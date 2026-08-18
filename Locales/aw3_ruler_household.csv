@@ -79,3 +79,14 @@ aw_household_failure_request_independence,仅独立国家之间可以请求提�
 aw_household_failure_request_relation,两国关系尚不足以提出求妃,Relations are not close enough for this request,兩國關係尚不足以提出求妃
 aw_household_failure_request_selection,接受前须先选择一名合适女子,Select an eligible noblewoman before accepting,接受前須先選擇一名合適女子
 aw_household_failure_candidate_selected,该请求已经选定其他女子,Another candidate has already been selected,該請求已經選定其他女子
+aw_household_rank_empress,皇后,Empress,皇后
+aw_household_rank_consort_de,德妃,Consort De,德妃
+aw_household_rank_consort_li,丽妃,Consort Li,麗妃
+aw_household_rank_consort_zhuang,庄妃,Consort Zhuang,莊妃
+aw_household_rank_consort_xian,贤妃,Consort Xian,賢妃
+aw_household_rank_consort_hui,惠妃,Consort Hui,惠妃
+aw_household_rank_consort_an,安妃,Consort An,安妃
+aw_household_rank_consort_he,和妃,Consort He,和妃
+aw_household_rank_consort_xi,僖妃,Consort Xi,僖妃
+aw_household_rank_consort_kang,康妃,Consort Kang,康妃
+aw_household_historical_prefix,先帝{0},Former ruler's {0},先帝{0}

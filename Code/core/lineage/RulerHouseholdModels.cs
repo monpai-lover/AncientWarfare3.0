@@ -30,6 +30,7 @@ namespace AncientWarfare3.core.lineage
         public long ActorId = -1L;
         public string ActorName = "";
         public string TitleKey = "";
+        public string RankCode = "";
         public string OriginRealmName = "";
         public string LineageLabel = "";
         public int Age = -1;

@@ -7,6 +7,9 @@ $query = [IO.File]::ReadAllText(
 $service = [IO.File]::ReadAllText(
     (Join-Path $root 'Code\core\lineage\RulerHouseholdService.cs'),
     [Text.Encoding]::UTF8)
+$readModel = [IO.File]::ReadAllText(
+    (Join-Path $root 'Code\core\lineage\RulerHouseholdReadModelService.cs'),
+    [Text.Encoding]::UTF8)
 $failures = [Collections.Generic.List[string]]::new()
 
 if (-not $query.Contains("IFNULL(STATUS,'') NOT IN ('slave','slave_lineage')")) {
@@ -17,6 +20,15 @@ if (-not $query.Contains('LIMIT @limit')) {
 }
 if (-not $service.Contains('RulerHouseholdRankRules.ConsortScore(')) {
     $failures.Add('Consort ordering must use attribute-first scoring.')
+}
+if (-not $query.Contains('MaximumRowsPerRuler = 10')) {
+    $failures.Add('Imperial household reads must include all ten fixed seats.')
+}
+if (-not $service.Contains('NormalizeImperialRanks(pKingdom)')) {
+    $failures.Add('Annual maintenance must normalize legacy imperial ranks.')
+}
+if (-not $readModel.Contains('pRecord?.RankCode')) {
+    $failures.Add('Household display must use the persisted fixed rank code.')
 }
 foreach ($forbidden in @('World.world.units_only_alive', 'getSimpleList()')) {
     if ($query.Contains($forbidden) -or $service.Contains($forbidden)) {

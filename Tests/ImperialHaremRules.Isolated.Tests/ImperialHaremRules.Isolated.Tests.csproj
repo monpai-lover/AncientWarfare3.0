@@ -10,5 +10,7 @@
              Link="Production/RulerHouseholdRules.cs" />
     <Compile Include="../../Code/core/lineage/RulerHouseholdRankRules.cs"
              Link="Production/RulerHouseholdRankRules.cs" />
+    <Compile Include="../../Code/core/lineage/RulerHouseholdRankMigrationService.cs"
+             Link="Production/RulerHouseholdRankMigrationService.cs" />
   </ItemGroup>
 </Project>

@@ -7,7 +7,7 @@ namespace AncientWarfare3.core.lineage
     internal sealed class RulerHouseholdQuery
     {
         private const int WorldTimePerYear = 60;
-        private const int MaximumRowsPerRuler = 9;
+        private const int MaximumRowsPerRuler = 10;
         private const int MaximumMaintenanceRows = 16;
         private const int MaximumOfferCandidates = 32;
         private const string Projection =
@@ -122,6 +122,13 @@ namespace AncientWarfare3.core.lineage
                 Math.Max(0, pLimit));
             return ReadMany("RULER_ACTOR_ID=@id", pOwnerActorId,
                 pAfterId: -1L, limit);
+        }
+
+        public IReadOnlyList<RulerHouseholdRecord>
+            ReadActiveForRankNormalization(long pRulerActorId)
+        {
+            return ReadMany("RULER_ACTOR_ID=@id", pRulerActorId,
+                pAfterId: -1L, MaximumMaintenanceRows);
         }
 
         public IReadOnlyList<long> ReadOfferCandidateIds(long pKingdomId,

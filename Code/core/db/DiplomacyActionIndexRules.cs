@@ -78,6 +78,12 @@ namespace AncientWarfare3.core.db
                 Index("uq_RulerHousehold_active_partner",
                     "RulerHousehold", "PARTNER_ACTOR_ID",
                     "STATUS=0 AND END_TIME<0", true),
+                Index("uq_RulerHousehold_active_fixed_rank",
+                    "RulerHousehold", "RULER_ACTOR_ID, RANK_CODE",
+                    "STATUS=0 AND END_TIME<0 AND RANK_CODE IN (" +
+                    "'empress','consort_de','consort_li','consort_zhuang'," +
+                    "'consort_xian','consort_hui','consort_an','consort_he'," +
+                    "'consort_xi','consort_kang')", true),
                 Index("idx_ActorArchive_lineage_kingdom_alive_birth",
                     "ActorArchive",
                     "LINEAGE_ID, KINGDOM_ID, IS_ALIVE, BIRTH_TIME, ID"),

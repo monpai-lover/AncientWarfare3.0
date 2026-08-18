@@ -32,6 +32,13 @@ namespace AncientWarfare3.core.lineage
                 pRankCode ?? "") >= 0;
         }
 
+        public static string TitleKey(string pRankCode)
+        {
+            return IsFixedImperialRank(pRankCode)
+                ? "aw_household_rank_" + pRankCode
+                : "";
+        }
+
         public static bool KeepsSeatAfterAge(int pAge)
         {
             return true;
@@ -50,7 +57,12 @@ namespace AncientWarfare3.core.lineage
             bool pPrincipal)
         {
             if (pUsed == null) return "";
-            int first = pPrincipal ? 0 : 1;
+            if (pPrincipal)
+            {
+                string empress = ImperialSeatCodes[0];
+                return pUsed.Contains(empress) ? "" : empress;
+            }
+            int first = 1;
             for (int i = first; i < ImperialSeatCodes.Length; i++)
             {
                 if (!pUsed.Contains(ImperialSeatCodes[i]))

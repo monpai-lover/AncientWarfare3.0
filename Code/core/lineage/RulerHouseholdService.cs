@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
+using System.Linq;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.schools;
@@ -550,6 +551,7 @@ namespace AncientWarfare3.core.lineage
             if (!IsAuthority() || !Ready || !IsLiveRealm(pKingdom)) return;
             try
             {
+                NormalizeImperialRanks(pKingdom);
                 pKingdom.data.get(LineageKeys.RULER_HOUSEHOLD_CURSOR,
                     out long cursor, -1L);
                 var query = new RulerHouseholdQuery(DB);
@@ -654,6 +656,11 @@ namespace AncientWarfare3.core.lineage
             string pSourceKind = "diplomatic_offer",
             long pSourceRelationId = -1L, int pSourceTributeYear = -1)
         {
+            string rankCode = ResolveStoredRankCode(transaction, pRuler,
+                pRecipient, pKind);
+            if (string.IsNullOrEmpty(rankCode))
+                throw new InvalidOperationException(
+                    "household rank capacity exhausted");
             using var command = new SQLiteCommand(DB)
             {
                 Transaction = transaction,
@@ -675,8 +682,7 @@ namespace AncientWarfare3.core.lineage
             command.Parameters.AddWithValue("@recipient", pRecipient.id);
             command.Parameters.AddWithValue("@kind", KindCode(pKind));
             command.Parameters.AddWithValue("@rank",
-                RulerHouseholdRules.TitleKey(ResolveRealmTier(pRecipient),
-                    pKind, pRuler.isSexFemale()));
+                rankCode);
             command.Parameters.AddWithValue("@year", pYear);
             command.Parameters.AddWithValue("@time", LineageService.CurTime());
             command.Parameters.AddWithValue("@proposal", pProposalId);
@@ -1113,6 +1119,95 @@ namespace AncientWarfare3.core.lineage
         {
             try { return pActor?.data == null ? -1 : pActor.getAge(); }
             catch { return -1; }
+        }
+
+        internal static bool NormalizeImperialRanks(Kingdom pKingdom)
+        {
+            if (!Ready || pKingdom?.king?.data == null ||
+                ResolveRealmTier(pKingdom) !=
+                RulerHouseholdRealmTier.Empire ||
+                pKingdom.king.isSexFemale()) return false;
+
+            long rulerId = pKingdom.king.data.id;
+            var query = new RulerHouseholdQuery(DB);
+            IReadOnlyList<RulerHouseholdRecord> records =
+                query.ReadActiveForRankNormalization(rulerId);
+            IReadOnlyList<RulerHouseholdRankMigrationEntry> normalized =
+                RulerHouseholdRankMigrationService.AssignLegacy(
+                    records.Select(pRow =>
+                        new RulerHouseholdRankMigrationEntry(
+                            pRow.RelationshipId, pRow.Kind, pRow.RankCode,
+                            pRow.StartYear, pRow.StartTime, pRow.Active)));
+            if (!normalized.Any(pRow => pRow.NeedsWrite)) return false;
+
+            using SQLiteTransaction transaction = DB.BeginTransaction();
+            double now = LineageService.CurTime();
+            for (int i = 0; i < normalized.Count; i++)
+            {
+                RulerHouseholdRankMigrationEntry row = normalized[i];
+                if (!row.NeedsWrite || !row.Closed) continue;
+                using var close = new SQLiteCommand(
+                    "UPDATE RulerHousehold SET STATUS=1,END_TIME=@time " +
+                    "WHERE RELATIONSHIP_ID=@id AND STATUS=0 AND END_TIME<0",
+                    DB, transaction);
+                close.Parameters.AddWithValue("@time", now);
+                close.Parameters.AddWithValue("@id", row.RelationshipId);
+                close.ExecuteNonQuery();
+            }
+            for (int i = 0; i < normalized.Count; i++)
+            {
+                RulerHouseholdRankMigrationEntry row = normalized[i];
+                if (!row.NeedsWrite || row.Closed) continue;
+                using var clear = new SQLiteCommand(
+                    "UPDATE RulerHousehold SET RANK_CODE='' " +
+                    "WHERE RELATIONSHIP_ID=@id AND STATUS=0 AND END_TIME<0",
+                    DB, transaction);
+                clear.Parameters.AddWithValue("@id", row.RelationshipId);
+                clear.ExecuteNonQuery();
+            }
+            for (int i = 0; i < normalized.Count; i++)
+            {
+                RulerHouseholdRankMigrationEntry row = normalized[i];
+                if (!row.NeedsWrite || row.Closed) continue;
+                using var assign = new SQLiteCommand(
+                    "UPDATE RulerHousehold SET RANK_CODE=@rank " +
+                    "WHERE RELATIONSHIP_ID=@id AND STATUS=0 AND END_TIME<0",
+                    DB, transaction);
+                assign.Parameters.AddWithValue("@rank", row.RankCode);
+                assign.Parameters.AddWithValue("@id", row.RelationshipId);
+                if (assign.ExecuteNonQuery() != 1)
+                    throw new InvalidOperationException(
+                        "household rank normalization lost its active row");
+            }
+            transaction.Commit();
+            return true;
+        }
+
+        private static string ResolveStoredRankCode(
+            SQLiteTransaction pTransaction, Actor pRuler,
+            Kingdom pRecipient, RulerHouseholdKind pKind)
+        {
+            RulerHouseholdRealmTier tier = ResolveRealmTier(pRecipient);
+            if (tier != RulerHouseholdRealmTier.Empire ||
+                pRuler.isSexFemale())
+                return RulerHouseholdRules.TitleKey(tier, pKind,
+                    pRuler.isSexFemale());
+
+            var used = new HashSet<string>(StringComparer.Ordinal);
+            using var command = new SQLiteCommand(
+                "SELECT RANK_CODE FROM RulerHousehold WHERE " +
+                "RULER_ACTOR_ID=@ruler AND STATUS=0 AND END_TIME<0 " +
+                "ORDER BY RELATIONSHIP_ID LIMIT 10", DB, pTransaction);
+            command.Parameters.AddWithValue("@ruler", pRuler.data.id);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                string code = Convert.ToString(reader.GetValue(0)) ?? "";
+                if (RulerHouseholdRankRules.IsFixedImperialRank(code))
+                    used.Add(code);
+            }
+            return RulerHouseholdRankRules.NextEmptySeat(used,
+                pKind == RulerHouseholdKind.PrincipalWife);
         }
 
         private static int CompareHouseholdCandidates(
