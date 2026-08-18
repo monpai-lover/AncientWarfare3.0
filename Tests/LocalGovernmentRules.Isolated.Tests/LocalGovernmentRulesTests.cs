@@ -34,6 +34,14 @@ internal static class LocalGovernmentRulesTests
                 CourtOfficeId.Constable,
                 xiaCirculationUnlocked: false),
             "local constables also circulate");
+        True(OfficialCirculationRules.ShouldRotateLocalLeader(
+                cityLayer: true, cityLeader: true, termDue: true,
+                liveCityCount: 3),
+            "a custom city-root office enters the governor rotation path");
+        False(OfficialCirculationRules.ShouldRotateLocalLeader(
+                cityLayer: true, cityLeader: false, termDue: true,
+                liveCityCount: 3),
+            "local subordinate offices do not enter leader-only rotation");
 
         True(LocalOfficialCandidateRules.CanEnter(
                 alive: true, adult: true, slave: false,
