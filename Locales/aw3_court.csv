@@ -758,3 +758,18 @@ aw_hist_coup_loyalist_restored,平定权臣，复位于, defeated the usurper an
 aw_hist_coup_loyalist_restored_suffix,，旧宗统得续,; the old royal succession continued,，舊宗統得續
 aw_hist_coup_loyalist_suppressed,勤王兵败，旧宗室未能复位：, was defeated; the old dynasty was not restored: ,勤王兵敗，舊宗室未能復位：
 aw_hist_coup_loyalist_stalemate,复统未决，仍据地自立为, failed to decide the succession and retained the rival realm of ,復統未決，仍據地自立為
+aw_court_office_history,官职历任,Office History,官職歷任
+aw_court_office_history_desc,查看该官职的全部历任与任期,Review every incumbent and term for this office,查看該官職的全部歷任與任期
+aw_court_history_to_present,至今,Present,至今
+aw_court_history_unknown_year,未知,Unknown,未知
+aw_court_history_unknown_actor,佚名,Unknown,佚名
+aw_court_history_current,现任,Current,現任
+aw_court_history_empty,暂无历任记录,No recorded incumbents,暫無歷任記錄
+aw_court_history_end_unknown,已离任,Ended,已離任
+aw_court_history_end_term_expired,任期届满,Term completed,任期屆滿
+aw_court_history_end_transferred,调任,Transferred,調任
+aw_court_history_end_reassigned,改任,Reassigned,改任
+aw_court_history_end_dismissed,罢免,Dismissed,罷免
+aw_court_history_end_death,卒于任上,Died in office,卒於任上
+aw_court_history_end_city_transferred,城池易主,City transferred,城池易主
+aw_court_history_end_city_destroyed,城池毁灭,City destroyed,城池毀滅

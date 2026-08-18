@@ -28,6 +28,9 @@ namespace AncientWarfare3.ui.items
         private Button _manageOfficeButton;
         private Text _manageOfficeText;
         private TipButton _manageOfficeTip;
+        private GameObject _historyObject;
+        private Button _historyButton;
+        private TipButton _historyTip;
         private GameObject _dispositionObject;
         private Button _dispositionButton;
         private TipButton _dispositionTip;
@@ -120,18 +123,55 @@ namespace AncientWarfare3.ui.items
             bool canManageOffice = officeAction != CourtManualOfficeAction.None;
             _manageOfficeObject.SetActive(canManageOffice);
             bool canDispose = live && !pNode.IsVacancy && !actor.isKing() &&
-                              !IsMilitaryGovernorateCommandNode(pNode);
+                               !IsMilitaryGovernorateCommandNode(pNode);
             _dispositionObject.SetActive(canDispose);
-            bool constrainedByTwoActions = canDispose && canManageOffice;
+            bool canOpenHistory = !string.IsNullOrEmpty(pNode.OfficeId) &&
+                                  !string.IsNullOrEmpty(pNode.OfficeLayer);
+            _historyObject.SetActive(canOpenHistory);
+            _historyButton.onClick.RemoveAllListeners();
+            if (canOpenHistory)
+            {
+                long kingdomId = pKingdom.id;
+                long cityId = pNode.CityId;
+                string officeLayer = pNode.OfficeLayer;
+                string officeId = pNode.OfficeId;
+                _historyButton.onClick.AddListener(() =>
+                    CourtOfficeHistoryWindow.Open(kingdomId, cityId,
+                        officeLayer, officeId));
+                _historyTip.enabled = true;
+                _historyTip.type = AW_RawTooltip.TYPE;
+                _historyTip.hoverAction = () => Tooltip.show(
+                    _historyObject, AW_RawTooltip.TYPE, new TooltipData
+                    {
+                        tip_name = AW_L10n.Text("aw_court_office_history",
+                            "Office History"),
+                        tip_description = AW_L10n.Text(
+                            "aw_court_office_history_desc",
+                            "Review every incumbent and term for this office.")
+                    });
+            }
+            else
+            {
+                _historyTip.enabled = false;
+                _historyTip.hoverAction = null;
+            }
+            RectTransform dispositionRect =
+                _dispositionObject.GetComponent<RectTransform>();
+            dispositionRect.anchoredPosition = new Vector2(
+                canOpenHistory ? 27f : 5f, 5f);
+            int leftActionCount = (canOpenHistory ? 1 : 0) +
+                                  (canDispose ? 1 : 0);
+            bool constrainedByTwoActions = leftActionCount > 1 ||
+                                           canManageOffice;
             _roles.text = OfficialCareerRankRules.ComposeCardCareerLabel(
                 roleLine, jointTitle, namedRank, constrainedByTwoActions);
             _roles.resizeTextMinSize =
                 OfficialCareerRankRules.CardCareerMinimumFontSize(
                     constrainedByTwoActions);
             _roles.rectTransform.anchoredPosition = new Vector2(
-                canDispose ? 27f : 4f, -79f);
+                4f + leftActionCount * 22f, -79f);
             _roles.rectTransform.sizeDelta = new Vector2(
-                Width - (canDispose ? 31f : 8f) -
+                Width - 8f - leftActionCount * 22f -
                 (canManageOffice ? 48f : 0f), 22f);
             _manageOfficeButton.onClick.RemoveAllListeners();
             if (canManageOffice)
@@ -308,6 +348,41 @@ namespace AncientWarfare3.ui.items
             _manageOfficeText.resizeTextMinSize = 6;
             _manageOfficeText.resizeTextMaxSize = 7;
             _manageOfficeObject.SetActive(false);
+
+            _historyObject = new GameObject("OfficeHistory",
+                typeof(RectTransform), typeof(Image), typeof(Button),
+                typeof(TipButton));
+            _historyObject.transform.SetParent(transform, false);
+            RectTransform historyRect =
+                _historyObject.GetComponent<RectTransform>();
+            historyRect.anchorMin = new Vector2(0f, 0f);
+            historyRect.anchorMax = new Vector2(0f, 0f);
+            historyRect.pivot = new Vector2(0f, 0f);
+            historyRect.anchoredPosition = new Vector2(5f, 5f);
+            historyRect.sizeDelta = new Vector2(18f, 18f);
+            AW_UIStyle.ApplyButton(
+                _historyObject.GetComponent<Image>(), 0.96f);
+            _historyButton = _historyObject.GetComponent<Button>();
+            _historyTip = _historyObject.GetComponent<TipButton>();
+            _historyTip.showOnClick = false;
+            var historyIconObject = new GameObject("Icon",
+                typeof(RectTransform), typeof(Image));
+            historyIconObject.transform.SetParent(
+                _historyObject.transform, false);
+            RectTransform historyIconRect =
+                historyIconObject.GetComponent<RectTransform>();
+            historyIconRect.anchorMin = Vector2.zero;
+            historyIconRect.anchorMax = Vector2.one;
+            historyIconRect.offsetMin = new Vector2(2f, 2f);
+            historyIconRect.offsetMax = new Vector2(-2f, -2f);
+            Image historyIcon = historyIconObject.GetComponent<Image>();
+            historyIcon.sprite = SpriteTextureLoader.getSprite(
+                                     "ui/icons/iconHistory") ??
+                                 SpriteTextureLoader.getSprite(
+                                     "ui/icons/iconDocument");
+            historyIcon.preserveAspect = true;
+            historyIcon.raycastTarget = false;
+            _historyObject.SetActive(false);
 
             _dispositionObject = new GameObject("Disposition",
                 typeof(RectTransform), typeof(Image), typeof(Button),

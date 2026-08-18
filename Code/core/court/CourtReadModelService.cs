@@ -123,6 +123,7 @@ namespace AncientWarfare3.core.court
                     ActorName = SafeActorName(actor) + (guest
                         ? " (" + AW_L10n.Text("aw_school_guest_service", "Guest") + ")"
                         : ""),
+                    OfficeLayer = officer.layer ?? "",
                     SchoolId = school,
                     SchoolIconPath = RegisteredSchoolIconPath(school),
                     CityId = officer.city_id,
@@ -148,6 +149,7 @@ namespace AncientWarfare3.core.court
                 pSeeds.Add(new CourtPyramidNodeModel(-1L, office, office,
                     rank, i, true)
                 {
+                    OfficeLayer = definition?.Layer ?? "",
                     SchoolId = CourtSchoolId.None,
                     SchoolIconPath = ""
                 });
@@ -167,6 +169,7 @@ namespace AncientWarfare3.core.court
                 pSeeds.Add(new CourtPyramidNodeModel(general.data.id, CourtPyramidRoleId.General,
                     CourtPyramidRoleId.General, CourtPyramidRules.GeneralRank, order++, false)
                 {
+                    OfficeLayer = CourtOfficeLayer.Military,
                     ActorName = SafeActorName(general),
                     SchoolId = ActorSchool(general, ""),
                     SchoolIconPath = RegisteredSchoolIconPath(ActorSchool(general, "")),
@@ -236,6 +239,7 @@ namespace AncientWarfare3.core.court
                     CourtPyramidRules.MilitaryGovernorateGovernorRank,
                     stableOrder, false)
                 {
+                    OfficeLayer = CourtOfficeLayer.Military,
                     ActorName = SafeActorName(governor),
                     SchoolId = governorSchool,
                     SchoolIconPath = RegisteredSchoolIconPath(
@@ -259,6 +263,7 @@ namespace AncientWarfare3.core.court
                     CourtPyramidRules.MilitaryGovernorateSuccessorRank,
                     stableOrder, false)
                 {
+                    OfficeLayer = CourtOfficeLayer.Military,
                     ActorName = SafeActorName(successor),
                     SchoolId = successorSchool,
                     SchoolIconPath = RegisteredSchoolIconPath(
@@ -287,6 +292,7 @@ namespace AncientWarfare3.core.court
                     CourtPyramidRoleId.FeudatoryPrince,
                     FeudatoryOfficeRules.PrinceRank, i, false)
                 {
+                    OfficeLayer = CourtOfficeLayer.Feudatory,
                     ActorName = SafeActorName(prince),
                     SchoolId = school,
                     SchoolIconPath = RegisteredSchoolIconPath(school),
@@ -315,6 +321,7 @@ namespace AncientWarfare3.core.court
                 pSeeds.Add(new CourtPyramidNodeModel(leader.data.id, office,
                     office, CourtPyramidRules.GovernorRank, order++, false)
                 {
+                    OfficeLayer = CourtOfficeLayer.City,
                     ActorName = SafeActorName(leader),
                     SchoolId = school,
                     SchoolIconPath = RegisteredSchoolIconPath(school),

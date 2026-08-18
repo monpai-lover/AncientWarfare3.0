@@ -75,6 +75,7 @@ namespace AncientWarfare3.core.court
         public long ActorId;
         public string ActorName = "";
         public string OfficeId = "";
+        public string OfficeLayer = "";
         public string RoleId = "";
         public string SchoolId = "";
         public string SchoolIconPath = "";
@@ -114,6 +115,7 @@ namespace AncientWarfare3.core.court
             return new CourtPyramidNodeModel(ActorId, OfficeId, RoleId, Rank, StableOrder, IsVacancy)
             {
                 ActorName = ActorName,
+                OfficeLayer = OfficeLayer,
                 SchoolId = SchoolId,
                 SchoolIconPath = SchoolIconPath,
                 CityId = CityId,
@@ -197,6 +199,9 @@ namespace AncientWarfare3.core.court
                         merged.CityId = item.CityId;
                         merged.CityName = item.CityName;
                     }
+                    if (string.IsNullOrEmpty(merged.OfficeLayer) &&
+                        !string.IsNullOrEmpty(item.OfficeLayer))
+                        merged.OfficeLayer = item.OfficeLayer;
                     if (item.AppointmentYear >= 0 &&
                         (merged.AppointmentYear < 0 || item.AppointmentYear < merged.AppointmentYear))
                         merged.AppointmentYear = item.AppointmentYear;
