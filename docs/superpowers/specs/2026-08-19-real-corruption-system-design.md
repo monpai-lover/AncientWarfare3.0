@@ -115,6 +115,68 @@ the real country corruption state:
 Mandate and authority remain independent signals and are not silently treated
 as corruption after this change.
 
+### Corruption-driven bandit-to-rebel tendency
+
+The existing Great Uprising activation gate remains unchanged: the origin
+kingdom must have at least 5% bandit population and either the configured
+long-term high-corruption streak or the existing famine streak. Corruption
+does not create a nationwide uprising before that gate is met.
+
+Once the era is active, the real country corruption score controls the
+likelihood that each eligible bandit kingdom becomes a founding peasant-rebel
+kingdom. The deterministic annual conversion tendency is:
+
+| Country corruption | Per-candidate conversion chance |
+| --- | ---: |
+| `0..30` | 5% |
+| `31..60` | 15% |
+| `61..80` | 35% |
+| `81..100` | 60% |
+
+The chance is evaluated with a stable hash of origin kingdom ID, candidate
+kingdom ID and current year. This avoids save/load and multiplayer divergence
+while still making higher corruption produce more rebels over time. The
+existing annual conversion budget and cursor remain authoritative, so a
+single year cannot convert more than the configured budget and candidates are
+fairly rotated.
+
+## Clean-corruption national decision
+
+Add a repeatable national decision with ID `aw_decision_clean_corruption`.
+It uses the existing decision research/progress pipeline and appears in the
+KingdomPolicyWindow. The decision is available when the kingdom corruption
+score is at least `40`, no clean-corruption decision is already active or
+queued, and the kingdom can pay the existing policy-point resource. Its
+definition cost is `50` policy points. It is not blocked by peace/war state,
+because corruption cleanup is an internal measure that can be ordered during
+either state.
+
+The AI priority is score-based:
+
+- below `40`: unavailable to AI;
+- `40..59`: normal administrative priority;
+- `60..79`: high priority;
+- `80..100`: highest priority and preferred over ordinary social decisions.
+
+While the decision is active, the annual corruption target pressure for the
+kingdom is multiplied by `0.85`; this is persisted as an active cleanup flag
+and applies to both country-level central/fiscal pressure and each city's
+combined pressure. On completion it clears the flag, reduces the country
+score by 20 points (clamped to `0`) and reduces each of the three
+highest-corruption live cities by 10 points (also clamped). The annual
+corruption service runs afterward and may rebuild part of the score from
+current pressure, preserving the system's inertia instead of permanently
+erasing economic or administrative causes.
+
+The completion effect is idempotent: a completed decision records its year and
+cannot apply its reduction twice when a save is loaded or a replica snapshot
+is replayed.
+
+The conversion tendency uses a deterministic 32-bit FNV-1a hash over the
+origin kingdom ID, candidate kingdom ID and current year. The unsigned hash
+modulo `10_000` is compared with the selected chance multiplied by `10_000`;
+no Unity/global random state is consumed.
+
 ## Persistence and Compatibility
 
 - Existing saves initialize missing fields to zero and begin accumulating
@@ -159,6 +221,9 @@ Pure rules test:
 - weighted country aggregation;
 - streak increment/reset;
 - zero-population safety.
+- corruption-band conversion chances and stable hash determinism;
+- clean-corruption decision availability, priority and completion reduction;
+- conversion budget/cursor behavior under different corruption bands.
 
 Source guards verify:
 
@@ -166,6 +231,9 @@ Source guards verify:
 - kingdom and city persistence keys;
 - Great Uprising reads corruption score/streak rather than mandate as the
   corruption condition;
+- Great Uprising uses corruption-band conversion tendency after activation;
+- the clean-corruption decision is defined, scored, progressed and applied
+  exactly once;
 - UI sections are present in policy and city/local-government views.
 
 Runtime acceptance verifies that a corrupt official/tax-heavy city raises its
