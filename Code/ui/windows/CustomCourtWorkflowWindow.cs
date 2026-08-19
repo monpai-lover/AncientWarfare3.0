@@ -20,8 +20,6 @@ namespace AncientWarfare3.ui.windows
         private const float ToolbarScale = 0.8f;
         private const float ToolbarWidth = 164f;
         private const float ToolbarContentHeight = 520f;
-        private const float ToolbarTopOffset = 46f;
-        private const float ToolbarBottomInset = 8f;
         private const float ToolbarScrollbarWidth = 6f;
         private static long _kingdomId = -1L;
         private static long _cityId = -1L;
@@ -62,6 +60,7 @@ namespace AncientWarfare3.ui.windows
             new Dictionary<string, string>(StringComparer.Ordinal);
         private Text _status;
         private CustomCourtTemplate _template;
+        private CustomCourtWorkflowLayout _layout;
         private CourtWorkflowVacancyCard _edgeSource;
         private CourtWorkflowVacancyCard _edgeTarget;
         private WideWindowChrome _chrome;
@@ -308,18 +307,28 @@ namespace AncientWarfare3.ui.windows
             _root.anchorMin = _root.anchorMax = new Vector2(0.5f, 0.5f);
             _root.pivot = new Vector2(0.5f, 0.5f);
             _root.sizeDelta = new Vector2(contentWidth, viewportHeight);
-            _root.anchoredPosition = new Vector2(0f, -8f);
-            _toolViewport.anchorMin = _toolViewport.anchorMax =
-                new Vector2(1f, 1f);
-            _toolViewport.pivot = new Vector2(1f, 1f);
-            _toolViewport.anchoredPosition = new Vector2(-864f, 46f);
+            _root.anchoredPosition = Vector2.zero;
+            _layout = CustomCourtWorkflowLayoutRules.Resolve(contentWidth,
+                viewportHeight, ToolbarWidth, ToolbarScale,
+                ToolbarScrollbarWidth);
+            _canvasRect.anchorMin = Vector2.zero;
+            _canvasRect.anchorMax = Vector2.one;
+            _canvasRect.pivot = new Vector2(0.5f, 0.5f);
+            _canvasRect.anchoredPosition = Vector2.zero;
+            _canvasRect.sizeDelta = Vector2.zero;
+            _canvasRect.offsetMin = Vector2.zero;
+            _canvasRect.offsetMax = Vector2.zero;
+            _toolViewport.anchorMin = new Vector2(0f, 0f);
+            _toolViewport.anchorMax = new Vector2(0f, 1f);
+            _toolViewport.pivot = new Vector2(0f, 0.5f);
+            _toolViewport.anchoredPosition = Vector2.zero;
             _toolViewport.sizeDelta = new Vector2(
-                ToolbarWidth * ToolbarScale + ToolbarScrollbarWidth,
-                Mathf.Max(1f, viewportHeight - ToolbarTopOffset - ToolbarBottomInset));
+                _layout.ToolbarViewportWidth, 0f);
             _toolViewport.SetAsLastSibling();
-            _toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f);
-            _toolPanel.pivot = new Vector2(1f, 1f);
-            _toolPanel.anchoredPosition = new Vector2(-ToolbarScrollbarWidth / ToolbarScale, 0f);
+            _toolPanel.anchorMin = _toolPanel.anchorMax =
+                new Vector2(0f, 1f);
+            _toolPanel.pivot = new Vector2(0f, 1f);
+            _toolPanel.anchoredPosition = Vector2.zero;
             _toolPanel.sizeDelta = new Vector2(ToolbarWidth,
                 ToolbarContentHeight);
             _toolPanel.localScale = Vector3.one * ToolbarScale;
@@ -337,12 +346,6 @@ namespace AncientWarfare3.ui.windows
             }
             Layout(_status.rectTransform, 8f, 460f, 148f,
                 Mathf.Max(1f, ToolbarContentHeight - 468f));
-            _canvasRect.anchorMin = _canvasRect.anchorMax = new Vector2(0.5f, 0.5f);
-            _canvasRect.pivot = new Vector2(0.5f, 0.5f);
-            _canvasRect.sizeDelta = new Vector2(contentWidth,
-                CustomCourtWorkflowLayoutRules.VisibleCanvasHeight(
-                    viewportHeight, _root.anchoredPosition.y, 50f));
-            _canvasRect.anchoredPosition = new Vector2(-480f, 50f);
             _canvasRect.GetComponent<TreeDragPanHandler>().Setup(_workspaceRect,
                 _canvasRect);
             _chrome?.RepositionResizeHandle();
@@ -904,7 +907,8 @@ namespace AncientWarfare3.ui.windows
             if (_canvasRect == null || _workspaceRect == null)
                 return new CustomCourtOfficeLayout { X = 1000f, Y = 700f };
             Vector3 worldCenter = _canvasRect.TransformPoint(
-                _canvasRect.rect.center);
+                _canvasRect.rect.center + new Vector2(
+                    _layout.VisibleCanvasCenterOffsetX, 0f));
             Vector3 localCenter = _workspaceRect.InverseTransformPoint(
                 worldCenter);
             return new CustomCourtOfficeLayout
@@ -1031,7 +1035,11 @@ namespace AncientWarfare3.ui.windows
         private void RefreshWholePresetOptions()
         {
             Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
-            ICourtProfile profile = CourtProfileRegistry.For(kingdom);
+            ICourtProfile runtimeProfile = CourtProfileRegistry.For(kingdom);
+            string currentInstitution = ResolveWholePresetInstitution(
+                kingdom, runtimeProfile);
+            ICourtProfile profile = ResolveWholePresetProfile(kingdom,
+                currentInstitution);
             if (kingdom?.data == null || profile == null)
             {
                 SetWholePresetButtonState(
@@ -1039,10 +1047,29 @@ namespace AncientWarfare3.ui.windows
                 return;
             }
 
-            string currentInstitution =
-                CourtInstitutionService.GetInstitution(kingdom);
             SetWholePresetButtonState(CustomCourtWholePresetRules.Options(
                 profile.Id, currentInstitution));
+        }
+
+        private static string ResolveWholePresetInstitution(Kingdom kingdom,
+            ICourtProfile runtimeProfile)
+        {
+            string resolved = CourtInstitutionService.GetInstitution(kingdom);
+            if (runtimeProfile != null || kingdom?.data == null)
+                return resolved;
+            kingdom.data.get(LineageKeys.COURT_INSTITUTION,
+                out string stored, string.Empty);
+            return CourtInstitutionRules.IsKnown(stored) ? stored : resolved;
+        }
+
+        private static ICourtProfile ResolveWholePresetProfile(
+            Kingdom kingdom, string institutionId)
+        {
+            ICourtProfile runtime = CourtProfileRegistry.For(kingdom);
+            CourtProfileId resolved =
+                CustomCourtWholePresetRules.ResolveProfile(
+                    runtime?.Id ?? CourtProfileId.None, institutionId);
+            return runtime ?? CourtProfileRegistry.For(resolved);
         }
 
         private void SetWholePresetButtonState(
@@ -1070,7 +1097,11 @@ namespace AncientWarfare3.ui.windows
         private void CycleWholePreset()
         {
             Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
-            ICourtProfile profile = CourtProfileRegistry.For(kingdom);
+            ICourtProfile runtimeProfile = CourtProfileRegistry.For(kingdom);
+            string currentInstitution = ResolveWholePresetInstitution(
+                kingdom, runtimeProfile);
+            ICourtProfile profile = ResolveWholePresetProfile(kingdom,
+                currentInstitution);
             if (kingdom?.data == null || profile == null)
             {
                 SetStatus(AW_L10n.Text(
@@ -1082,7 +1113,7 @@ namespace AncientWarfare3.ui.windows
             CustomCourtWholePresetOption next =
                 CustomCourtWholePresetRules.NextUnlockedPreset(
                     CustomCourtWholePresetRules.Options(profile.Id,
-                        CourtInstitutionService.GetInstitution(kingdom)),
+                        currentInstitution),
                     _selectedWholePresetId);
             if (string.IsNullOrEmpty(next.InstitutionId))
             {
