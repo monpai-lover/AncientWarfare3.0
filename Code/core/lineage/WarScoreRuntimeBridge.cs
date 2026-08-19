@@ -391,7 +391,7 @@ namespace AncientWarfare3.core.lineage
                     CurrentWorldTime());
             WarGoalSettlementRuntimeService.OnCityControlChanged(pWar,
                 pCity, pOccupier);
-            WarScoreDecisiveSettlementService.QueueIfDecisive(pWar);
+            WarTerminalSettlementCoordinator.NotifyWarChanged(pWar);
             return true;
         }
 
@@ -1227,9 +1227,7 @@ namespace AncientWarfare3.core.lineage
 
         private static void QueueSettlementChecks(War pWar)
         {
-            if (WarForceEliminationSettlementService.QueueIfReady(pWar)) return;
-            WarScoreDecisiveSettlementService.QueueIfDecisive(pWar);
-            WarGoalSettlementRuntimeService.QueueIfReady(pWar);
+            WarTerminalSettlementCoordinator.NotifyWarChanged(pWar);
             WarExhaustionSettlementRuntimeService.QueueIfReady(pWar);
             RebellionCollapseSettlementService.QueueIfCollapsed(pWar);
         }

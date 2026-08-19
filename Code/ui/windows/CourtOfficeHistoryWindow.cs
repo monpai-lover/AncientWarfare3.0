@@ -98,11 +98,7 @@ namespace AncientWarfare3.ui.windows
             var scope = new OfficialCareerHistoryScope(_kingdomId, _cityId,
                 _officeLayer, _officeId);
             IReadOnlyList<OfficialCareerHistoryRow> rows =
-                LineageArchiveManager.Instance?.OperatingDB == null
-                    ? Array.Empty<OfficialCareerHistoryRow>()
-                    : OfficialCareerHistoryQuery.Read(
-                        LineageArchiveManager.Instance.OperatingDB,
-                        scope, 96);
+                OfficialCareerHistoryReadService.Read(scope, 96);
             for (int i = 0; i < rows.Count; i++)
             {
                 while (_rowPool.Count <= i)

@@ -11,6 +11,11 @@ $windowPath = Join-Path $root 'Code\ui\windows\CourtOfficeHistoryWindow.cs'
 $window = if ([IO.File]::Exists($windowPath)) {
     [IO.File]::ReadAllText($windowPath, [Text.Encoding]::UTF8)
 } else { '' }
+$readServicePath = Join-Path $root `
+    'Code\core\court\OfficialCareerHistoryReadService.cs'
+$readService = if ([IO.File]::Exists($readServicePath)) {
+    [IO.File]::ReadAllText($readServicePath, [Text.Encoding]::UTF8)
+} else { '' }
 $failures = [Collections.Generic.List[string]]::new()
 
 if (-not $model.Contains('public string OfficeLayer')) {
@@ -20,8 +25,11 @@ if (-not $node.Contains('CourtOfficeHistoryWindow.Open(') -or
     -not $node.Contains('pNode.OfficeLayer')) {
     $failures.Add('Every shared office card must open scoped history.')
 }
-if (-not $window.Contains('OfficialCareerHistoryQuery.Read(')) {
-    $failures.Add('History window must use the bounded SQLite query.')
+if (-not $window.Contains('OfficialCareerHistoryReadService.Read(')) {
+    $failures.Add('History window must use the core read gateway.')
+}
+if (-not $readService.Contains('OfficialCareerHistoryQuery.Read(')) {
+    $failures.Add('History read gateway must use the bounded SQLite query.')
 }
 if (-not $window.Contains('OfficialCareerHistoryRules.YearRange(')) {
     $failures.Add('History rows must use the shared year-range rule.')

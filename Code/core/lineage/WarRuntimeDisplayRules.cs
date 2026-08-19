@@ -7,12 +7,26 @@ namespace AncientWarfare3.core.lineage
         public static string ResolveName(string pLiveWarName,
             string pLocalizedWarName, string pGenericWarName)
         {
-            if (IsDisplayName(pLiveWarName)) return pLiveWarName.Trim();
             if (IsDisplayName(pLocalizedWarName))
                 return pLocalizedWarName.Trim();
+            if (IsDisplayName(pLiveWarName) &&
+                !LooksLikeGeneratedNativeWarName(pLiveWarName))
+                return pLiveWarName.Trim();
             return IsDisplayName(pGenericWarName)
                 ? pGenericWarName.Trim()
                 : "War";
+        }
+
+        private static bool LooksLikeGeneratedNativeWarName(string pValue)
+        {
+            if (string.IsNullOrWhiteSpace(pValue)) return false;
+            string value = pValue.Trim();
+            return value.StartsWith("Great War of ",
+                       StringComparison.OrdinalIgnoreCase) ||
+                   value.StartsWith("War of ",
+                       StringComparison.OrdinalIgnoreCase) ||
+                   value.StartsWith("Battle of ",
+                       StringComparison.OrdinalIgnoreCase);
         }
 
         public static bool IsDisplayName(string pValue)

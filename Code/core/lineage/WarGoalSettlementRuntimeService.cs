@@ -8,9 +8,6 @@ namespace AncientWarfare3.core.lineage
 {
     internal static class WarGoalSettlementRuntimeService
     {
-        private const string QueuePrefix = "war_goal_settlement:";
-        private const int MaximumAttempts = 2;
-
         private static SQLiteConnection DB =>
             LineageArchiveManager.Instance?.OperatingDB;
 
@@ -37,57 +34,41 @@ namespace AncientWarfare3.core.lineage
 
         public static bool QueueIfReady(War pWar)
         {
+            if (!HasAffordableGoal(pWar)) return false;
+            return WarTerminalSettlementCoordinator.NotifyWarChanged(pWar);
+        }
+
+        internal static bool HasAffordableGoal(War pWar)
+        {
             if (AW3MultiplayerReplicaScope.IsReplicaSession ||
                 pWar?.data == null || pWar.hasEnded() ||
                 ZhuluPeaceGuard.BlocksOrdinarySettlement(pWar) ||
-                RebellionDirectTerritoryTransferService.
-                    BlocksOrdinarySettlement(pWar) ||
-                WarPeaceSettlementService.Instance.HasActionableSettlement(
-                    pWar.data.id) ||
+                RebellionDirectTerritoryTransferService
+                    .BlocksOrdinarySettlement(pWar) ||
                 !TryBuildPlan(pWar, out _, out var facts,
                     out int expectedGoalCount)) return false;
-            if (!WarGoalSettlementRules.TryValidateForceBundle(
-                    facts[0].AchievedScore, facts, expectedGoalCount,
-                    out _)) return false;
-            Enqueue(pWar.data.id, 0);
-            return true;
+            return WarGoalSettlementRules.TryValidateForceBundle(
+                facts[0].AchievedScore, facts, expectedGoalCount, out _);
         }
 
-        private static void Enqueue(long pWarId, int pAttempt)
+        internal static bool TryExecuteImmediate(War pWar,
+            out WarPeaceExecutionResult pResult)
         {
-            DeferredRuntimeWorkService.EnqueueCoalesced(
-                QueuePrefix + pWarId, DeferredWorkClass.Runtime,
-                () => Process(pWarId, pAttempt));
-        }
-
-        private static void Process(long pWarId, int pAttempt)
-        {
-            if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
-            War war = WarPeaceSettlementWorld.FindWar(pWarId);
-            if (war?.data == null || war.hasEnded() ||
-                ZhuluPeaceGuard.BlocksOrdinarySettlement(war) ||
-                RebellionDirectTerritoryTransferService.
-                    BlocksOrdinarySettlement(war) ||
-                WarPeaceSettlementService.Instance.HasActionableSettlement(
-                    pWarId) ||
-                !TryBuildPlan(war, out WarPeaceSettlementDraft draft,
+            pResult = new WarPeaceExecutionResult(false, -1,
+                "war_goal_bundle_incomplete");
+            if (AW3MultiplayerReplicaScope.IsReplicaSession ||
+                pWar?.data == null || pWar.hasEnded() ||
+                !TryBuildPlan(pWar, out WarPeaceSettlementDraft draft,
                     out IReadOnlyList<WarGoalSettlementFacts> facts,
-                    out int expectedGoalCount)) return;
+                    out int expectedGoalCount)) return false;
             if (!WarGoalSettlementRules.TryValidateForceBundle(
                     draft.SignedWarScore, facts, expectedGoalCount,
-                    out _)) return;
+                    out _)) return false;
 
-            WarPeaceExecutionResult result = WarPeaceSettlementService
+            pResult = WarPeaceSettlementService
                 .Instance.ForceGoalSettlement(draft, facts,
                     expectedGoalCount);
-            if (result.Success || war?.data == null || war.hasEnded()) return;
-            if (pAttempt < MaximumAttempts)
-            {
-                Enqueue(pWarId, pAttempt + 1);
-                return;
-            }
-            ModClass.LogWarning("War-goal settlement failed war=" +
-                                pWarId + " reason=" + result.Reason);
+            return pResult.Success;
         }
 
         private static bool TryBuildPlan(War pWar,

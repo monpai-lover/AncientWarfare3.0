@@ -1,0 +1,89 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WarTerminalSettlementRulesTests
+{
+    internal static void Run()
+    {
+        DecisiveScoreHasPriority();
+        OneSidedEliminationHasFullBudget();
+        AffordableGoalFollowsForceElimination();
+        MutualEliminationUsesScoreOrWhitePeace();
+        SpecialWarsBlockOrdinarySettlement();
+    }
+
+    private static void DecisiveScoreHasPriority()
+    {
+        WarTerminalSettlementDecision decision =
+            WarTerminalSettlementRules.Resolve(
+                new WarTerminalSettlementFacts(false, 100, 0, 0, true));
+        Equal(WarTerminalSettlementReason.DecisiveScore, decision.Reason,
+            "decisive score outranks force and goal facts");
+        Equal(WarScoreSide.Attackers, decision.Beneficiary,
+            "positive decisive score benefits attackers");
+        Equal(100, decision.Budget,
+            "decisive settlement receives the treaty cap");
+    }
+
+    private static void OneSidedEliminationHasFullBudget()
+    {
+        WarTerminalSettlementDecision attackersLose =
+            WarTerminalSettlementRules.Resolve(
+                new WarTerminalSettlementFacts(false, 75, 0, 3, true));
+        Equal(WarTerminalSettlementReason.ForceElimination,
+            attackersLose.Reason,
+            "one-sided elimination outranks an affordable goal");
+        Equal(WarScoreSide.Defenders, attackersLose.Beneficiary,
+            "the surviving side wins regardless of current score");
+        Equal(100, attackersLose.Budget,
+            "force elimination receives a full winner budget");
+    }
+
+    private static void AffordableGoalFollowsForceElimination()
+    {
+        WarTerminalSettlementDecision goal =
+            WarTerminalSettlementRules.Resolve(
+                new WarTerminalSettlementFacts(false, 45, 2, 4, true));
+        Equal(WarTerminalSettlementReason.AffordableGoal, goal.Reason,
+            "an affordable legal goal ends a non-terminal field war");
+        Equal(WarScoreSide.Attackers, goal.Beneficiary,
+            "declared goals settle for the attacker");
+        Equal(45, goal.Budget,
+            "goal settlement keeps the authoritative score budget");
+    }
+
+    private static void MutualEliminationUsesScoreOrWhitePeace()
+    {
+        WarTerminalSettlementDecision scored =
+            WarTerminalSettlementRules.Resolve(
+                new WarTerminalSettlementFacts(false, -35, 0, 0, false));
+        Equal(WarTerminalSettlementReason.MutualElimination, scored.Reason,
+            "mutual elimination is terminal");
+        Equal(WarScoreSide.Defenders, scored.Beneficiary,
+            "negative score benefits defenders");
+        Equal(35, scored.Budget,
+            "mutual elimination is capped by current score");
+
+        WarTerminalSettlementDecision whitePeace =
+            WarTerminalSettlementRules.Resolve(
+                new WarTerminalSettlementFacts(false, 0, 0, 0, false));
+        Equal(WarTerminalSettlementReason.WhitePeace, whitePeace.Reason,
+            "zero-score mutual elimination creates white peace");
+    }
+
+    private static void SpecialWarsBlockOrdinarySettlement()
+    {
+        WarTerminalSettlementDecision guarded =
+            WarTerminalSettlementRules.Resolve(
+                new WarTerminalSettlementFacts(true, 100, 0, 4, true));
+        Equal(WarTerminalSettlementReason.None, guarded.Reason,
+            "special war adapters retain settlement authority");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                                                expected + ", got " +
+                                                actual);
+    }
+}

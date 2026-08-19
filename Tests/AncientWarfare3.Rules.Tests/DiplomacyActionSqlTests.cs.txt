@@ -13,8 +13,11 @@ internal static class DiplomacyActionSqlTests
 
         IReadOnlyList<DiplomacyActionIndexSpec> specs =
             DiplomacyActionIndexRules.GetRequiredIndexes();
-        Equal(33, specs.Count,
+        Equal(34, specs.Count,
             "diplomacy expansion owns a fixed append-only index set");
+        True(specs.Any(spec => spec.Name ==
+                "uq_RulerHousehold_active_fixed_rank"),
+            "fixed household ranks reject duplicate active occupants");
         True(specs.Any(spec =>
                 spec.Name == "idx_DiplomaticMarriage_actor_a_active"),
             "active marriage lookup indexes the first actor slot");

@@ -107,6 +107,7 @@ namespace AncientWarfare3.patch
         {
             if (__result?.data == null) return;
             PeasantRebelRouteService.OnWarStarted(__result);
+            SpecialGovernmentWarParticipationService.OnWarStarted(__result);
             if (ZhuluWarService.IsZhuluWar(__result,
                     requireActive: false))
             {
@@ -311,6 +312,7 @@ namespace AncientWarfare3.patch
             ArmyStallWatchdogService.OnWarEnded(pWar);
             WarBattleEpisodeService.OnWarEnded(pWar);
             WarScoreService.EndWar(pWar, pWinner);
+            SpecialGovernmentWarParticipationService.OnWarEnded(pWar);
             RoyalAsylumService.OnWarEnded(pWar);
             MilitaryEmergencyService.OnWarEnded(pWar);
             SyntheticMobilizationLedgerService.OnWarEnded(pWar);

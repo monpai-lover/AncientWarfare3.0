@@ -1,0 +1,128 @@
+using AncientWarfare3.core.lineage;
+
+internal static class SpecialGovernmentWarParticipationRulesTests
+{
+    internal static void Run()
+    {
+        CommandActorsKeepTheirIdentity();
+        RebelAndBanditResidentsFightAsCivilians();
+        ForceCountAddsOnlyNonWarriors();
+        RuntimeUsesScopedVanillaLawWithoutGlobalMutation();
+    }
+
+    private static void CommandActorsKeepTheirIdentity()
+    {
+        foreach (SpecialWarGovernmentKind kind in new[]
+                 {
+                     SpecialWarGovernmentKind.Bandit,
+                     SpecialWarGovernmentKind.PeasantRebel,
+                     SpecialWarGovernmentKind.MilitaryGovernorate
+                 })
+        {
+            True(SpecialGovernmentWarParticipationRules.CanCommand(
+                    kind, true, true, true, false, false, false),
+                kind + " king participates in an active war");
+            True(SpecialGovernmentWarParticipationRules.CanCommand(
+                    kind, true, true, false, true, false, false),
+                kind + " heir participates in an active war");
+            True(SpecialGovernmentWarParticipationRules.CanCommand(
+                    kind, true, true, false, false, true, false),
+                kind + " city leader participates in an active war");
+        }
+        False(SpecialGovernmentWarParticipationRules.CanCommand(
+                SpecialWarGovernmentKind.Ordinary, true, true,
+                true, false, false, false),
+            "ordinary rulers retain civilian protection");
+        False(SpecialGovernmentWarParticipationRules.CanCommand(
+                SpecialWarGovernmentKind.Bandit, true, false,
+                true, false, false, false),
+            "special rulers are not military-owned during peace");
+    }
+
+    private static void RebelAndBanditResidentsFightAsCivilians()
+    {
+        True(SpecialGovernmentWarParticipationRules.CanFightAsCivilian(
+                SpecialWarGovernmentKind.Bandit, true, true, false),
+            "all living bandit residents can fight");
+        True(SpecialGovernmentWarParticipationRules.CanFightAsCivilian(
+                SpecialWarGovernmentKind.PeasantRebel,
+                true, true, false),
+            "all living peasant-rebel residents can fight");
+        False(SpecialGovernmentWarParticipationRules.CanFightAsCivilian(
+                SpecialWarGovernmentKind.MilitaryGovernorate,
+                true, true, false),
+            "governorates only add command actors");
+        False(SpecialGovernmentWarParticipationRules.CanFightAsCivilian(
+                SpecialWarGovernmentKind.Bandit, true, true, true),
+            "boats are excluded from civilian participation");
+    }
+
+    private static void ForceCountAddsOnlyNonWarriors()
+    {
+        True(SpecialGovernmentWarParticipationRules
+                .CountsAsAdditionalCombatant(
+                    SpecialWarGovernmentKind.Bandit, true, true,
+                    false, false, false, false, false),
+            "a living bandit civilian supplements native warrior counts");
+        False(SpecialGovernmentWarParticipationRules
+                .CountsAsAdditionalCombatant(
+                    SpecialWarGovernmentKind.Bandit, true, true,
+                    false, false, false, false, true),
+            "native warriors are not double-counted");
+        True(SpecialGovernmentWarParticipationRules
+                .CountsAsAdditionalCombatant(
+                    SpecialWarGovernmentKind.MilitaryGovernorate,
+                    true, true, true, false, false, false, false),
+            "a governorate ruler supplements native warrior counts");
+    }
+
+    private static void RuntimeUsesScopedVanillaLawWithoutGlobalMutation()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string patch = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_SpecialGovernmentCombatPatch.cs"));
+        string runtime = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "SpecialGovernmentWarParticipationService.cs"));
+        string rts = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "ArmyRtsControllerService.cs"));
+        string force = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "WarForceEliminationSettlementService.cs"));
+        string authority = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "AWAuthorityCycleService.cs"));
+        True(patch.Contains("BaseSimObject") &&
+             patch.Contains("canAttackTarget") &&
+             patch.Contains("WorldLawAsset.isEnabled") &&
+             patch.Contains("world_law_angry_civilians") &&
+             patch.Contains("[ThreadStatic]"),
+            "vanilla angry-civilian eligibility is enabled only in scope");
+        False(patch.Contains(".toggle(") || patch.Contains("setEnabled") ||
+              runtime.Contains(".toggle(") || runtime.Contains("setEnabled"),
+            "special combat never mutates the global world law");
+        True(rts.Contains("SpecialGovernmentWarParticipationService") &&
+             force.Contains(
+                "TryAddSpecialGovernmentCombatants"),
+            "RTS ownership and force elimination consume the same policy");
+        False(runtime.Contains("World.world.units") ||
+              runtime.Contains("World.world.cities"),
+            "special force reconciliation never scans the world");
+        True(runtime.Contains("ActiveWarCounts") &&
+             !runtime.Contains("HeirService.FindHeirReadOnly"),
+            "RTS hot-path checks use cached war state and direct heir ids");
+        True(runtime.Contains("ParticipationBatch = 64") &&
+             authority.Contains(
+                 "SpecialGovernmentWarParticipationService.ProcessAuthorityCycle"),
+            "special roster attachment and cleanup are bounded per cycle");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(
+            name + ": expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(
+            name + ": expected false");
+    }
+}

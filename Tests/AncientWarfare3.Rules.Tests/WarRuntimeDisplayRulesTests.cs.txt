@@ -4,9 +4,9 @@ internal static class WarRuntimeDisplayRulesTests
 {
     internal static void Run()
     {
-        Equal("Battle of Red Cliffs", WarRuntimeDisplayRules.ResolveName(
+        Equal("Localized war", WarRuntimeDisplayRules.ResolveName(
                 "Battle of Red Cliffs", "Localized war", "War"),
-            "the live War.name is authoritative");
+            "localized war type is authoritative over generated live names");
         Equal("Localized war", WarRuntimeDisplayRules.ResolveName(
                 "war_name_reclaim", "Localized war", "War"),
             "an unresolved war-name key uses localized text");
@@ -74,6 +74,12 @@ internal static class WarRuntimeDisplayRulesTests
         True(conversation.Contains("ReadExecutedTerms(") &&
              conversation.Contains("pProposal.WarId"),
             "settlement terms still come from persisted data for the real war id");
+
+        string negotiation = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "WarPeaceNegotiationController.cs"));
+        True(negotiation.Contains("WarRuntimeDisplayService.Resolve(war)") &&
+             !negotiation.Contains("war.name,"),
+            "negotiation window uses the unified localized war name");
 
         string proposals = File.ReadAllText(Path.Combine(lineage,
             "DiplomacyProposalService.cs"));

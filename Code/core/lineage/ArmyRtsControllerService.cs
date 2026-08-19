@@ -6485,7 +6485,10 @@ namespace AncientWarfare3.core.lineage
                 hasArmyIndex,
                 pMissionActive,
                 isCivilAuthority: IsCivilAuthorityActor(pActor),
-                isCurrentCaptain: IsCaptain(pActor, pActor?.army));
+                isCurrentCaptain: IsCaptain(pActor, pActor?.army),
+                specialWarParticipant:
+                    SpecialGovernmentWarParticipationService
+                        .CanParticipateInRts(pActor));
         }
 
         private static bool IsLiveCombatantActor(Actor pActor)
@@ -6493,7 +6496,9 @@ namespace AncientWarfare3.core.lineage
             return IsLiveActor(pActor) &&
                    (IsCaptain(pActor, pActor?.army) ||
                     pActor.is_profession_warrior &&
-                    !IsCivilAuthorityActor(pActor));
+                    !IsCivilAuthorityActor(pActor) ||
+                    SpecialGovernmentWarParticipationService
+                        .CanParticipateInRts(pActor));
         }
 
         private static bool IsLiveActor(Actor pActor)
@@ -6509,7 +6514,9 @@ namespace AncientWarfare3.core.lineage
         private static bool IsLiveWarriorActor(Actor pActor)
         {
             return IsLiveActor(pActor) && pActor.is_profession_warrior &&
-                   !IsCivilAuthorityActor(pActor);
+                   (!IsCivilAuthorityActor(pActor) ||
+                    SpecialGovernmentWarParticipationService
+                        .CanParticipateInRts(pActor));
         }
 
         private static bool IsCivilAuthorityActor(Actor pActor)

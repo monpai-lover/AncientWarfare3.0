@@ -1,0 +1,76 @@
+internal static class WarTerminalSettlementSourceTests
+{
+    internal static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string lineage = Path.Combine(root, "Code", "core", "lineage");
+        string coordinator = File.ReadAllText(Path.Combine(lineage,
+            "WarTerminalSettlementCoordinator.cs"));
+        string bridge = File.ReadAllText(Path.Combine(lineage,
+            "WarScoreRuntimeBridge.cs"));
+        string authority = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWAuthorityCycleService.cs"));
+        string decisive = File.ReadAllText(Path.Combine(lineage,
+            "WarScoreDecisiveSettlementService.cs"));
+        string force = File.ReadAllText(Path.Combine(lineage,
+            "WarForceEliminationSettlementService.cs"));
+        string goals = File.ReadAllText(Path.Combine(lineage,
+            "WarGoalSettlementRuntimeService.cs"));
+        string settlement = File.ReadAllText(Path.Combine(lineage,
+            "WarPeaceSettlementService.cs"));
+
+        True(coordinator.Contains(
+                "QueuePrefix = \"war_terminal_settlement:\"") &&
+             coordinator.Contains("EnqueueCoalesced("),
+            "one coalesced terminal task owns each war");
+        True(coordinator.Contains("WarsPerAuthorityCycle = 2") &&
+             coordinator.Contains("_recoveryCursor") &&
+             coordinator.Contains("wars.list"),
+            "recovery uses a bounded persistent war cursor");
+        False(coordinator.Contains("foreach (War war in World.world.wars)") ||
+              coordinator.Contains("World.world.cities") ||
+              coordinator.Contains("World.world.units"),
+            "terminal recovery does not scan wars, cities, or actors");
+        True(coordinator.Contains(
+                "AW3MultiplayerReplicaScope.IsReplicaSession") &&
+             coordinator.Contains("TryReadDecision(war") &&
+             coordinator.Contains("ModClass.LogError("),
+            "execution is authoritative, revalidated, and error-visible");
+        True(bridge.Contains(
+                "WarTerminalSettlementCoordinator.NotifyWarChanged(pWar)") &&
+             !bridge.Contains(
+                "if (WarForceEliminationSettlementService.QueueIfReady(pWar)) return;"),
+            "war mutations notify the unified coordinator once");
+        True(authority.Contains(
+                "WarTerminalSettlementCoordinator.ProcessAuthorityCycle") &&
+             authority.Contains("WarTerminalSettlementCoordinator.ClearRuntime"),
+            "authority lifecycle owns bounded recovery and reset");
+        True(decisive.Contains(
+                 "WarPeaceDefaultOfferMode.ExhaustionMaximumBenefit") &&
+             !decisive.Contains("MaximumAttempts"),
+            "decisive settlement uses the maximum-benefit optimizer without local retries");
+        True(force.Contains("TryExecuteImmediate") &&
+             !force.Contains("MaximumAttempts"),
+            "force elimination exposes one immediate execution helper");
+        True(goals.Contains("TryExecuteImmediate") &&
+             !goals.Contains("MaximumAttempts"),
+            "war goals expose one exact-binding execution helper");
+        True(settlement.Contains(
+                 "superseded_by_terminal_goal_settlement") &&
+             settlement.Contains(
+                 "superseded_by_terminal_force_settlement"),
+            "stale ordinary proposals cannot block terminal settlement");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(
+            name + ": expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(
+            name + ": expected false");
+    }
+}

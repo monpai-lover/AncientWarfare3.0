@@ -17,6 +17,8 @@
     <Compile Include="CustomCourtTemplateCodecTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateModels.cs" Link="Production\CustomCourtTemplateModels.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateRules.cs" Link="Production\CustomCourtTemplateRules.cs" />
+    <Compile Include="..\..\Code\core\court\CustomLocalCourtTemplateRules.cs" Link="Production\CustomLocalCourtTemplateRules.cs" />
+    <Compile Include="..\..\Code\core\court\LocalCourtOfficeRules.cs" Link="Production\LocalCourtOfficeRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateJsonCodec.cs" Link="Production\CustomCourtTemplateJsonCodec.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateStore.cs" Link="Production\CustomCourtTemplateStore.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplatePathService.cs" Link="Production\CustomCourtTemplatePathService.cs" />
@@ -362,6 +364,9 @@
     <Compile Include="CityReservePoolPersistenceRulesTests.cs.txt" />
     <Compile Include="RebellionForceCollapseRulesTests.cs.txt" />
     <Compile Include="WarForceEliminationRulesTests.cs.txt" />
+    <Compile Include="WarTerminalSettlementRulesTests.cs.txt" />
+    <Compile Include="WarTerminalSettlementSourceTests.cs.txt" />
+    <Compile Include="SpecialGovernmentWarParticipationRulesTests.cs.txt" />
     <Compile Include="ArmyReplenishmentOperationRulesTests.cs.txt" />
     <Compile Include="CourtConscriptionLawRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyRecoveryRulesTests.cs.txt" />
@@ -555,6 +560,9 @@
     <Compile Include="..\..\Code\core\lineage\WarScoreRules.cs" Link="Production\WarScoreRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarExhaustionSettlementRules.cs" Link="Production\WarExhaustionSettlementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarForceEliminationRules.cs" Link="Production\WarForceEliminationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarTerminalSettlementRules.cs" Link="Production\WarTerminalSettlementRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RulerHouseholdRankRules.cs" Link="Production\RulerHouseholdRankRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SpecialGovernmentWarParticipationRules.cs" Link="Production\SpecialGovernmentWarParticipationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarBattleEpisodeRules.cs" Link="Production\WarBattleEpisodeRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarVictoryExhaustionRules.cs" Link="Production\WarVictoryExhaustionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarScorePersistence.cs" Link="Production\WarScorePersistence.cs" />
@@ -910,7 +918,6 @@
     <Compile Include="..\..\Code\core\court\OfficialCareerHistoryModels.cs" Link="Production\OfficialCareerHistoryModels.cs" />
     <Compile Include="..\..\Code\core\court\OfficialCareerHistoryRules.cs" Link="Production\OfficialCareerHistoryRules.cs" />
     <Compile Include="..\..\Code\core\court\OfficialCareerHistoryQuery.cs" Link="Production\OfficialCareerHistoryQuery.cs" />
-    <Compile Include="..\..\Code\core\db\CourtOfficerTableItem.cs" Link="Production\CourtOfficerTableItem.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyProposalRuntimeState.cs" Link="Production\DiplomacyProposalRuntimeState.cs" />
     <Compile Include="..\..\Code\core\lineage\AsyncStrategyAdmissionModels.cs" Link="Production\AsyncStrategyAdmissionModels.cs" />
     <Compile Include="..\..\Code\core\lineage\RulerHouseholdPregnancyRules.cs" Link="Production\RulerHouseholdPregnancyRules.cs" />

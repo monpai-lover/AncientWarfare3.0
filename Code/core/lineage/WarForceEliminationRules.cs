@@ -62,7 +62,7 @@ namespace AncientWarfare3.core.lineage
 
     public static class WarForceEliminationRules
     {
-        public const int RequiredZeroObservations = 2;
+        public const int RequiredZeroObservations = 1;
 
         public static int NextZeroStreak(int pPotential,
             int pCurrentStreak)

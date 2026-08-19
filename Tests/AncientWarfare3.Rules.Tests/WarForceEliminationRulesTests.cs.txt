@@ -6,14 +6,14 @@ internal static class WarForceEliminationRulesTests
     {
         Equal(1, WarForceEliminationRules.NextZeroStreak(0, 0),
             "first zero observation starts confirmation");
-        Equal(2, WarForceEliminationRules.NextZeroStreak(0, 1),
-            "second zero observation confirms exhaustion");
+        Equal(1, WarForceEliminationRules.NextZeroStreak(0, 1),
+            "zero confirmation saturates after one observation");
         Equal(0, WarForceEliminationRules.NextZeroStreak(1, 2),
             "positive potential clears the zero streak");
 
-        Equal(WarForceEliminationDecisionKind.None,
+        Equal(WarForceEliminationDecisionKind.ScoreSettlement,
             WarForceEliminationRules.Resolve(0, 0, 1, 1, 40).Kind,
-            "one zero month cannot settle a war");
+            "one zero observation settles immediately");
         Equal(WarForceEliminationDecisionKind.DefendersSurrender,
             WarForceEliminationRules.Resolve(3, 0, 0, 2, -20).Kind,
             "confirmed defender exhaustion overrides score");
@@ -49,7 +49,7 @@ internal static class WarForceEliminationRulesTests
             "negative facts do not reduce military potential");
         MilitaryPotentialReusesVanillaStatistics();
         DuplicateObservationsInOneMonthDoNotConfirmExhaustion();
-        RuntimeWiresBoundedMonthlyObservationFirst();
+        RuntimeWiresImmediateTerminalCoordinator();
         OrdinarySettlementUsesTheRequiredOfferMode();
         SpecialWarsUseBoundedAdapters();
     }
@@ -68,6 +68,8 @@ internal static class WarForceEliminationRulesTests
             "lineage", "WarForceEliminationSettlementService.cs"));
         string router = File.ReadAllText(Path.Combine(root, "Code", "core",
             "lineage", "WarForceSpecialSettlementService.cs"));
+        string coordinator = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "WarTerminalSettlementCoordinator.cs"));
         string rebellion = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "RebellionCollapseSettlementService.cs"));
         True(central.Contains(
@@ -78,7 +80,7 @@ internal static class WarForceEliminationRulesTests
              !central.Contains("CountSideReserves") &&
              !central.Contains("CityReservePoolService.CountAvailable"),
             "ordinary force exhaustion uses only native War force facts");
-        True(central.Contains("TrySettleZhuluZeroForce(pWar)") &&
+        True(coordinator.Contains("TrySettleZhuluZeroForce(war)") &&
              router.Contains("ResolveZeroForceFallback(") &&
              !router.Contains("ZhuluWarSettlementService"),
             "Zhulu uses only its direct zero-force liveness fallback");
@@ -117,9 +119,10 @@ internal static class WarForceEliminationRulesTests
         True(elimination.Contains("Kingdom requester = winner") &&
              elimination.Contains("WarPeaceDefaultOfferMode.ExhaustionMaximumBenefit"),
             "force exhaustion negotiates from the winner at maximum benefit");
-        True(elimination.Contains("TryReadScoreIfRequired") &&
-             elimination.Contains("state.Observe(pMonthKey"),
-            "one-sided exhaustion records force facts without requiring score");
+        True(elimination.Contains(
+                 "if (attackers == 0 && defenders == 0") &&
+             elimination.Contains("TryReadAttackerScore"),
+            "only mutual exhaustion requires a current score read");
     }
 
     private static void DuplicateObservationsInOneMonthDoNotConfirmExhaustion()
@@ -135,17 +138,17 @@ internal static class WarForceEliminationRulesTests
             "duplicate event cannot confirm attacker exhaustion");
         True(state.Observe(1202, 0, 3),
             "next month is accepted");
-        Equal(2, state.AttackerZeroStreak,
-            "second distinct month confirms attacker exhaustion");
+        Equal(1, state.AttackerZeroStreak,
+            "zero observation remains confirmed without another month");
         Equal(0, state.DefenderZeroStreak,
             "recovered defender clears its zero streak");
         False(state.Observe(1201, 0, 0),
             "late work from an older month is ignored");
-        Equal(2, state.AttackerZeroStreak,
+        Equal(1, state.AttackerZeroStreak,
             "out-of-order work cannot create another zero month");
     }
 
-    private static void RuntimeWiresBoundedMonthlyObservationFirst()
+    private static void RuntimeWiresImmediateTerminalCoordinator()
     {
         string root = Directory.GetCurrentDirectory();
         string authority = File.ReadAllText(Path.Combine(root, "Code",
@@ -153,16 +156,16 @@ internal static class WarForceEliminationRulesTests
         string bridge = File.ReadAllText(Path.Combine(root, "Code", "core",
             "lineage", "WarScoreRuntimeBridge.cs"));
         True(System.Text.RegularExpressions.Regex.IsMatch(authority,
-                @"WarForceEliminationSettlementService\s*\.\s*" +
+                @"WarTerminalSettlementCoordinator\s*\.\s*" +
                 @"ProcessAuthorityCycle"),
-            "authority cycle drains monthly war observations");
+            "authority cycle drains bounded terminal recovery work");
         True(authority.Contains(
-                "WarForceEliminationSettlementService.ClearRuntime"),
-            "world reset clears war force observations");
+                "WarTerminalSettlementCoordinator.ClearRuntime"),
+            "world reset clears terminal recovery state");
         True(bridge.Contains(
-                "if (WarForceEliminationSettlementService." +
-                "QueueIfReady(pWar)) return;"),
-            "force elimination runs before other settlement checks");
+                "WarTerminalSettlementCoordinator." +
+                "NotifyWarChanged(pWar)"),
+            "war mutations notify immediate terminal settlement");
     }
 
     private static void MilitaryPotentialReusesVanillaStatistics()

@@ -55,6 +55,8 @@ namespace AncientWarfare3.core.performance
             AWStatusSimulationScheduler.ClearRuntime();
             CityReservePoolService.ClearRuntime();
             WarForceEliminationSettlementService.ClearRuntime();
+            WarTerminalSettlementCoordinator.ClearRuntime();
+            SpecialGovernmentWarParticipationService.ClearRuntime();
             ArmyReplenishmentOperationService.ClearRuntime();
             KingdomDecisionMonthlyService.Reset();
             WarParticipantEntrySourceService.Instance.ClearRuntime();
@@ -106,7 +108,9 @@ namespace AncientWarfare3.core.performance
             Measure(RecentFeatureBenchmarkRules.DiplomacyIndex,
                 ZhuluAgeDirectorService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.DiplomacyIndex,
-                WarForceEliminationSettlementService.ProcessAuthorityCycle);
+                WarTerminalSettlementCoordinator.ProcessAuthorityCycle);
+            Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
+                SpecialGovernmentWarParticipationService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.MonthKingdomPolicyIndex,
                 KingdomDecisionMonthlyService.ProcessAuthorityCycle);
             TemporaryLevyService.ProcessLegacyMigration();

@@ -78,6 +78,7 @@ namespace AncientWarfare3.patch
             bool suppressPersonalHistory =
                 SyntheticLevyService.SuppressPersonalHistory(__instance);
             ActorAgeWorkService.Remove(__instance.data.id);
+            SpecialGovernmentWarParticipationService.OnActorDied(__instance);
             if (!__instance.isAlive()) return;
             __state.Diagnostic = RuntimePerformanceDiagnostic.BeginDeathEvent();
             if (__instance.isKing() && __instance.kingdom != null)

@@ -143,6 +143,11 @@ namespace AncientWarfare3.core.lineage
                     out string reason))
                 return new WarPeaceExecutionResult(false, -1, reason);
 
+            if (!TryClearPendingTerminalPredecessor(pDraft,
+                    "superseded_by_terminal_goal_settlement",
+                    out WarPeaceExecutionResult predecessor))
+                return predecessor;
+
             WarPeacePrepareResult prepared = Prepare(pDraft);
             if (!prepared.Success || prepared.Proposal == null)
                 return new WarPeaceExecutionResult(false,
@@ -227,12 +232,49 @@ namespace AncientWarfare3.core.lineage
                     ? WarPeaceTermsRules.MaximumWarScore
                     : current.Score;
             pDraft.SignedWarScore = effectiveScore;
+            if (!TryClearPendingTerminalPredecessor(pDraft,
+                    "superseded_by_terminal_force_settlement",
+                    out WarPeaceExecutionResult predecessor))
+                return predecessor;
             WarPeacePrepareResult prepared = PrepareWithForcedScore(
                 pDraft, effectiveScore);
             if (!prepared.Success || prepared.Proposal == null)
                 return new WarPeaceExecutionResult(false,
                     prepared.ProposalId, prepared.Reason);
             return AcceptAndExecuteOrResume(prepared.ProposalId);
+        }
+
+        private bool TryClearPendingTerminalPredecessor(
+            WarPeaceSettlementDraft pDraft, string pCancelReason,
+            out WarPeaceExecutionResult pResult)
+        {
+            pResult = new WarPeaceExecutionResult(true, -1, "");
+            if (!(_store is IWarPeaceSettlementActionableStore lookup) ||
+                !lookup.TryReadActionableWinnerProposalForWar(pDraft.WarId,
+                    pDraft.RequesterKingdomId, pDraft.ResponderKingdomId,
+                    out long proposalId)) return true;
+            if (!_store.TryRead(proposalId,
+                    out WarPeaceSettlementProposal existing))
+            {
+                pResult = new WarPeaceExecutionResult(false, proposalId,
+                    "settlement_not_found");
+                return false;
+            }
+            if (existing.Status == WarPeaceSettlementStatus.Executing ||
+                existing.Status == WarPeaceSettlementStatus.TermsApplied ||
+                existing.Status == WarPeaceSettlementStatus.Executed)
+            {
+                pResult = AcceptAndExecuteOrResume(proposalId);
+                return false;
+            }
+            WarPeaceDecisionResult cancelled = Cancel(existing.DetailId,
+                pCancelReason);
+            if (cancelled.Success) return true;
+            pResult = new WarPeaceExecutionResult(false, proposalId,
+                string.IsNullOrEmpty(cancelled.Reason)
+                    ? "terminal_predecessor_cancel_failed"
+                    : cancelled.Reason);
+            return false;
         }
 
         private WarPeacePrepareResult PrepareWithForcedScore(

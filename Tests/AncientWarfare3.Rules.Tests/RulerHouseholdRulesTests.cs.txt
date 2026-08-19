@@ -154,10 +154,10 @@ internal static class RulerHouseholdRulesTests
                 RulerHouseholdCandidateClass.Commoner,
                 RulerHouseholdKind.PrincipalWife),
             "a commoner cannot become a principal wife");
-        Equal(false, RulerHouseholdRules.IsCandidateClassEligible(
+        Equal(true, RulerHouseholdRules.IsCandidateClassEligible(
                 RulerHouseholdCandidateClass.Commoner,
                 RulerHouseholdKind.Consort),
-            "a commoner cannot become a consort");
+            "a commoner may become a consort");
         True(RulerHouseholdRules.HouseholdCandidatePriority(
                  memberOfRulingLineage: true) <
              RulerHouseholdRules.HouseholdCandidatePriority(

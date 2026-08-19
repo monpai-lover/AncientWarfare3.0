@@ -1,79 +1,56 @@
-using System;
 using AncientWarfare3.api.multiplayer;
 
 namespace AncientWarfare3.core.lineage
 {
     internal static class WarScoreDecisiveSettlementService
     {
-        private const string QueuePrefix = "war_score_decisive_settlement:";
-        private const int MaximumAttempts = 2;
-
         public static bool QueueIfDecisive(War pWar)
         {
+            if (!TryReadWinner(pWar, out _, out _, out _)) return false;
+            return WarTerminalSettlementCoordinator.NotifyWarChanged(pWar);
+        }
+
+        internal static bool TryExecuteImmediate(War pWar,
+            out WarPeaceExecutionResult pResult)
+        {
+            pResult = new WarPeaceExecutionResult(false, -1,
+                "war_score_not_decisive");
+            if (AW3MultiplayerReplicaScope.IsReplicaSession ||
+                !TryReadWinner(pWar, out Kingdom winner,
+                    out Kingdom loser, out _)) return false;
+
+            WarPeaceSettlementDraft draft = WarPeaceSettlementService
+                .Instance.BuildDefaultDraft(pWar, winner, loser,
+                    WarScoreRules.MaximumScore,
+                    WarPeaceDefaultOfferMode.ExhaustionMaximumBenefit);
+            draft.PlayerInitiated = false;
+            pResult = WarPeaceSettlementService.Instance
+                .ForceDecisiveSettlement(draft);
+            return pResult.Success;
+        }
+
+        private static bool TryReadWinner(War pWar, out Kingdom pWinner,
+            out Kingdom pLoser, out WarScoreSnapshot pSnapshot)
+        {
+            pWinner = null;
+            pLoser = null;
+            pSnapshot = default;
             if (AW3MultiplayerReplicaScope.IsReplicaSession ||
                 pWar?.data == null || pWar.hasEnded() ||
                 ZhuluPeaceGuard.BlocksOrdinarySettlement(pWar) ||
-                RebellionDirectTerritoryTransferService.
-                    BlocksOrdinarySettlement(pWar)) return false;
+                RebellionDirectTerritoryTransferService
+                    .BlocksOrdinarySettlement(pWar)) return false;
             Kingdom attacker = MainAttacker(pWar);
-            if (attacker?.data == null ||
-                !WarScoreService.TryGetSnapshot(pWar, attacker,
-                    out WarScoreSnapshot snapshot) ||
-                WarScoreDecisiveSettlementRules.WinnerSide(snapshot.Score) ==
-                WarScoreSide.None) return false;
-
-            long warId = pWar.data.id;
-            Enqueue(warId, 0);
-            return true;
-        }
-
-        private static void Enqueue(long pWarId, int pAttempt)
-        {
-            DeferredRuntimeWorkService.EnqueueCoalesced(QueuePrefix + pWarId,
-                DeferredWorkClass.Runtime,
-                () => Process(pWarId, pAttempt));
-        }
-
-        private static void Process(long pWarId, int pAttempt)
-        {
-            if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
-            War war = WarPeaceSettlementWorld.FindWar(pWarId);
-            if (war?.data == null || war.hasEnded() ||
-                ZhuluPeaceGuard.BlocksOrdinarySettlement(war) ||
-                RebellionDirectTerritoryTransferService.
-                    BlocksOrdinarySettlement(war)) return;
-            Kingdom attacker = MainAttacker(war);
-            Kingdom defender = MainDefender(war);
+            Kingdom defender = MainDefender(pWar);
             if (attacker?.data == null || defender?.data == null ||
-                !WarScoreService.TryGetSnapshot(war, attacker,
-                    out WarScoreSnapshot snapshot)) return;
-
-            WarScoreSide winnerSide = WarScoreDecisiveSettlementRules
-                .WinnerSide(snapshot.Score);
-            if (winnerSide == WarScoreSide.None) return;
-            Kingdom winner = winnerSide == WarScoreSide.Attackers
-                ? attacker
-                : defender;
-            Kingdom loser = winnerSide == WarScoreSide.Attackers
-                ? defender
-                : attacker;
-            WarPeaceSettlementDraft draft = WarPeaceSettlementService
-                .Instance.BuildDefaultDraft(war, winner, loser,
-                    WarScoreRules.MaximumScore,
-                    WarPeaceDefaultOfferMode.EnforceDemands);
-            draft.PlayerInitiated = false;
-            WarPeaceExecutionResult result = WarPeaceSettlementService
-                .Instance.ForceDecisiveSettlement(draft);
-            if (result.Success || war?.data == null || war.hasEnded()) return;
-            if (pAttempt < MaximumAttempts)
-            {
-                DeferredRuntimeWorkService.EnqueueCoalesced(
-                    QueuePrefix + pWarId, DeferredWorkClass.Runtime,
-                    () => Process(pWarId, pAttempt + 1));
-                return;
-            }
-            ModClass.LogWarning("Decisive war settlement failed war=" +
-                                pWarId + " reason=" + result.Reason);
+                !WarScoreService.TryGetSnapshot(pWar, attacker,
+                    out pSnapshot)) return false;
+            WarScoreSide side = WarScoreDecisiveSettlementRules.WinnerSide(
+                pSnapshot.Score);
+            if (side == WarScoreSide.None) return false;
+            pWinner = side == WarScoreSide.Attackers ? attacker : defender;
+            pLoser = side == WarScoreSide.Attackers ? defender : attacker;
+            return true;
         }
 
         private static Kingdom MainAttacker(War pWar)

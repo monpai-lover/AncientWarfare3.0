@@ -568,12 +568,15 @@ namespace AncientWarfare3.core.lineage
             bool actorValid, bool currentProfessionIsWarrior,
             bool hasArmyIndex, bool armyMissionActive,
             bool isCivilAuthority = false,
-            bool isCurrentCaptain = false)
+            bool isCurrentCaptain = false,
+            bool specialWarParticipant = false)
         {
-            if (isCivilAuthority && !isCurrentCaptain)
+            if (isCivilAuthority && !isCurrentCaptain &&
+                !specialWarParticipant)
                 return false;
             bool militaryRole = isCurrentCaptain ||
-                                currentProfessionIsWarrior;
+                                currentProfessionIsWarrior ||
+                                specialWarParticipant;
             return authoritative && actorValid && militaryRole &&
                    hasArmyIndex && armyMissionActive;
         }

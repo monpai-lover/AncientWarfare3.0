@@ -73,7 +73,7 @@ namespace AncientWarfare3.ui.windows
                 -score.GoalScore - score.LossScore, -score.Score,
                 -score.DecisiveScore);
             session.Presentation = new WarPeaceNegotiationPresentation(
-                war.name,
+                WarRuntimeDisplayService.Resolve(war),
                 Party(pRequester, war), Party(pResponder, war), requesterBreakdown,
                 responderBreakdown, terms,
                 new WarPeaceAcceptanceContext(0, resolve,
