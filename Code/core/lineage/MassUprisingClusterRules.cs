@@ -121,5 +121,15 @@ namespace AncientWarfare3.core.lineage
             return Math.Max(0L, pCultureId) + ":" +
                 string.Join(",", pCluster.CityIds);
         }
+
+        internal static int AdvanceCursor(int pCurrent, int pProcessed,
+            int pCount)
+        {
+            if (pCount <= 0) return 0;
+            int current = pCurrent % pCount;
+            if (current < 0) current += pCount;
+            int processed = Math.Max(0, pProcessed) % pCount;
+            return (current + processed) % pCount;
+        }
     }
 }

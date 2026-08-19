@@ -32,6 +32,13 @@ if (args.Length == 1 && args[0] == "--local-corruption-loyalty")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--mass-uprising-cluster-source")
+{
+    MassUprisingClusterSourceGuardTests.Run();
+    Console.WriteLine("Mass uprising cluster source guard passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--war-refugees")
 {
     WarRefugeeRulesTests.Run();

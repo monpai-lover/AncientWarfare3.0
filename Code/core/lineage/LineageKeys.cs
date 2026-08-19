@@ -133,6 +133,26 @@ namespace AncientWarfare3.core.lineage
             "aw_mandate_rebel_great_uprising_conversion_cursor";
         public const string MANDATE_REBEL_GREAT_UPRISING_LAST_CONVERSION_YEAR =
             "aw_mandate_rebel_great_uprising_last_conversion_year";
+        public const string MASS_UPRISING_CLUSTER_KEYS =
+            "aw_mass_uprising_cluster_keys";
+        public const string MASS_UPRISING_CLUSTER_CURSOR =
+            "aw_mass_uprising_cluster_cursor";
+        public const string MASS_UPRISING_CLUSTER_LAST_YEAR =
+            "aw_mass_uprising_cluster_last_year";
+        public const string MASS_UPRISING_CLUSTER_ORIGIN_ID =
+            "aw_mass_uprising_cluster_origin_id";
+        public const string MASS_UPRISING_CLUSTER_KEY =
+            "aw_mass_uprising_cluster_key";
+        public const string MASS_UPRISING_CLUSTER_CULTURE_ID =
+            "aw_mass_uprising_cluster_culture_id";
+        public const string MASS_UPRISING_CLUSTER_CORE_IDS =
+            "aw_mass_uprising_cluster_core_ids";
+        public const string MASS_UPRISING_CLUSTER_TARGET_IDS =
+            "aw_mass_uprising_cluster_target_ids";
+        public const string MASS_UPRISING_CLUSTER_PHASE =
+            "aw_mass_uprising_cluster_phase";
+        public const string MASS_UPRISING_CLUSTER_COMPLETED_YEAR =
+            "aw_mass_uprising_cluster_completed_year";
         public const string CORRUPTION_SCORE = "aw_corruption_score";
         public const string CORRUPTION_LAST_YEAR = "aw_corruption_last_year";
         public const string CORRUPTION_HIGH_STREAK_YEARS =

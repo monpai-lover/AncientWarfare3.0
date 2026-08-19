@@ -362,6 +362,8 @@ namespace AncientWarfare3.core.policy
             MeasureAge(UpdateAgeBenchmarkRules.KingdomMandateRebelIndex,
                 () => BanditGreatUprisingService.OnKingdomYear(pKingdom));
             MeasureAge(UpdateAgeBenchmarkRules.KingdomMandateRebelIndex,
+                () => MassUprisingClusterService.OnKingdomYear(pKingdom));
+            MeasureAge(UpdateAgeBenchmarkRules.KingdomMandateRebelIndex,
                 () => PeasantRebelBanditSpawnService.OnKingdomYear(pKingdom));
             MeasureAge(UpdateAgeBenchmarkRules.KingdomForeignOccupationIndex,
                 () => ForeignOccupationService.OnKingdomYear(pKingdom));
