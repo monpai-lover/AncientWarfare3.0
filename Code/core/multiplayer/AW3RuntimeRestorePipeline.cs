@@ -154,6 +154,8 @@ namespace AncientWarfare3.core.multiplayer
                     PeasantRebelBanditStrongholdService.RestoreRuntime),
                 new AW3RestoreStage("peasant_rebel_routes",
                     PeasantRebelRouteService.RebuildRuntime),
+                new AW3RestoreStage("bandit_great_uprising",
+                    BanditGreatUprisingService.RebuildRuntime),
                 new AW3RestoreStage("world_traits", () =>
                     XiaSubspeciesRepair.EnsureWorldTraits()),
                 new AW3RestoreStage("figure_state", FigureStateStore.Load),
@@ -295,6 +297,8 @@ namespace AncientWarfare3.core.multiplayer
                     PeasantRebelBanditStrongholdService.RestoreRuntime),
                 new AW3RestoreStage("peasant_rebel_routes",
                     PeasantRebelRouteService.RebuildRuntime),
+                new AW3RestoreStage("bandit_great_uprising",
+                    BanditGreatUprisingService.RebuildRuntime),
                 new AW3RestoreStage("war_plot_redirect",
                     WarPlotRedirectService.SweepExistingPlots),
                 new AW3RestoreStage("world_traits", () =>
@@ -429,6 +433,8 @@ namespace AncientWarfare3.core.multiplayer
                     MandatePhaseService.ClearRuntime),
                 new AW3RestoreStage("peasant_rebel_routes",
                     PeasantRebelRouteService.ClearRuntime),
+                new AW3RestoreStage("bandit_great_uprising",
+                    BanditGreatUprisingService.ClearRuntime),
                 new AW3RestoreStage("army_retreat",
                     ArmyRetreatService.ClearRuntime),
                 new AW3RestoreStage("army_strategic_index",
