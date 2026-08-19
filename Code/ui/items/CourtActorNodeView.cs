@@ -654,6 +654,11 @@ namespace AncientWarfare3.ui.items
                         ? OfficeName(pKingdom, CourtOfficeId.Governor)
                         : pCityName + " " +
                           OfficeName(pKingdom, CourtOfficeId.Governor);
+                case CourtPyramidRoleId.RegionalGovernor:
+                    return string.IsNullOrWhiteSpace(pCommandName)
+                        ? AW_L10n.Text("aw_court_regional_governor",
+                            "Regional Governor")
+                        : pCommandName;
                 default: return OfficeName(pKingdom, pRole);
             }
         }

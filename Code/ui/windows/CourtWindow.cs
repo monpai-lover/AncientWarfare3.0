@@ -31,6 +31,8 @@ namespace AncientWarfare3.ui.windows
         private const float CanvasPadding = 24f;
         private const int PortraitsPerFrame = 8;
         private const float CityCardGap = 12f;
+        private const float RegionGroupGap = 24f;
+        private const float RegionHeadingHeight = 20f;
 
         private static long _kingdomId = -1L;
         private static long _cityId = -1L;
@@ -39,6 +41,8 @@ namespace AncientWarfare3.ui.windows
         private readonly List<GameObject> _linkPool = new List<GameObject>();
         private readonly List<CourtCityGovernmentCard> _cityCardPool =
             new List<CourtCityGovernmentCard>();
+        private readonly List<Text> _regionSectionLabelPool =
+            new List<Text>();
         private readonly Queue<CourtActorNodeView> _portraitRetries =
             new Queue<CourtActorNodeView>();
         private Vector2 _windowSize = new Vector2(DefaultWidth, DefaultHeight);
@@ -376,7 +380,7 @@ namespace AncientWarfare3.ui.windows
                     ? CourtReadModelService.BuildLocalGovernments(kingdom)
                     : new List<LocalCourtReadModel>();
                 Vector2 canvasSize = CalculateCanvasSize(bounds,
-                    cityGovernments.Count);
+                    cityGovernments);
                 _canvasRect.sizeDelta = canvasSize;
                 Vector2 nodeOffset = new Vector2(bounds.OffsetX, bounds.OffsetY);
                 IReadOnlyList<CustomCourtEdge> localEdges = local != null &&
@@ -387,7 +391,7 @@ namespace AncientWarfare3.ui.windows
                 LayoutSectionMarkers(nodes, bounds, nodeOffset, KingdomColor(kingdom));
                 if (local == null)
                     RenderCityGovernmentCards(cityGovernments, kingdom,
-                        bounds, canvasSize);
+                        nodes, nodeOffset, bounds, canvasSize);
                 int renderVersion = _renderVersion;
                 _renderCoroutine = StartCoroutine(RenderNodesBatched(
                     nodes, kingdom, nodeOffset, renderVersion));
@@ -413,6 +417,13 @@ namespace AncientWarfare3.ui.windows
         private void UpdateLocalSummary(Kingdom pKingdom,
             LocalCourtReadModel pLocal)
         {
+            string bannerId = "";
+            try { bannerId = pKingdom.getActorAsset()?.banner_id ?? ""; }
+            catch { }
+            KingdomFlagBuilder.Build(bannerId, pKingdom.data.banner_icon_id,
+                pKingdom.data.banner_background_id,
+                HistoryColors.FromKingdom(pKingdom), pKingdom.data.color_id,
+                _summaryFlagBackground, _summaryFlagIcon);
             UpdateCustomCourtWorkflowEntry(localMode: true);
             _summaryPrimary.color = KingdomColor(pKingdom);
             _summaryPrimary.text = pLocal.CityName + "  |  " +
@@ -443,13 +454,12 @@ namespace AncientWarfare3.ui.windows
         private void UpdateLocalTemplateOptions(Kingdom pKingdom,
             LocalCourtReadModel pLocal)
         {
-            CustomCourtTemplate snapshot;
-            bool available = CustomCourtRuntime.TryGetSnapshot(pKingdom,
-                out snapshot) && snapshot.LocalTemplates != null &&
-                snapshot.LocalTemplates.Count > 0;
+            IReadOnlyList<CustomLocalCourtTemplate> templates =
+                CustomCourtRuntime.ResolvedLocalTemplates(pKingdom);
+            bool available = templates != null && templates.Count > 0;
             _localTemplateDropdown.gameObject.SetActive(available);
             if (!available) return;
-            _localTemplateDropdown.SetOptions(snapshot.LocalTemplates
+            _localTemplateDropdown.SetOptions(templates
                 .Where(template => template != null)
                 .Take(CustomLocalCourtTemplateRules.MaximumTemplates)
                 .Select(template => new AWStringDropdownOption
@@ -475,45 +485,85 @@ namespace AncientWarfare3.ui.windows
         }
 
         private static Vector2 CalculateCanvasSize(
-            CourtPyramidCanvasBounds pBounds, int pCityCardCount)
+            CourtPyramidCanvasBounds pBounds,
+            IReadOnlyList<LocalCourtReadModel> pCities)
         {
-            if (pCityCardCount <= 0)
+            List<List<LocalCourtReadModel>> groups =
+                GroupCityGovernmentsByRegion(pCities);
+            if (groups.Count == 0)
                 return new Vector2(pBounds.Width, pBounds.Height);
-            int columns = Math.Min(4, Math.Max(1, pCityCardCount));
-            int rows = Mathf.CeilToInt(pCityCardCount / (float)columns);
+            int columns = groups.Max(group => Math.Min(4, group.Count));
             float cityWidth = CanvasPadding * 2f + columns *
                 CourtCityGovernmentCard.Width + (columns - 1) * CityCardGap;
-            float cityHeight = 28f + rows * CourtCityGovernmentCard.Height +
-                               Math.Max(0, rows - 1) * CityCardGap;
+            float cityHeight = groups.Sum(group =>
+            {
+                int rows = Mathf.CeilToInt(group.Count / 4f);
+                return RegionHeadingHeight + rows *
+                    CourtCityGovernmentCard.Height +
+                    Math.Max(0, rows - 1) * CityCardGap + RegionGroupGap;
+            });
             return new Vector2(Mathf.Max(pBounds.Width, cityWidth),
                 pBounds.Height + cityHeight + CanvasPadding);
         }
 
         private void RenderCityGovernmentCards(
             IReadOnlyList<LocalCourtReadModel> pCities, Kingdom pKingdom,
+            IReadOnlyList<CourtPyramidNodeModel> pNodes, Vector2 pNodeOffset,
             CourtPyramidCanvasBounds pBounds, Vector2 pCanvasSize)
         {
             if (pCities == null || pCities.Count == 0) return;
-            int columns = Math.Min(4, Math.Max(1, pCities.Count));
-            float rowWidth = columns * CourtCityGovernmentCard.Width +
-                (columns - 1) * CityCardGap;
-            float startX = (pCanvasSize.x - rowWidth) * 0.5f;
-            float startY = -pBounds.Height - 26f;
-            for (int index = 0; index < pCities.Count; index++)
+            List<List<LocalCourtReadModel>> groups =
+                GroupCityGovernmentsByRegion(pCities);
+            float groupTopY = -pBounds.Height - 26f;
+            int cardIndex = 0;
+            int labelIndex = 0;
+            foreach (List<LocalCourtReadModel> group in groups)
             {
-                CourtCityGovernmentCard card = GetCityCard(index);
-                int row = index / columns;
-                int column = index % columns;
-                RectTransform rect = card.GetComponent<RectTransform>();
-                rect.anchoredPosition = new Vector2(startX + column *
-                    (CourtCityGovernmentCard.Width + CityCardGap),
-                    startY - row * (CourtCityGovernmentCard.Height +
-                                    CityCardGap));
-                card.Bind(pCities[index], pKingdom,
-                    cityId => OpenCity(pKingdom.id, cityId));
-                card.gameObject.SetActive(true);
-                if (card.LeaderNode?.NeedsPortrait == true)
-                    _portraitRetries.Enqueue(card.LeaderNode);
+                int columns = Math.Min(4, Math.Max(1, group.Count));
+                int rows = Mathf.CeilToInt(group.Count / 4f);
+                float rowWidth = columns * CourtCityGovernmentCard.Width +
+                    (columns - 1) * CityCardGap;
+                float startX = (pCanvasSize.x - rowWidth) * 0.5f;
+                Text heading = GetRegionSectionLabel(labelIndex++);
+                LocalCourtReadModel first = group[0];
+                string regionName = string.IsNullOrWhiteSpace(first.RegionName)
+                    ? first.CityName
+                    : first.RegionName;
+                heading.text = RegionalGovernmentRules.AdministrativeLabel(
+                    regionName, first.RegionTitle) + " · " + string.Format(
+                    AW_L10n.Text("aw_court_regional_member_count",
+                        "{0} prefectures"),
+                    Math.Max(1, first.RegionMemberCount));
+                heading.color = KingdomColor(pKingdom);
+                LayoutCanvasText(heading, startX, groupTopY + 20f,
+                    rowWidth, RegionHeadingHeight);
+                heading.gameObject.SetActive(true);
+                heading.transform.SetAsLastSibling();
+
+                float cardTopY = groupTopY - RegionHeadingHeight;
+                var cardRects = new List<RectTransform>();
+                for (int index = 0; index < group.Count; index++)
+                {
+                    CourtCityGovernmentCard card = GetCityCard(cardIndex++);
+                    int row = index / 4;
+                    int column = index % 4;
+                    RectTransform rect = card.GetComponent<RectTransform>();
+                    rect.anchoredPosition = new Vector2(startX + column *
+                        (CourtCityGovernmentCard.Width + CityCardGap),
+                        cardTopY - row * (CourtCityGovernmentCard.Height +
+                                          CityCardGap));
+                    card.Bind(group[index], pKingdom,
+                        cityId => OpenCity(pKingdom.id, cityId));
+                    card.gameObject.SetActive(true);
+                    cardRects.Add(rect);
+                    if (card.LeaderNode?.NeedsPortrait == true)
+                        _portraitRetries.Enqueue(card.LeaderNode);
+                }
+                RenderRegionalGovernmentLinks(pNodes, first.RegionSeatCityId,
+                    cardRects, pNodeOffset, pCanvasSize, pKingdom);
+                groupTopY = cardTopY - rows *
+                    CourtCityGovernmentCard.Height -
+                    Math.Max(0, rows - 1) * CityCardGap - RegionGroupGap;
             }
             if (_localSectionLabel != null)
             {
@@ -521,9 +571,75 @@ namespace AncientWarfare3.ui.windows
                 _localSectionLabel.text = AW_L10n.Text(
                     "aw_court_layer_city", "Local Bureaus");
                 _localSectionLabel.color = KingdomColor(pKingdom);
-                LayoutCanvasText(_localSectionLabel, startX,
-                    startY + 20f, rowWidth, 18f);
+                LayoutCanvasText(_localSectionLabel, 8f,
+                    -pBounds.Height + 20f,
+                    Mathf.Max(1f, pCanvasSize.x - 16f), 18f);
                 _localSectionLabel.transform.SetAsLastSibling();
+            }
+        }
+
+        private static List<List<LocalCourtReadModel>>
+            GroupCityGovernmentsByRegion(
+                IReadOnlyList<LocalCourtReadModel> pCities)
+        {
+            return (pCities ?? Array.Empty<LocalCourtReadModel>())
+                .Where(city => city != null)
+                .GroupBy(city => city.RegionSeatCityId >= 0
+                    ? city.RegionSeatCityId
+                    : city.CityId)
+                .OrderBy(group => group.Key)
+                .Select(group => group
+                    .OrderBy(city => city.CityId == group.Key ? 0 : 1)
+                    .ThenBy(city => city.CityId)
+                    .ToList())
+                .ToList();
+        }
+
+        private Text GetRegionSectionLabel(int pIndex)
+        {
+            while (_regionSectionLabelPool.Count <= pIndex)
+            {
+                Text label = EnsureText(_canvasRect,
+                    "RegionalGovernmentSectionLabel", 9,
+                    TextAnchor.MiddleCenter);
+                label.fontStyle = FontStyle.Bold;
+                _regionSectionLabelPool.Add(label);
+            }
+            return _regionSectionLabelPool[pIndex];
+        }
+
+        private void RenderRegionalGovernmentLinks(
+            IReadOnlyList<CourtPyramidNodeModel> pNodes, long pRegionSeatCityId,
+            IReadOnlyList<RectTransform> pCards, Vector2 pNodeOffset,
+            Vector2 pCanvasSize, Kingdom pKingdom)
+        {
+            CourtPyramidNodeModel governor = pNodes?.FirstOrDefault(node =>
+                CourtPyramidRules.IsRegionalNode(node) &&
+                node.CityId == pRegionSeatCityId);
+            if (governor == null || pCards == null || pCards.Count == 0)
+                return;
+            float fromX = governor.X + pNodeOffset.x;
+            float fromY = governor.Y + pNodeOffset.y -
+                          CourtActorNodeView.Height;
+            float busY = pCards.Max(card => card.anchoredPosition.y) + 8f;
+            float minX = pCards.Min(card => card.anchoredPosition.x +
+                CourtCityGovernmentCard.Width * 0.5f);
+            float maxX = pCards.Max(card => card.anchoredPosition.x +
+                CourtCityGovernmentCard.Width * 0.5f);
+            var canvasBounds = new CourtPyramidCanvasBounds(pCanvasSize.x,
+                pCanvasSize.y, 0f, 0f);
+            Color color = KingdomColor(pKingdom);
+            CreateLink(new CourtPyramidLinkSegment(fromX, fromY, fromX,
+                busY), Vector2.zero, color, canvasBounds, 2f, 0.58f);
+            CreateLink(new CourtPyramidLinkSegment(minX, busY, maxX,
+                busY), Vector2.zero, color, canvasBounds, 2f, 0.58f);
+            foreach (RectTransform card in pCards)
+            {
+                float targetX = card.anchoredPosition.x +
+                                CourtCityGovernmentCard.Width * 0.5f;
+                CreateLink(new CourtPyramidLinkSegment(targetX, busY,
+                    targetX, card.anchoredPosition.y), Vector2.zero, color,
+                    canvasBounds, 2f, 0.58f);
             }
         }
 
@@ -742,6 +858,11 @@ namespace AncientWarfare3.ui.windows
                                  CourtActorNodeView.Height)))
                     CreateLink(segment, pOffset, pColor, pBounds);
             if (!customGraph) return;
+            if (pLocalContext)
+                foreach (CourtPyramidLinkSegment segment in
+                         CourtPyramidRules.BuildRegionalSuperiorLinks(pNodes,
+                             CourtActorNodeView.Height))
+                    CreateLink(segment, pOffset, pColor, pBounds, 2f, 0.58f);
             Color managementColor = new Color(0.22f, 0.82f, 0.94f, 1f);
             foreach (CourtPyramidLinkSegment segment in
                      CourtPyramidRules.BuildCustomManagementLinks(pNodes,
@@ -798,6 +919,8 @@ namespace AncientWarfare3.ui.windows
                 if (node != null) node.gameObject.SetActive(false);
             foreach (CourtCityGovernmentCard card in _cityCardPool)
                 if (card != null) card.gameObject.SetActive(false);
+            foreach (Text label in _regionSectionLabelPool)
+                if (label != null) label.gameObject.SetActive(false);
             foreach (GameObject link in _linkPool)
                 if (link != null) link.SetActive(false);
             if (_centralSectionLabel != null) _centralSectionLabel.gameObject.SetActive(false);

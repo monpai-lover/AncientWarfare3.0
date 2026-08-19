@@ -1,0 +1,54 @@
+using System;
+using System.Linq;
+using AncientWarfare3.core.policy;
+
+internal static class CityAdministrationMapModeRulesTests
+{
+    public static void Run()
+    {
+        var state = new CityAdministrationMapStateRules();
+        True(state.IsRegionLevel, "city mode starts at region level");
+        True(state.PushRegion(42L), "region focus pushes seat city");
+        Equal(42L, state.FocusSeatCityId, "focused seat is stable");
+        True(!state.IsRegionLevel, "focused city mode is member level");
+        True(state.PopRegion(), "outside click pops to region level");
+        True(state.IsRegionLevel, "pop restores region level");
+        Equal("city-admin:7:Regions:42:99", CityAdministrationMapModeRules
+            .CacheKey(7L, CityAdministrationMapLevel.Regions, 42L, 99L),
+            "cache key includes world level seat and entity");
+        True(CityAdministrationMapModeRules.OrderedMembers(
+            new[] { 8L, 2L, 8L }).SequenceEqual(new[] { 2L, 8L }),
+            "members are deterministic");
+        Equal(CityAdministrationMapClickAction.FocusRegion,
+            CityAdministrationMapModeRules.ResolveClick(
+                true, -1L, 42L, true),
+            "region-level click focuses the mapped region");
+        Equal(CityAdministrationMapClickAction.InspectCity,
+            CityAdministrationMapModeRules.ResolveClick(
+                false, 42L, 42L, true),
+            "member click inside the focused region inspects the city");
+        Equal(CityAdministrationMapClickAction.PopToRegions,
+            CityAdministrationMapModeRules.ResolveClick(
+                false, 42L, 99L, true),
+            "mapped city outside the focused region returns to regions");
+        Equal(CityAdministrationMapClickAction.PopToRegions,
+            CityAdministrationMapModeRules.ResolveClick(
+                false, 42L, -1L, false),
+            "unmapped click returns one city-administration level");
+        Equal(CityAdministrationMapClickAction.None,
+            CityAdministrationMapModeRules.ResolveClick(
+                true, -1L, -1L, false),
+            "unmapped region-level click does not affect kingdom hierarchy");
+    }
+
+    private static void True(bool pActual, string pMessage)
+    {
+        if (!pActual) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage);
+    }
+}

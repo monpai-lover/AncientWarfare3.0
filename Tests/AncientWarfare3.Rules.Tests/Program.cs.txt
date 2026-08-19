@@ -49,6 +49,48 @@ if (args.Length == 1 && args[0] == "--custom-local-government")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--regional-government")
+{
+    RegionalGovernmentRulesTests.Run();
+    Console.WriteLine("Regional government rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--regional-government-template")
+{
+    RegionalGovernmentTemplateRulesTests.Run();
+    Console.WriteLine("Regional government template rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--regional-government-court")
+{
+    RegionalGovernmentCourtRulesTests.Run();
+    Console.WriteLine("Regional government court rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--city-administration-mapmode")
+{
+    CityAdministrationMapModeRulesTests.Run();
+    Console.WriteLine("City administration map mode rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--regional-government-nine-rank")
+{
+    RegionalGovernmentNineRankRulesTests.Run();
+    Console.WriteLine("Regional government nine-rank rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--official-career-noble-identity")
+{
+    OfficialCareerNobleIdentityRulesTests.Run();
+    Console.WriteLine("Official career noble identity rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--custom-court-template")
 {
     CustomCourtTemplateRulesTests.Run();

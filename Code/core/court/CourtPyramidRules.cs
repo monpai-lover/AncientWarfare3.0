@@ -68,6 +68,7 @@ namespace AncientWarfare3.core.court
             "military_governorate_governor";
         public const string MilitaryGovernorateSuccessor =
             "military_governorate_successor";
+        public const string RegionalGovernor = "regional_governor";
     }
 
     public sealed class CourtPyramidNodeModel
@@ -82,6 +83,7 @@ namespace AncientWarfare3.core.court
         public long CityId = -1L;
         public string CityName = "";
         public string CommandName = "";
+        public string DisplayTitle = "";
         public int AppointmentYear = -1;
         public float Influence;
         public int Merit;
@@ -121,6 +123,7 @@ namespace AncientWarfare3.core.court
                 CityId = CityId,
                 CityName = CityName,
                 CommandName = CommandName,
+                DisplayTitle = DisplayTitle,
                 AppointmentYear = AppointmentYear,
                 Influence = Influence,
                 Merit = Merit,
@@ -174,9 +177,11 @@ namespace AncientWarfare3.core.court
                 .Select(p => p.OfficeId));
             var result = new List<CourtPyramidNodeModel>();
 
-            foreach (IGrouping<long, CourtPyramidNodeModel> group in seeds
+            foreach (IGrouping<string, CourtPyramidNodeModel> group in seeds
                          .Where(p => !p.IsVacancy && p.ActorId >= 0)
-                         .GroupBy(p => p.ActorId))
+                         .GroupBy(p => IsRegionalNode(p)
+                             ? "regional:" + p.ActorId + ":" + p.OfficeId
+                             : "actor:" + p.ActorId))
             {
                 List<CourtPyramidNodeModel> ordered = group
                     .OrderBy(p => p.Rank)
@@ -281,6 +286,12 @@ namespace AncientWarfare3.core.court
                    (pNode.Rank >= GovernorRank || pNode.RoleId == CourtPyramidRoleId.Governor);
         }
 
+        public static bool IsRegionalNode(CourtPyramidNodeModel pNode)
+        {
+            return pNode != null &&
+                   pNode.RoleId == CourtPyramidRoleId.RegionalGovernor;
+        }
+
         public static bool IsMilitaryNode(CourtPyramidNodeModel pNode)
         {
             return pNode != null && !IsLocalNode(pNode) &&
@@ -356,6 +367,41 @@ namespace AncientWarfare3.core.court
             return BuildOrthogonalLinksForRows((pNodes ??
                 Array.Empty<CourtPyramidNodeModel>()).Where(node =>
                 node != null), nodeHeight);
+        }
+
+        public static List<CourtPyramidLinkSegment>
+            BuildRegionalSuperiorLinks(
+                IEnumerable<CourtPyramidNodeModel> pNodes, float nodeHeight)
+        {
+            List<CourtPyramidNodeModel> nodes = (pNodes ??
+                Array.Empty<CourtPyramidNodeModel>())
+                .Where(node => node != null)
+                .ToList();
+            CourtPyramidNodeModel superior = nodes
+                .Where(IsRegionalNode)
+                .OrderBy(node => node.StableOrder)
+                .FirstOrDefault();
+            if (superior == null) return new List<CourtPyramidLinkSegment>();
+            List<CourtPyramidNodeModel> localNodes = nodes
+                .Where(node => !IsRegionalNode(node))
+                .ToList();
+            if (localNodes.Count == 0)
+                return new List<CourtPyramidLinkSegment>();
+            int topRank = localNodes.Min(node => node.Rank);
+            CourtPyramidNodeModel[] children = localNodes
+                .Where(node => node.Rank == topRank)
+                .OrderBy(node => node.X)
+                .ToArray();
+            float safeHeight = Math.Max(1f, nodeHeight);
+            float fromY = superior.Y - safeHeight;
+            float busY = (fromY + children[0].Y) * 0.5f;
+            var segments = new List<CourtPyramidLinkSegment>();
+            AddSegment(segments, superior.X, fromY, superior.X, busY);
+            AddSegment(segments, children.Min(node => node.X), busY,
+                children.Max(node => node.X), busY);
+            foreach (CourtPyramidNodeModel child in children)
+                AddSegment(segments, child.X, busY, child.X, child.Y);
+            return segments;
         }
 
         private static List<CourtPyramidLinkSegment>

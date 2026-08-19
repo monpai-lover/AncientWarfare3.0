@@ -57,8 +57,16 @@ namespace AncientWarfare3.patch
                 ShouldUseIntercityGovernorCirculation(hasNineRankSystem,
                     CountLiveCities(kingdom));
 
-            Actor actor = TryGetRealmLeader(pCity, kingdom, heirId, circulating);
+            Actor actor = TryGetRealmLeader(pCity, kingdom, heirId,
+                circulating, pAllowVacancyPromotion: false);
+            bool vacancyPromotion = false;
             bool acting = false;
+            if (actor == null && civilServiceCareer)
+            {
+                actor = TryGetRealmLeader(pCity, kingdom, heirId,
+                    circulating, pAllowVacancyPromotion: true);
+                vacancyPromotion = actor != null;
+            }
             if (actor == null && civilServiceCareer)
             {
                 actor = TryGetActingLocalLeader(pCity, kingdom, heirId);
@@ -83,7 +91,8 @@ namespace AncientWarfare3.patch
                     bool appointed = acting
                         ? CourtService.TryAssignActingCityGovernor(actor, kingdom,
                             pCity)
-                        : CourtService.TryAssignCityGovernor(actor, kingdom, pCity);
+                        : CourtService.TryAssignCityGovernor(actor, kingdom,
+                            pCity, vacancyPromotion);
                     if (appointed)
                     {
                         CityLeaderCandidateRetryService.Clear(pCity, actor);
@@ -133,7 +142,8 @@ namespace AncientWarfare3.patch
         }
 
         private static Actor TryGetRealmLeader(City pCity, Kingdom pKingdom,
-            long pHeirId, bool pCirculating)
+            long pHeirId, bool pCirculating,
+            bool pAllowVacancyPromotion)
         {
             if (pCity == null || pKingdom?.data == null) return null;
             string cityOffice = CourtService.ResolveCityOffice(pKingdom,
@@ -162,7 +172,7 @@ namespace AncientWarfare3.patch
                     if (!CivilServiceQualificationService.
                             CanReceiveFormalCivilAppointment(unit, pKingdom,
                                 CourtOfficeLayer.City,
-                                cityOffice)) continue;
+                                cityOffice, pAllowVacancyPromotion)) continue;
                     if (pCirculating && !CanServeTarget(unit, pCity)) continue;
                     if (unit.hasClan() && royalClan != null && unit.clan == royalClan)
                         royalCandidates.Add(unit);

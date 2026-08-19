@@ -51,6 +51,10 @@ aw_local_office_zhoumu,州牧,Governor,州牧
 aw_local_office_changshi,长史,Chief Clerk,長史
 aw_local_office_sihu,司户,Household Officer,司戶
 aw_local_office_sicang,司仓,Granary Officer,司倉
+aw_court_office_minzhou_governor,州牧,Governor,州牧
+aw_court_office_minzhou_changshi,长史,Chief Clerk,長史
+aw_court_office_minzhou_sihu,司户,Household Officer,司戶
+aw_court_office_minzhou_sicang,司仓,Granary Officer,司倉
 aw_local_office_dudu,都督,Commander,都督
 aw_local_office_sima,司马,Marshal,司馬
 aw_local_office_canjun,参军,Staff Officer,參軍
@@ -59,12 +63,16 @@ aw_custom_court_add_office_desc,在当前可见画布中央新建官职卡片,Cr
 aw_custom_court_management_edge,管理关系,Management,管理关系
 aw_custom_court_prerequisite_edge,任职前置,Prerequisite,任职前置
 aw_custom_court_export,导出,Export,导出
-aw_custom_court_export_desc,将当前模板导出到模组 CourtJson 文件夹,Export the current template to the mod CourtJson folder,將目前模板匯出到模組 CourtJson 資料夾
+aw_custom_court_export_desc,将当前模板导出到模组 Courtjson 的中央或地方子文件夹,Export the current template to the Central or Local folder under Courtjson,將目前模板匯出到模組 Courtjson 的中央或地方子資料夾
 aw_custom_court_import,导入,Import,导入
 aw_custom_court_exported_path,导出成功：{0},Exported successfully: {0},导出成功：{0}
 aw_custom_court_import_select,导入 JSON,Import JSON,导入 JSON
-aw_custom_court_import_select_desc,从模组 CourtJson 文件夹选择 JSON 模板导入,Choose a JSON template from the mod CourtJson folder,從模組 CourtJson 資料夾選擇 JSON 模板匯入
+aw_custom_court_import_select_desc,中央朝廷与地方官署分别从对应的 JSON 文件夹导入,Import central courts and local governments from their separate JSON folders,中央朝廷與地方官署分別從對應的 JSON 資料夾匯入
 aw_custom_court_import_no_files,没有 JSON 文件,No JSON files,没有 JSON 文件
+aw_custom_court_import_central_select,导入中央朝廷 JSON,Import central court JSON,匯入中央朝廷 JSON
+aw_custom_court_import_central_no_files,没有中央朝廷 JSON,No central court JSON files,沒有中央朝廷 JSON
+aw_custom_local_court_import_select,导入地方官署 JSON,Import local government JSON,匯入地方官署 JSON
+aw_custom_local_court_import_no_files,没有地方官署 JSON,No local government JSON files,沒有地方官署 JSON
 aw_custom_court_import_invalid,选择的 JSON 文件无效,The selected JSON file is invalid,选择的 JSON 文件无效
 aw_custom_court_apply,应用,Apply,应用
 aw_custom_court_apply_desc,将当前朝廷和地方官署模板应用到这个国家,Apply this court and its local templates to the current kingdom,將目前朝廷和地方官署模板套用到這個國家
@@ -827,3 +835,20 @@ aw_court_history_end_dismissed,罢免,Dismissed,罷免
 aw_court_history_end_death,卒于任上,Died in office,卒於任上
 aw_court_history_end_city_transferred,城池易主,City transferred,城池易主
 aw_court_history_end_city_destroyed,城池毁灭,City destroyed,城池毀滅
+aw_custom_court_region_title,区域称呼,Region title,區域稱呼
+aw_custom_court_region_title_placeholder,郡,Commandery,郡
+aw_custom_court_region_title_desc,相邻城市运行时聚合层的称呼,Name of the runtime grouping made from adjacent cities,相鄰城市執行時聚合層的稱呼
+aw_custom_court_governor_title,区域长官称呼,Governor title,區域長官稱呼
+aw_custom_court_governor_title_placeholder,郡守,Regional Governor,郡守
+aw_custom_court_governor_title_desc,首府州牧兼任区域长官时显示的官职称呼,Title shown for the seat city leader when acting as regional governor,首府州牧兼任區域長官時顯示的官職稱呼
+aw_custom_court_regional_dynamic,动态区域层,Dynamic regional layer,動態區域層
+aw_custom_court_regional_dynamic_desc,按相邻城市实时生成且不产生空缺或独立任命记录,Generated from adjacent cities at runtime without vacancies or separate appointments,按相鄰城市即時生成且不產生空缺或獨立任命記錄
+aw_custom_court_regional_read_only,区域上级需要在中央朝廷中设置,The regional superior is configured in the central court,區域上級需要在中央朝廷中設定
+aw_custom_court_regional_management_only,区域层只能与中央官职建立管理关系,The regional layer only accepts central management connections,區域層只能與中央官職建立管理關係
+aw_custom_court_regional_protected,动态区域层不能删除,The dynamic regional layer cannot be deleted,動態區域層不能刪除
+aw_custom_court_language_zh,中文,Chinese,中文
+aw_custom_court_language_en,英文,English,英文
+aw_custom_court_local_level_title,基层行政称呼,Local level title,基層行政稱呼
+aw_custom_court_local_level_title_desc,显示在原城市名称旁的基层行政等级称呼,Administrative level shown beside the unchanged city name,顯示在原城市名稱旁的基層行政等級稱呼
+aw_court_regional_member_count,辖领{0}州,{0} prefectures,轄領{0}州
+aw_court_regional_node_summary,{0} | {1} | 首府 {2} | 辖领 {3} 州,{0} | {1} | Seat {2} | {3} prefectures,{0} | {1} | 首府 {2} | 轄領 {3} 州

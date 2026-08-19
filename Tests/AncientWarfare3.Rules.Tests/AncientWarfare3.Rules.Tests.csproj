@@ -16,6 +16,15 @@
     <Compile Include="CustomCourtTemplateRulesTests.cs.txt" />
     <Compile Include="CustomCourtTemplateCodecTests.cs.txt" />
     <Compile Include="CustomLocalGovernmentRulesTests.cs.txt" />
+    <Compile Include="RegionalGovernmentRulesTests.cs.txt" />
+    <Compile Include="RegionalGovernmentTemplateRulesTests.cs.txt" />
+    <Compile Include="RegionalGovernmentCourtRulesTests.cs.txt" />
+    <Compile Include="CityAdministrationMapModeRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\policy\CityAdministrationMapModeRules.cs" Link="Production\CityAdministrationMapModeRules.cs" />
+    <Compile Include="RegionalGovernmentNineRankRulesTests.cs.txt" />
+    <Compile Include="OfficialCareerNobleIdentityRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\RegionalGovernmentRules.cs" Link="Production\RegionalGovernmentRules.cs" />
+    <Compile Include="..\..\Code\core\court\RegionalGovernmentReadModel.cs" Link="Production\RegionalGovernmentReadModel.cs" />
     <Compile Include="..\..\Code\core\court\CustomLocalGovernmentRules.cs" Link="Production\CustomLocalGovernmentRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomLocalGovernmentPresetRules.cs" Link="Production\CustomLocalGovernmentPresetRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateModels.cs" Link="Production\CustomCourtTemplateModels.cs" />
@@ -25,6 +34,7 @@
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateJsonCodec.cs" Link="Production\CustomCourtTemplateJsonCodec.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateStore.cs" Link="Production\CustomCourtTemplateStore.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplatePathService.cs" Link="Production\CustomCourtTemplatePathService.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtTemplateDocumentRules.cs" Link="Production\CustomCourtTemplateDocumentRules.cs" />
     <Compile Include="CustomCourtInstanceRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CustomCourtInstanceModels.cs" Link="Production\CustomCourtInstanceModels.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtInstanceRules.cs" Link="Production\CustomCourtInstanceRules.cs" />
@@ -1043,5 +1053,6 @@
   </Target>
   <Target Name="KingdomAtlasSourceGuard" BeforeTargets="Build">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\KingdomAtlasSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\FormalOfficialNobleIdentitySourceGuard.ps1&quot;" />
   </Target>
 </Project>

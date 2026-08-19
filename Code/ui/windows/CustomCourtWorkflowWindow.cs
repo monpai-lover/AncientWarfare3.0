@@ -17,9 +17,16 @@ namespace AncientWarfare3.ui.windows
     internal sealed class CustomCourtWorkflowWindow :
         AbstractWindow<CustomCourtWorkflowWindow>
     {
+        private enum RegionalTitleTarget
+        {
+            Region,
+            Governor,
+            LocalLevel
+        }
+
         private const float ToolbarScale = 0.8f;
         private const float ToolbarWidth = 164f;
-        private const float ToolbarContentHeight = 520f;
+        private const float ToolbarContentHeight = 598f;
         private const float ToolbarScrollbarWidth = 6f;
         private static long _kingdomId = -1L;
         private static long _cityId = -1L;
@@ -37,6 +44,15 @@ namespace AncientWarfare3.ui.windows
         private Scrollbar _toolScrollbar;
         private InputField _courtNameInput;
         private InputField _officeNameInput;
+        private Text _regionTitleLabel;
+        private InputField _regionTitleChineseInput;
+        private InputField _regionTitleEnglishInput;
+        private Text _governorTitleLabel;
+        private InputField _governorTitleChineseInput;
+        private InputField _governorTitleEnglishInput;
+        private Text _localLevelTitleLabel;
+        private InputField _localLevelTitleChineseInput;
+        private InputField _localLevelTitleEnglishInput;
         private Button _wholePresetButton;
         private Button _backButton;
         private Text _wholePresetButtonText;
@@ -49,7 +65,8 @@ namespace AncientWarfare3.ui.windows
         private Button _createLocalTemplateButton;
         private Button _duplicateLocalTemplateButton;
         private Button _deleteLocalTemplateButton;
-        private string _selectedImportFile = string.Empty;
+        private string _selectedCentralImportFile = string.Empty;
+        private string _selectedLocalImportFile = string.Empty;
         private string _selectedLocalTemplateId = string.Empty;
         private string _selectedWholePresetId = string.Empty;
         private string _replacementTemplateId = string.Empty;
@@ -177,6 +194,48 @@ namespace AncientWarfare3.ui.windows
                 "aw_custom_court_whole_preset", "Whole court preset",
                 "aw_custom_court_whole_preset_select",
                 "Cycle through the unlocked whole-court presets");
+            _regionTitleLabel = CreateText(_toolPanel, "RegionTitleLabel", 9,
+                TextAnchor.MiddleLeft);
+            _regionTitleLabel.text = AW_L10n.Text(
+                "aw_custom_court_region_title", "Region title");
+            _regionTitleChineseInput = CreateInput(_toolPanel,
+                "RegionTitleChineseInput", "aw_custom_court_language_zh",
+                "中");
+            _regionTitleChineseInput.onEndEdit.AddListener(
+                ApplyRegionTitleChinese);
+            _regionTitleEnglishInput = CreateInput(_toolPanel,
+                "RegionTitleEnglishInput", "aw_custom_court_language_en",
+                "EN");
+            _regionTitleEnglishInput.onEndEdit.AddListener(
+                ApplyRegionTitleEnglish);
+            _governorTitleLabel = CreateText(_toolPanel,
+                "GovernorTitleLabel", 9, TextAnchor.MiddleLeft);
+            _governorTitleLabel.text = AW_L10n.Text(
+                "aw_custom_court_governor_title", "Governor title");
+            _governorTitleChineseInput = CreateInput(_toolPanel,
+                "GovernorTitleChineseInput", "aw_custom_court_language_zh",
+                "中");
+            _governorTitleChineseInput.onEndEdit.AddListener(
+                ApplyGovernorTitleChinese);
+            _governorTitleEnglishInput = CreateInput(_toolPanel,
+                "GovernorTitleEnglishInput", "aw_custom_court_language_en",
+                "EN");
+            _governorTitleEnglishInput.onEndEdit.AddListener(
+                ApplyGovernorTitleEnglish);
+            _localLevelTitleLabel = CreateText(_toolPanel,
+                "LocalLevelTitleLabel", 9, TextAnchor.MiddleLeft);
+            _localLevelTitleLabel.text = AW_L10n.Text(
+                "aw_custom_court_local_level_title", "City level");
+            _localLevelTitleChineseInput = CreateInput(_toolPanel,
+                "LocalLevelTitleChineseInput", "aw_custom_court_language_zh",
+                "中");
+            _localLevelTitleChineseInput.onEndEdit.AddListener(
+                ApplyLocalLevelTitleChinese);
+            _localLevelTitleEnglishInput = CreateInput(_toolPanel,
+                "LocalLevelTitleEnglishInput", "aw_custom_court_language_en",
+                "EN");
+            _localLevelTitleEnglishInput.onEndEdit.AddListener(
+                ApplyLocalLevelTitleEnglish);
             Text officeNameLabel = CreateText(_toolPanel, "OfficeNameLabel", 9,
                 TextAnchor.MiddleLeft);
             officeNameLabel.text = AW_L10n.Text("aw_custom_court_office_name",
@@ -227,6 +286,30 @@ namespace AncientWarfare3.ui.windows
                 _officeNameInput, add, _createLocalTemplateButton,
                 _duplicateLocalTemplateButton, _deleteLocalTemplateButton,
                 save, export, _importDropdown, apply);
+            AttachTooltip(_regionTitleChineseInput.gameObject,
+                "aw_custom_court_region_title", "Region title",
+                "aw_custom_court_region_title_desc",
+                "Name of the runtime grouping made from adjacent cities.");
+            AttachTooltip(_regionTitleEnglishInput.gameObject,
+                "aw_custom_court_region_title", "Region title",
+                "aw_custom_court_region_title_desc",
+                "Name of the runtime grouping made from adjacent cities.");
+            AttachTooltip(_governorTitleChineseInput.gameObject,
+                "aw_custom_court_governor_title", "Governor title",
+                "aw_custom_court_governor_title_desc",
+                "Title shown for the seat city's leader when acting as regional governor.");
+            AttachTooltip(_governorTitleEnglishInput.gameObject,
+                "aw_custom_court_governor_title", "Governor title",
+                "aw_custom_court_governor_title_desc",
+                "Title shown for the seat city's leader when acting as regional governor.");
+            AttachTooltip(_localLevelTitleChineseInput.gameObject,
+                "aw_custom_court_local_level_title", "City level",
+                "aw_custom_court_local_level_title_desc",
+                "Administrative level shown beside the unchanged city name.");
+            AttachTooltip(_localLevelTitleEnglishInput.gameObject,
+                "aw_custom_court_local_level_title", "City level",
+                "aw_custom_court_local_level_title_desc",
+                "Administrative level shown beside the unchanged city name.");
             Layout(_contextDropdown.RectTransform, 8f, 6f, 148f, 22f);
             Layout(_localTemplateDropdown.RectTransform, 8f, 32f, 148f, 22f);
             Layout(_localDefaultDropdown.RectTransform, 8f, 58f, 148f, 22f);
@@ -236,23 +319,38 @@ namespace AncientWarfare3.ui.windows
                 148f, 20f);
             Layout(_wholePresetButton.GetComponent<RectTransform>(), 8f, 154f,
                 148f, 22f);
-            Layout(officeNameLabel.rectTransform, 8f, 180f, 148f, 16f);
-            Layout(_officeNameInput.GetComponent<RectTransform>(), 8f, 198f,
+            Layout(_regionTitleLabel.rectTransform, 8f, 180f, 48f, 16f);
+            Layout(_regionTitleChineseInput.GetComponent<RectTransform>(),
+                58f, 178f, 46f, 20f);
+            Layout(_regionTitleEnglishInput.GetComponent<RectTransform>(),
+                108f, 178f, 48f, 20f);
+            Layout(_governorTitleLabel.rectTransform, 8f, 204f, 48f, 16f);
+            Layout(_governorTitleChineseInput.GetComponent<RectTransform>(),
+                58f, 202f, 46f, 20f);
+            Layout(_governorTitleEnglishInput.GetComponent<RectTransform>(),
+                108f, 202f, 48f, 20f);
+            Layout(_localLevelTitleLabel.rectTransform, 8f, 228f, 48f, 16f);
+            Layout(_localLevelTitleChineseInput.GetComponent<RectTransform>(),
+                58f, 226f, 46f, 20f);
+            Layout(_localLevelTitleEnglishInput.GetComponent<RectTransform>(),
+                108f, 226f, 48f, 20f);
+            Layout(officeNameLabel.rectTransform, 8f, 256f, 148f, 16f);
+            Layout(_officeNameInput.GetComponent<RectTransform>(), 8f, 274f,
                 148f, 20f);
-            Layout(add.GetComponent<RectTransform>(), 8f, 224f, 148f, 22f);
-            Layout(manage.GetComponent<RectTransform>(), 8f, 250f, 148f, 22f);
-            Layout(prerequisite.GetComponent<RectTransform>(), 8f, 276f,
+            Layout(add.GetComponent<RectTransform>(), 8f, 300f, 148f, 22f);
+            Layout(manage.GetComponent<RectTransform>(), 8f, 326f, 148f, 22f);
+            Layout(prerequisite.GetComponent<RectTransform>(), 8f, 352f,
                 148f, 22f);
             Layout(_createLocalTemplateButton.GetComponent<RectTransform>(),
-                8f, 302f, 72f, 22f);
+                8f, 378f, 72f, 22f);
             Layout(_duplicateLocalTemplateButton.GetComponent<RectTransform>(),
-                84f, 302f, 72f, 22f);
+                84f, 378f, 72f, 22f);
             Layout(_deleteLocalTemplateButton.GetComponent<RectTransform>(),
-                8f, 328f, 148f, 22f);
-            Layout(save.GetComponent<RectTransform>(), 8f, 354f, 148f, 22f);
-            Layout(export.GetComponent<RectTransform>(), 8f, 380f, 148f, 22f);
-            Layout(_importDropdown.RectTransform, 8f, 406f, 148f, 22f);
-            Layout(apply.GetComponent<RectTransform>(), 8f, 432f, 148f, 22f);
+                8f, 404f, 148f, 22f);
+            Layout(save.GetComponent<RectTransform>(), 8f, 430f, 148f, 22f);
+            Layout(export.GetComponent<RectTransform>(), 8f, 456f, 148f, 22f);
+            Layout(_importDropdown.RectTransform, 8f, 482f, 148f, 22f);
+            Layout(apply.GetComponent<RectTransform>(), 8f, 508f, 148f, 22f);
         }
 
         private void ApplyLayout()
@@ -321,7 +419,10 @@ namespace AncientWarfare3.ui.windows
             _root.anchorMin = _root.anchorMax = new Vector2(0.5f, 0.5f);
             _root.pivot = new Vector2(0.5f, 0.5f);
             _root.sizeDelta = new Vector2(contentWidth, viewportHeight);
-            _root.anchoredPosition = new Vector2(-530f, 0f);
+            if (_editingLocal)
+                _root.anchoredPosition = new Vector2(-530f, 0f);
+            else
+                _root.anchoredPosition = new Vector2(-510f, 0f);
             _layout = CustomCourtWorkflowLayoutRules.Resolve(contentWidth,
                 viewportHeight, ToolbarWidth, ToolbarScale,
                 ToolbarScrollbarWidth);
@@ -358,8 +459,8 @@ namespace AncientWarfare3.ui.windows
                     ToolbarScrollbarWidth, 0f);
                 _toolScrollbar.transform.SetAsLastSibling();
             }
-            Layout(_status.rectTransform, 8f, 460f, 148f,
-                Mathf.Max(1f, ToolbarContentHeight - 468f));
+            Layout(_status.rectTransform, 8f, 536f, 148f,
+                Mathf.Max(1f, ToolbarContentHeight - 544f));
             _canvasRect.GetComponent<TreeDragPanHandler>().Setup(_workspaceRect,
                 _canvasRect);
             _chrome?.RepositionResizeHandle();
@@ -386,6 +487,7 @@ namespace AncientWarfare3.ui.windows
             if (contextChanged)
             {
                 _editingLocal = _localEntryMode;
+                ApplyLayout();
                 _edgeSource = _edgeTarget = null;
                 _replacementTemplateId = string.Empty;
                 if (_officeNameInput != null)
@@ -456,6 +558,15 @@ namespace AncientWarfare3.ui.windows
                 new List<CustomCourtEdge>();
             _template.LocalTemplates = _template.LocalTemplates ??
                 new List<CustomLocalCourtTemplate>();
+            _template.RegionalGovernmentLayer =
+                _template.RegionalGovernmentLayer ??
+                new CustomCourtRegionalGovernmentLayer();
+            _template.RegionalGovernmentLayer.Layout =
+                _template.RegionalGovernmentLayer.Layout ??
+                new CustomCourtOfficeLayout { X = 1000f, Y = 900f };
+            _template.RegionalGovernmentLayer.ManagementOfficeIds =
+                _template.RegionalGovernmentLayer.ManagementOfficeIds ??
+                new List<string>();
             if (_template.LocalTemplates.Count == 0)
                 _template.LocalTemplates.Add(NewLocalTemplate("minzhou",
                     "民州", CustomLocalCourtDefaultKind.CivilDefault));
@@ -531,6 +642,15 @@ namespace AncientWarfare3.ui.windows
             _duplicateLocalTemplateButton?.gameObject.SetActive(localMode);
             _deleteLocalTemplateButton?.gameObject.SetActive(localMode);
             _wholePresetButton?.gameObject.SetActive(!localMode);
+            _regionTitleLabel?.gameObject.SetActive(!localMode);
+            _regionTitleChineseInput?.gameObject.SetActive(!localMode);
+            _regionTitleEnglishInput?.gameObject.SetActive(!localMode);
+            _governorTitleLabel?.gameObject.SetActive(!localMode);
+            _governorTitleChineseInput?.gameObject.SetActive(!localMode);
+            _governorTitleEnglishInput?.gameObject.SetActive(!localMode);
+            _localLevelTitleLabel?.gameObject.SetActive(!localMode);
+            _localLevelTitleChineseInput?.gameObject.SetActive(!localMode);
+            _localLevelTitleEnglishInput?.gameObject.SetActive(!localMode);
             if (_nameLabel != null)
                 _nameLabel.text = localMode
                     ? AW_L10n.Text("aw_custom_local_court_name",
@@ -596,6 +716,29 @@ namespace AncientWarfare3.ui.windows
             if (_courtNameInput != null)
                 _courtNameInput.text = name?.Chinese ?? name?.English ??
                     string.Empty;
+            if (!_editingLocal && _template?.RegionalGovernmentLayer != null)
+            {
+                CustomCourtRegionalGovernmentLayer layer =
+                    _template.RegionalGovernmentLayer;
+                if (_regionTitleChineseInput != null)
+                    _regionTitleChineseInput.text =
+                        layer.RegionTitle?.Chinese ?? string.Empty;
+                if (_regionTitleEnglishInput != null)
+                    _regionTitleEnglishInput.text =
+                        layer.RegionTitle?.English ?? string.Empty;
+                if (_governorTitleChineseInput != null)
+                    _governorTitleChineseInput.text =
+                        layer.GovernorTitle?.Chinese ?? string.Empty;
+                if (_governorTitleEnglishInput != null)
+                    _governorTitleEnglishInput.text =
+                        layer.GovernorTitle?.English ?? string.Empty;
+                if (_localLevelTitleChineseInput != null)
+                    _localLevelTitleChineseInput.text =
+                        layer.LocalLevelTitle?.Chinese ?? string.Empty;
+                if (_localLevelTitleEnglishInput != null)
+                    _localLevelTitleEnglishInput.text =
+                        layer.LocalLevelTitle?.English ?? string.Empty;
+            }
         }
 
         private void SelectEditorContext(AWStringDropdownOption pOption)
@@ -603,11 +746,13 @@ namespace AncientWarfare3.ui.windows
             bool local = pOption?.Id == "local";
             if (_editingLocal == local) return;
             _editingLocal = local;
+            ApplyLayout();
             _edgeSource = _edgeTarget = null;
             if (_officeNameInput != null)
                 _officeNameInput.text = string.Empty;
             EnsureTemplateShape();
             RefreshContextControls();
+            RefreshImportFiles();
             SyncNameInputFromContext();
             RenderCards(pFocusGraph: true);
         }
@@ -764,7 +909,11 @@ namespace AncientWarfare3.ui.windows
             CourtWorkflowCanvas canvas = _workspaceRect.GetComponent<
                 CourtWorkflowCanvas>();
             canvas.Clear();
-            foreach (CustomCourtOffice office in ActiveOffices)
+            var renderedOffices = new List<CustomCourtOffice>(ActiveOffices
+                .Where(office => office != null));
+            CustomCourtOffice regionalLayer = CreateRegionalLayerOffice();
+            if (regionalLayer != null) renderedOffices.Add(regionalLayer);
+            foreach (CustomCourtOffice office in renderedOffices)
             {
                 CourtWorkflowVacancyCard card = CourtWorkflowVacancyCard.Create(
                     _workspaceRect, office, SelectCard, OpenOfficeSettings,
@@ -778,10 +927,48 @@ namespace AncientWarfare3.ui.windows
                     office.Layout = new CustomCourtOfficeLayout();
                 rect.anchoredPosition = new Vector2(office.Layout.X,
                     -office.Layout.Y);
+                if (_editingLocal && card.IsRegionalLayerCard)
+                    card.enabled = false;
             }
             RenderEdges();
             RefreshSelectionVisuals();
             if (pFocusGraph) FocusActiveGraph(canvas);
+        }
+
+        private CustomCourtOffice CreateRegionalLayerOffice()
+        {
+            CustomCourtRegionalGovernmentLayer layer =
+                _template?.RegionalGovernmentLayer;
+            if (layer == null) return null;
+            CustomCourtOfficeLayout layout = layer.Layout ??
+                new CustomCourtOfficeLayout { X = 1000f, Y = 900f };
+            layer.Layout = layout;
+            if (_editingLocal)
+            {
+                List<CustomCourtOffice> offices = ActiveOffices?
+                    .Where(office => office?.Layout != null).ToList() ??
+                    new List<CustomCourtOffice>();
+                if (offices.Count > 0)
+                    layout = new CustomCourtOfficeLayout
+                    {
+                        X = offices.Average(office => office.Layout.X),
+                        Y = Math.Max(0f, offices.Min(office =>
+                            office.Layout.Y) - 150f)
+                    };
+            }
+            return new CustomCourtOffice
+            {
+                Id = "regional_government_layer",
+                Name = layer.GovernorTitle ?? new CustomCourtLocalizedText
+                {
+                    Chinese = "郡守",
+                    English = "Regional Governor"
+                },
+                Layer = CourtOfficeLayer.Regional,
+                Grade = 1,
+                Slots = 1,
+                Layout = layout
+            };
         }
 
         private void FocusActiveGraph(CourtWorkflowCanvas pCanvas)
@@ -828,7 +1015,7 @@ namespace AncientWarfare3.ui.windows
                     Destroy(child.gameObject);
             CourtWorkflowCanvas canvas = _workspaceRect.GetComponent<
                 CourtWorkflowCanvas>();
-            foreach (CustomCourtEdge edge in ActiveEdges)
+            foreach (CustomCourtEdge edge in RenderedEdges())
             {
                 CourtWorkflowVacancyCard from = FindCard(canvas,
                     edge?.FromOfficeId);
@@ -848,6 +1035,39 @@ namespace AncientWarfare3.ui.windows
             }
         }
 
+        private IEnumerable<CustomCourtEdge> RenderedEdges()
+        {
+            foreach (CustomCourtEdge edge in ActiveEdges ??
+                     new List<CustomCourtEdge>())
+                if (edge != null) yield return edge;
+            if (_editingLocal)
+            {
+                var managed = new HashSet<string>((ActiveEdges ??
+                        new List<CustomCourtEdge>())
+                    .Where(edge => edge != null && edge.Kind ==
+                        CustomCourtEdgeKind.Management)
+                    .Select(edge => edge.ToOfficeId), StringComparer.Ordinal);
+                foreach (CustomCourtOffice office in ActiveOffices ??
+                         new List<CustomCourtOffice>())
+                    if (office != null && !managed.Contains(office.Id))
+                        yield return new CustomCourtEdge
+                        {
+                            FromOfficeId = "regional_government_layer",
+                            ToOfficeId = office.Id,
+                            Kind = CustomCourtEdgeKind.Management
+                        };
+                yield break;
+            }
+            foreach (string officeId in _template?.RegionalGovernmentLayer?
+                         .ManagementOfficeIds ?? new List<string>())
+                yield return new CustomCourtEdge
+                {
+                    FromOfficeId = officeId,
+                    ToOfficeId = "regional_government_layer",
+                    Kind = CustomCourtEdgeKind.Management
+                };
+        }
+
         private static CourtWorkflowVacancyCard FindCard(
             CourtWorkflowCanvas canvas, string officeId)
         {
@@ -859,6 +1079,13 @@ namespace AncientWarfare3.ui.windows
 
         private void SelectCard(CourtWorkflowVacancyCard card)
         {
+            if (_editingLocal && card != null && card.IsRegionalLayerCard)
+            {
+                SetStatus(AW_L10n.Text(
+                    "aw_custom_court_regional_read_only",
+                    "The regional superior is configured in the central court."));
+                return;
+            }
             if (_edgeSource == null) _edgeSource = card;
             else if (_edgeTarget == null && card != _edgeSource) _edgeTarget = card;
             else { _edgeSource = card; _edgeTarget = null; }
@@ -899,6 +1126,29 @@ namespace AncientWarfare3.ui.windows
             {
                 SetStatus(AW_L10n.Text("aw_custom_court_select_two",
                     "Select two office cards first."));
+                return;
+            }
+            bool sourceRegional = _edgeSource.IsRegionalLayerCard;
+            bool targetRegional = _edgeTarget.IsRegionalLayerCard;
+            if (sourceRegional || targetRegional)
+            {
+                if (_editingLocal || kind != CustomCourtEdgeKind.Management ||
+                    sourceRegional || !targetRegional)
+                {
+                    SetStatus(AW_L10n.Text(
+                        "aw_custom_court_regional_management_only",
+                        "The regional layer only accepts central management connections."));
+                    return;
+                }
+                string officeId = _edgeSource.Office.Id;
+                List<string> managers = _template.RegionalGovernmentLayer
+                    .ManagementOfficeIds;
+                if (!managers.Contains(officeId)) managers.Add(officeId);
+                _edgeSource = _edgeTarget = null;
+                RenderEdges();
+                RefreshSelectionVisuals();
+                SetStatus(AW_L10n.Text("aw_custom_court_edge_added",
+                    "Connection added."));
                 return;
             }
             var edge = new CustomCourtEdge
@@ -975,13 +1225,109 @@ namespace AncientWarfare3.ui.windows
         {
             CourtWorkflowVacancyCard card = _edgeTarget ?? _edgeSource;
             string name = value?.Trim() ?? string.Empty;
-            if (card?.Office == null || string.IsNullOrEmpty(name)) return;
+            if (card?.Office == null || card.IsRegionalLayerCard ||
+                string.IsNullOrEmpty(name)) return;
             card.Office.Name = card.Office.Name ?? new CustomCourtLocalizedText();
             card.Office.Name.Chinese = name;
             card.Office.Name.English = name;
             card.RefreshText();
             SetStatus(AW_L10n.Text("aw_custom_court_office_renamed",
                 "Office renamed."));
+        }
+
+        private void ApplyRegionTitleChinese(string pValue)
+        {
+            ApplyRegionalLocalizedTitleFromInput(pValue,
+                RegionalTitleTarget.Region, pEnglish: false);
+        }
+
+        private void ApplyRegionTitleEnglish(string pValue)
+        {
+            ApplyRegionalLocalizedTitleFromInput(pValue,
+                RegionalTitleTarget.Region, pEnglish: true);
+        }
+
+        private void ApplyGovernorTitleChinese(string pValue)
+        {
+            ApplyRegionalLocalizedTitleFromInput(pValue,
+                RegionalTitleTarget.Governor, pEnglish: false);
+        }
+
+        private void ApplyGovernorTitleEnglish(string pValue)
+        {
+            ApplyRegionalLocalizedTitleFromInput(pValue,
+                RegionalTitleTarget.Governor, pEnglish: true);
+        }
+
+        private void ApplyLocalLevelTitleChinese(string pValue)
+        {
+            ApplyRegionalLocalizedTitleFromInput(pValue,
+                RegionalTitleTarget.LocalLevel, pEnglish: false);
+        }
+
+        private void ApplyLocalLevelTitleEnglish(string pValue)
+        {
+            ApplyRegionalLocalizedTitleFromInput(pValue,
+                RegionalTitleTarget.LocalLevel, pEnglish: true);
+        }
+
+        private void ApplyRegionalLocalizedTitleFromInput(string pValue,
+            RegionalTitleTarget pTarget, bool pEnglish)
+        {
+            if (ApplyRegionalLocalizedTitle(pValue, pTarget, pEnglish))
+                RenderCards();
+        }
+
+        private bool ApplyRegionalLocalizedTitle(string pValue,
+            RegionalTitleTarget pTarget, bool pEnglish)
+        {
+            if (_editingLocal || _template?.RegionalGovernmentLayer == null)
+                return false;
+            string value = pValue?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(value)) return false;
+            CustomCourtRegionalGovernmentLayer layer =
+                _template.RegionalGovernmentLayer;
+            CustomCourtLocalizedText text = pTarget ==
+                                             RegionalTitleTarget.Governor
+                ? layer.GovernorTitle
+                : pTarget == RegionalTitleTarget.LocalLevel
+                    ? layer.LocalLevelTitle
+                    : layer.RegionTitle;
+            if (text == null) text = new CustomCourtLocalizedText();
+            string oldValue = pEnglish ? text.English : text.Chinese;
+            if (string.Equals(oldValue, value, StringComparison.Ordinal))
+                return false;
+            if (pEnglish) text.English = value;
+            else text.Chinese = value;
+            if (pTarget == RegionalTitleTarget.Governor)
+                layer.GovernorTitle = text;
+            else if (pTarget == RegionalTitleTarget.LocalLevel)
+                layer.LocalLevelTitle = text;
+            else layer.RegionTitle = text;
+            return true;
+        }
+
+        private void SyncRegionalTitlesFromInputs()
+        {
+            bool changed = ApplyRegionalLocalizedTitle(
+                _regionTitleChineseInput?.text, RegionalTitleTarget.Region,
+                pEnglish: false);
+            changed |= ApplyRegionalLocalizedTitle(
+                _regionTitleEnglishInput?.text, RegionalTitleTarget.Region,
+                pEnglish: true);
+            changed |= ApplyRegionalLocalizedTitle(
+                _governorTitleChineseInput?.text,
+                RegionalTitleTarget.Governor, pEnglish: false);
+            changed |= ApplyRegionalLocalizedTitle(
+                _governorTitleEnglishInput?.text,
+                RegionalTitleTarget.Governor, pEnglish: true);
+            changed |= ApplyRegionalLocalizedTitle(
+                _localLevelTitleChineseInput?.text,
+                RegionalTitleTarget.LocalLevel, pEnglish: false);
+            changed |= ApplyRegionalLocalizedTitle(
+                _localLevelTitleEnglishInput?.text,
+                RegionalTitleTarget.LocalLevel, pEnglish: true);
+            if (changed) RenderCards();
         }
 
         private static string OfficeDisplayName(CustomCourtOffice office)
@@ -997,6 +1343,12 @@ namespace AncientWarfare3.ui.windows
 
         private void DeleteOffice(CourtWorkflowVacancyCard card)
         {
+            if (card != null && card.IsRegionalLayerCard)
+            {
+                SetStatus(AW_L10n.Text("aw_custom_court_regional_protected",
+                    "The dynamic regional layer cannot be deleted."));
+                return;
+            }
             string officeId = card?.Office?.Id;
             if (string.IsNullOrEmpty(officeId)) return;
             ActiveOffices?.RemoveAll(office => office != null &&
@@ -1006,6 +1358,9 @@ namespace AncientWarfare3.ui.windows
                     StringComparison.Ordinal) ||
                 string.Equals(edge.ToOfficeId, officeId,
                     StringComparison.Ordinal));
+            _template?.RegionalGovernmentLayer?.ManagementOfficeIds?
+                .RemoveAll(id => string.Equals(id, officeId,
+                    StringComparison.Ordinal));
             _edgeSource = null;
             _edgeTarget = null;
             if (_officeNameInput != null) _officeNameInput.text = string.Empty;
@@ -1014,7 +1369,8 @@ namespace AncientWarfare3.ui.windows
 
         private void OpenOfficeSettings(CourtWorkflowVacancyCard card)
         {
-            if (card?.Office == null || _template == null) return;
+            if (card?.Office == null || card.IsRegionalLayerCard ||
+                _template == null) return;
             CustomCourtOfficeSettingsWindow.Open(_kingdomId, _template,
                 card.Office,
                 draft =>
@@ -1033,19 +1389,57 @@ namespace AncientWarfare3.ui.windows
                 });
         }
 
-        private string TemplateRoot()
+        private string ActiveTemplateRoot()
         {
-            return CustomCourtTemplatePathService.RootPath;
+            return _editingLocal
+                ? CustomCourtTemplatePathService.LocalRootPath
+                : CustomCourtTemplatePathService.CentralRootPath;
+        }
+
+        private string ActiveSelectedImportFile
+        {
+            get => _editingLocal
+                ? _selectedLocalImportFile
+                : _selectedCentralImportFile;
+            set
+            {
+                if (_editingLocal) _selectedLocalImportFile = value ??
+                    string.Empty;
+                else _selectedCentralImportFile = value ?? string.Empty;
+            }
+        }
+
+        private bool TryBuildActiveDocument(
+            out CustomCourtTemplate pDocument)
+        {
+            pDocument = null;
+            if (_editingLocal)
+            {
+                CustomLocalCourtTemplate local = ActiveLocalTemplate;
+                if (local == null) return false;
+                pDocument = CustomCourtTemplateDocumentRules
+                    .CreateLocalDocument(local);
+                return true;
+            }
+            pDocument = CustomCourtTemplateDocumentRules
+                .CreateCentralDocument(_template);
+            return true;
         }
 
         private void ExportTemplate()
         {
             if (!SyncContextNameFromInput()) return;
-            var store = new CustomCourtTemplateStore(TemplateRoot());
-            CustomCourtTemplateValidationError error;
-            if (store.TrySave(_template, out error, out string savedPath))
+            if (!TryBuildActiveDocument(out CustomCourtTemplate document))
             {
-                _selectedImportFile = Path.GetFileName(savedPath);
+                SetStatus(AW_L10n.Text("aw_custom_court_invalid",
+                    "Template is invalid."));
+                return;
+            }
+            var store = new CustomCourtTemplateStore(ActiveTemplateRoot());
+            CustomCourtTemplateValidationError error;
+            if (store.TrySave(document, out error, out string savedPath))
+            {
+                ActiveSelectedImportFile = Path.GetFileName(savedPath);
                 RefreshImportFiles();
                 SetStatus(string.Format(CultureInfo.CurrentCulture,
                     AW_L10n.Text("aw_custom_court_exported_path",
@@ -1059,16 +1453,22 @@ namespace AncientWarfare3.ui.windows
         {
             if (!SyncContextNameFromInput()) return;
             _template.Revision = Math.Max(1, _template.Revision + 1);
-            var store = new CustomCourtTemplateStore(TemplateRoot());
+            if (!TryBuildActiveDocument(out CustomCourtTemplate document))
+            {
+                SetStatus(AW_L10n.Text("aw_custom_court_invalid",
+                    "Template is invalid."));
+                return;
+            }
+            var store = new CustomCourtTemplateStore(ActiveTemplateRoot());
             CustomCourtTemplateValidationError error;
-            SetStatus(store.TrySave(_template, out error)
+            SetStatus(store.TrySave(document, out error)
                 ? AW_L10n.Text("aw_custom_court_saved", "Court saved.")
                 : AW_L10n.Text("aw_custom_court_invalid", "Template is invalid."));
         }
 
         private void RefreshImportFiles()
         {
-            var store = new CustomCourtTemplateStore(TemplateRoot());
+            var store = new CustomCourtTemplateStore(ActiveTemplateRoot());
             string[] files = store.ListFileNames();
             var options = files.Select(file => new AWStringDropdownOption
             {
@@ -1076,12 +1476,22 @@ namespace AncientWarfare3.ui.windows
                 Label = Path.GetFileNameWithoutExtension(file),
                 Enabled = true
             }).ToArray();
-            _importDropdown?.SetOptions(options, _selectedImportFile,
+            string emptyKey = _editingLocal
+                ? "aw_custom_local_court_import_no_files"
+                : "aw_custom_court_import_central_no_files";
+            string emptyFallback = _editingLocal
+                ? "No local government JSON files"
+                : "No central court JSON files";
+            string selectKey = _editingLocal
+                ? "aw_custom_local_court_import_select"
+                : "aw_custom_court_import_central_select";
+            string selectFallback = _editingLocal
+                ? "Import local government JSON"
+                : "Import central court JSON";
+            _importDropdown?.SetOptions(options, ActiveSelectedImportFile,
                 files.Length == 0
-                    ? AW_L10n.Text("aw_custom_court_import_no_files",
-                        "No JSON files")
-                    : AW_L10n.Text("aw_custom_court_import_select",
-                        "Import JSON"));
+                    ? AW_L10n.Text(emptyKey, emptyFallback)
+                    : AW_L10n.Text(selectKey, selectFallback));
         }
 
         private void RefreshWholePresetOptions()
@@ -1231,20 +1641,32 @@ namespace AncientWarfare3.ui.windows
         private void ImportTemplate(AWStringDropdownOption option)
         {
             if (option == null || string.IsNullOrEmpty(option.Id)) return;
-            var store = new CustomCourtTemplateStore(TemplateRoot());
+            var store = new CustomCourtTemplateStore(ActiveTemplateRoot());
             CustomCourtTemplate imported;
             CustomCourtTemplateValidationError error;
             if (store.TryLoadFile(option.Id, out imported, out error))
             {
-                _template = imported;
+                bool merged = _editingLocal
+                    ? CustomCourtTemplateDocumentRules.TryApplyLocalDocument(
+                        _template, imported, out CustomCourtTemplate localResult,
+                        out string importedLocalId) &&
+                      AcceptLocalImport(localResult, importedLocalId)
+                    : CustomCourtTemplateDocumentRules.TryApplyCentralDocument(
+                        _template, imported,
+                        out CustomCourtTemplate centralResult) &&
+                      AcceptCentralImport(centralResult);
+                if (!merged)
+                {
+                    SetStatus(AW_L10n.Text("aw_custom_court_import_invalid",
+                        "The selected JSON file is invalid."));
+                    return;
+                }
                 _loadedKingdomId = _kingdomId;
-                _pendingReplacements.Clear();
-                _selectedWholePresetId = string.Empty;
                 EnsureTemplateShape();
                 if (ActiveLocalTemplate == null)
                     _selectedLocalTemplateId = _template.LocalTemplates
                         .FirstOrDefault()?.Id ?? string.Empty;
-                _selectedImportFile = option.Id;
+                ActiveSelectedImportFile = option.Id;
                 RefreshContextControls();
                 SyncNameInputFromContext();
                 RenderCards(pFocusGraph: true);
@@ -1254,6 +1676,25 @@ namespace AncientWarfare3.ui.windows
             }
             else SetStatus(AW_L10n.Text("aw_custom_court_import_invalid",
                 "The selected JSON file is invalid."));
+        }
+
+        private bool AcceptCentralImport(CustomCourtTemplate pImported)
+        {
+            if (pImported == null) return false;
+            _template = pImported;
+            _selectedWholePresetId = string.Empty;
+            return true;
+        }
+
+        private bool AcceptLocalImport(CustomCourtTemplate pImported,
+            string pTemplateId)
+        {
+            if (pImported == null || string.IsNullOrEmpty(pTemplateId))
+                return false;
+            _template = pImported;
+            _selectedLocalTemplateId = pTemplateId;
+            _replacementTemplateId = string.Empty;
+            return true;
         }
 
         public void ApplyCustomCourtTemplate()
@@ -1301,6 +1742,7 @@ namespace AncientWarfare3.ui.windows
                     new CustomCourtLocalizedText();
                 _template.Name.Chinese = name;
                 _template.Name.English = name;
+                SyncRegionalTitlesFromInputs();
             }
             return true;
         }

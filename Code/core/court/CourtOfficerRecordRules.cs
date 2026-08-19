@@ -30,5 +30,11 @@ namespace AncientWarfare3.core.court
             return string.Equals(pExistingLayer ?? "", pNewLayer ?? "",
                 System.StringComparison.Ordinal);
         }
+
+        public static bool ShouldGrantNobleIdentity(bool pCommitted,
+            bool pActing)
+        {
+            return pCommitted && !pActing;
+        }
     }
 }

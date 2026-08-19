@@ -38,7 +38,10 @@ namespace AncientWarfare3.ui.components
         {
             if (pModel == null || pKingdom?.data == null) return;
             gameObject.name = "CourtCityGovernment_" + pModel.CityId;
-            _title.text = pModel.CityName + " | " + pModel.CityTypeName;
+            string cityLabel = RegionalGovernmentRules.AdministrativeLabel(
+                RegionalGovernmentRules.CityName(pModel.CityName),
+                pModel.LocalLevelTitle);
+            _title.text = cityLabel + " | " + pModel.CityTypeName;
             _summary.text = string.Format(
                 AW_L10n.Text("aw_local_court_card_summary",
                     "Officials {0}/{1}  Efficiency {2}"),

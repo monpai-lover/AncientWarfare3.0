@@ -27,6 +27,28 @@ namespace AncientWarfare3.core.court
             return IsValidTemplateId(id);
         }
 
+        public static CustomCourtOffice FindOffice(CustomCourtTemplate pTemplate,
+            string pOfficeId)
+        {
+            if (pTemplate == null || string.IsNullOrEmpty(pOfficeId))
+                return null;
+            CustomCourtOffice central = (pTemplate.Offices ??
+                    new List<CustomCourtOffice>()).FirstOrDefault(office =>
+                    office != null && string.Equals(office.Id, pOfficeId,
+                        StringComparison.Ordinal));
+            if (central != null) return central;
+            foreach (CustomLocalCourtTemplate local in pTemplate.LocalTemplates ??
+                     new List<CustomLocalCourtTemplate>())
+            {
+                CustomCourtOffice office = (local?.Offices ??
+                        new List<CustomCourtOffice>()).FirstOrDefault(item =>
+                        item != null && string.Equals(item.Id, pOfficeId,
+                            StringComparison.Ordinal));
+                if (office != null) return office;
+            }
+            return null;
+        }
+
         public static CustomCourtTemplateValidationError Validate(
             CustomCourtTemplate template)
         {

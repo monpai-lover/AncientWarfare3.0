@@ -870,24 +870,31 @@ namespace AncientWarfare3.core.court
 
             bool examinationSystem = CivilServiceQualificationService.
                 HasExaminationSystem(pKingdom);
-            Actor candidate = examinationSystem
+            Actor indexedStrict = examinationSystem
                 ? FindBestIndexedFormalCandidate(pKingdom,
                     indexedFormalCandidates, pOfficeId, pPreferredSchool,
                     pAllowVacancyPromotion: false, pUnavailableActorIds, pLayer)
                 : null;
+            Actor rosterStrict = FindBestCandidate(pKingdom, pRoster,
+                pOfficeId, pPreferredSchool,
+                pAllowVacancyPromotion: false, pUnavailableActorIds, pLayer);
+            Actor candidate = BetterCandidate(pKingdom, indexedStrict,
+                rosterStrict, pOfficeId, pPreferredSchool);
             bool vacancyPromotion = false;
-            if (candidate == null && examinationSystem)
+            if (candidate == null)
             {
-                candidate = FindBestIndexedFormalCandidate(pKingdom,
-                    indexedFormalCandidates, pOfficeId, pPreferredSchool,
-                    pAllowVacancyPromotion: true, pUnavailableActorIds, pLayer);
-                vacancyPromotion = candidate != null;
-            }
-            if (candidate == null && pAllowActing)
-            {
-                candidate = FindBestCandidate(pKingdom, pRoster, pOfficeId,
-                    pPreferredSchool, pAllowVacancyPromotion: true,
-                    pUnavailableActorIds, pLayer);
+                Actor indexedFallback = examinationSystem
+                    ? FindBestIndexedFormalCandidate(pKingdom,
+                        indexedFormalCandidates, pOfficeId, pPreferredSchool,
+                        pAllowVacancyPromotion: true, pUnavailableActorIds,
+                        pLayer)
+                    : null;
+                Actor rosterFallback = FindBestCandidate(pKingdom, pRoster,
+                    pOfficeId, pPreferredSchool,
+                    pAllowVacancyPromotion: true, pUnavailableActorIds,
+                    pLayer);
+                candidate = BetterCandidate(pKingdom, indexedFallback,
+                    rosterFallback, pOfficeId, pPreferredSchool);
                 vacancyPromotion = candidate != null;
             }
             bool acting = false;
@@ -1021,6 +1028,21 @@ namespace AncientWarfare3.core.court
             }
 
             return best;
+        }
+
+        private static Actor BetterCandidate(Kingdom pKingdom, Actor pFirst,
+            Actor pSecond, string pOfficeId, string pPreferredSchool)
+        {
+            if (pFirst?.data == null) return pSecond;
+            if (pSecond?.data == null) return pFirst;
+            bool nineRankSystem = HasNineRankSystem(pKingdom);
+            float firstScore = ScoreCandidate(pKingdom, pFirst, pOfficeId,
+                pPreferredSchool, nineRankSystem);
+            float secondScore = ScoreCandidate(pKingdom, pSecond, pOfficeId,
+                pPreferredSchool, nineRankSystem);
+            if (secondScore > firstScore) return pSecond;
+            if (firstScore > secondScore) return pFirst;
+            return pSecond.data.id < pFirst.data.id ? pSecond : pFirst;
         }
 
         private static float ScoreCandidate(Kingdom pKingdom, Actor pActor,
@@ -1600,7 +1622,8 @@ namespace AncientWarfare3.core.court
         }
 
         internal static bool TryAssignCityGovernor(Actor pActor,
-            Kingdom pKingdom, City pCity)
+            Kingdom pKingdom, City pCity,
+            bool pVacancyPromotion = false)
         {
             if (pActor?.data == null || pKingdom?.data == null ||
                 pCity?.data == null || pCity.kingdom != pKingdom ||
@@ -1608,18 +1631,20 @@ namespace AncientWarfare3.core.court
             string officeId = ResolveCityOffice(pKingdom, pCity);
             return !string.IsNullOrEmpty(officeId) &&
                 SetOfficer(pActor, pKingdom, CourtOfficeLayer.City, officeId,
-                SchoolMembershipService.GetSchool(pActor.data.id), pCity);
+                SchoolMembershipService.GetSchool(pActor.data.id), pCity,
+                pVacancyPromotion: pVacancyPromotion);
         }
 
         internal static bool TryAssignLocalOfficer(Actor pActor,
-            Kingdom pKingdom, City pCity, string pOfficeId)
+            Kingdom pKingdom, City pCity, string pOfficeId,
+            bool pVacancyPromotion = true)
         {
             if (pActor?.data == null || pKingdom?.data == null ||
                 pCity?.data == null || pCity.kingdom != pKingdom ||
                 string.IsNullOrEmpty(pOfficeId)) return false;
             return SetOfficer(pActor, pKingdom, CourtOfficeLayer.City,
                 pOfficeId, SchoolMembershipService.GetSchool(pActor.data.id),
-                pCity, pActing: false, pVacancyPromotion: true,
+                pCity, pActing: false, pVacancyPromotion,
                 pAllowLocalLowerQualification: true);
         }
 
@@ -1744,6 +1769,9 @@ namespace AncientWarfare3.core.court
                 city?.data?.id ?? -1L);
             pActor.data.set(LineageKeys.COURT_SCHOOL,
                 pAppointment.SchoolId ?? "");
+            if (!pAppointment.IsActing)
+                LineageService.EnsureOfficialShiAndClan(pActor,
+                    pAppointment.OfficeId);
             SyncSchoolTrait(pActor, active: true);
             CitySchoolSnapshotService.MarkActorDirty(pActor);
             CourtDirectionService.MarkDirty(kingdom);
@@ -1925,7 +1953,9 @@ namespace AncientWarfare3.core.court
                 pKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, pActor.data.id);
             CourtOfficerMilitaryTransitionService.ReleaseAfterCommittedAppointment(
                 pActor, pLayer, pOfficeId);
-            LineageService.EnsureOfficialShiAndClan(pActor, pOfficeId);
+            if (CourtOfficerRecordRules.ShouldGrantNobleIdentity(
+                    careerResult.IsCommitted, pActing))
+                LineageService.EnsureOfficialShiAndClan(pActor, pOfficeId);
             SyncSchoolTrait(pActor, active: true);
             if (pRecordCareerHistory && careerResult.CreatedAppointmentEvent)
             {

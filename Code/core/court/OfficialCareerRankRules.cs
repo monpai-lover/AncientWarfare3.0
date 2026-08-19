@@ -316,6 +316,14 @@ namespace AncientWarfare3.core.court
             return MinimumRank;
         }
 
+        public static int RequiredRankForLocalOfficeGrade(int pOfficeGrade)
+        {
+            if (pOfficeGrade == 10) return 12;
+            if (pOfficeGrade == 20) return 6;
+            if (pOfficeGrade == 30) return 1;
+            return MinimumRank;
+        }
+
         public static bool IsRequiredServiceGrade(int servedOfficeGrade,
             int requiredOfficeGrade)
         {
@@ -359,6 +367,21 @@ namespace AncientWarfare3.core.court
             return Math.Max(rank, floor);
         }
 
+        public static int ResolveInitialLocalAppointmentRank(int currentRank,
+            int officeGrade, bool hasNineRankSystem,
+            bool hasFormalQualification, int entryBonus)
+        {
+            int rank = ClampRank(currentRank);
+            if (!hasNineRankSystem || !hasFormalQualification) return rank;
+            int floor = RequiredRankForLocalOfficeGrade(officeGrade);
+            if (officeGrade == 30)
+            {
+                int bonus = Math.Max(0, Math.Min(2, entryBonus));
+                floor = NormalizePrincipalEntryRank(floor + bonus);
+            }
+            return Math.Max(rank, floor);
+        }
+
         public static int ResolveActingAppointmentRank(int currentRank,
             bool hasNineRankSystem)
         {
@@ -377,6 +400,22 @@ namespace AncientWarfare3.core.court
                 officeGrade != 10 && officeGrade != 20 && officeGrade != 30)
                 return initial;
             return Math.Max(initial, RequiredRankForOfficeGrade(officeGrade));
+        }
+
+        public static int ResolveLocalVacancyPromotionRank(int currentRank,
+            int officeGrade, bool hasNineRankSystem,
+            bool hasFormalQualification, bool vacancyPromotion,
+            int entryBonus = 0)
+        {
+            int initial = ResolveInitialLocalAppointmentRank(currentRank,
+                officeGrade, hasNineRankSystem, hasFormalQualification,
+                entryBonus);
+            if (!vacancyPromotion || !hasNineRankSystem ||
+                !hasFormalQualification ||
+                officeGrade != 10 && officeGrade != 20 && officeGrade != 30)
+                return initial;
+            return Math.Max(initial,
+                RequiredRankForLocalOfficeGrade(officeGrade));
         }
 
         public static float OfficeRankMatchScore(int pRank, int pOfficeGrade)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.court;
 
 namespace AncientWarfare3.core.policy
 {
@@ -58,6 +59,8 @@ namespace AncientWarfare3.core.policy
             _pendingCitySources;
         private static IReadOnlyList<
             HierarchicalVassalMapLabelTerritorySource> _pendingTerritories;
+        private static IReadOnlyList<HierarchicalVassalMapLabelRegionSource>
+            _pendingRegionSources;
         private static int _sourceConversionIndex;
         private static bool _sourceConversionComplete;
         private static HashSet<string> _activeKeys;
@@ -524,6 +527,11 @@ namespace AncientWarfare3.core.policy
             _sources = new List<LabelSource>();
             BatchSourceGenerations.Clear();
             _activeKeys = new HashSet<string>();
+            _pendingRegionSources = (_refreshKind ==
+                HierarchicalVassalLabelRefreshKind.RootCities ||
+                _refreshKind == HierarchicalVassalLabelRefreshKind.ActiveView) &&
+                HierarchicalVassalMapModeService.IsCityRegionLayer
+                ? result.RegionSources : null;
             _pendingCitySources = _refreshKind ==
                 HierarchicalVassalLabelRefreshKind.RootCities ||
                 (_refreshKind == HierarchicalVassalLabelRefreshKind.ActiveView &&
@@ -545,12 +553,17 @@ namespace AncientWarfare3.core.policy
                 : HierarchicalVassalMapModeSchedulingRules.
                     MaximumInactiveLabelBudget;
             if (budget <= 0) budget = 1;
-            bool cityBatch = _pendingCitySources != null;
-            int count = cityBatch ? _pendingCitySources.Count :
+            bool regionBatch = _pendingRegionSources != null;
+            bool cityBatch = !regionBatch && _pendingCitySources != null;
+            int count = regionBatch ? _pendingRegionSources.Count :
+                cityBatch ? _pendingCitySources.Count :
                 (_pendingTerritories?.Count ?? 0);
             while (budget-- > 0 && _sourceConversionIndex < count)
             {
-                if (cityBatch)
+                if (regionBatch)
+                    AppendRegionSource(_pendingRegionSources[
+                        _sourceConversionIndex], _batchFocus);
+                else if (cityBatch)
                     AppendCitySource(_pendingCitySources[
                         _sourceConversionIndex], _batchFocus);
                 else
@@ -561,6 +574,7 @@ namespace AncientWarfare3.core.policy
             if (_sourceConversionIndex < count) return;
 
             _pendingCitySources = null;
+            _pendingRegionSources = null;
             _pendingTerritories = null;
             _sourceConversionComplete = true;
             _discoveryJob = null;
@@ -613,12 +627,16 @@ namespace AncientWarfare3.core.policy
             _forceRootCitiesRequested = false;
             _sources = null;
             _pendingCitySources = null;
+            _pendingRegionSources = null;
             _pendingTerritories = null;
             _sourceConversionIndex = 0;
             _sourceConversionComplete = false;
             _activeKeys = null;
             _batchKeyPrefix = ResolveBatchKeyPrefix(kind);
-            _batchLayer = kind == HierarchicalVassalLabelRefreshKind.RootCities ||
+            _batchLayer = (kind == HierarchicalVassalLabelRefreshKind.RootCities ||
+                kind == HierarchicalVassalLabelRefreshKind.ActiveView) &&
+                HierarchicalVassalMapModeService.IsCityRegionLayer
+                ? "region" : kind == HierarchicalVassalLabelRefreshKind.RootCities ||
                 (kind == HierarchicalVassalLabelRefreshKind.ActiveView &&
                  HierarchicalVassalMapModeService.IsCityLayer)
                 ? "city" : "country";
@@ -661,6 +679,22 @@ namespace AncientWarfare3.core.policy
             var source = new LabelSource(
                 BuildKey(pFocusKey, city.id, true), city.id, name,
                 false, city.kingdom, city, pSource.Zones,
+                pSource.ZoneIds);
+            RegisterConvertedSource(source);
+        }
+
+        private static void AppendRegionSource(
+            HierarchicalVassalMapLabelRegionSource pSource, long pFocusKey)
+        {
+            if (pSource == null || !pSource.HasVisibleLand ||
+                pSource.SeatCity?.data == null) return;
+            string name = RegionalGovernmentRules.AdministrativeLabel(
+                pSource.Region.RegionName, pSource.Region.RegionTitle);
+            if (string.IsNullOrWhiteSpace(name)) return;
+            var source = new LabelSource(
+                BuildKey(pFocusKey, pSource.Region.SeatCityId,
+                    "region"), pSource.Region.SeatCityId, name, false,
+                pSource.SeatCity.kingdom, pSource.SeatCity, pSource.Zones,
                 pSource.ZoneIds);
             RegisterConvertedSource(source);
         }
@@ -774,7 +808,9 @@ namespace AncientWarfare3.core.policy
             if (pKind == HierarchicalVassalLabelRefreshKind.RootCountries)
                 return "world:" + _worldGeneration + ":country:-1:";
             if (pKind == HierarchicalVassalLabelRefreshKind.RootCities)
-                return "world:" + _worldGeneration + ":city:-1:";
+                return "world:" + _worldGeneration + ":" +
+                    (HierarchicalVassalMapModeService.IsCityRegionLayer
+                        ? "region" : "city") + ":-1:";
             long focus = HierarchicalVassalMapModeService.
                 CurrentLabelFocusKey;
             return "world:" + _worldGeneration + ":" +
@@ -1246,7 +1282,8 @@ namespace AncientWarfare3.core.policy
             if (!HierarchicalVassalLabelCacheKey.TryParse(pKey,
                     out HierarchicalVassalLabelCacheKey parsed)) return;
             string activeLayer = HierarchicalVassalMapModeService.IsCityLayer
-                ? "city" : "country";
+                ? (HierarchicalVassalMapModeService.IsCityRegionLayer
+                    ? "region" : "city") : "country";
             bool activeMatch = _mapModeActive &&
                 string.Equals(parsed.Layer, activeLayer,
                     StringComparison.Ordinal) &&
@@ -1258,7 +1295,8 @@ namespace AncientWarfare3.core.policy
                 return;
             }
             if (parsed.HierarchyFocus != -1L) return;
-            if (string.Equals(parsed.Layer, "city", StringComparison.Ordinal))
+            if (string.Equals(parsed.Layer, "city", StringComparison.Ordinal) ||
+                string.Equals(parsed.Layer, "region", StringComparison.Ordinal))
                 _rootCitiesDirty = true;
             else if (string.Equals(parsed.Layer, "country",
                          StringComparison.Ordinal))
@@ -1280,6 +1318,13 @@ namespace AncientWarfare3.core.policy
         {
             return new HierarchicalVassalLabelCacheKey(_worldGeneration,
                 pCity ? "city" : "country", pFocusId, pEntityId).ToString();
+        }
+
+        private static string BuildKey(long pFocusId, long pEntityId,
+            string pLayer)
+        {
+            return new HierarchicalVassalLabelCacheKey(_worldGeneration,
+                pLayer, pFocusId, pEntityId).ToString();
         }
 
         private static string SafeCityName(City pCity)

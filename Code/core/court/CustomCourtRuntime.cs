@@ -66,13 +66,8 @@ namespace AncientWarfare3.core.court
             pTemplate = null;
             if (pKingdom?.data == null || pCity?.data == null ||
                 pCity.kingdom != pKingdom) return false;
-            IReadOnlyList<CustomLocalCourtTemplate> templates;
-            if (TryGetSnapshot(pKingdom, out CustomCourtTemplate snapshot) &&
-                snapshot.LocalTemplates != null &&
-                snapshot.LocalTemplates.Count > 0)
-                templates = snapshot.LocalTemplates;
-            else
-                templates = BuiltInLocalTemplates;
+            IReadOnlyList<CustomLocalCourtTemplate> templates =
+                ResolvedLocalTemplates(pKingdom);
 
             pCity.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
                 out string persistedId, string.Empty);
@@ -110,10 +105,9 @@ namespace AncientWarfare3.core.court
             if (pKingdom?.data == null || pCity?.data == null ||
                 pCity.kingdom != pKingdom || string.IsNullOrWhiteSpace(
                     pTemplateId)) return false;
-            CustomCourtTemplate snapshot;
-            if (!TryGetSnapshot(pKingdom, out snapshot) ||
-                snapshot.LocalTemplates == null ||
-                !snapshot.LocalTemplates.Any(template => template != null &&
+            IReadOnlyList<CustomLocalCourtTemplate> templates =
+                ResolvedLocalTemplates(pKingdom);
+            if (!templates.Any(template => template != null &&
                     string.Equals(template.Id, pTemplateId,
                         System.StringComparison.Ordinal))) return false;
             pCity.data.set(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
@@ -134,15 +128,57 @@ namespace AncientWarfare3.core.court
         public static string OfficeDisplayName(Kingdom kingdom,
             string officeId)
         {
-            CustomCourtTemplate snapshot;
-            if (!TryGetSnapshot(kingdom, out snapshot) ||
-                snapshot.Offices == null) return string.Empty;
-            foreach (CustomCourtOffice office in snapshot.Offices)
-            {
-                if (office == null || office.Id != officeId) continue;
-                return LocalizedName(office.Name, office.Id);
-            }
-            return string.Empty;
+            CustomCourtOffice office = null;
+            if (TryGetSnapshot(kingdom, out CustomCourtTemplate snapshot))
+                office = CustomCourtTemplateRules.FindOffice(snapshot,
+                    officeId);
+            if (office == null)
+                foreach (CustomLocalCourtTemplate local in
+                         ResolvedLocalTemplates(kingdom))
+                {
+                    office = (local?.Offices ??
+                        new List<CustomCourtOffice>()).FirstOrDefault(item =>
+                        item != null && string.Equals(item.Id, officeId,
+                            System.StringComparison.Ordinal));
+                    if (office != null) break;
+                }
+            return office == null
+                ? string.Empty
+                : LocalizedName(office.Name, office.Id);
+        }
+
+        internal static void RegionalTitles(Kingdom pKingdom,
+            out string pRegionTitle, out string pGovernorTitle)
+        {
+            RegionalTitles(pKingdom, out pRegionTitle, out pGovernorTitle,
+                out _);
+        }
+
+        internal static void RegionalTitles(Kingdom pKingdom,
+            out string pRegionTitle, out string pGovernorTitle,
+            out string pLocalLevelTitle)
+        {
+            pRegionTitle = "郡";
+            pGovernorTitle = "郡守";
+            pLocalLevelTitle = "州";
+            if (!TryGetSnapshot(pKingdom, out CustomCourtTemplate snapshot) ||
+                snapshot.RegionalGovernmentLayer == null) return;
+            pRegionTitle = LocalizedName(snapshot.RegionalGovernmentLayer
+                .RegionTitle, pRegionTitle);
+            pGovernorTitle = LocalizedName(snapshot.RegionalGovernmentLayer
+                .GovernorTitle, pGovernorTitle);
+            pLocalLevelTitle = LocalizedName(snapshot.RegionalGovernmentLayer
+                .LocalLevelTitle, pLocalLevelTitle);
+        }
+
+        internal static IReadOnlyList<CustomLocalCourtTemplate>
+            ResolvedLocalTemplates(Kingdom pKingdom)
+        {
+            if (TryGetSnapshot(pKingdom, out CustomCourtTemplate snapshot) &&
+                snapshot.LocalTemplates != null &&
+                snapshot.LocalTemplates.Count > 0)
+                return snapshot.LocalTemplates;
+            return BuiltInLocalTemplates;
         }
 
         private static string LocalizedName(CustomCourtLocalizedText value,
@@ -172,6 +208,7 @@ namespace AncientWarfare3.core.court
             if (!application.TryBuildInstance(KingdomKey(kingdom), template,
                     current, incumbents, out next) || !Instances.Save(next))
                 return false;
+            RegionalGovernmentAggregationService.Invalidate(kingdom);
             try
             {
                 kingdom.data.set(LineageKeys.CUSTOM_COURT_TEMPLATE_ID,

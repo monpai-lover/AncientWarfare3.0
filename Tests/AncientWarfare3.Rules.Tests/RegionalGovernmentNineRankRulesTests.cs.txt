@@ -1,0 +1,63 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class RegionalGovernmentNineRankRulesTests
+{
+    public static void Run()
+    {
+        Equal(1, OfficialCareerRankRules.RequiredRankForLocalOfficeGrade(30),
+            "lowest local office opens at ninth rank");
+        Equal(6, OfficialCareerRankRules.RequiredRankForLocalOfficeGrade(20),
+            "middle local office keeps a higher floor");
+        Equal(12, OfficialCareerRankRules.RequiredRankForLocalOfficeGrade(10),
+            "local leader keeps the senior floor");
+        Equal(6, OfficialCareerRankRules.RequiredRankForOfficeGrade(30),
+            "central office compatibility remains unchanged");
+        Equal(2, OfficialCareerRankRules.ResolveInitialLocalAppointmentRank(
+            OfficialCareerRankRules.Unranked, 30, true, true, 0),
+            "local entry does not require central sixth-rank floor");
+        Equal(true, CivilServiceExamRules.ShouldUseVacancyFallback(
+                officeVacant: true, strictCandidateFound: false,
+                appointmentQualificationEligible: true),
+            "a genuine vacancy bypasses only progression gates");
+        Equal(false, CivilServiceExamRules.ShouldUseVacancyFallback(
+                officeVacant: false, strictCandidateFound: false,
+                appointmentQualificationEligible: true),
+            "an occupied office never uses vacancy fallback");
+        Equal(false, CivilServiceExamRules.ShouldUseVacancyFallback(
+                officeVacant: true, strictCandidateFound: true,
+                appointmentQualificationEligible: true),
+            "a strict candidate always wins before vacancy fallback");
+        Equal(false, CivilServiceExamRules.ShouldUseVacancyFallback(
+                officeVacant: true, strictCandidateFound: false,
+                appointmentQualificationEligible: false),
+            "vacancy fallback never bypasses appointment qualification");
+        Equal(10, OfficialCareerRankRules.ResolveVacancyPromotionRank(
+                currentRank: 0, officeGrade: 20,
+                hasNineRankSystem: true, hasFormalQualification: true,
+                vacancyPromotion: true),
+            "central fallback grants the target office rank floor");
+        Equal(6, OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
+                currentRank: 0, officeGrade: 20,
+                hasNineRankSystem: true, hasFormalQualification: true,
+                vacancyPromotion: true),
+            "local fallback grants the target office rank floor");
+        Equal(8, OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
+                currentRank: 8, officeGrade: 20,
+                hasNineRankSystem: true, hasFormalQualification: true,
+                vacancyPromotion: true),
+            "vacancy fallback preserves an already superior rank");
+        Equal(0, OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
+                currentRank: 0, officeGrade: 20,
+                hasNineRankSystem: true, hasFormalQualification: false,
+                vacancyPromotion: true),
+            "vacancy fallback does not grant rank without validated qualification");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+}

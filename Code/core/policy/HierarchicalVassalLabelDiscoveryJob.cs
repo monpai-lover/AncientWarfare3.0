@@ -26,6 +26,8 @@ namespace AncientWarfare3.core.policy
         internal readonly IReadOnlyList<City> Cities;
         internal readonly IReadOnlyList<HierarchicalVassalMapLabelCitySource>
             CitySources;
+        internal readonly IReadOnlyList<HierarchicalVassalMapLabelRegionSource>
+            RegionSources;
         internal readonly IReadOnlyList<
             HierarchicalVassalMapLabelTerritorySource> Territories;
         internal readonly HierarchicalVassalHierarchyIndex Hierarchy;
@@ -36,12 +38,15 @@ namespace AncientWarfare3.core.policy
             IReadOnlyList<HierarchicalVassalMapLabelTerritorySource>
                 pTerritories,
             IReadOnlyList<HierarchicalVassalMapLabelCitySource> pCitySources,
+            IReadOnlyList<HierarchicalVassalMapLabelRegionSource> pRegionSources,
             HierarchicalVassalHierarchyIndex pHierarchy,
             Dictionary<long, Kingdom> pKingdoms)
         {
             Cities = pCities ?? Array.Empty<City>();
             CitySources = pCitySources ?? Array.Empty<
                 HierarchicalVassalMapLabelCitySource>();
+            RegionSources = pRegionSources ?? Array.Empty<
+                HierarchicalVassalMapLabelRegionSource>();
             Territories = pTerritories ?? Array.Empty<
                 HierarchicalVassalMapLabelTerritorySource>();
             Hierarchy = pHierarchy;
@@ -500,8 +505,11 @@ namespace AncientWarfare3.core.policy
                 HierarchicalVassalMapModeService.IsCityLayer ||
                 _kind == HierarchicalVassalLabelDiscoveryKind.RootCities)
             {
+                IReadOnlyList<HierarchicalVassalMapLabelRegionSource> regions =
+                    HierarchicalVassalMapModeService.
+                        BuildCityAdministrationRegionSources(_cities);
                 _result = new HierarchicalVassalLabelDiscoveryResult(_cities,
-                    null, _citySources, _hierarchy, _kingdomById);
+                    null, _citySources, regions, _hierarchy, _kingdomById);
                 _status = HierarchicalVassalLabelDiscoveryStatus.Complete;
                 return;
             }
@@ -520,7 +528,7 @@ namespace AncientWarfare3.core.policy
             if (_finalizationIndex < _territoryOrder.Count)
                 return;
             _result = new HierarchicalVassalLabelDiscoveryResult(null,
-                _finalizedTerritories, null, _hierarchy, _kingdomById);
+                _finalizedTerritories, null, null, _hierarchy, _kingdomById);
             _status = HierarchicalVassalLabelDiscoveryStatus.Complete;
         }
 
