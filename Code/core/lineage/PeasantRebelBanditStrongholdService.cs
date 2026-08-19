@@ -906,6 +906,10 @@ namespace AncientWarfare3.core.lineage
             City mother = ResolveCity(pState.MotherCityId);
             if (pBandit?.data == null || pStronghold?.data == null ||
                 mother?.data == null || mother.isRekt()) return false;
+            Kingdom motherKingdom = mother.kingdom;
+            if (motherKingdom?.data == null || motherKingdom.asset == null ||
+                motherKingdom.isRekt() || motherKingdom == pBandit)
+                return false;
             try
             {
                 if (pSuppressor?.data != null &&
@@ -944,7 +948,21 @@ namespace AncientWarfare3.core.lineage
                 foreach (Actor actor in pStronghold.units.ToList())
                 {
                     if (actor?.data == null || actor.isRekt()) continue;
-                    actor.joinCity(mother);
+                    bool wasBanditSurvivor =
+                        PeasantRebelBanditStrongholdRules.
+                            ShouldTransferFallenSurvivor(
+                                actor.isAlive(), actor.kingdom == pBandit,
+                                true,
+                                motherKingdom == pBandit);
+                    using (FormalAffiliationTransferScope.Open(
+                               actor.data.id, motherKingdom.id,
+                               mother.data.id))
+                    {
+                        actor.joinCity(mother);
+                        if (wasBanditSurvivor &&
+                            actor.kingdom != motherKingdom)
+                            actor.joinKingdom(motherKingdom);
+                    }
                     if (motherTile != null) actor.spawnOn(motherTile);
                 }
                 foreach (TileZone zone in pStronghold.zones.ToList())

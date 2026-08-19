@@ -21,6 +21,7 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         CountsOnlyLivingStrongholdResidents();
         QueuesEveryTrulyEmptyActiveStronghold();
         RelocatesOnlyOrdinaryResidents();
+        TransfersFallenSurvivorsToTheMotherRealm();
         ComposesStrongholdNamesAndTitles();
     }
 
@@ -268,6 +269,25 @@ internal static class PeasantRebelBanditStrongholdRulesTests
             PeasantRebelBanditStrongholdRules.ComposeCeremonialTitle(
                 "\u864e\u8e1e", "Chief"),
             "localized role text follows the canonical stronghold name");
+    }
+
+    private static void TransfersFallenSurvivorsToTheMotherRealm()
+    {
+        True(PeasantRebelBanditStrongholdRules.
+                ShouldTransferFallenSurvivor(true, true, true, false),
+            "a living bandit survivor moves to the mother realm");
+        False(PeasantRebelBanditStrongholdRules.
+                ShouldTransferFallenSurvivor(true, false, true, false),
+            "an actor already outside the bandit realm is not reprocessed");
+        False(PeasantRebelBanditStrongholdRules.
+                ShouldTransferFallenSurvivor(false, true, true, false),
+            "dead actors are never transferred");
+        False(PeasantRebelBanditStrongholdRules.
+                ShouldTransferFallenSurvivor(true, true, false, false),
+            "a missing destination realm blocks completion");
+        False(PeasantRebelBanditStrongholdRules.
+                ShouldTransferFallenSurvivor(true, true, true, true),
+            "the bandit realm cannot be its own suppression destination");
     }
 
     private static BanditZoneFact Zone(string key, int x, int y,

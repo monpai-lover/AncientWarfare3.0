@@ -182,6 +182,14 @@ namespace AncientWarfare3.core.lineage
                    !heir;
         }
 
+        public static bool ShouldTransferFallenSurvivor(
+            bool actorAlive, bool actorBelongsToBanditKingdom,
+            bool destinationKingdomValid, bool destinationIsBanditKingdom)
+        {
+            return actorAlive && actorBelongsToBanditKingdom &&
+                   destinationKingdomValid && !destinationIsBanditKingdom;
+        }
+
         public static bool CanAcquireZone(bool bandit, string zoneKey,
             ISet<string> fixedZoneKeys)
         {
