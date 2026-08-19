@@ -87,9 +87,14 @@ namespace AncientWarfare3.core.court
             bool formal = CivilServiceQualificationService.
                 CanReceiveFormalCivilAppointment(pActor, pCity.kingdom,
                     CourtOfficeLayer.City, officeId);
-            bool appointed = formal
+            bool vacancyFallback = !formal &&
+                CivilServiceQualificationService.
+                    CanReceiveFormalCivilAppointment(pActor, pCity.kingdom,
+                        CourtOfficeLayer.City, officeId,
+                        pAllowVacancyPromotion: true);
+            bool appointed = formal || vacancyFallback
                 ? CourtService.TryAssignCityGovernor(pActor, pCity.kingdom,
-                    pCity)
+                    pCity, vacancyFallback)
                 : CourtService.TryAssignActingCityGovernor(pActor,
                     pCity.kingdom, pCity);
             if (appointed) return;

@@ -42,18 +42,18 @@ False(CivilServiceExamRules.ShouldUseVacancyFallback(
 
 Equal(10, OfficialCareerRankRules.ResolveVacancyPromotionRank(
     currentRank: 0, officeGrade: 20, hasNineRankSystem: true,
-    hasFormalQualification: false, vacancyPromotion: true),
+    hasFormalQualification: true, vacancyPromotion: true),
     "central fallback grants the floor after qualification was validated upstream");
 Equal(6, OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
     currentRank: 0, officeGrade: 20, hasNineRankSystem: true,
-    hasFormalQualification: false, vacancyPromotion: true),
+    hasFormalQualification: true, vacancyPromotion: true),
     "local fallback grants the floor after qualification was validated upstream");
 ```
 
 Keep the existing assertion that a genuinely unqualified actor cannot receive
-a formal appointment. The pure rank resolver may receive
-`hasFormalQualification: false` for accepted local or legacy credentials, but
-the qualification service must approve the actor before it is called.
+a formal appointment. The state service converts an accepted local or legacy
+credential into an effective appointment-qualification flag before invoking the
+pure rank resolver.
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
@@ -80,11 +80,11 @@ public static bool ShouldUseVacancyFallback(bool officeVacant,
 }
 ```
 
-Change `ResolveVacancyPromotionRank` so `vacancyPromotion == true` applies the
-central office floor even when `hasFormalQualification == false`. Add
+Keep `ResolveVacancyPromotionRank` qualification-dependent and add
 `ResolveLocalVacancyPromotionRank` with identical behavior using
-`RequiredRankForLocalOfficeGrade`. Non-fallback initial appointment behavior
-must remain qualification-dependent.
+`RequiredRankForLocalOfficeGrade`. The state service passes an effective true
+flag for formal, accepted local, legacy, exempt, or pre-examination appointment
+paths. A genuinely unqualified actor keeps the unranked result.
 
 - [ ] **Step 4: Run the focused rules slices and verify GREEN**
 
@@ -155,10 +155,10 @@ In `ResolveAppointmentRankFast`, route vacancy appointments to:
 ```csharp
 return localOffice
     ? OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
-        existingRank, officeGrade, true, hasFormalQualification, true,
+        existingRank, officeGrade, true, hasAppointmentQualification, true,
         qualification?.EntryBonus ?? 0)
     : OfficialCareerRankRules.ResolveVacancyPromotionRank(
-        existingRank, officeGrade, true, hasFormalQualification, true,
+        existingRank, officeGrade, true, hasAppointmentQualification, true,
         qualification?.EntryBonus ?? 0);
 ```
 
@@ -175,6 +175,8 @@ Run the Task 1 commands plus the source guard. Expected: all exit 0.
 **Files:**
 - Modify: `Code/core/court/CourtService.cs`
 - Modify: `Code/core/court/LocalCourtAppointmentService.cs`
+- Modify: `Code/core/court/CityGovernorProjectionRepairService.cs`
+- Modify: `Code/patch/AW_CityLeaderPatch.cs`
 - Modify: `Tests/RegionalGovernmentNineRankSourceGuard.ps1`
 
 - [ ] **Step 1: Add source assertions for two-pass selection**
@@ -182,8 +184,8 @@ Run the Task 1 commands plus the source guard. Expected: all exit 0.
 The guard must require a strict selection call with
 `pAllowVacancyPromotion: false`, followed by a fallback call with
 `pAllowVacancyPromotion: true`, in both central and local appointment sources.
-The local fallback roster must continue using `CanUseCandidate`, preserving
-formal-entry and actor-validity checks.
+The local world roster must preserve actor hard-validity checks while deferring
+formal-entry checks to the office-aware selector.
 
 - [ ] **Step 2: Run the guard and verify RED**
 
@@ -192,12 +194,12 @@ separate fallback roster.
 
 - [ ] **Step 3: Complete central strict-first selection**
 
-Keep the existing indexed-formal strict pass first. Keep the indexed-formal
-vacancy-promotion pass second. If both fail, scan the bounded ordinary roster
-with `pAllowVacancyPromotion: true` regardless of `pAllowActing`; this admits
-valid legacy or other accepted credentials but not unqualified actors. Acting
-appointment remains a later compatibility path only when no formal fallback
-candidate exists.
+Compare the best indexed-formal strict candidate with the best strict candidate
+from the bounded ordinary roster. Only when both strict pools are empty compare
+their vacancy-fallback winners. This admits valid legacy credentials without
+allowing an indexed fallback candidate to outrank a strict roster candidate.
+Acting appointment remains a later compatibility path only when no formal
+fallback candidate exists.
 
 Candidate scoring and stable ordering remain `ScoreCandidate`; add no new score
 formula and continue marking the selected actor unavailable after commit.
@@ -208,24 +210,25 @@ Split local candidate validity into the existing hard facts and the examination
 progression check. For each empty seat:
 
 ```csharp
-Actor candidate = SelectCandidate(strictCandidates, pKingdom,
+Actor candidate = SelectCandidate(candidates, pKingdom,
     leaderNativeCityId, officeId, pAllowVacancyPromotion: false);
 bool vacancyFallback = candidate == null;
 if (vacancyFallback)
-    candidate = SelectCandidate(fallbackCandidates, pKingdom,
+    candidate = SelectCandidate(candidates, pKingdom,
         leaderNativeCityId, officeId, pAllowVacancyPromotion: true);
 if (candidate != null && CourtService.TryAssignLocalOfficer(candidate,
         pKingdom, pCity, officeId, vacancyFallback))
     retainedCounts[officeId] = current + 1;
 ```
 
-The fallback roster is a bounded kingdom-unit scan using `CanUseCandidate`; it
-must not rely solely on the examination waiting pool, but it still preserves
-formal-entry and hard actor checks. `SelectCandidate` calls
-`CanReceiveFormalCivilAppointment` with the pass flag and preserves the existing
-ability, merit, hometown, and actor-ID tie-breakers. Add an optional vacancy
-flag to `TryAssignLocalOfficer`; existing callers retain their current default
-behavior.
+The combined roster merges the waiting pool with a bounded kingdom-unit scan.
+It preserves alive/adult/sex/slave/king/heir/current-office, affiliation,
+madness, royal-guard, and asylum hard checks. `SelectCandidate` then calls
+`CanReceiveFormalCivilAppointment` with the pass flag, so formal/local/legacy
+credentials remain office-aware. Preserve ability, merit, hometown, and
+actor-ID tie-breakers. Add optional vacancy flags to local-officer and city-
+governor assignment; the city-leader path must also try strict, then vacancy
+fallback, then acting appointment.
 
 - [ ] **Step 5: Run rules and source verification**
 

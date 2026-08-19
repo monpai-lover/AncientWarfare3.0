@@ -138,7 +138,17 @@ namespace AncientWarfare3.core.court
         public static bool ShouldUseVacancyPromotion(bool officeVacant,
             bool strictEligible, bool hasFormalQualification)
         {
-            return officeVacant && !strictEligible && hasFormalQualification;
+            return ShouldUseVacancyFallback(officeVacant,
+                strictCandidateFound: strictEligible,
+                appointmentQualificationEligible: hasFormalQualification);
+        }
+
+        public static bool ShouldUseVacancyFallback(bool officeVacant,
+            bool strictCandidateFound,
+            bool appointmentQualificationEligible)
+        {
+            return officeVacant && !strictCandidateFound &&
+                   appointmentQualificationEligible;
         }
 
         public static int ReserveTarget(int establishedPosts)

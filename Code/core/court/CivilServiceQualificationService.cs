@@ -79,10 +79,13 @@ namespace AncientWarfare3.core.court
             bool pAllowVacancyPromotion = false,
             CivilServiceQualificationRecord pQualification = null,
             bool pQualificationsCaptured = false,
-            bool pAllowLocalLowerQualification = false)
+            bool pAllowLocalLowerQualification = false,
+            City pCity = null)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
-            if (!HasExaminationSystem(pKingdom)) return true;
+            bool examinationSystem = HasExaminationSystem(pKingdom);
+            bool nineRankSystem = CourtService.HasNineRankSystem(pKingdom);
+            if (!examinationSystem && !nineRankSystem) return true;
             if (IsAppointmentExempt(pActor, pKingdom, pLayer, pOfficeId))
                 return true;
             if (pAllowLocalLowerQualification &&
@@ -90,29 +93,38 @@ namespace AncientWarfare3.core.court
                 return true;
             if (!HistoricalSchoolEducationService.CanAppoint(pActor,
                     pKingdom, pLayer, pOfficeId)) return false;
-            CivilServiceQualificationRecord qualification =
-                pQualificationsCaptured
+            CivilServiceQualificationRecord qualification = examinationSystem
+                ? pQualificationsCaptured
                     ? pQualification
-                    : LoadOrRepair(pActor, pKingdom);
+                    : LoadOrRepair(pActor, pKingdom)
+                : null;
             bool higherStageFailure = pAllowLocalLowerQualification &&
                 HasFailedHigherStage(pActor, pKingdom);
-            bool hasFormalQualification =
+            bool hasFormalQualification = !examinationSystem ||
                 LocalOfficialCandidateRules.AcceptsAppointmentQualification(
                     qualification?.Qualification ?? "none",
                     higherStageFailure, pAllowLocalLowerQualification);
-            bool hasLegacyCredential = CivilServiceLegacyTransitionService.
-                HasUsableCredential(pActor, pKingdom, pLayer, pOfficeId);
-            if (!hasFormalQualification && !hasLegacyCredential)
+            bool hasLegacyCredential = examinationSystem &&
+                CivilServiceLegacyTransitionService.HasUsableCredential(
+                    pActor, pKingdom, pLayer, pOfficeId);
+            bool appointmentQualificationEligible = hasFormalQualification ||
+                hasLegacyCredential;
+            if (!appointmentQualificationEligible)
                 return false;
 
             int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
-                pOfficeId);
+                pKingdom, pLayer, pOfficeId, pCity);
             int currentRank = OfficialCareerStateService.ReadRankFast(pActor);
             if (currentRank <= OfficialCareerRankRules.Unranked)
-                currentRank = OfficialCareerRankRules.ResolveInitialAppointmentRank(
-                    OfficialCareerRankRules.Unranked, officeGrade,
-                    hasNineRankSystem: true, hasFormalQualification: true,
-                    qualification?.EntryBonus ?? 0);
+                currentRank = pLayer == CourtOfficeLayer.City
+                    ? OfficialCareerRankRules.ResolveInitialLocalAppointmentRank(
+                        OfficialCareerRankRules.Unranked, officeGrade,
+                        hasNineRankSystem: true, hasFormalQualification: true,
+                        qualification?.EntryBonus ?? 0)
+                    : OfficialCareerRankRules.ResolveInitialAppointmentRank(
+                        OfficialCareerRankRules.Unranked, officeGrade,
+                        hasNineRankSystem: true, hasFormalQualification: true,
+                        qualification?.EntryBonus ?? 0);
             bool hasLowerService = HasRequiredServiceHistory(pActor,
                 pKingdom, requiredOfficeGrade: 30);
             bool hasMiddleService = HasRequiredServiceHistory(pActor,
@@ -120,12 +132,20 @@ namespace AncientWarfare3.core.court
             pActor.data.get(LineageKeys.OFFICER_LAST_KAOKE,
                 out int evaluation, -1);
             bool passingEvaluation = evaluation >= 0 && evaluation <= 2;
-            bool strictEligible = OfficialCareerRankRules.CanEnterOffice(currentRank,
-                officeGrade, hasLowerService, hasMiddleService,
-                passingEvaluation);
-            return strictEligible || CivilServiceExamRules.ShouldUseVacancyPromotion(
-                officeVacant: pAllowVacancyPromotion, strictEligible,
-                hasFormalQualification: true);
+            bool rankEligible = pLayer == CourtOfficeLayer.City
+                ? currentRank >= OfficialCareerRankRules.
+                    RequiredRankForLocalOfficeGrade(officeGrade)
+                : currentRank >= OfficialCareerRankRules.
+                    RequiredRankForOfficeGrade(officeGrade);
+            bool strictEligible = rankEligible &&
+                OfficialCareerRankRules.CanEnterOffice(currentRank,
+                    officeGrade, hasLowerService, hasMiddleService,
+                    passingEvaluation);
+            if (strictEligible) return true;
+            return CivilServiceExamRules.ShouldUseVacancyFallback(
+                officeVacant: pAllowVacancyPromotion,
+                strictCandidateFound: false,
+                appointmentQualificationEligible);
         }
 
         internal static Dictionary<long, CivilServiceQualificationRecord>
@@ -194,7 +214,7 @@ namespace AncientWarfare3.core.court
             try
             {
                 using var command = new SQLiteCommand(DB);
-                command.CommandText = "SELECT OFFICE_ID FROM " +
+                command.CommandText = "SELECT OFFICE_ID,LAYER,CITY_ID FROM " +
                     CourtOfficerTableItem.GetTableName() +
                     " WHERE ACTOR_ID=@actor AND KINGDOM_ID=@kingdom " +
                     "AND IFNULL(IS_ACTING,0)=0 " +
@@ -207,8 +227,17 @@ namespace AncientWarfare3.core.court
                     string office = reader.IsDBNull(0)
                         ? ""
                         : Convert.ToString(reader.GetValue(0)) ?? "";
+                    string layer = reader.IsDBNull(1)
+                        ? ""
+                        : Convert.ToString(reader.GetValue(1)) ?? "";
+                    long cityId = reader.IsDBNull(2)
+                        ? -1L
+                        : Convert.ToInt64(reader.GetValue(2));
+                    City city = cityId < 0
+                        ? null
+                        : World.world?.cities?.get(cityId);
                     int grade = OfficialCareerStateService.OfficeGradeForOffice(
-                        office);
+                        pKingdom, layer, office, city);
                     if (OfficialCareerRankRules.IsRequiredServiceGrade(
                             grade, requiredOfficeGrade)) return true;
                 }
@@ -242,7 +271,7 @@ namespace AncientWarfare3.core.court
                    currentOffice == (pOfficeId ?? "");
         }
 
-        private static bool HasFailedHigherStage(Actor pActor,
+        internal static bool HasFailedHigherStage(Actor pActor,
             Kingdom pKingdom)
         {
             if (DB == null || pActor?.data == null ||

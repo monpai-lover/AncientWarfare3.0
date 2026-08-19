@@ -63,7 +63,8 @@ namespace AncientWarfare3.core.court
                     (connection, transaction) =>
                         stateProjection = OfficialCareerStateService.StageAppointment(
                             connection, transaction, pActor, pKingdom, pLayer,
-                            pOfficeId, pCity, pActing, pVacancyPromotion);
+                            pOfficeId, pCity, pActing, pVacancyPromotion,
+                            pAllowLocalLowerQualification);
                 OfficialCareerAppointmentResult result =
                     OfficialCareerPersistence.Appoint(db, appointment, stageState);
                 if (result.IsCommitted && stateProjection != null)
@@ -97,7 +98,8 @@ namespace AncientWarfare3.core.court
                          CanReceiveFormalCivilAppointment(pActor, pKingdom,
                              pLayer, pOfficeId, pVacancyPromotion,
                              pAllowLocalLowerQualification:
-                             pAllowLocalLowerQualification)) return null;
+                             pAllowLocalLowerQualification,
+                             pCity: pCity)) return null;
             return new OfficialCareerAppointment
             {
                 ActorId = pActor.data.id,
@@ -117,7 +119,8 @@ namespace AncientWarfare3.core.court
                 RankAtAppointment = CourtService.HasNineRankSystem(pKingdom)
                     ? OfficialCareerStateService.ResolveAppointmentRankFast(
                         pActor, pKingdom, pLayer, pOfficeId, pActing,
-                        pVacancyPromotion)
+                        pVacancyPromotion, pAllowLocalLowerQualification,
+                        pCity)
                     : OfficialCareerRankRules.Unranked,
                 LocalGradeAtAppointment = CourtService.HasNineRankSystem(pKingdom)
                     ? OfficialCareerStateService.EstimateLocalGradeFast(
