@@ -425,6 +425,7 @@ namespace AncientWarfare3.core.schools
             City residence = HistoricalAffiliationService.ResidenceCity(pTeacher) ?? pTeacher.city;
             if (residence?.data == null || residence.isRekt() ||
                 residence.kingdom?.data == null ||
+                !HistoricalSchoolXiaAccessService.CanHostLecture(residence) ||
                 !HistoricalAffiliationService.IsAvailableForOffice(pTeacher) ||
                 !HistoricalAffiliationService.IsPresentForInfluence(pTeacher)) return false;
             bool academyUsable =
@@ -481,6 +482,7 @@ namespace AncientWarfare3.core.schools
             return teacher?.data != null && teacher.isAlive() && !teacher.isRekt() &&
                    teacherMembership?.SchoolId == plan.Candidate.SchoolId &&
                    residence?.data != null && !residence.isRekt() &&
+                   HistoricalSchoolXiaAccessService.CanHostLecture(residence) &&
                    residence.data.id == plan.Candidate.CityId &&
                    HistoricalAffiliationService.IsAvailableForOffice(teacher) &&
                    HistoricalAffiliationService.IsPresentForInfluence(teacher);

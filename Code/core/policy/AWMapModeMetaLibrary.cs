@@ -29,6 +29,7 @@ namespace AncientWarfare3.core.policy
         public static MetaTypeAsset HierarchicalVassalAsset {
             get; private set;
         }
+        public static MetaTypeAsset ShiLineageAsset { get; private set; }
 
         private static ZoneCalculator ZoneManager => World.world?.zone_calculator;
 
@@ -63,6 +64,8 @@ namespace AncientWarfare3.core.policy
                     return FeudatoryAsset;
                 case HierarchicalVassalMapModeService.POWER_ID:
                     return HierarchicalVassalAsset;
+                case ShiLineageMapModeService.POWER_ID:
+                    return ShiLineageAsset;
                 default:
                     return null;
             }
@@ -93,6 +96,11 @@ namespace AncientWarfare3.core.policy
             ConfigureSchoolSelectionAsset(SchoolAsset);
             SchoolAsset.tile_get_metaobject = (pZone, _) => GetSchoolIdentityMetaForZone(pZone);
             SchoolAsset.click_action_zone = SchoolMapModeService.SelectCity;
+            ShiLineageAsset = AddOrGet(AWMapModeMetaTypes.ShiLineageId,
+                AWMapModeMetaTypes.ShiLineage, ShiLineageMapModeService.POWER_ID,
+                GetShiLineageMetaForZone);
+            ConfigureShiLineageSelectionAsset(ShiLineageAsset);
+            ShiLineageAsset.click_action_zone = ShiLineageMapModeService.SelectCity;
             FeudatoryAsset = AddOrGet(AWMapModeMetaTypes.FeudatoryId,
                 AWMapModeMetaTypes.Feudatory, FeudatoryMapModeService.POWER_ID,
                 GetFeudatoryMetaForZone);
@@ -137,6 +145,19 @@ namespace AncientWarfare3.core.policy
             };
             pAsset.check_unit_has_meta = pActor => pActor?.city?.data != null;
             pAsset.set_unit_set_meta_for_meta_for_window = pActor => SelectedMetas.selected_city = pActor?.city;
+        }
+
+        private static void ConfigureShiLineageSelectionAsset(MetaTypeAsset pAsset)
+        {
+            ConfigureSchoolSelectionAsset(pAsset);
+            if (pAsset == null) return;
+            pAsset.icon_single_path = "ui/icons/iconClan";
+            pAsset.power_tab_id = ShiLineageMapBottomBarController.TabId;
+            pAsset.selected_tab_action_meta = _ =>
+            {
+                if (!ShiLineageMapModeService.SelectCity(SelectedMetas.selected_city))
+                    PowerTabController.showMainTab();
+            };
         }
 
         private static MetaTypeAsset AddOrGet(string pId, MetaType pType, string pPowerId, MetaZoneGetMetaSimple pGetter)
@@ -385,6 +406,22 @@ namespace AncientWarfare3.core.policy
                 SchoolMapModeService.GetSchoolDisplayName(schoolId), SchoolMapModeService.GetColorAsset(city));
         }
 
+        private static IMetaObject GetShiLineageMetaForZone(TileZone pZone)
+        {
+            City city = GetCityForZone(pZone);
+            if (city?.data == null || city.kingdom?.data == null) return null;
+            CityShiInfluenceSnapshot snapshot = CityShiInfluenceSnapshotService.GetSnapshot(city);
+            long shiId = snapshot?.DominantShiId ?? -1L;
+            CityShiInfluenceBranch branch = snapshot?.FindBranch(shiId);
+            string hex = ShiLineageMapModeService.GetCityColorHex(city);
+            string displayName = branch?.IsValid == true &&
+                !string.IsNullOrEmpty(branch.DisplayName)
+                ? branch.DisplayName
+                : AW_L10n.Text("aw_shi_map_unknown", "Unknown Shi");
+            return GetMeta(AWMapModeMetaTypes.ShiLineage, "shi:" + shiId + ":" + hex,
+                displayName, MakeColor(hex));
+        }
+
         private static IMetaObject GetFeudatoryMetaForZone(TileZone pZone)
         {
             City city = GetCityForZone(pZone);
@@ -450,6 +487,22 @@ namespace AncientWarfare3.core.policy
                 displayName, MakeColor(definition.ColorHex));
             if (meta.data.name != displayName) meta.data.name = displayName;
             return meta;
+        }
+
+        internal static AWMapModeMetaObject GetShiLineageIdentityMetaForCity(
+            City pCity, CityShiInfluenceSnapshot pSnapshot)
+        {
+            if (pCity?.data == null || pCity.kingdom?.data == null ||
+                pSnapshot == null || pSnapshot.TotalWeight <= 0) return null;
+            CityShiInfluenceBranch branch = pSnapshot.FindBranch(
+                pSnapshot.DominantShiId);
+            if (branch == null || !branch.IsValid) return null;
+            string hex = ShiLineageMapModeRules.OverviewHex(branch.ShiId);
+            int share = pSnapshot.SharePercent(pSnapshot.DominantShiId);
+            string displayName = branch.DisplayName + "  " + share + "%";
+            return GetMeta(AWMapModeMetaTypes.ShiLineage,
+                "nameplate:" + branch.ShiId + ":" + share, displayName,
+                MakeColor(hex));
         }
 
         private static AWMapModeMetaObject GetMeta(MetaType pType, string pKey, string pName, ColorAsset pColor)
@@ -564,6 +617,8 @@ namespace AncientWarfare3.core.policy
             MandateDynastyMapModeService.ResetRuntime();
             FeudatoryMapModeService.ResetRuntime();
             SchoolMapModeService.ResetRuntime();
+            CityShiInfluenceSnapshotService.Clear();
+            ShiLineageMapModeService.ResetRuntime();
         }
 
         private static ColorAsset MandateDynastyColor(string pStatus)

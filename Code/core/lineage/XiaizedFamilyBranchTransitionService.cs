@@ -219,6 +219,7 @@ namespace AncientWarfare3.core.lineage
             XiaizedFamilyBranchTransitionPrepared pPrepared)
         {
             if (pPrepared == null || !pPrepared.HasTransition) return;
+            ShiBranchRuntimeMetadataCache.Invalidate(pPrepared.NewShiId);
             foreach (long actorId in pPrepared.ActorIds)
             {
                 Actor actor = World.world?.units?.get(actorId);
@@ -250,6 +251,7 @@ namespace AncientWarfare3.core.lineage
                     FamilyTreeProjectionChange.FamilyStructure);
                 try { actor.clearGraphicsFully(); }
                 catch { }
+                CityShiInfluenceSnapshotService.MarkActorDirty(actor);
             }
         }
 

@@ -29,6 +29,8 @@ namespace AncientWarfare3.content
         private static readonly List<City> SchoolNameplateCandidates = new List<City>();
         private static readonly HashSet<long> SchoolNameplateCandidateIds = new HashSet<long>();
         private static readonly Comparison<City> SchoolNameplateCityOrder = CompareSchoolNameplateCities;
+        private static readonly List<City> ShiNameplateCandidates = new List<City>();
+        private static readonly HashSet<long> ShiNameplateCandidateIds = new HashSet<long>();
         private static readonly Dictionary<long, City> FeudatoryNameplateAnchors =
             new Dictionary<long, City>();
         private static readonly Dictionary<long, TileZone> FeudatoryNameplateZones =
@@ -43,6 +45,9 @@ namespace AncientWarfare3.content
         private static bool _feudatoryNameplateCandidatesReady;
         private static ulong _feudatoryNameplateCandidateSignature;
         private static float _feudatoryNameplateCandidateRefreshAt;
+        private static bool _shiNameplateCandidatesReady;
+        private static ulong _shiNameplateCandidateSignature;
+        private static float _shiNameplateCandidateRefreshAt;
 
         public static void Init()
         {
@@ -54,6 +59,7 @@ namespace AncientWarfare3.content
             RegisterMandateMapModes();
             RegisterFeudatoryMapMode();
             RegisterSchoolMapMode();
+            RegisterShiLineageMapMode();
             RegisterDiplomacyAiToggle();
             LinkMapModeAssets();
             AWMapModeMetaLibrary.Init();
@@ -71,6 +77,8 @@ namespace AncientWarfare3.content
             _pendingVassal = null;
             SchoolNameplateCandidates.Clear();
             SchoolNameplateCandidateIds.Clear();
+            ShiNameplateCandidates.Clear();
+            ShiNameplateCandidateIds.Clear();
             FeudatoryNameplateAnchors.Clear();
             FeudatoryNameplateZones.Clear();
             FeudatoryNameplateSnapshots.Clear();
@@ -81,6 +89,9 @@ namespace AncientWarfare3.content
             _feudatoryNameplateCandidatesReady = false;
             _feudatoryNameplateCandidateSignature = 0UL;
             _feudatoryNameplateCandidateRefreshAt = 0f;
+            _shiNameplateCandidatesReady = false;
+            _shiNameplateCandidateSignature = 0UL;
+            _shiNameplateCandidateRefreshAt = 0f;
         }
 
         private static void RegisterSpawnXia()
@@ -179,6 +190,26 @@ namespace AncientWarfare3.content
                 toggle_action = BuildMapModeToggleAction(RefreshSchoolMapMode),
                 click_special_action = new PowerActionWithID(SchoolMapClick)
             });
+        }
+
+        private static void RegisterShiLineageMapMode()
+        {
+            RegisterMapModeOption(ShiLineageMapModeService.POWER_ID);
+            GodPower power = AssetManager.powers.get(ShiLineageMapModeService.POWER_ID);
+            if (power == null)
+            {
+                power = new GodPower { id = ShiLineageMapModeService.POWER_ID,
+                    name = ShiLineageMapModeService.POWER_ID,
+                    path_icon = "ui/icons/iconClan", map_modes_switch = true,
+                    multi_toggle = false, unselect_when_window = true,
+                    ignore_cursor_icon = true, allow_unit_selection = true,
+                    force_map_mode = AWMapModePowerRules.ResolveForcedMapModeForLayerPower() };
+                AssetManager.powers.add(power);
+            }
+            ConfigureMapModePower(power, ShiLineageMapModeService.POWER_ID,
+                ShiLineageMapModeService.Prepare);
+            power.click_special_action = new PowerActionWithID(
+                ShiLineageMapModeService.SelectCity);
         }
 
         private static void RefreshSchoolMapMode()
@@ -562,6 +593,26 @@ namespace AncientWarfare3.content
                 schoolPlate.action_main = DrawSchoolNameplates;
             }
 
+            NameplateAsset shiPlate = library.get("plate_aw_shi_lineage");
+            if (shiPlate == null)
+            {
+                shiPlate = library.add(new NameplateAsset
+                {
+                    id = "plate_aw_shi_lineage",
+                    path_sprite = "ui/nameplates/nameplate_religion",
+                    padding_left = 11,
+                    padding_right = 13,
+                    map_mode = AWMapModeMetaTypes.ShiLineage,
+                    max_nameplate_count = 100,
+                    action_main = DrawShiNameplates
+                });
+            }
+            else
+            {
+                shiPlate.map_mode = AWMapModeMetaTypes.ShiLineage;
+                shiPlate.action_main = DrawShiNameplates;
+            }
+
             NameplateAsset feudatoryPlate = library.get(
                 "plate_aw_feudatory");
             if (feudatoryPlate == null)
@@ -612,11 +663,13 @@ namespace AncientWarfare3.content
             {
                 if (metaType == AWMapModeMetaTypes.School ||
                     metaType == AWMapModeMetaTypes.Feudatory ||
-                    metaType == AWMapModeMetaTypes.HierarchicalVassal)
+                    metaType == AWMapModeMetaTypes.HierarchicalVassal ||
+                    metaType == AWMapModeMetaTypes.ShiLineage)
                     continue;
                 library.map_modes_nameplates[metaType] = kingdomPlate;
             }
             library.map_modes_nameplates[AWMapModeMetaTypes.School] = schoolPlate;
+            library.map_modes_nameplates[AWMapModeMetaTypes.ShiLineage] = shiPlate;
             library.map_modes_nameplates[AWMapModeMetaTypes.Feudatory] =
                 feudatoryPlate;
             library.map_modes_nameplates[AWMapModeMetaTypes.HierarchicalVassal] =
@@ -769,6 +822,46 @@ namespace AncientWarfare3.content
 
                 CourtSchoolDefinition definition = CourtSchoolRegistry.Find(snapshot.DominantSchool);
                 if (definition != null) text.showSpecial(definition.IconPath);
+                count++;
+            }
+        }
+
+        private static void DrawShiNameplates(NameplateManager pManager,
+            NameplateAsset pAsset)
+        {
+            if (pManager == null || pAsset == null || World.world?.zone_camera == null)
+                return;
+            if (ShouldRefreshNameplateCandidates(ref _shiNameplateCandidatesReady,
+                    ref _shiNameplateCandidateSignature,
+                    ref _shiNameplateCandidateRefreshAt))
+            {
+                ShiNameplateCandidates.Clear();
+                ShiNameplateCandidateIds.Clear();
+                List<TileZone> visibleZones = World.world.zone_camera.getVisibleZones();
+                for (int i = 0; i < visibleZones.Count; i++)
+                {
+                    City city = visibleZones[i]?.city;
+                    if (city?.data == null || city.isRekt() || !city.isAlive()) continue;
+                    if (ShiNameplateCandidateIds.Add(city.data.id))
+                        ShiNameplateCandidates.Add(city);
+                }
+                ShiNameplateCandidates.Sort(CompareSchoolNameplateCities);
+            }
+            int count = 0;
+            for (int i = 0; i < ShiNameplateCandidates.Count; i++)
+            {
+                if (count >= pAsset.max_nameplate_count) break;
+                City city = ShiNameplateCandidates[i];
+                if (!World.world.move_camera.isWithinCameraViewNotPowerBar(city.city_center)) continue;
+                CityShiInfluenceSnapshot snapshot =
+                    CityShiInfluenceSnapshotService.GetSnapshot(city);
+                AWMapModeMetaObject meta = AWMapModeMetaLibrary.
+                    GetShiLineageIdentityMetaForCity(city, snapshot);
+                if (meta == null) continue;
+                NameplateText text = pManager.prepareNext(pAsset, city);
+                text.setupMeta(meta.data, meta.getColor());
+                text.setText(meta.data.name, city.city_center);
+                text.setPriority(city.getPopulationPeople());
                 count++;
             }
         }

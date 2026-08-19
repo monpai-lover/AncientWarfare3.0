@@ -35,6 +35,22 @@ namespace AncientWarfare3.core.schools
             out WorldTile pSecondary,
             out Building pAcademy)
         {
+            if (pKind == HistoricalSchoolVenueKind.Lecture &&
+                !HistoricalSchoolXiaAccessService.CanHostLecture(pCity))
+            {
+                pPrimary = null;
+                pSecondary = null;
+                pAcademy = null;
+                return false;
+            }
+            if (pKind == HistoricalSchoolVenueKind.TravelArrival &&
+                !HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(pCity))
+            {
+                pPrimary = null;
+                pSecondary = null;
+                pAcademy = null;
+                return false;
+            }
             if (HistoricalSchoolVenueRules.RequiresAcademy(pKind))
                 return Sources[0].TryFind(
                     pCity, pActor, pSchoolId, pKind,

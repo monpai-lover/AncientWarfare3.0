@@ -94,6 +94,8 @@ namespace AncientWarfare3.core.schools
         private static Building TryStartCore(City pCity,
             WorldTile pPreferredTile)
         {
+            if (!HistoricalSchoolXiaAccessService.CanHostAcademy(pCity))
+                return null;
             BuildingAsset asset = SchoolAcademyBuildingContent.Asset ??
                                   AssetManager.buildings.get(
                                       SchoolAcademyBuildingContent.BuildingId);
@@ -201,6 +203,7 @@ namespace AncientWarfare3.core.schools
                     SchoolAcademyBuildingContent.BuildingId);
             return asset != null &&
                    !HistoricalSchoolAcademyService.HasLiveAcademy(pCity) &&
+                   HistoricalSchoolXiaAccessService.CanHostAcademy(pCity) &&
                    CanBuildAt(pCity, asset, pTile);
         }
 

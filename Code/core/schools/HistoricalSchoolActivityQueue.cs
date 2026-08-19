@@ -106,6 +106,9 @@ namespace AncientWarfare3.core.schools
             int pDirectDiscipleCount)
         {
             if (!pPlan.IsValid) return false;
+            City city = FindCity(pPlan.Candidate.CityId);
+            if (!HistoricalSchoolXiaAccessService.CanHostLecture(city))
+                return false;
             if (!HistoricalSchoolActivityQueueRules.CanEnqueueTotal(
                     PendingLectures.Count + ActiveLectures.Count,
                     MaxRetainedLectures)) return false;
@@ -220,6 +223,7 @@ namespace AncientWarfare3.core.schools
             }
             if (!IsValidLectureActor(actor, pending, pRequireVenue: false) ||
                 city?.data == null || city.isRekt() ||
+                !HistoricalSchoolXiaAccessService.CanHostLecture(city) ||
                 !HistoricalSchoolVenueService.TryClaimLecture(city, actor,
                     pending.Plan.Candidate.SchoolId, pending.Plan.OperationKey,
                     out HistoricalSchoolVenueClaim venue))
@@ -365,6 +369,7 @@ namespace AncientWarfare3.core.schools
                 HistoricalAffiliationService.Get(pActor.data.id);
             City residence = HistoricalAffiliationService.ResidenceCity(pActor);
             return residence?.data != null && !residence.isRekt() &&
+                   HistoricalSchoolXiaAccessService.CanHostLecture(residence) &&
                    residence.data.id == candidate.CityId &&
                    affiliation?.ResidenceCityId == candidate.CityId &&
                    HistoricalSchoolRevisionService.IsPresent(affiliation) &&

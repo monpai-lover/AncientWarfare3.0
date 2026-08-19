@@ -1,0 +1,77 @@
+using System;
+using AncientWarfare3.core.schools;
+
+internal static class HistoricalSchoolXiaAccessRulesTests
+{
+    internal static void Run()
+    {
+        AllowsNativeXiaCities();
+        AllowsFullyXiaizedForeignCities();
+        RejectsPartialAndInvalidCities();
+        KeepsNamedDomainDecisionsAligned();
+    }
+
+    private static void AllowsNativeXiaCities()
+    {
+        True(HistoricalSchoolXiaAccessRules.CanHostAcademy(
+            true, true, true, false), "native Xia city hosts academy");
+        True(HistoricalSchoolXiaAccessRules.CanReceiveSchoolTravel(
+            true, true, true, false), "native Xia city receives travel");
+        True(HistoricalSchoolXiaAccessRules.CanHostLecture(
+            true, true, true, false), "native Xia city hosts lecture");
+    }
+
+    private static void AllowsFullyXiaizedForeignCities()
+    {
+        True(HistoricalSchoolXiaAccessRules.CanHostAcademy(
+            true, true, false, true), "fully Xiaized city hosts academy");
+        True(HistoricalSchoolXiaAccessRules.CanReceiveSchoolTravel(
+            true, true, false, true), "fully Xiaized city receives travel");
+        True(HistoricalSchoolXiaAccessRules.CanHostLecture(
+            true, true, false, true), "fully Xiaized city hosts lecture");
+    }
+
+    private static void RejectsPartialAndInvalidCities()
+    {
+        False(HistoricalSchoolXiaAccessRules.CanHostAcademy(
+            true, true, false, false), "partial foreign city rejects academy");
+        False(HistoricalSchoolXiaAccessRules.CanReceiveSchoolTravel(
+            false, true, true, true), "invalid city rejects travel");
+        False(HistoricalSchoolXiaAccessRules.CanHostLecture(
+            true, false, true, true), "invalid owner rejects lecture");
+    }
+
+    private static void KeepsNamedDomainDecisionsAligned()
+    {
+        for (int mask = 0; mask < 16; mask++)
+        {
+            bool city = (mask & 1) != 0;
+            bool owner = (mask & 2) != 0;
+            bool native = (mask & 4) != 0;
+            bool full = (mask & 8) != 0;
+            bool academy = HistoricalSchoolXiaAccessRules.CanHostAcademy(
+                city, owner, native, full);
+            Equal(academy, HistoricalSchoolXiaAccessRules.CanReceiveSchoolTravel(
+                city, owner, native, full), "travel policy alignment");
+            Equal(academy, HistoricalSchoolXiaAccessRules.CanHostLecture(
+                city, owner, native, full), "lecture policy alignment");
+        }
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal(bool pExpected, bool pActual, string pMessage)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(pMessage + ": expected " +
+                                                pExpected + ", actual " + pActual);
+    }
+}

@@ -1,4 +1,12 @@
 {
+  "aw_shi_lineage_mapmode": "世家地圖",
+  "aw_shi_mapmode_tooltip": "世家影響力地圖",
+  "aw_shi_map_no_influence": "此地無世家影響",
+  "aw_shi_map_dominant": "主要世家",
+  "aw_shi_map_none": "無世家",
+  "aw_shi_map_unknown": "未知世家",
+  "aw_shi_map_composition": "世家構成",
+  "aw_shi_map_focus": "聚焦",
   "AWPerformanceSettings": "AW3 效能設定",
   "aw_settings_btn": "AW3 設定",
   "aw_settings_btn Description": "開啟 AW3 模組設定",

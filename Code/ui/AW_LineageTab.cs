@@ -53,6 +53,11 @@ namespace AncientWarfare3.ui
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconKnowledge"));
             Register(groups, AWLineageTabLayoutRules.Schools, schoolMapButton);
 
+            PowerButton shiMapButton = CreateMapModeToggleButton(
+                ShiLineageMapModeService.POWER_ID,
+                SpriteTextureLoader.getSprite("ui/icons/iconClan"));
+            Register(groups, AWLineageTabLayoutRules.Archives, shiMapButton);
+
             PowerButton schoolOverviewButton = PowerButtonCreator.CreateSimpleButton(
                 "aw_school_overview_btn",
                 () => windows.SchoolWindow.OpenSchool(),

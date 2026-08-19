@@ -21,10 +21,14 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(MetaTypeAsset), nameof(MetaTypeAsset.selectAndInspect))]
         public static bool SelectAndInspect_Prefix(MetaTypeAsset __instance, NanoObject pNewNanoObject)
         {
-            if (!SchoolMapModeService.IsActive() || pNewNanoObject is not City city ||
-                __instance != AWMapModeMetaLibrary.SchoolAsset && __instance != MetaTypeLibrary.city)
+            if (pNewNanoObject is not City city ||
+                __instance != AWMapModeMetaLibrary.SchoolAsset &&
+                __instance != AWMapModeMetaLibrary.ShiLineageAsset &&
+                __instance != MetaTypeLibrary.city)
                 return true;
-            SchoolMapModeService.SelectCity(city);
+            if (ShiLineageMapModeService.IsActive()) ShiLineageMapModeService.SelectCity(city);
+            else if (SchoolMapModeService.IsActive()) SchoolMapModeService.SelectCity(city);
+            else return true;
             return false;
         }
 
@@ -107,6 +111,12 @@ namespace AncientWarfare3.patch
                     pCheckOnlyOption))
             {
                 pResult = AWMapModeMetaTypes.HierarchicalVassal;
+                return true;
+            }
+            if (IsActive(AWMapModeMetaLibrary.ShiLineageAsset,
+                    pCheckOnlyOption))
+            {
+                pResult = AWMapModeMetaTypes.ShiLineage;
                 return true;
             }
             if (IsActive(AWMapModeMetaLibrary.FeudatoryAsset,

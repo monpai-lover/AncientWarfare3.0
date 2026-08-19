@@ -154,6 +154,8 @@ namespace AncientWarfare3.core.lineage
             LineageService.ArchiveActor(pActor, pAlive: true);
             try { pActor.clearGraphicsFully(); }
             catch { }
+            CityShiInfluenceSnapshotService.MarkActorDirty(pActor);
+            ShiBranchRuntimeMetadataCache.Invalidate(result.ShiId);
             return true;
         }
 

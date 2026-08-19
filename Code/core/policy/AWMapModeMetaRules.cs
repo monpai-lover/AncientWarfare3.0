@@ -41,6 +41,8 @@ namespace AncientWarfare3.core.policy
                     return AWMapModeMetaTypes.Feudatory;
                 case HierarchicalVassalMapModeRules.POWER_ID:
                     return AWMapModeMetaTypes.HierarchicalVassal;
+                case ShiLineageMapModeService.POWER_ID:
+                    return AWMapModeMetaTypes.ShiLineage;
                 default:
                     return MetaType.Kingdom;
             }
@@ -101,6 +103,7 @@ namespace AncientWarfare3.core.policy
                 case MandateCoreMapModeService.POWER_ID:
                 case SchoolMapModeService.POWER_ID:
                 case FeudatoryMapModeService.POWER_ID:
+                case ShiLineageMapModeService.POWER_ID:
                     return true;
                 default:
                     return false;
@@ -115,7 +118,8 @@ namespace AncientWarfare3.core.policy
                    pMapMode == AWMapModeMetaTypes.WarClaim ||
                    pMapMode == AWMapModeMetaTypes.MandateCore ||
                    pMapMode == AWMapModeMetaTypes.School ||
-                   pMapMode == AWMapModeMetaTypes.Feudatory;
+                   pMapMode == AWMapModeMetaTypes.Feudatory ||
+                   pMapMode == AWMapModeMetaTypes.ShiLineage;
         }
 
         public static bool ShouldUseKingdomTooltipForPowerId(string pPowerId)

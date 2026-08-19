@@ -1961,6 +1961,7 @@ namespace AncientWarfare3.core.court
                     : HistoricalSchoolElitePriority.CentralOfficial);
             if (targetNeedsReconcile)
                 RoyalMedicalCareService.ReconcileTargets(pKingdom);
+            CityShiInfluenceSnapshotService.MarkActorDirty(pActor);
             return true;
         }
 
@@ -2015,6 +2016,7 @@ namespace AncientWarfare3.core.court
             if (alive && pArchive) LineageService.ArchiveActor(pActor, pAlive: true);
             if (courtKingdom?.data != null) CourtDirectionService.MarkDirty(courtKingdom);
             CitySchoolSnapshotService.MarkActorDirty(pActor);
+            CityShiInfluenceSnapshotService.MarkActorDirty(pActor);
             if (courtKingdom?.data != null && office == CourtOfficeId.ImperialPhysician)
                 RoyalMedicalCareService.ReconcileTargets(courtKingdom);
         }

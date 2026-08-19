@@ -49,6 +49,14 @@ namespace AncientWarfare3.patch
                     "Hundred Schools Map", SchoolMapModeService.BuildTooltip(city), "#D8C38A");
                 return true;
             }
+            if (selected == ShiLineageMapModeService.POWER_ID ||
+                (selected == null && ShiLineageMapModeService.IsActive()))
+            {
+                if (city?.data == null) return false;
+                ShowCityMapModeTooltip(pTooltip, city, "aw_shi_mapmode_tooltip",
+                    "Shi Influence Map", ShiLineageMapModeService.BuildTooltip(city), "#C9A96E");
+                return true;
+            }
 
             if (selected == WarCoreMapModeService.POWER_ID ||
                 (selected == null && WarCoreMapModeService.IsActive()))
