@@ -51,6 +51,7 @@ namespace AncientWarfare3.core.lineage
                     actor.addTrait(LineageKeys.TRAIT_GUIZU);
                 if (actor.clan != pRuler.clan) actor.setClan(pRuler.clan);
                 LineageService.ArchiveActor(actor, pAlive: true);
+                CityShiInfluenceSnapshotService.MarkActorDirty(actor);
             }
             pMigratedCount = migrants.Count;
             HeirService.RefreshHeir(pKingdom);
@@ -112,9 +113,11 @@ namespace AncientWarfare3.core.lineage
                     actor.clan != independentClan)
                     actor.setClan(independentClan);
                 LineageService.ArchiveActor(actor, pAlive: true);
+                CityShiInfluenceSnapshotService.MarkActorDirty(actor);
             }
             if (independentClan?.data != null)
                 LineageService.RenameClanByLeader(independentClan, pTarget);
+            ShiBranchRuntimeMetadataCache.Invalidate(newShiId);
             pNewShiId = newShiId;
             pMigratedCount = migrants.Count;
             HeirService.RefreshHeir(pKingdom);
