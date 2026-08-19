@@ -16,6 +16,10 @@ $readServicePath = Join-Path $root `
 $readService = if ([IO.File]::Exists($readServicePath)) {
     [IO.File]::ReadAllText($readServicePath, [Text.Encoding]::UTF8)
 } else { '' }
+$localePath = Join-Path $root 'Locales\aw3_court.csv'
+$locale = if ([IO.File]::Exists($localePath)) {
+    [IO.File]::ReadAllText($localePath, [Text.Encoding]::UTF8)
+} else { '' }
 $failures = [Collections.Generic.List[string]]::new()
 
 if (-not $model.Contains('public string OfficeLayer')) {
@@ -44,6 +48,22 @@ if (-not $window.Contains(
 }
 if (-not $window.Contains('OfficialCareerHistoryRules.YearRange(')) {
     $failures.Add('History rows must use the shared year-range rule.')
+}
+$historyName = -join ([char]0x5b98, [char]0x804c, [char]0x5386,
+    [char]0x4efb)
+$historyNameTraditional = -join ([char]0x5b98, [char]0x8077,
+    [char]0x6b77, [char]0x4efb)
+$governorName = -join ([char]0x5730, [char]0x65b9, [char]0x957f,
+    [char]0x5b98)
+$governorNameTraditional = -join ([char]0x5730, [char]0x65b9,
+    [char]0x9577, [char]0x5b98)
+if (-not $locale.Contains('aw_court_office_history Title,' +
+        $historyName + ',Office History,' + $historyNameTraditional)) {
+    $failures.Add('History window title localization is missing.')
+}
+if (-not $locale.Contains('aw_court_governor,' + $governorName +
+        ',Governor,' + $governorNameTraditional)) {
+    $failures.Add('Custom local-government governor localization is missing.')
 }
 foreach ($forbidden in @('World.world.units_only_alive', 'getSimpleList()',
         'foreach (Actor')) {
