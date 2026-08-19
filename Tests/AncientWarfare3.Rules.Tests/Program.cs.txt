@@ -16,6 +16,20 @@ if (args.Length == 1 && args[0] == "--custom-local-government")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--regional-government")
+{
+    RegionalGovernmentRulesTests.Run();
+    Console.WriteLine("Regional government rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--regional-government-template")
+{
+    RegionalGovernmentTemplateRulesTests.Run();
+    Console.WriteLine("Regional government template rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--custom-court-template")
 {
     CustomCourtTemplateRulesTests.Run();

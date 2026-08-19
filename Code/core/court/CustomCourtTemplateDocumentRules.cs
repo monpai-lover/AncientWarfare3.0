@@ -11,6 +11,7 @@ namespace AncientWarfare3.core.court
         {
             CustomCourtTemplate document =
                 CustomCourtTemplateJsonCodec.Normalize(pSource);
+            CustomCourtTemplateJsonCodec.EnsureRegionalLayer(document);
             document.LocalTemplates = new List<CustomLocalCourtTemplate>();
             document.ArchivedCrossLayerEdges = new List<CustomCourtEdge>();
             return document;
@@ -27,6 +28,7 @@ namespace AncientWarfare3.core.court
                 Id = pSource.Id,
                 Revision = 1,
                 Name = pSource.Name ?? new CustomCourtLocalizedText(),
+                RegionalGovernmentLayer = null,
                 LocalTemplates = new List<CustomLocalCourtTemplate>
                 {
                     pSource
@@ -82,6 +84,8 @@ namespace AncientWarfare3.core.court
             current.Name = central.Name;
             current.Offices = central.Offices;
             current.Edges = central.Edges;
+            current.RegionalGovernmentLayer = central.RegionalGovernmentLayer;
+            CustomCourtTemplateJsonCodec.EnsureRegionalLayer(current);
             if (CustomCourtTemplateRules.Validate(current) !=
                 CustomCourtTemplateValidationError.None) return false;
             pMerged = current;

@@ -1,0 +1,62 @@
+using System;
+using System.Linq;
+using AncientWarfare3.core.court;
+
+internal static class RegionalGovernmentTemplateRulesTests
+{
+    public static void Run()
+    {
+        string oldCentral = "{\"SchemaVersion\":3,\"Id\":\"old_court\",\"Revision\":1," +
+            "\"Name\":{\"Chinese\":\"旧朝\",\"English\":\"Old Court\"}," +
+            "\"Offices\":[{\"Id\":\"minister\",\"Layer\":\"central\",\"Grade\":10," +
+            "\"Slots\":1,\"Name\":{\"Chinese\":\"官\",\"English\":\"Office\"}}]," +
+            "\"Edges\":[],\"LocalTemplates\":[],\"ArchivedCrossLayerEdges\":[]}";
+        True(CustomCourtTemplateJsonCodec.TryImport(oldCentral,
+            out CustomCourtTemplate imported, out _), "old central imports");
+        True(imported.RegionalGovernmentLayer != null,
+            "old central receives dynamic layer");
+        Equal("郡", imported.RegionalGovernmentLayer.RegionTitle.Chinese,
+            "default region title");
+        Equal("郡守", imported.RegionalGovernmentLayer.GovernorTitle.Chinese,
+            "default governor title");
+
+        CustomCourtTemplate custom = CustomCourtTemplateJsonCodec.Normalize(
+            imported);
+        custom.RegionalGovernmentLayer.RegionTitle.Chinese = "道";
+        custom.RegionalGovernmentLayer.GovernorTitle.Chinese = "观察使";
+        custom.RegionalGovernmentLayer.ManagementOfficeIds.Add("minister");
+        string roundTrip = CustomCourtTemplateJsonCodec.Export(custom);
+        True(CustomCourtTemplateJsonCodec.TryImport(roundTrip,
+            out CustomCourtTemplate restored, out _), "custom layer round trips");
+        Equal("道", restored.RegionalGovernmentLayer.RegionTitle.Chinese,
+            "custom region title survives export");
+        Equal("观察使", restored.RegionalGovernmentLayer.GovernorTitle.Chinese,
+            "custom governor title survives export");
+        Equal("minister", restored.RegionalGovernmentLayer.ManagementOfficeIds
+            .Single(), "management link survives export");
+
+        CustomLocalCourtTemplate local = CustomLocalGovernmentPresetRules
+            .CreateCivil("local_only");
+        CustomCourtTemplate localDocument =
+            CustomCourtTemplateDocumentRules.CreateLocalDocument(local);
+        False(localDocument.RegionalGovernmentLayer != null,
+            "local document does not copy central layer");
+    }
+
+    private static void True(bool pActual, string pMessage)
+    {
+        if (!pActual) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pActual, string pMessage)
+    {
+        if (pActual) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+}

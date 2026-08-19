@@ -152,6 +152,20 @@ namespace AncientWarfare3.core.court
             new List<CustomLocalCourtTemplate>();
         public List<CustomCourtEdge> ArchivedCrossLayerEdges { get; set; } =
             new List<CustomCourtEdge>();
+        public CustomCourtRegionalGovernmentLayer RegionalGovernmentLayer {
+            get; set;
+        }
+    }
+
+    public sealed class CustomCourtRegionalGovernmentLayer
+    {
+        public string Id { get; set; } = "regional_government_layer";
+        public CustomCourtLocalizedText RegionTitle { get; set; } =
+            new CustomCourtLocalizedText { Chinese = "郡", English = "Commandery" };
+        public CustomCourtLocalizedText GovernorTitle { get; set; } =
+            new CustomCourtLocalizedText { Chinese = "郡守", English = "Regional Governor" };
+        public List<string> ManagementOfficeIds { get; set; } =
+            new List<string>();
     }
 
     public readonly struct CustomCourtValidationIssue

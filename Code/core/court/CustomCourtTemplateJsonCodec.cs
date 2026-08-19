@@ -55,6 +55,10 @@ namespace AncientWarfare3.core.court
             normalized.ArchivedCrossLayerEdges = SortEdges(
                 normalized.ArchivedCrossLayerEdges);
             normalized.Name = normalized.Name ?? new CustomCourtLocalizedText();
+            if (normalized.Offices.Count > 0)
+                EnsureRegionalLayer(normalized);
+            if (normalized.RegionalGovernmentLayer != null)
+                NormalizeRegionalLayer(normalized.RegionalGovernmentLayer);
             return normalized;
         }
 
@@ -77,6 +81,8 @@ namespace AncientWarfare3.core.court
                     json, Settings);
                 template = CustomLocalCourtTemplateRules.UpgradeLegacy(
                     template);
+                if (template?.Offices != null && template.Offices.Count > 0)
+                    EnsureRegionalLayer(template);
                 error = CustomCourtTemplateRules.Validate(template);
                 if (error != CustomCourtTemplateValidationError.None)
                 {
@@ -129,6 +135,38 @@ namespace AncientWarfare3.core.court
                     .ThenBy(item => item.Mode).ThenBy(item => item.Scope)
                     .ThenBy(item => item.Value).ToList();
             }
+        }
+
+        internal static void EnsureRegionalLayer(CustomCourtTemplate pTemplate)
+        {
+            if (pTemplate == null) return;
+            pTemplate.RegionalGovernmentLayer =
+                pTemplate.RegionalGovernmentLayer ??
+                new CustomCourtRegionalGovernmentLayer();
+            NormalizeRegionalLayer(pTemplate.RegionalGovernmentLayer);
+        }
+
+        private static void NormalizeRegionalLayer(
+            CustomCourtRegionalGovernmentLayer pLayer)
+        {
+            if (pLayer == null) return;
+            pLayer.Id = "regional_government_layer";
+            pLayer.RegionTitle = pLayer.RegionTitle ??
+                new CustomCourtLocalizedText();
+            pLayer.GovernorTitle = pLayer.GovernorTitle ??
+                new CustomCourtLocalizedText();
+            if (string.IsNullOrWhiteSpace(pLayer.RegionTitle.Chinese))
+                pLayer.RegionTitle.Chinese = "郡";
+            if (string.IsNullOrWhiteSpace(pLayer.RegionTitle.English))
+                pLayer.RegionTitle.English = "Commandery";
+            if (string.IsNullOrWhiteSpace(pLayer.GovernorTitle.Chinese))
+                pLayer.GovernorTitle.Chinese = "郡守";
+            if (string.IsNullOrWhiteSpace(pLayer.GovernorTitle.English))
+                pLayer.GovernorTitle.English = "Regional Governor";
+            pLayer.ManagementOfficeIds = (pLayer.ManagementOfficeIds ??
+                    new List<string>()).Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal).OrderBy(id => id,
+                    StringComparer.Ordinal).ToList();
         }
     }
 }
