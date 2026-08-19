@@ -41,6 +41,27 @@ internal static class RegionalGovernmentRulesTests
                 Fact(4, 2, "甲", .5f, 10), Fact(3, 2, "乙", .5f, 10)
             }, "郡");
         Equal(3L, tie[0].SeatCityId, "city ID breaks a development tie");
+
+        var capped = new List<RegionalGovernmentCityFact>
+        {
+            Fact(100, 7, "Seat宸?", 1f, 100, 101, 102, 103, 104, 105, 106),
+            Fact(101, 7, "A宸?", .9f, 90), Fact(102, 7, "B宸?", .8f, 80),
+            Fact(103, 7, "C宸?", .7f, 70), Fact(104, 7, "D宸?", .6f, 60),
+            Fact(105, 7, "E宸?", .5f, 50), Fact(106, 7, "F宸?", .4f, 40),
+            Fact(107, 8, "Foreign宸?", 2f, 200)
+        };
+        IReadOnlyList<RegionalGovernmentFact> cappedRegions =
+            RegionalGovernmentRules.Build(capped, "郡");
+        RegionalGovernmentFact cappedSeat = cappedRegions.Single(
+            region => region.SeatCityId == 100);
+        Equal(5, cappedSeat.MemberCityIds.Count,
+            "a region contains at most the seat and four neighbors");
+        Equal(false, cappedSeat.MemberCityIds.Contains(107),
+            "cross-kingdom neighbors are excluded");
+        Equal(1, RegionalGovernmentRules.Build(new[] {
+            Fact(200, 9, "孤立州", 1f, 1)
+        }, "郡").Single().MemberCityIds.Count,
+            "an isolated kingdom still yields one seat-only region");
     }
 
     private static RegionalGovernmentCityFact Fact(long pCityId,
