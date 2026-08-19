@@ -139,7 +139,7 @@ namespace AncientWarfare3.core.court
 
     public sealed class CustomCourtTemplate
     {
-        public int SchemaVersion { get; set; } = 2;
+        public int SchemaVersion { get; set; } = 3;
         public string Id { get; set; } = string.Empty;
         public int Revision { get; set; } = 1;
         public CustomCourtLocalizedText Name { get; set; } =

@@ -1,0 +1,147 @@
+using System;
+using System.Linq;
+using AncientWarfare3.core.court;
+
+internal static class CustomLocalGovernmentRulesTests
+{
+    public static void Run()
+    {
+        Equal(CustomLocalGovernmentDefaultKind.Military,
+            CustomLocalGovernmentRules.SelectDefault(false, true, false),
+            "foreign land border selects military government");
+        Equal(CustomLocalGovernmentDefaultKind.Military,
+            CustomLocalGovernmentRules.SelectDefault(false, false, true),
+            "frontier military role selects military government");
+        Equal(CustomLocalGovernmentDefaultKind.Civil,
+            CustomLocalGovernmentRules.SelectDefault(false, false, false),
+            "ordinary interior city selects civil government");
+        Equal(CustomLocalGovernmentDefaultKind.Manual,
+            CustomLocalGovernmentRules.SelectDefault(true, true, true),
+            "manual template binding always wins");
+
+        CustomLocalCourtTemplate civil =
+            CustomLocalGovernmentPresetRules.CreateCivil("minzhou");
+        CustomLocalCourtTemplate military =
+            CustomLocalGovernmentPresetRules.CreateMilitary("junfu");
+        Equal(4, civil.Offices.Count, "civil preset office count");
+        Equal(4, military.Offices.Count, "military preset office count");
+        HasOffice(civil, "minzhou_governor");
+        HasOffice(civil, "minzhou_changshi");
+        HasOffice(civil, "minzhou_sihu");
+        HasOffice(civil, "minzhou_sicang");
+        HasOffice(military, "junfu_dudu");
+        HasOffice(military, "junfu_changshi");
+        HasOffice(military, "junfu_sima");
+        HasOffice(military, "junfu_canjun");
+        Equal(3, civil.Edges.Count, "civil preset management edge count");
+        Equal(3, military.Edges.Count,
+            "military preset management edge count");
+        Equal(CustomLocalCourtDefaultKind.CivilDefault, civil.DefaultKind,
+            "civil preset default role");
+        Equal(CustomLocalCourtDefaultKind.MilitaryDefault,
+            military.DefaultKind, "military preset default role");
+        True(military.Offices.First(office =>
+            office.Id == "junfu_dudu").MilitaryCapable,
+            "military commander can lead troops");
+        True(military.Offices.First(office =>
+            office.Id == "junfu_sima").MilitaryCapable,
+            "military marshal can lead troops");
+
+        CustomCourtTemplate legacy = LegacyTemplate(includeMilitary: false);
+        CustomCourtTemplate upgraded =
+            CustomLocalCourtTemplateRules.UpgradeLegacy(legacy);
+        Equal(CustomLocalCourtTemplateRules.CurrentSchemaVersion,
+            upgraded.SchemaVersion, "migration advances schema");
+        Equal(4, Find(upgraded, "minzhou").Offices.Count,
+            "pristine legacy civil template expands");
+        Equal(4, Find(upgraded, "junfu").Offices.Count,
+            "missing military template is added");
+        string once = CustomCourtTemplateJsonCodec.Export(upgraded);
+        string twice = CustomCourtTemplateJsonCodec.Export(
+            CustomCourtTemplateJsonCodec.Normalize(upgraded));
+        Equal(once, twice, "migration is idempotent");
+
+        CustomCourtTemplate customized = LegacyTemplate(includeMilitary: true);
+        CustomLocalCourtTemplate customCivil = Find(customized, "minzhou");
+        customCivil.Offices[0].Grade = 11;
+        CustomLocalCourtTemplateRules.UpgradeLegacy(customized);
+        Equal(1, Find(customized, "minzhou").Offices.Count,
+            "modified legacy template is preserved");
+        Equal(11, Find(customized, "minzhou").Offices[0].Grade,
+            "modified office properties are not overwritten");
+    }
+
+    private static CustomCourtTemplate LegacyTemplate(bool includeMilitary)
+    {
+        var template = new CustomCourtTemplate
+        {
+            SchemaVersion = 2,
+            Id = "legacy_court",
+            Name = new CustomCourtLocalizedText
+            {
+                Chinese = "旧朝廷",
+                English = "Legacy Court"
+            }
+        };
+        template.LocalTemplates.Add(LegacyLocal("minzhou", "民州",
+            CustomLocalCourtDefaultKind.CivilDefault));
+        if (includeMilitary)
+            template.LocalTemplates.Add(LegacyLocal("junfu", "军府",
+                CustomLocalCourtDefaultKind.MilitaryDefault));
+        return template;
+    }
+
+    private static CustomLocalCourtTemplate LegacyLocal(string id,
+        string name, CustomLocalCourtDefaultKind kind)
+    {
+        var local = new CustomLocalCourtTemplate
+        {
+            Id = id,
+            Name = new CustomCourtLocalizedText
+            {
+                Chinese = name,
+                English = name
+            },
+            DefaultKind = kind
+        };
+        local.Offices.Add(new CustomCourtOffice
+        {
+            Id = id + "_governor",
+            Name = new CustomCourtLocalizedText
+            {
+                Chinese = "地方长官",
+                English = "地方长官"
+            },
+            Layer = CourtOfficeLayer.City,
+            Grade = 10,
+            Slots = 1,
+            Layout = new CustomCourtOfficeLayout()
+        });
+        return local;
+    }
+
+    private static CustomLocalCourtTemplate Find(CustomCourtTemplate template,
+        string id)
+    {
+        return template.LocalTemplates.First(item => item.Id == id);
+    }
+
+    private static void HasOffice(CustomLocalCourtTemplate template,
+        string id)
+    {
+        True(template.Offices.Any(office => office.Id == id),
+            "missing office " + id);
+    }
+
+    private static void True(bool actual, string message)
+    {
+        if (!actual) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                expected + ", got " + actual);
+    }
+}

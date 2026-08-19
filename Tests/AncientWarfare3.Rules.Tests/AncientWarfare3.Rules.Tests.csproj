@@ -15,6 +15,9 @@
     <Compile Include="Program.cs.txt" />
     <Compile Include="CustomCourtTemplateRulesTests.cs.txt" />
     <Compile Include="CustomCourtTemplateCodecTests.cs.txt" />
+    <Compile Include="CustomLocalGovernmentRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CustomLocalGovernmentRules.cs" Link="Production\CustomLocalGovernmentRules.cs" />
+    <Compile Include="..\..\Code\core\court\CustomLocalGovernmentPresetRules.cs" Link="Production\CustomLocalGovernmentPresetRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateModels.cs" Link="Production\CustomCourtTemplateModels.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateRules.cs" Link="Production\CustomCourtTemplateRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomLocalCourtTemplateRules.cs" Link="Production\CustomLocalCourtTemplateRules.cs" />

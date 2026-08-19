@@ -9,6 +9,13 @@ using AncientWarfare3.core.presentation;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--custom-local-government")
+{
+    CustomLocalGovernmentRulesTests.Run();
+    Console.WriteLine("Custom local government rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--custom-court-template")
 {
     CustomCourtTemplateRulesTests.Run();
