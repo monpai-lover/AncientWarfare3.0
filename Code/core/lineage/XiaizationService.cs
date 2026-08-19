@@ -400,7 +400,7 @@ namespace AncientWarfare3.core.lineage
             string mode = IsXiaOccupationMode(pOccupationType) ? pOccupationType : TYPE_FOREIGN_ENTRY;
             EnsureForeignOccupier(pOwner, pCity, mode, level);
             UpsertCityState(pCity, pOwner, mode + "_xiaized", 100.0, 100.0, GetCityResentment(pCity));
-            HistoricalSchoolRuntime.RefreshLivingXiaCity(pCity);
+            HistoricalSchoolXiaAccessService.NotifyAccessChanged(pCity);
 
             HistoryWriter.RecordCity(pCity, pOwner, CityEvent.XIAIZATION_PROGRESS,
                 HistoryText.City(pCity, pOwner) +

@@ -1,0 +1,86 @@
+using System;
+using System.IO;
+
+internal static class HistoricalSchoolXiaAccessSourceGuardTests
+{
+    internal static void Run()
+    {
+        string academy = Read("Code/core/schools/HistoricalSchoolAcademyConstructionService.cs");
+        string academyLookup = Read("Code/core/schools/HistoricalSchoolAcademyService.cs");
+        string repair = Read("Code/core/schools/HistoricalSchoolAcademyRepairService.cs");
+        string travel = Read("Code/core/schools/HistoricalSchoolTravelService.cs");
+        string education = Read("Code/core/schools/HistoricalSchoolEducationJourneyService.cs");
+        string lectures = Read("Code/core/schools/HistoricalSchoolActivityQueue.cs");
+        string actions = Read("Code/core/schools/HistoricalSchoolActionService.cs");
+        string venues = Read("Code/core/schools/HistoricalSchoolVenueProvider.cs");
+        string xiaization = Read("Code/core/lineage/XiaizationService.cs");
+
+        Contains(academy,
+            "if (!HistoricalSchoolXiaAccessService.CanHostAcademy(pCity))\n" +
+            "                return null;",
+            "academy construction must reject before placement bookkeeping");
+        Contains(academy,
+            "HistoricalSchoolXiaAccessService.CanHostAcademy(pCity) &&\n" +
+            "                   CanBuildAt",
+            "preferred-tile construction must use the same access gate");
+        Contains(repair,
+            "if (!HistoricalSchoolXiaAccessService.CanHostAcademy(city))\n" +
+            "                return;",
+            "academy repair must remain pending while access is unavailable");
+        Contains(academyLookup,
+            "if (!HistoricalSchoolXiaAccessService.CanHostAcademy(pCity))\n" +
+            "                return null;",
+            "existing foreign academies must remain present but dormant");
+        Contains(travel,
+            "!HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(destination)",
+            "physical travel must revalidate destination access");
+        Contains(travel,
+            "!HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(pDestination)",
+            "direct invitation must reject foreign non-Xia destinations");
+        Contains(travel,
+            "!HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(city)",
+            "ordinary destination candidates must exclude inaccessible cities");
+        Contains(travel,
+            "!HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(\n" +
+            "                        destination)",
+            "arrival persistence must revalidate destination access");
+        Contains(education,
+            "!HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(\n" +
+            "                    pDestination)",
+            "education journey selection must reject inaccessible destinations");
+        Contains(education,
+            "!HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(\n" +
+            "                    pDestination))",
+            "education state validation must reject a destination that lost access");
+        Contains(actions,
+            "!HistoricalSchoolXiaAccessService.CanHostLecture(residence)",
+            "lecture planning and commit validation must use the lecture gate");
+        Contains(lectures,
+            "HistoricalSchoolXiaAccessService.CanHostLecture(city)",
+            "lecture enqueue or activation must validate the planned city");
+        Contains(lectures,
+            "HistoricalSchoolXiaAccessService.CanHostLecture(residence)",
+            "active lecture validation must cancel stale activities");
+        Contains(venues,
+            "pKind == HistoricalSchoolVenueKind.Lecture &&\n" +
+            "                !HistoricalSchoolXiaAccessService.CanHostLecture(pCity)",
+            "venue provider must fail closed for lecture venues");
+        Contains(xiaization,
+            "HistoricalSchoolXiaAccessService.NotifyAccessChanged(pCity);",
+            "full Xiaization must invalidate school destination and venue caches");
+    }
+
+    private static string Read(string pRelative)
+    {
+        return File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+                pRelative.Replace('/', Path.DirectorySeparatorChar)))
+            .Replace("\r\n", "\n");
+    }
+
+    private static void Contains(string pText, string pNeedle,
+        string pMessage)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage);
+    }
+}

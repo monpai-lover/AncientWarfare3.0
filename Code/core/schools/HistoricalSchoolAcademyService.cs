@@ -13,6 +13,8 @@ namespace AncientWarfare3.core.schools
         public static Building FindUsable(City pCity)
         {
             if (pCity?.data == null || pCity.isRekt()) return null;
+            if (!HistoricalSchoolXiaAccessService.CanHostAcademy(pCity))
+                return null;
             try
             {
                 System.Collections.Generic.List<Building> academies =
@@ -77,6 +79,8 @@ namespace AncientWarfare3.core.schools
 
         public static bool IsUsable(Building pAcademy, City pCity)
         {
+            if (!HistoricalSchoolXiaAccessService.CanHostAcademy(pCity))
+                return false;
             if (!IsLiveAcademyForCity(pAcademy, pCity)) return false;
             City attachedCity = null;
             try { attachedCity = pAcademy?.getCity(); }

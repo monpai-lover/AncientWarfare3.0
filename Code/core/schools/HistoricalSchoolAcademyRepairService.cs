@@ -90,6 +90,8 @@ namespace AncientWarfare3.core.schools
                 CitySchoolSnapshotService.MarkDirtyById(pTicket.CityId);
                 return;
             }
+            if (!HistoricalSchoolXiaAccessService.CanHostAcademy(city))
+                return;
             if (disposition == HistoricalSchoolAcademyRepairDisposition.RebindOwner &&
                 HistoricalSchoolStore.RebindAcademyRepairOwner(
                     pTicket.InstitutionId, ownerId, worldTime))

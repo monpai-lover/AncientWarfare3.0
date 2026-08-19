@@ -9,6 +9,14 @@ using AncientWarfare3.core.presentation;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--historical-school-xia-access")
+{
+    HistoricalSchoolXiaAccessRulesTests.Run();
+    HistoricalSchoolXiaAccessSourceGuardTests.Run();
+    Console.WriteLine("Historical school Xia access rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--frame-priority-confirmation")
 {
     FramePrioritySchedulerConfirmationRulesTests.Run();
@@ -8815,5 +8823,7 @@ PeasantRebelRouteRulesTests.Run();
 BanditGreatUprisingRulesTests.Run();
 CorruptionRulesTests.Run();
 CorruptionSourceGuardTests.Run();
+HistoricalSchoolXiaAccessRulesTests.Run();
+HistoricalSchoolXiaAccessSourceGuardTests.Run();
 
 Console.WriteLine("Rule tests passed.");

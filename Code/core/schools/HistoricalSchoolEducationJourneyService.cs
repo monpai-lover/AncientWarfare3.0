@@ -62,6 +62,8 @@ namespace AncientWarfare3.core.schools
             if (!IsUsable(pStudent) || !IsLivingCity(pResidence) ||
                 !IsLivingCity(pDestination) || pTeacherMembership == null ||
                 pResidence.data.id == pDestination.data.id) return false;
+            if (!HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(
+                    pDestination)) return false;
             if (!TryValidateTeacher(pTeacher, pTeacherMembership.SchoolId,
                     pDestination, pKingdomId, out _)) return false;
             if (!IsDomesticStudent(pStudent, pKingdomId) ||
@@ -425,6 +427,8 @@ namespace AncientWarfare3.core.schools
             pMembership = pTeacher?.data == null ? null :
                 SchoolMembershipService.GetActive(pTeacher.data.id);
             if (!IsUsable(pTeacher) || !IsLivingCity(pDestination) ||
+                !HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(
+                    pDestination) ||
                 pMembership == null || pMembership.SchoolId != pSchoolId ||
                 !SchoolLineageService.IsQualifiedTeacher(pTeacher) ||
                 !HistoricalAffiliationService.IsPresentForInfluence(pTeacher) ||

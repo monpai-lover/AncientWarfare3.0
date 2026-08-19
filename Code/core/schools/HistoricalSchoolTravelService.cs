@@ -144,7 +144,8 @@ namespace AncientWarfare3.core.schools
                     TravelActivityId(pActor.data.id), HistoricalSchoolContent.TravelTaskId))
                 return false;
             City destination = FindCity(state.DestinationCityId);
-            if (!IsLivingCity(destination))
+            if (!IsLivingCity(destination) ||
+                !HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(destination))
             {
                 CancelMaritimeTravel(pActor.data.id, pActor);
                 HistoricalAffiliationService.CancelTravel(pActor);
@@ -175,7 +176,8 @@ namespace AncientWarfare3.core.schools
                 state.LifecycleState != HistoricalSchoolLifecycleState.Travelling) return false;
             City destination = FindCity(state.DestinationCityId);
             City previousResidence = FindCity(state.ResidenceCityId);
-            if (!IsLivingCity(destination))
+            if (!IsLivingCity(destination) ||
+                !HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(destination))
             {
                 CancelMaritimeTravel(pActor.data.id, pActor);
                 HistoricalAffiliationService.CancelTravel(pActor);
@@ -256,7 +258,8 @@ namespace AncientWarfare3.core.schools
         public static bool TryInviteToCity(Actor pActor, City pDestination,
             int pYear)
         {
-            if (!IsUsable(pActor) || !IsLivingCity(pDestination))
+            if (!IsUsable(pActor) || !IsLivingCity(pDestination) ||
+                !HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(pDestination))
                 return false;
             HistoricalSchoolAffiliationSnapshot state =
                 HistoricalAffiliationService.Get(pActor.data.id);
@@ -297,7 +300,9 @@ namespace AncientWarfare3.core.schools
             var cheapCandidates = new List<TravelCityTarget>(pCities.Count);
             foreach (City city in pCities)
             {
-                if (!IsLivingCity(city) || city.data.id == pState.ResidenceCityId) continue;
+                if (!IsLivingCity(city) ||
+                    !HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(city) ||
+                    city.data.id == pState.ResidenceCityId) continue;
                 WorldTile target = DestinationTile(city, pActor, school);
                 if (target == null) continue;
                 cheapCandidates.Add(new TravelCityTarget(city, target));
@@ -401,7 +406,9 @@ namespace AncientWarfare3.core.schools
                 return false;
             City destination = FindCity(pState.DestinationCityId);
             City residence = FindCity(pState.ResidenceCityId) ?? pActor.city;
-            if (!IsLivingCity(destination) || residence?.getTile() == null) return false;
+            if (!IsLivingCity(destination) ||
+                !HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(destination) ||
+                residence?.getTile() == null) return false;
             int distance = Toolbox.SquaredDistTile(residence.getTile(), destination.getTile());
             int arrival = HistoricalSchoolRules.VoyageArrivalYear(pYear, distance);
             if (!HistoricalAffiliationService.TryBeginVoyage(pActor, pYear, arrival))
@@ -424,7 +431,8 @@ namespace AncientWarfare3.core.schools
             City previousResidence = FindCity(pState.ResidenceCityId);
             if (!IsUsable(actor)) return;
             RefreshVoyageIsolation(actor);
-            if (!IsLivingCity(destination))
+            if (!IsLivingCity(destination) ||
+                !HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(destination))
             {
                 RestoreCancelledVoyage(actor, pState);
                 return;
@@ -470,6 +478,8 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolAffiliationSnapshot pState, int pYear)
         {
             if (!IsUsable(pActor) || !IsLivingCity(pDestination) ||
+                !HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(
+                    pDestination) ||
                 pState == null) return false;
             if (PendingArrivalActorIds.Contains(pActor.data.id)) return true;
             if (!HistoricalAffiliationService.TryPrepareArrival(pActor,
@@ -1084,7 +1094,9 @@ namespace AncientWarfare3.core.schools
                         CleanFailure;
                 Actor actor = FindActor(_desired?.ActorId ?? -1L);
                 City destination = FindCity(_destinationCityId);
-                if (!IsUsable(actor) || !IsLivingCity(destination))
+                if (!IsUsable(actor) || !IsLivingCity(destination) ||
+                    !HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(
+                        destination))
                     return HistoricalSchoolTeachingPersistenceOutcome.
                         CleanFailure;
                 HistoricalSchoolTeachingPersistenceOutcome affiliation =
@@ -1174,7 +1186,9 @@ namespace AncientWarfare3.core.schools
                     return true;
                 }
                 City destination = FindCity(current.DestinationCityId);
-                if (!IsLivingCity(destination))
+                if (!IsLivingCity(destination) ||
+                    !HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(
+                        destination))
                 {
                     RestoreCancelledVoyage(actor, current);
                     PendingArrivalActorIds.Remove(ActorId);
