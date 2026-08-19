@@ -165,6 +165,14 @@ internal static class CustomLocalGovernmentRulesTests
             "local incumbents are scoped to their city");
         True(effects.Contains("snapshot.LocalTemplates"),
             "runtime effects inspect local templates inside the custom court");
+        True(effects.Contains("BuildBoundedArmyModifier("),
+            "local military effects use a bounded aggregation path");
+        True(effects.Contains("activeLocalTemplateIds.Add("),
+            "each active local template contributes to army effects once");
+        True(effects.Contains("IsActiveLocalTemplateRow("),
+            "stale local office rows do not grant army effects");
+        True(effects.Contains("FindOfficeIncludingLocal("),
+            "local office influence resolves through the court snapshot");
         True(economy.Contains("cityEffectModifiers.TryGetValue("),
             "city economy consumes per-city local office modifiers");
     }

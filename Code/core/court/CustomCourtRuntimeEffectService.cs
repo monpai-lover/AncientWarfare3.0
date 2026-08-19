@@ -29,9 +29,57 @@ namespace AncientWarfare3.core.court
         public static CustomCourtEffectModifier GetArmyModifier(
             Kingdom kingdom)
         {
-            return GetAggregateModifier(kingdom,
-                CustomCourtEffectId.ArmyMorale,
+            return BuildBoundedArmyModifier(kingdom);
+        }
+
+        private static CustomCourtEffectModifier BuildBoundedArmyModifier(
+            Kingdom kingdom)
+        {
+            if (!TryGetRuntime(kingdom, out CustomCourtTemplate snapshot,
+                    out List<CourtOfficerView> officers))
+                return CustomCourtEffectModifier.Identity;
+
+            var active = new List<CustomCourtOffice>();
+            AddActiveFilteredOffices(active, kingdom, snapshot.Offices,
+                officers, null, CustomCourtEffectId.ArmyMorale,
                 CustomCourtEffectScope.Kingdom, CustomCourtEffectScope.Army);
+            var activeLocalTemplateIds = new HashSet<string>(
+                StringComparer.Ordinal);
+            foreach (CustomLocalCourtTemplate local in snapshot.LocalTemplates ??
+                     new List<CustomLocalCourtTemplate>())
+            {
+                if (local == null || string.IsNullOrWhiteSpace(local.Id) ||
+                    !activeLocalTemplateIds.Add(local.Id)) continue;
+                AddActiveFilteredOffices(active, kingdom, local.Offices,
+                    officers, row => IsActiveLocalTemplateRow(kingdom, row,
+                        local.Id),
+                    CustomCourtEffectId.ArmyMorale,
+                    CustomCourtEffectScope.Kingdom,
+                    CustomCourtEffectScope.Army);
+            }
+            IDictionary<CustomCourtEffectId, CustomCourtEffectModifier>
+                modifiers = EffectService.AggregateModifiers(active,
+                    _ => true);
+            return modifiers.TryGetValue(CustomCourtEffectId.ArmyMorale,
+                out CustomCourtEffectModifier modifier)
+                ? modifier
+                : CustomCourtEffectModifier.Identity;
+        }
+
+        private static bool IsActiveLocalTemplateRow(Kingdom kingdom,
+            CourtOfficerView row, string templateId)
+        {
+            if (row == null || row.layer != CourtOfficeLayer.City ||
+                row.city_id < 0L || string.IsNullOrWhiteSpace(templateId))
+                return false;
+            City city;
+            try { city = World.world?.cities?.get(row.city_id); }
+            catch { return false; }
+            return city?.data != null && city.kingdom == kingdom &&
+                   CustomCourtRuntime.TryGetLocalTemplate(kingdom, city,
+                       out CustomLocalCourtTemplate resolved) &&
+                   string.Equals(resolved?.Id, templateId,
+                       StringComparison.Ordinal);
         }
 
         public static Dictionary<long, CustomCourtCityEffectModifiers>
@@ -88,7 +136,8 @@ namespace AncientWarfare3.core.court
             if (!TryGetRuntime(kingdom, out CustomCourtTemplate snapshot,
                     out List<CourtOfficerView> officers))
                 return CustomCourtEffectModifier.Identity;
-            CustomCourtOffice office = FindOffice(snapshot, officeId);
+            CustomCourtOffice office = FindOfficeIncludingLocal(snapshot,
+                officeId);
             if (office == null || !HasActiveIncumbent(kingdom, office,
                     officers, actorId))
                 return CustomCourtEffectModifier.Identity;
@@ -148,6 +197,29 @@ namespace AncientWarfare3.core.court
             return result;
         }
 
+        private static void AddActiveFilteredOffices(
+            List<CustomCourtOffice> target, Kingdom kingdom,
+            IEnumerable<CustomCourtOffice> offices,
+            List<CourtOfficerView> officers,
+            Func<CourtOfficerView, bool> rowFilter,
+            CustomCourtEffectId effectId,
+            params CustomCourtEffectScope[] scopes)
+        {
+            foreach (CustomCourtOffice office in offices ??
+                     Array.Empty<CustomCourtOffice>())
+            {
+                if (office == null || !HasActiveIncumbent(kingdom, office,
+                        officers, -1L, rowFilter)) continue;
+                var filtered = new List<CustomCourtOfficeEffect>();
+                foreach (CustomCourtOfficeEffect effect in office.Effects ??
+                         new List<CustomCourtOfficeEffect>())
+                    if (effect != null && effect.Id == effectId &&
+                        Contains(scopes, effect.Scope)) filtered.Add(effect);
+                if (filtered.Count > 0)
+                    target.Add(new CustomCourtOffice { Effects = filtered });
+            }
+        }
+
         private static CustomCourtEffectModifier ComposeOfficeEffects(
             CustomCourtOffice office, CustomCourtEffectId effectId,
             params CustomCourtEffectScope[] scopes)
@@ -184,6 +256,20 @@ namespace AncientWarfare3.core.court
             return null;
         }
 
+        private static CustomCourtOffice FindOfficeIncludingLocal(
+            CustomCourtTemplate snapshot, string officeId)
+        {
+            CustomCourtOffice central = FindOffice(snapshot, officeId);
+            if (central != null) return central;
+            foreach (CustomLocalCourtTemplate local in snapshot?.LocalTemplates ??
+                     new List<CustomLocalCourtTemplate>())
+                foreach (CustomCourtOffice office in local?.Offices ??
+                         new List<CustomCourtOffice>())
+                    if (office != null && string.Equals(office.Id, officeId,
+                            StringComparison.Ordinal)) return office;
+            return null;
+        }
+
         private static bool HasActiveIncumbent(Kingdom kingdom,
             CustomCourtOffice office, List<CourtOfficerView> officers,
             long requiredActorId,
@@ -194,7 +280,7 @@ namespace AncientWarfare3.core.court
                 CourtOfficerView row = officers[i];
                 if (row == null || (requiredActorId >= 0L &&
                     row.actor_id != requiredActorId) || rowFilter != null &&
-                    !rowFilter(row)) continue;
+                    !rowFilter(row) || row.layer != office.Layer) continue;
                 Actor actor = null;
                 try { actor = World.world?.units?.get(row.actor_id); }
                 catch { }

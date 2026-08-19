@@ -51,6 +51,14 @@ internal static class CustomCourtWorkflowSourceGuardTests
             "Locales", "aw3_config.csv"));
         Contains(window, "public static void Open(");
         Contains(courtWindow, "CustomCourtWorkflowWindow.Open(");
+        Contains(window,
+            "public static void Open(long kingdomId, long cityId,");
+        Contains(window, "bool localMode)");
+        Contains(courtWindow,
+            "CustomCourtWorkflowWindow.Open(_kingdomId, _cityId,");
+        Contains(courtWindow, "localMode: true)");
+        Contains(window, "CourtWindow.OpenCity(_kingdomId, _cityId)");
+        DoesNotContain(window, "CustomLocalCourtInstance");
         Contains(window, "CreateManagementEdge");
         Contains(window, "CreateAppointmentPrerequisiteEdge");
         Contains(window, "ApplyCustomCourtTemplate");
@@ -101,7 +109,18 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "_toolScrollRect.content = _toolPanel;");
         Contains(window, "_toolScrollRect.vertical = true;");
         Contains(window, "_toolScrollRect.horizontal = false;");
+        Contains(window, "ToolbarTopOffset");
+        Contains(window, "ToolbarBottomInset");
+        Contains(window,
+            "viewportHeight - ToolbarTopOffset - ToolbarBottomInset");
+        Contains(window, "Scrollbar CreateToolbarScrollbar(");
+        Contains(window, "scrollbar.handleRect = handle;");
+        Contains(window, "_toolScrollRect.verticalScrollbar = scrollbar;");
+        Contains(window,
+            "ScrollRect.ScrollbarVisibility.Permanent");
         Contains(window, "_toolPanel.localScale = Vector3.one * ToolbarScale;");
+        Contains(window,
+            "_toolPanel.anchoredPosition = new Vector2(-ToolbarScrollbarWidth / ToolbarScale, 0f)");
         Contains(window, "CourtWorkflowVacancyCard.Create");
         Contains(window, "_toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f)");
         Contains(window, "_toolViewport.anchoredPosition = new Vector2(-864f, 46f)");
@@ -203,6 +222,22 @@ internal static class CustomCourtWorkflowSourceGuardTests
         HasLocalizationKey(localization, "aw_custom_court_workflow");
         HasLocalizationKey(localization, "aw_custom_court_workflow Title");
         HasLocalizationKey(localization, "aw_custom_court_workflow_title");
+        HasLocalizationKey(localization, "aw_custom_local_court_workflow");
+        HasLocalizationKey(localization,
+            "aw_custom_local_court_workflow Title");
+        HasLocalizationKey(localization,
+            "aw_custom_local_court_workflow_title");
+        HasLocalizationKey(localization,
+            "aw_custom_local_court_workflow_desc");
+        HasLocalizationKey(localization, "aw_local_court_minzhou");
+        HasLocalizationKey(localization, "aw_local_court_junfu");
+        HasLocalizationKey(localization, "aw_local_office_zhoumu");
+        HasLocalizationKey(localization, "aw_local_office_changshi");
+        HasLocalizationKey(localization, "aw_local_office_sihu");
+        HasLocalizationKey(localization, "aw_local_office_sicang");
+        HasLocalizationKey(localization, "aw_local_office_dudu");
+        HasLocalizationKey(localization, "aw_local_office_sima");
+        HasLocalizationKey(localization, "aw_local_office_canjun");
         HasLocalizationKey(localization, "aw_custom_court_add_office");
         HasLocalizationKey(localization, "aw_custom_court_office_name");
         HasLocalizationKey(localization, "aw_custom_court_office_name_placeholder");

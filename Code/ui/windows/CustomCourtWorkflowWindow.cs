@@ -20,7 +20,12 @@ namespace AncientWarfare3.ui.windows
         private const float ToolbarScale = 0.8f;
         private const float ToolbarWidth = 164f;
         private const float ToolbarContentHeight = 520f;
+        private const float ToolbarTopOffset = 46f;
+        private const float ToolbarBottomInset = 8f;
+        private const float ToolbarScrollbarWidth = 6f;
         private static long _kingdomId = -1L;
+        private static long _cityId = -1L;
+        private static bool _localEntryMode;
         private static readonly Vector2 DefaultSize = new Vector2(560f, 360f);
         private static readonly Vector2 MinimumSize = new Vector2(420f, 280f);
         private static readonly Vector2 MaximumSize = new Vector2(900f, 650f);
@@ -31,6 +36,7 @@ namespace AncientWarfare3.ui.windows
         private RectTransform _toolViewport;
         private RectTransform _toolPanel;
         private ScrollRect _toolScrollRect;
+        private Scrollbar _toolScrollbar;
         private InputField _courtNameInput;
         private InputField _officeNameInput;
         private Button _wholePresetButton;
@@ -50,6 +56,8 @@ namespace AncientWarfare3.ui.windows
         private string _replacementTemplateId = string.Empty;
         private bool _editingLocal;
         private long _loadedKingdomId = -1L;
+        private long _loadedCityId = -1L;
+        private bool _loadedLocalEntryMode;
         private readonly Dictionary<string, string> _pendingReplacements =
             new Dictionary<string, string>(StringComparer.Ordinal);
         private Text _status;
@@ -67,7 +75,15 @@ namespace AncientWarfare3.ui.windows
 
         public static void Open(long kingdomId)
         {
+            Open(kingdomId, -1L, localMode: false);
+        }
+
+        public static void Open(long kingdomId, long cityId,
+            bool localMode)
+        {
             _kingdomId = kingdomId;
+            _cityId = localMode ? cityId : -1L;
+            _localEntryMode = localMode;
             if (Instance == null)
                 CreateAndInit(AW_LineageWindowIds.CUSTOM_COURT_WORKFLOW);
             AW_LineageWindowIds.SafeShow(
@@ -128,6 +144,7 @@ namespace AncientWarfare3.ui.windows
             _toolScrollRect.movementType = ScrollRect.MovementType.Clamped;
             _toolScrollRect.inertia = true;
             _toolScrollRect.scrollSensitivity = 18f;
+            _toolScrollbar = CreateToolbarScrollbar(_toolViewport);
 
             _toolPanel = new GameObject("CourtWorkflowTools",
                 typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
@@ -254,7 +271,12 @@ namespace AncientWarfare3.ui.windows
             if (scrollWindow?.titleText != null)
             {
                 scrollWindow.titleText.text = AW_L10n.Text(
-                    "aw_custom_court_workflow_title", "Custom Court Workflow");
+                    _localEntryMode
+                        ? "aw_custom_local_court_workflow_title"
+                        : "aw_custom_court_workflow_title",
+                    _localEntryMode
+                        ? "Custom Local Government"
+                        : "Custom Court Workflow");
                 scrollWindow.titleText.transform.localPosition = new Vector3(0f,
                     _windowSize.y * 0.5f - 16f, 0f);
                 scrollWindow.titleText.raycastTarget = false;
@@ -292,15 +314,27 @@ namespace AncientWarfare3.ui.windows
             _toolViewport.pivot = new Vector2(1f, 1f);
             _toolViewport.anchoredPosition = new Vector2(-864f, 46f);
             _toolViewport.sizeDelta = new Vector2(
-                ToolbarWidth * ToolbarScale,
-                Mathf.Max(1f, viewportHeight - 8f));
+                ToolbarWidth * ToolbarScale + ToolbarScrollbarWidth,
+                Mathf.Max(1f, viewportHeight - ToolbarTopOffset - ToolbarBottomInset));
             _toolViewport.SetAsLastSibling();
             _toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f);
             _toolPanel.pivot = new Vector2(1f, 1f);
-            _toolPanel.anchoredPosition = Vector2.zero;
+            _toolPanel.anchoredPosition = new Vector2(-ToolbarScrollbarWidth / ToolbarScale, 0f);
             _toolPanel.sizeDelta = new Vector2(ToolbarWidth,
                 ToolbarContentHeight);
             _toolPanel.localScale = Vector3.one * ToolbarScale;
+            if (_toolScrollbar != null)
+            {
+                RectTransform scrollbarRect =
+                    _toolScrollbar.GetComponent<RectTransform>();
+                scrollbarRect.anchorMin = new Vector2(1f, 0f);
+                scrollbarRect.anchorMax = Vector2.one;
+                scrollbarRect.pivot = new Vector2(1f, 0.5f);
+                scrollbarRect.anchoredPosition = Vector2.zero;
+                scrollbarRect.sizeDelta = new Vector2(
+                    ToolbarScrollbarWidth, 0f);
+                _toolScrollbar.transform.SetAsLastSibling();
+            }
             Layout(_status.rectTransform, 8f, 460f, 148f,
                 Mathf.Max(1f, ToolbarContentHeight - 468f));
             _canvasRect.anchorMin = _canvasRect.anchorMax = new Vector2(0.5f, 0.5f);
@@ -318,6 +352,9 @@ namespace AncientWarfare3.ui.windows
         {
             EnsureUi();
             ApplyLayout();
+            bool contextChanged = _loadedKingdomId != _kingdomId ||
+                                  _loadedCityId != _cityId ||
+                                  _loadedLocalEntryMode != _localEntryMode;
             if (_template == null || _loadedKingdomId != _kingdomId)
             {
                 Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
@@ -325,11 +362,25 @@ namespace AncientWarfare3.ui.windows
                     out CustomCourtTemplate applied)
                     ? CustomCourtTemplateJsonCodec.Normalize(applied)
                     : NewTemplate();
-                    _loadedKingdomId = _kingdomId;
-                    _pendingReplacements.Clear();
-                    _selectedWholePresetId = string.Empty;
+                _pendingReplacements.Clear();
+                _selectedWholePresetId = string.Empty;
             }
             EnsureTemplateShape();
+            if (contextChanged)
+            {
+                _editingLocal = _localEntryMode;
+                _edgeSource = _edgeTarget = null;
+                _replacementTemplateId = string.Empty;
+                if (_officeNameInput != null)
+                    _officeNameInput.text = string.Empty;
+                if (_localEntryMode)
+                    SelectEntryCityTemplate();
+                if (_toolScrollRect != null)
+                    _toolScrollRect.verticalNormalizedPosition = 1f;
+            }
+            _loadedKingdomId = _kingdomId;
+            _loadedCityId = _cityId;
+            _loadedLocalEntryMode = _localEntryMode;
             RefreshContextControls();
             SyncNameInputFromContext();
             RenderCards();
@@ -405,30 +456,30 @@ namespace AncientWarfare3.ui.windows
         private CustomLocalCourtTemplate NewLocalTemplate(string pId,
             string pName, CustomLocalCourtDefaultKind pDefaultKind)
         {
-            var local = new CustomLocalCourtTemplate
+            CustomLocalCourtTemplate local = pDefaultKind ==
+                CustomLocalCourtDefaultKind.MilitaryDefault
+                    ? CustomLocalGovernmentPresetRules.CreateMilitary(pId)
+                    : CustomLocalGovernmentPresetRules.CreateCivil(pId);
+            local.Name = new CustomCourtLocalizedText
             {
-                Id = pId,
-                Name = new CustomCourtLocalizedText
-                {
-                    Chinese = pName,
-                    English = pName
-                },
-                DefaultKind = pDefaultKind
+                Chinese = pName,
+                English = pName
             };
-            local.Offices.Add(new CustomCourtOffice
-            {
-                Id = pId + "_governor",
-                Name = new CustomCourtLocalizedText
-                {
-                    Chinese = AW_L10n.Text("aw_court_governor", "Governor"),
-                    English = AW_L10n.Text("aw_court_governor", "Governor")
-                },
-                Layer = CourtOfficeLayer.City,
-                Grade = 10,
-                Slots = 1,
-                Layout = CanvasCenterLayout()
-            });
+            local.DefaultKind = pDefaultKind;
             return local;
+        }
+
+        private void SelectEntryCityTemplate()
+        {
+            Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+            City city;
+            try { city = World.world?.cities?.get(_cityId); }
+            catch { city = null; }
+            if (city?.data == null || city.kingdom != kingdom ||
+                !CustomCourtRuntime.TryGetLocalTemplate(kingdom, city,
+                    out CustomLocalCourtTemplate local) || local == null)
+                return;
+            _selectedLocalTemplateId = local.Id;
         }
 
         private void RefreshContextControls()
@@ -449,6 +500,7 @@ namespace AncientWarfare3.ui.windows
                 }
             }, _editingLocal ? "local" : "central",
                 AW_L10n.Text("aw_custom_court_context", "Edit layer"));
+            _contextDropdown?.gameObject.SetActive(!_localEntryMode);
 
             bool localMode = _editingLocal;
             _localTemplateDropdown?.gameObject.SetActive(localMode);
@@ -1231,7 +1283,9 @@ namespace AncientWarfare3.ui.windows
         private IEnumerator ReturnToCourtAfterApply()
         {
             yield return null;
-            CourtWindow.OpenAndRefresh(_kingdomId);
+            if (_localEntryMode && _cityId >= 0L)
+                CourtWindow.OpenCity(_kingdomId, _cityId);
+            else CourtWindow.OpenAndRefresh(_kingdomId);
         }
 
         private void SetStatus(string value)
@@ -1301,6 +1355,43 @@ namespace AncientWarfare3.ui.windows
             text.rectTransform.offsetMin = new Vector2(2f, 1f);
             text.rectTransform.offsetMax = new Vector2(-2f, -1f);
             return button;
+        }
+
+        private Scrollbar CreateToolbarScrollbar(Transform pParent)
+        {
+            var barObject = new GameObject("CourtWorkflowToolbarScrollbar",
+                typeof(RectTransform), typeof(Image), typeof(Scrollbar));
+            barObject.transform.SetParent(pParent, false);
+            Image track = barObject.GetComponent<Image>();
+            track.color = new Color(0.08f, 0.075f, 0.065f, 0.98f);
+
+            var slidingObject = new GameObject("Sliding Area",
+                typeof(RectTransform));
+            slidingObject.transform.SetParent(barObject.transform, false);
+            RectTransform sliding = slidingObject.GetComponent<RectTransform>();
+            sliding.anchorMin = Vector2.zero;
+            sliding.anchorMax = Vector2.one;
+            sliding.offsetMin = new Vector2(1f, 1f);
+            sliding.offsetMax = new Vector2(-1f, -1f);
+
+            var handleObject = new GameObject("Handle",
+                typeof(RectTransform), typeof(Image));
+            handleObject.transform.SetParent(sliding, false);
+            RectTransform handle = handleObject.GetComponent<RectTransform>();
+            handle.anchorMin = Vector2.zero;
+            handle.anchorMax = Vector2.one;
+            handle.offsetMin = handle.offsetMax = Vector2.zero;
+            Image handleImage = handleObject.GetComponent<Image>();
+            handleImage.color = new Color(0.76f, 0.61f, 0.28f, 1f);
+
+            Scrollbar scrollbar = barObject.GetComponent<Scrollbar>();
+            scrollbar.handleRect = handle;
+            scrollbar.targetGraphic = handleImage;
+            scrollbar.direction = Scrollbar.Direction.BottomToTop;
+            _toolScrollRect.verticalScrollbar = scrollbar;
+            _toolScrollRect.verticalScrollbarVisibility =
+                ScrollRect.ScrollbarVisibility.Permanent;
+            return scrollbar;
         }
 
         private static void AttachTooltip(Button button, string titleKey,

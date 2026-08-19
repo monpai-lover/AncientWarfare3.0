@@ -413,6 +413,7 @@ namespace AncientWarfare3.ui.windows
         private void UpdateLocalSummary(Kingdom pKingdom,
             LocalCourtReadModel pLocal)
         {
+            UpdateCustomCourtWorkflowEntry(localMode: true);
             _summaryPrimary.color = KingdomColor(pKingdom);
             _summaryPrimary.text = pLocal.CityName + "  |  " +
                 pLocal.CityTypeName + "  |  " +
@@ -529,6 +530,7 @@ namespace AncientWarfare3.ui.windows
 
         private void UpdateSummary(Kingdom pKingdom, CourtSnapshot pSnapshot)
         {
+            UpdateCustomCourtWorkflowEntry(localMode: false);
             if (_localTemplateDropdown != null)
                 _localTemplateDropdown.gameObject.SetActive(false);
             string bannerId = "";
@@ -1004,7 +1006,39 @@ namespace AncientWarfare3.ui.windows
 
         private void OpenCustomCourtWorkflow()
         {
-            CustomCourtWorkflowWindow.Open(_kingdomId);
+            if (_cityId >= 0L)
+                CustomCourtWorkflowWindow.Open(_kingdomId, _cityId,
+                    localMode: true);
+            else CustomCourtWorkflowWindow.Open(_kingdomId);
+        }
+
+        private void UpdateCustomCourtWorkflowEntry(bool localMode)
+        {
+            if (_customCourtWorkflowButton == null) return;
+            string key = localMode
+                ? "aw_custom_local_court_workflow"
+                : "aw_custom_court_workflow";
+            string fallback = localMode
+                ? "Custom Local Government"
+                : "Custom Court";
+            Text label = _customCourtWorkflowButton.transform.Find("Text")
+                ?.GetComponent<Text>();
+            if (label != null) label.text = AW_L10n.Text(key, fallback);
+            TipButton tip = _customCourtWorkflowButton.GetComponent<TipButton>()
+                            ?? _customCourtWorkflowButton.gameObject
+                                .AddComponent<TipButton>();
+            tip.type = AW_RawTooltip.TYPE;
+            tip.hoverAction = () => Tooltip.show(
+                _customCourtWorkflowButton.gameObject, AW_RawTooltip.TYPE,
+                new TooltipData
+                {
+                    tip_name = AW_L10n.Text(key, fallback),
+                    tip_description = localMode
+                        ? AW_L10n.Text("aw_custom_local_court_workflow_desc",
+                            "Edit this city's resolved local government template.")
+                        : AW_L10n.Text("aw_custom_court_whole_preset_select",
+                            "Edit the realm's custom court and local governments.")
+                });
         }
 
         private void EnsureSummaryFlag(Transform pParent)

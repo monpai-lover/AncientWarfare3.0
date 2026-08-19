@@ -32,6 +32,19 @@ aw_custom_court_whole_preset_cycle,整套官场：{0},Whole court: {0},整套官
 aw_custom_court_workflow,自定义朝廷,Custom Court Workflow,自定义朝廷
 aw_custom_court_workflow Title,自定义朝廷工作流,Custom Court Workflow,自定义朝廷工作流
 aw_custom_court_workflow_title,自定义朝廷工作流,Custom Court Workflow,自定义朝廷工作流
+aw_custom_local_court_workflow,自定义官府,Custom Local Government,自訂官府
+aw_custom_local_court_workflow Title,自定义官府,Custom Local Government,自訂官府
+aw_custom_local_court_workflow_title,自定义官府,Custom Local Government,自訂官府
+aw_custom_local_court_workflow_desc,编辑该城市当前采用的地方官署模板,Edit the local government template currently used by this city,編輯該城市目前採用的地方官署模板
+aw_local_court_minzhou,民州,Civil Prefecture,民州
+aw_local_court_junfu,军府,Military Government,軍府
+aw_local_office_zhoumu,州牧,Governor,州牧
+aw_local_office_changshi,长史,Chief Clerk,長史
+aw_local_office_sihu,司户,Household Officer,司戶
+aw_local_office_sicang,司仓,Granary Officer,司倉
+aw_local_office_dudu,都督,Commander,都督
+aw_local_office_sima,司马,Marshal,司馬
+aw_local_office_canjun,参军,Staff Officer,參軍
 aw_custom_court_add_office,添加官职,Add Office,添加官职
 aw_custom_court_management_edge,管理关系,Management,管理关系
 aw_custom_court_prerequisite_edge,任职前置,Prerequisite,任职前置
