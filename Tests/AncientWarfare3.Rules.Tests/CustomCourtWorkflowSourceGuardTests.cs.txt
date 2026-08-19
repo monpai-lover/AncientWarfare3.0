@@ -80,11 +80,23 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "_edgeSource = null;");
         Contains(window, "_edgeTarget = null;");
         Contains(window, "SyncContextNameFromInput()");
-        Contains(window, "CustomCourtTemplatePathService.RootPath");
+        DoesNotContain(window,
+            "new CustomCourtTemplateStore(TemplateRoot())");
+        Contains(window, "CustomCourtTemplatePathService.CentralRootPath");
+        Contains(window, "CustomCourtTemplatePathService.LocalRootPath");
+        Contains(window, "_selectedCentralImportFile");
+        Contains(window, "_selectedLocalImportFile");
+        Contains(window, ".CreateCentralDocument(");
+        Contains(window, ".CreateLocalDocument(");
+        Contains(window,
+            "CustomCourtTemplateDocumentRules.TryApplyCentralDocument(");
+        Contains(window,
+            "CustomCourtTemplateDocumentRules.TryApplyLocalDocument(");
         Contains(window, "store.ListFileNames()");
         Contains(window, "store.TryLoadFile(option.Id");
         Contains(window, "out string savedPath");
         Contains(window, "RefreshImportFiles(");
+        Contains(window, "SelectEditorContext");
         Contains(window, "RenderEdges");
         Contains(window, "RefreshSelectionVisuals");
         Contains(window, "SetSelectionState(1)");
@@ -224,6 +236,7 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(stringDropdown, "_onUnavailable?.Invoke(option)");
         Contains(runtime, "DisplayName(Kingdom kingdom");
         Contains(runtime, "OfficeDisplayName(Kingdom kingdom");
+        Contains(runtime, "CustomCourtTemplateRules.FindOffice(");
         Contains(runtime,
             "BuiltInLocalTemplates = CustomLocalGovernmentPresetRules");
         Contains(runtime, ".CreateBuiltInCatalog();");

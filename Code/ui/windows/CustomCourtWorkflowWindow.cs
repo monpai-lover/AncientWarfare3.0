@@ -49,7 +49,8 @@ namespace AncientWarfare3.ui.windows
         private Button _createLocalTemplateButton;
         private Button _duplicateLocalTemplateButton;
         private Button _deleteLocalTemplateButton;
-        private string _selectedImportFile = string.Empty;
+        private string _selectedCentralImportFile = string.Empty;
+        private string _selectedLocalImportFile = string.Empty;
         private string _selectedLocalTemplateId = string.Empty;
         private string _selectedWholePresetId = string.Empty;
         private string _replacementTemplateId = string.Empty;
@@ -608,6 +609,7 @@ namespace AncientWarfare3.ui.windows
                 _officeNameInput.text = string.Empty;
             EnsureTemplateShape();
             RefreshContextControls();
+            RefreshImportFiles();
             SyncNameInputFromContext();
             RenderCards(pFocusGraph: true);
         }
@@ -1033,19 +1035,57 @@ namespace AncientWarfare3.ui.windows
                 });
         }
 
-        private string TemplateRoot()
+        private string ActiveTemplateRoot()
         {
-            return CustomCourtTemplatePathService.RootPath;
+            return _editingLocal
+                ? CustomCourtTemplatePathService.LocalRootPath
+                : CustomCourtTemplatePathService.CentralRootPath;
+        }
+
+        private string ActiveSelectedImportFile
+        {
+            get => _editingLocal
+                ? _selectedLocalImportFile
+                : _selectedCentralImportFile;
+            set
+            {
+                if (_editingLocal) _selectedLocalImportFile = value ??
+                    string.Empty;
+                else _selectedCentralImportFile = value ?? string.Empty;
+            }
+        }
+
+        private bool TryBuildActiveDocument(
+            out CustomCourtTemplate pDocument)
+        {
+            pDocument = null;
+            if (_editingLocal)
+            {
+                CustomLocalCourtTemplate local = ActiveLocalTemplate;
+                if (local == null) return false;
+                pDocument = CustomCourtTemplateDocumentRules
+                    .CreateLocalDocument(local);
+                return true;
+            }
+            pDocument = CustomCourtTemplateDocumentRules
+                .CreateCentralDocument(_template);
+            return true;
         }
 
         private void ExportTemplate()
         {
             if (!SyncContextNameFromInput()) return;
-            var store = new CustomCourtTemplateStore(TemplateRoot());
-            CustomCourtTemplateValidationError error;
-            if (store.TrySave(_template, out error, out string savedPath))
+            if (!TryBuildActiveDocument(out CustomCourtTemplate document))
             {
-                _selectedImportFile = Path.GetFileName(savedPath);
+                SetStatus(AW_L10n.Text("aw_custom_court_invalid",
+                    "Template is invalid."));
+                return;
+            }
+            var store = new CustomCourtTemplateStore(ActiveTemplateRoot());
+            CustomCourtTemplateValidationError error;
+            if (store.TrySave(document, out error, out string savedPath))
+            {
+                ActiveSelectedImportFile = Path.GetFileName(savedPath);
                 RefreshImportFiles();
                 SetStatus(string.Format(CultureInfo.CurrentCulture,
                     AW_L10n.Text("aw_custom_court_exported_path",
@@ -1059,16 +1099,22 @@ namespace AncientWarfare3.ui.windows
         {
             if (!SyncContextNameFromInput()) return;
             _template.Revision = Math.Max(1, _template.Revision + 1);
-            var store = new CustomCourtTemplateStore(TemplateRoot());
+            if (!TryBuildActiveDocument(out CustomCourtTemplate document))
+            {
+                SetStatus(AW_L10n.Text("aw_custom_court_invalid",
+                    "Template is invalid."));
+                return;
+            }
+            var store = new CustomCourtTemplateStore(ActiveTemplateRoot());
             CustomCourtTemplateValidationError error;
-            SetStatus(store.TrySave(_template, out error)
+            SetStatus(store.TrySave(document, out error)
                 ? AW_L10n.Text("aw_custom_court_saved", "Court saved.")
                 : AW_L10n.Text("aw_custom_court_invalid", "Template is invalid."));
         }
 
         private void RefreshImportFiles()
         {
-            var store = new CustomCourtTemplateStore(TemplateRoot());
+            var store = new CustomCourtTemplateStore(ActiveTemplateRoot());
             string[] files = store.ListFileNames();
             var options = files.Select(file => new AWStringDropdownOption
             {
@@ -1076,12 +1122,22 @@ namespace AncientWarfare3.ui.windows
                 Label = Path.GetFileNameWithoutExtension(file),
                 Enabled = true
             }).ToArray();
-            _importDropdown?.SetOptions(options, _selectedImportFile,
+            string emptyKey = _editingLocal
+                ? "aw_custom_local_court_import_no_files"
+                : "aw_custom_court_import_central_no_files";
+            string emptyFallback = _editingLocal
+                ? "No local government JSON files"
+                : "No central court JSON files";
+            string selectKey = _editingLocal
+                ? "aw_custom_local_court_import_select"
+                : "aw_custom_court_import_central_select";
+            string selectFallback = _editingLocal
+                ? "Import local government JSON"
+                : "Import central court JSON";
+            _importDropdown?.SetOptions(options, ActiveSelectedImportFile,
                 files.Length == 0
-                    ? AW_L10n.Text("aw_custom_court_import_no_files",
-                        "No JSON files")
-                    : AW_L10n.Text("aw_custom_court_import_select",
-                        "Import JSON"));
+                    ? AW_L10n.Text(emptyKey, emptyFallback)
+                    : AW_L10n.Text(selectKey, selectFallback));
         }
 
         private void RefreshWholePresetOptions()
@@ -1231,20 +1287,32 @@ namespace AncientWarfare3.ui.windows
         private void ImportTemplate(AWStringDropdownOption option)
         {
             if (option == null || string.IsNullOrEmpty(option.Id)) return;
-            var store = new CustomCourtTemplateStore(TemplateRoot());
+            var store = new CustomCourtTemplateStore(ActiveTemplateRoot());
             CustomCourtTemplate imported;
             CustomCourtTemplateValidationError error;
             if (store.TryLoadFile(option.Id, out imported, out error))
             {
-                _template = imported;
+                bool merged = _editingLocal
+                    ? CustomCourtTemplateDocumentRules.TryApplyLocalDocument(
+                        _template, imported, out CustomCourtTemplate localResult,
+                        out string importedLocalId) &&
+                      AcceptLocalImport(localResult, importedLocalId)
+                    : CustomCourtTemplateDocumentRules.TryApplyCentralDocument(
+                        _template, imported,
+                        out CustomCourtTemplate centralResult) &&
+                      AcceptCentralImport(centralResult);
+                if (!merged)
+                {
+                    SetStatus(AW_L10n.Text("aw_custom_court_import_invalid",
+                        "The selected JSON file is invalid."));
+                    return;
+                }
                 _loadedKingdomId = _kingdomId;
-                _pendingReplacements.Clear();
-                _selectedWholePresetId = string.Empty;
                 EnsureTemplateShape();
                 if (ActiveLocalTemplate == null)
                     _selectedLocalTemplateId = _template.LocalTemplates
                         .FirstOrDefault()?.Id ?? string.Empty;
-                _selectedImportFile = option.Id;
+                ActiveSelectedImportFile = option.Id;
                 RefreshContextControls();
                 SyncNameInputFromContext();
                 RenderCards(pFocusGraph: true);
@@ -1254,6 +1322,25 @@ namespace AncientWarfare3.ui.windows
             }
             else SetStatus(AW_L10n.Text("aw_custom_court_import_invalid",
                 "The selected JSON file is invalid."));
+        }
+
+        private bool AcceptCentralImport(CustomCourtTemplate pImported)
+        {
+            if (pImported == null) return false;
+            _template = pImported;
+            _selectedWholePresetId = string.Empty;
+            return true;
+        }
+
+        private bool AcceptLocalImport(CustomCourtTemplate pImported,
+            string pTemplateId)
+        {
+            if (pImported == null || string.IsNullOrEmpty(pTemplateId))
+                return false;
+            _template = pImported;
+            _selectedLocalTemplateId = pTemplateId;
+            _replacementTemplateId = string.Empty;
+            return true;
         }
 
         public void ApplyCustomCourtTemplate()

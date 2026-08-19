@@ -135,14 +135,12 @@ namespace AncientWarfare3.core.court
             string officeId)
         {
             CustomCourtTemplate snapshot;
-            if (!TryGetSnapshot(kingdom, out snapshot) ||
-                snapshot.Offices == null) return string.Empty;
-            foreach (CustomCourtOffice office in snapshot.Offices)
-            {
-                if (office == null || office.Id != officeId) continue;
-                return LocalizedName(office.Name, office.Id);
-            }
-            return string.Empty;
+            if (!TryGetSnapshot(kingdom, out snapshot)) return string.Empty;
+            CustomCourtOffice office = CustomCourtTemplateRules.FindOffice(
+                snapshot, officeId);
+            return office == null
+                ? string.Empty
+                : LocalizedName(office.Name, office.Id);
         }
 
         private static string LocalizedName(CustomCourtLocalizedText value,

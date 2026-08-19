@@ -59,12 +59,16 @@ aw_custom_court_add_office_desc,在当前可见画布中央新建官职卡片,Cr
 aw_custom_court_management_edge,管理关系,Management,管理关系
 aw_custom_court_prerequisite_edge,任职前置,Prerequisite,任职前置
 aw_custom_court_export,导出,Export,导出
-aw_custom_court_export_desc,将当前模板导出到模组 CourtJson 文件夹,Export the current template to the mod CourtJson folder,將目前模板匯出到模組 CourtJson 資料夾
+aw_custom_court_export_desc,将当前模板导出到模组 Courtjson 的中央或地方子文件夹,Export the current template to the Central or Local folder under Courtjson,將目前模板匯出到模組 Courtjson 的中央或地方子資料夾
 aw_custom_court_import,导入,Import,导入
 aw_custom_court_exported_path,导出成功：{0},Exported successfully: {0},导出成功：{0}
 aw_custom_court_import_select,导入 JSON,Import JSON,导入 JSON
-aw_custom_court_import_select_desc,从模组 CourtJson 文件夹选择 JSON 模板导入,Choose a JSON template from the mod CourtJson folder,從模組 CourtJson 資料夾選擇 JSON 模板匯入
+aw_custom_court_import_select_desc,中央朝廷与地方官署分别从对应的 JSON 文件夹导入,Import central courts and local governments from their separate JSON folders,中央朝廷與地方官署分別從對應的 JSON 資料夾匯入
 aw_custom_court_import_no_files,没有 JSON 文件,No JSON files,没有 JSON 文件
+aw_custom_court_import_central_select,导入中央朝廷 JSON,Import central court JSON,匯入中央朝廷 JSON
+aw_custom_court_import_central_no_files,没有中央朝廷 JSON,No central court JSON files,沒有中央朝廷 JSON
+aw_custom_local_court_import_select,导入地方官署 JSON,Import local government JSON,匯入地方官署 JSON
+aw_custom_local_court_import_no_files,没有地方官署 JSON,No local government JSON files,沒有地方官署 JSON
 aw_custom_court_import_invalid,选择的 JSON 文件无效,The selected JSON file is invalid,选择的 JSON 文件无效
 aw_custom_court_apply,应用,Apply,应用
 aw_custom_court_apply_desc,将当前朝廷和地方官署模板应用到这个国家,Apply this court and its local templates to the current kingdom,將目前朝廷和地方官署模板套用到這個國家

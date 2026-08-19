@@ -32,6 +32,8 @@ internal static class CustomCourtTemplateCodecTests
     {
         CustomCourtTemplate current = BuildWorkingTemplate();
         CustomCourtTemplate incoming = BuildTemplate(false);
+        foreach (CustomCourtOffice office in incoming.Offices)
+            office.Layer = CourtOfficeLayer.Central;
         incoming.Id = "incoming_central";
         incoming.Name = Text("新中央朝廷", "New Central Court");
         incoming.LocalTemplates.Add(Local("foreign_local", "错误地方模板"));
