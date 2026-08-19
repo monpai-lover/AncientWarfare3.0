@@ -8,6 +8,19 @@ namespace AncientWarfare3.core.court
         private static readonly ICourtProfile Western =
             new WesternCourtProfile();
 
+        public static ICourtProfile For(CourtProfileId profileId)
+        {
+            switch (profileId)
+            {
+                case CourtProfileId.Xia:
+                    return Xia;
+                case CourtProfileId.Western:
+                    return Western;
+                default:
+                    return null;
+            }
+        }
+
         public static ICourtProfile For(KingdomPolicyProfileId profileId)
         {
             switch (profileId)

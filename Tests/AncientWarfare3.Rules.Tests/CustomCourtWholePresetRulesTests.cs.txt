@@ -7,6 +7,9 @@ internal static class CustomCourtWholePresetRulesTests
         XiaOptionsContainAllHistoricalStages();
         WesternOptionsContainOnlyCanonicalStages();
         CurrentHanUnlocksOnlyZhouAndHan();
+        EasternZhouUnlocksItsBuiltInPreset();
+        KnownInstitutionRecoversMissingProfile();
+        ExplicitProfileWinsOverInstitutionFallback();
         ReplacementPreservesTemplateIdentityAndName();
         ReplacementDiscardsOldGraphAndCopiesDefinitions();
         DuplicateOfficeIdsAreNormalizedDeterministically();
@@ -53,6 +56,41 @@ internal static class CustomCourtWholePresetRulesTests
         True(options[1].Unlocked, "Han remains selectable at Han stage");
         False(options[2].Unlocked, "Tang stays locked at Han stage");
         False(options[3].Unlocked, "Song stays locked at Han stage");
+    }
+
+    private static void EasternZhouUnlocksItsBuiltInPreset()
+    {
+        IReadOnlyList<CustomCourtWholePresetOption> options =
+            CustomCourtWholePresetRules.Options(CourtProfileId.Xia,
+                CourtInstitutionId.Zhou);
+        True(options[0].Unlocked,
+            "Eastern Zhou remains selectable at rank zero");
+        True(options.Skip(1).All(option => !option.Unlocked),
+            "later Xia institutions remain locked at Eastern Zhou");
+    }
+
+    private static void KnownInstitutionRecoversMissingProfile()
+    {
+        Equal(CourtProfileId.Xia,
+            CustomCourtWholePresetRules.ResolveProfile(CourtProfileId.None,
+                CourtInstitutionId.Zhou),
+            "Eastern Zhou recovers the Xia profile");
+        Equal(CourtProfileId.Western,
+            CustomCourtWholePresetRules.ResolveProfile(CourtProfileId.None,
+                CourtInstitutionId.WesternBureaucratic),
+            "Western institution recovers the Western profile");
+        Equal(CourtProfileId.None,
+            CustomCourtWholePresetRules.ResolveProfile(CourtProfileId.None,
+                "unknown"),
+            "unknown institution does not guess a profile");
+    }
+
+    private static void ExplicitProfileWinsOverInstitutionFallback()
+    {
+        Equal(CourtProfileId.Xia,
+            CustomCourtWholePresetRules.ResolveProfile(CourtProfileId.Xia,
+                CourtInstitutionId.WesternBureaucratic),
+            "runtime profile remains authoritative");
     }
 
     private static void ReplacementPreservesTemplateIdentityAndName()

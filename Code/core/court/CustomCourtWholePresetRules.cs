@@ -58,6 +58,19 @@ namespace AncientWarfare3.core.court
         private const float HorizontalSpacing = 150f;
         private const float VerticalSpacing = 96f;
 
+        public static CourtProfileId ResolveProfile(
+            CourtProfileId runtimeProfileId, string institutionId)
+        {
+            if (runtimeProfileId != CourtProfileId.None)
+                return runtimeProfileId;
+            if (!CourtInstitutionRules.IsKnown(institutionId))
+                return CourtProfileId.None;
+            return institutionId.StartsWith("western_",
+                StringComparison.Ordinal)
+                ? CourtProfileId.Western
+                : CourtProfileId.Xia;
+        }
+
         public static IReadOnlyList<CustomCourtWholePresetOption> Options(
             CourtProfileId profileId, string currentInstitutionId)
         {
