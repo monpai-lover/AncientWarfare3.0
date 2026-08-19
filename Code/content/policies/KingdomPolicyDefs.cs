@@ -952,6 +952,21 @@ namespace AncientWarfare3.content.policies
             },
             new KingdomPolicyDef
             {
+                Id = "aw_decision_clean_corruption",
+                Kind = PolicyNodeKind.Decision,
+                ProfileIds = CommonProfiles,
+                NameKey = "aw_decision_clean_corruption",
+                DescKey = "aw_decision_clean_corruption_desc",
+                FallbackName = "清理腐败",
+                FallbackDesc = "整饬官场与地方官府，降低国家和地方腐败。",
+                IconPath = "ui/icons/iconPeace",
+                Cost = 50f,
+                Repeatable = true,
+                Column = 5,
+                Row = 1
+            },
+            new KingdomPolicyDef
+            {
                 Id = "aw_decision_appease_foreign_cities",
                 Kind = PolicyNodeKind.Decision,
                 ProfileIds = CommonProfiles,

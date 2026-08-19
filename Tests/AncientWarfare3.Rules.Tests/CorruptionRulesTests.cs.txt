@@ -1,0 +1,76 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class CorruptionRulesTests
+{
+    public static void Run()
+    {
+        SeverityBoundaries();
+        InertiaAndClamp();
+        WeightedAverageSafe();
+        Streaks();
+        ConversionBandsAndHash();
+        CleanupReduction();
+    }
+
+    private static void SeverityBoundaries()
+    {
+        Equal(CorruptionSeverity.Controlled, CorruptionRules.GetSeverity(30), "30 controlled");
+        Equal(CorruptionSeverity.Elevated, CorruptionRules.GetSeverity(31), "31 elevated");
+        Equal(CorruptionSeverity.High, CorruptionRules.GetSeverity(60), "60 high");
+        Equal(CorruptionSeverity.Extreme, CorruptionRules.GetSeverity(80), "80 extreme");
+        Equal(100, CorruptionRules.ClampScore(140), "upper clamp");
+        Equal(0, CorruptionRules.ClampScore(-4), "lower clamp");
+    }
+
+    private static void InertiaAndClamp()
+    {
+        Equal(25, CorruptionRules.AdvanceInertia(0, 100), "inertia rises");
+        Equal(75, CorruptionRules.AdvanceInertia(100, 0), "inertia decays");
+    }
+
+    private static void WeightedAverageSafe()
+    {
+        Equal(35, CorruptionRules.WeightedAverage(20 * 10L + 40 * 30L, 40), "weighted average");
+        Equal(0, CorruptionRules.WeightedAverage(10, 0), "zero population safe");
+    }
+
+    private static void Streaks()
+    {
+        Equal(5, CorruptionRules.AdvanceStreak(4, 80, 60, 5), "streak cap");
+        Equal(0, CorruptionRules.AdvanceStreak(4, 59, 60, 5), "streak reset");
+    }
+
+    private static void ConversionBandsAndHash()
+    {
+        Equal(500, CorruptionRules.ConversionChanceBasisPoints(0), "low chance");
+        Equal(1500, CorruptionRules.ConversionChanceBasisPoints(31), "elevated chance");
+        Equal(3500, CorruptionRules.ConversionChanceBasisPoints(60), "high chance");
+        Equal(6000, CorruptionRules.ConversionChanceBasisPoints(80), "extreme chance");
+        Equal(CorruptionRules.StableHash(1, 2, 3), CorruptionRules.StableHash(1, 2, 3), "stable hash");
+        False(CorruptionRules.StableHash(1, 2, 3) == CorruptionRules.StableHash(1, 2, 4), "year changes hash");
+    }
+
+    private static void CleanupReduction()
+    {
+        Equal(30, CorruptionRules.ReduceScore(50, 20), "cleanup reduction");
+        Equal(0, CorruptionRules.ReduceScore(5, 20), "cleanup lower clamp");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                $": expected {expected}, got {actual}");
+    }
+}

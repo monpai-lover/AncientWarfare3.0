@@ -111,7 +111,9 @@ namespace AncientWarfare3.core.court
                 ActiveSeats = 0,
                 TotalSeats = Math.Max(1, bureau?.office_slots ?? 1),
                 Efficiency = bureau?.efficiency ?? 0f,
-                LocalSchoolId = bureau?.local_school ?? string.Empty
+                LocalSchoolId = bureau?.local_school ?? string.Empty,
+                CountryCorruption = CorruptionService.ReadCountry(pKingdom),
+                CityCorruption = CorruptionService.ReadCity(pCity)
             };
 
             CustomLocalCourtTemplate localTemplate;

@@ -327,6 +327,8 @@ namespace AncientWarfare3.core.policy
 
         private static void RunStateRealm(Kingdom pKingdom)
         {
+            MeasureAge(UpdateAgeBenchmarkRules.KingdomMandateRebelIndex,
+                () => CorruptionService.OnKingdomYear(pKingdom));
             MeasureAge(UpdateAgeBenchmarkRules.KingdomWarTerritoryIndex,
                 () => WarTerritoryService.OnKingdomYear(pKingdom));
             MeasureAge(UpdateAgeBenchmarkRules.KingdomMandateIndex,

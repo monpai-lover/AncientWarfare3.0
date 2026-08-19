@@ -359,6 +359,8 @@ namespace AncientWarfare3.core.policy
 
             if (PolicyNodeLockRules.ShouldClearCurrent(pNodeId, GetCurrent(pKingdom, PolicyNodeKind.Decision)))
             {
+                if (pNodeId == "aw_decision_clean_corruption")
+                    CorruptionService.SetCleanupActive(pKingdom, false);
                 pKingdom.data.set(LineageKeys.DECISION_CURRENT, "");
                 pKingdom.data.set(LineageKeys.DECISION_PROGRESS, 0f);
                 ClearDecisionTarget(pKingdom);
@@ -391,6 +393,9 @@ namespace AncientWarfare3.core.policy
             EnsureInitialized(pKingdom);
             if (GetStatus(pKingdom, def) != PolicyNodeStatus.Available) return false;
 
+            if (def.Id == "aw_decision_clean_corruption" &&
+                !CorruptionService.CanStartCleanup(pKingdom)) return false;
+
             if (def.Kind == PolicyNodeKind.Decision &&
                 TitleUpgradeDecisionRules.ShouldCompleteImmediately(def.Id, HasValidSuzerain(pKingdom)))
                 return CompleteImmediateDecision(pKingdom, def);
@@ -409,6 +414,8 @@ namespace AncientWarfare3.core.policy
             string progressKey = ProgressKey(def.Kind);
             pKingdom.data.set(currentKey, def.Id);
             pKingdom.data.set(progressKey, 0f);
+            if (def.Id == "aw_decision_clean_corruption")
+                CorruptionService.SetCleanupActive(pKingdom, true);
             if (def.Kind == PolicyNodeKind.Decision) ClearDecisionTarget(pKingdom);
             UpsertSnapshot(pKingdom);
             return true;
@@ -439,6 +446,8 @@ namespace AncientWarfare3.core.policy
 
             pKingdom.data.set(CurrentKey(def.Kind), def.Id);
             pKingdom.data.set(ProgressKey(def.Kind), 0f);
+            if (def.Id == "aw_decision_clean_corruption")
+                CorruptionService.SetCleanupActive(pKingdom, true);
             if (def.Kind == PolicyNodeKind.Decision) ClearDecisionTarget(pKingdom);
             UpsertSnapshot(pKingdom);
             return true;
@@ -891,6 +900,16 @@ namespace AncientWarfare3.core.policy
             return value ?? "";
         }
 
+        public static bool IsDecisionQueued(Kingdom pKingdom,
+            string pDecisionId)
+        {
+            if (pKingdom?.data == null || string.IsNullOrEmpty(pDecisionId))
+                return false;
+            return ReadDecisionQueue(pKingdom).Any(item => item != null &&
+                string.Equals(item.decision_id, pDecisionId,
+                    StringComparison.Ordinal));
+        }
+
         public static float GetProgress(Kingdom pKingdom, PolicyNodeKind pKind)
         {
             if (pKingdom?.data == null) return 0f;
@@ -1327,6 +1346,8 @@ namespace AncientWarfare3.core.policy
             }
             if (IsNodeLocked(pKingdom, def.Id))
             {
+                if (def.Id == "aw_decision_clean_corruption")
+                    CorruptionService.SetCleanupActive(pKingdom, false);
                 pKingdom.data.set(CurrentKey(pKind), "");
                 pKingdom.data.set(ProgressKey(pKind), 0f);
                 if (pKind == PolicyNodeKind.Decision) ClearDecisionTarget(pKingdom);
@@ -1335,6 +1356,8 @@ namespace AncientWarfare3.core.policy
             }
             if (!CanAccessPolicyNode(pKingdom, def))
             {
+                if (def.Id == "aw_decision_clean_corruption")
+                    CorruptionService.SetCleanupActive(pKingdom, false);
                 pKingdom.data.set(CurrentKey(pKind), "");
                 pKingdom.data.set(ProgressKey(pKind), 0f);
                 if (pKind == PolicyNodeKind.Decision) ClearDecisionTarget(pKingdom);
@@ -1451,6 +1474,9 @@ namespace AncientWarfare3.core.policy
         private static void ReleaseFailedDecision(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
+            if (GetCurrent(pKingdom, PolicyNodeKind.Decision) ==
+                "aw_decision_clean_corruption")
+                CorruptionService.SetCleanupActive(pKingdom, false);
             pKingdom.data.set(LineageKeys.DECISION_CURRENT, "");
             pKingdom.data.set(LineageKeys.DECISION_PROGRESS, 0f);
             ClearDecisionTarget(pKingdom);
@@ -1555,6 +1581,8 @@ namespace AncientWarfare3.core.policy
                     SlaveService.SetSlaveryEnabled(pKingdom, true);
                     SlaveService.EnforceSlaveControl(pKingdom);
                     return true;
+                case "aw_decision_clean_corruption":
+                    return CorruptionService.ApplyCleanup(pKingdom);
                 case "aw_west_decision_consolidate_royal_authority":
                     return KingdomPolicyEffectService.ApplyRoyalAuthorityDecision(
                         pKingdom);
@@ -1713,6 +1741,8 @@ namespace AncientWarfare3.core.policy
                 case "aw_decision_control_slaves":
                     return SlaveService.IsSlaveryEnabled(pKingdom) ||
                            IsCompleted(pKingdom, PolicyNodeKind.Social, "aw_policy_start_slavery");
+                case "aw_decision_clean_corruption":
+                    return CorruptionService.CanStartCleanup(pKingdom);
                 case "aw_west_decision_consolidate_royal_authority":
                     return KingdomPolicyEffectService.
                         CanConsolidateRoyalAuthority(pKingdom);
@@ -2182,6 +2212,8 @@ namespace AncientWarfare3.core.policy
             pKingdom.data.set(LineageKeys.DECISION_NOTICE_EARLIEST_YEAR, pItem.earliest_war_year);
             pKingdom.data.set(LineageKeys.DECISION_NOTICE_FORCED_YEAR, pItem.forced_war_year);
             pKingdom.data.set(LineageKeys.DECISION_NOTICE_RECORDED, pItem.notice_recorded);
+            if (pItem.decision_id == "aw_decision_clean_corruption")
+                CorruptionService.SetCleanupActive(pKingdom, true);
             UpsertSnapshot(pKingdom);
         }
 

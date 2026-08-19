@@ -186,6 +186,13 @@ namespace AncientWarfare3.core.policy
                 XiaizationService.ScoreResearch(pKingdom, pDef),
                 false);
 
+            if (pDef.Id == "aw_decision_clean_corruption")
+            {
+                int corruption = CorruptionService.ReadCountry(pKingdom).Score;
+                return corruption >= 80 ? 1600 :
+                       corruption >= 60 ? 1100 : 650;
+            }
+
             CourtSnapshot court = CourtService.GetSnapshot(pKingdom);
             long benchmark = UpdateAgeBenchmark.Begin();
             try
@@ -224,6 +231,8 @@ namespace AncientWarfare3.core.policy
                 case "aw_decision_appease_foreign_cities":
                     return YearsSinceForeignAppeasement(pKingdom) >= 12 &&
                            XiaizationService.SpecialRequirementMet(pKingdom, pDef.Id);
+                case "aw_decision_clean_corruption":
+                    return CorruptionService.CanStartCleanup(pKingdom);
                 case "aw_decision_fabricate_core":
                     return WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom)?.data != null;
                 case "aw_decision_year_name":

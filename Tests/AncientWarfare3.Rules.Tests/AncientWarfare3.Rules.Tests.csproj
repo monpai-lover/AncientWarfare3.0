@@ -61,6 +61,9 @@
     <Compile Include="..\..\Code\core\lineage\PeasantRebelRouteRules.cs" Link="Production\PeasantRebelRouteRules.cs" />
     <Compile Include="BanditGreatUprisingRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\BanditGreatUprisingRules.cs" Link="Production\BanditGreatUprisingRules.cs" />
+    <Compile Include="CorruptionRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\CorruptionRules.cs" Link="Production\CorruptionRules.cs" />
+    <Compile Include="CorruptionSourceGuardTests.cs.txt" />
     <Compile Include="PeasantRebelBanditStrongholdRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditAnnexationRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditSpawnRulesTests.cs.txt" />

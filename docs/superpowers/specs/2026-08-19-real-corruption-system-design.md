@@ -201,14 +201,26 @@ Add a corruption section using the existing policy-window visual language:
 - central pressure, fiscal pressure and weighted city score components;
 - a button to focus/open the highest-corruption city when it is still valid.
 
+The central court/官场 view must expose the same country-level summary even
+when it is opened outside the policy window: total country corruption,
+severity, high/very-high streaks and the current highest-corruption city.
+This is a read-only summary and uses the same value provider as the policy
+window so the two views cannot drift.
+
 ### City/local-government view
 
 Add the same compact corruption block to the existing city/local-government
 details rather than creating a separate standalone window:
 
+- country total corruption and severity (read-only parent summary);
 - city corruption score and severity;
 - four pressure components;
 - last update year and short source text.
+
+The local-government/地方官府 view must show both values together: the
+country total identifies the central administrative environment, while the
+city value identifies local corruption. Both are refreshed from the same
+persisted state snapshot when the window is opened.
 
 No new top-level window is introduced.
 

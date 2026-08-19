@@ -534,7 +534,9 @@ namespace AncientWarfare3.ui.windows
             string points = AW_L10n.Text("aw_policy_points_short", "\u653F") + ":" +
                             Mathf.FloorToInt(KingdomPolicyService.GetPoliticalPoints(pKingdom)) + "  " +
                             AW_L10n.Text("aw_tech_points_short", "\u6280") + ":" +
-                            Mathf.FloorToInt(KingdomPolicyService.GetTechPoints(pKingdom));
+                            Mathf.FloorToInt(KingdomPolicyService.GetTechPoints(pKingdom)) + "  " +
+                            AW_L10n.Text("aw_corruption_country", "国家腐败") + ":" +
+                            CorruptionService.ReadCountry(pKingdom).Score;
 
             float width = Mathf.Max(1f, _contentWidth - CONTENT_PAD_X * 2f);
             float gap = 8f;

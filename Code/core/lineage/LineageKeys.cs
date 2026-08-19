@@ -124,6 +124,39 @@ namespace AncientWarfare3.core.lineage
             "aw_mandate_rebel_great_uprising_conversion_cursor";
         public const string MANDATE_REBEL_GREAT_UPRISING_LAST_CONVERSION_YEAR =
             "aw_mandate_rebel_great_uprising_last_conversion_year";
+        public const string CORRUPTION_SCORE = "aw_corruption_score";
+        public const string CORRUPTION_LAST_YEAR = "aw_corruption_last_year";
+        public const string CORRUPTION_HIGH_STREAK_YEARS =
+            "aw_corruption_high_streak_years";
+        public const string CORRUPTION_VERY_HIGH_STREAK_YEARS =
+            "aw_corruption_very_high_streak_years";
+        public const string CORRUPTION_CENTRAL_PRESSURE =
+            "aw_corruption_central_pressure";
+        public const string CORRUPTION_FISCAL_PRESSURE =
+            "aw_corruption_fiscal_pressure";
+        public const string CORRUPTION_AVERAGE_CITY_SCORE =
+            "aw_corruption_average_city_score";
+        public const string CORRUPTION_HIGHEST_CITY_SCORE =
+            "aw_corruption_highest_city_score";
+        public const string CORRUPTION_HIGHEST_CITY_ID =
+            "aw_corruption_highest_city_id";
+        public const string CORRUPTION_CLEANUP_ACTIVE =
+            "aw_corruption_cleanup_active";
+        public const string CORRUPTION_CLEANUP_COMPLETED_YEAR =
+            "aw_corruption_cleanup_completed_year";
+        public const string CITY_CORRUPTION_SCORE = "aw_city_corruption_score";
+        public const string CITY_CORRUPTION_LAST_YEAR =
+            "aw_city_corruption_last_year";
+        public const string CITY_CORRUPTION_HIGH_STREAK_YEARS =
+            "aw_city_corruption_high_streak_years";
+        public const string CITY_CORRUPTION_TAX_PRESSURE =
+            "aw_city_corruption_tax_pressure";
+        public const string CITY_CORRUPTION_OFFICIAL_PRESSURE =
+            "aw_city_corruption_official_pressure";
+        public const string CITY_CORRUPTION_ORDER_PRESSURE =
+            "aw_city_corruption_order_pressure";
+        public const string CITY_CORRUPTION_FOOD_PRESSURE =
+            "aw_city_corruption_food_pressure";
         public const string MANDATE_DECLINE_REBEL =
             "aw_mandate_decline_rebel";
         public const string MANDATE_DECLINE_REBEL_ORIGIN_ID =

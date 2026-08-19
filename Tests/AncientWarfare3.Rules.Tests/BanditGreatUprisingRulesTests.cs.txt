@@ -10,6 +10,7 @@ internal static class BanditGreatUprisingRulesTests
         StreaksResetAndCap();
         CursorWraps();
         ConversionNeedsActiveValidOrigin();
+        ConversionTendencyBands();
     }
 
     private static void RatioBoundaries()
@@ -58,6 +59,18 @@ internal static class BanditGreatUprisingRulesTests
             "non-bandit route does not convert");
         False(BanditGreatUprisingRules.CanConvert(true, true, false),
             "invalid origin does not convert");
+    }
+
+    private static void ConversionTendencyBands()
+    {
+        Equal(500, CorruptionRules.ConversionChanceBasisPoints(30),
+            "controlled corruption uses low rebel tendency");
+        Equal(1500, CorruptionRules.ConversionChanceBasisPoints(31),
+            "elevated corruption increases rebel tendency");
+        Equal(3500, CorruptionRules.ConversionChanceBasisPoints(60),
+            "high corruption increases rebel tendency");
+        Equal(6000, CorruptionRules.ConversionChanceBasisPoints(80),
+            "extreme corruption has highest rebel tendency");
     }
 
     private static void True(bool value, string message)

@@ -43,7 +43,11 @@ namespace AncientWarfare3.ui.components
                 AW_L10n.Text("aw_local_court_card_summary",
                     "Officials {0}/{1}  Efficiency {2}"),
                 pModel.ActiveSeats, pModel.TotalSeats,
-                Mathf.FloorToInt(pModel.Efficiency));
+                Mathf.FloorToInt(pModel.Efficiency)) + "\n" +
+                AW_L10n.Text("aw_corruption_country", "Country corruption") +
+                " " + (pModel.CountryCorruption?.Score ?? 0) + "  " +
+                AW_L10n.Text("aw_corruption_local", "Local corruption") +
+                " " + (pModel.CityCorruption?.Score ?? 0);
             _openButton.onClick.RemoveAllListeners();
             long cityId = pModel.CityId;
             _openButton.onClick.AddListener(() => pOpenCity?.Invoke(cityId));

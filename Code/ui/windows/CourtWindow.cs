@@ -421,12 +421,18 @@ namespace AncientWarfare3.ui.windows
                         "Officials {0}/{1}"), pLocal.ActiveSeats,
                     pLocal.TotalSeats) + "  |  " +
                 AW_L10n.Text("aw_court_efficiency", "Court Efficiency") +
-                " " + Mathf.FloorToInt(pLocal.Efficiency);
+                " " + Mathf.FloorToInt(pLocal.Efficiency) + "  |  " +
+                AW_L10n.Text("aw_corruption_local", "Local corruption") +
+                " " + (pLocal.CityCorruption?.Score ?? 0);
             _summarySecondary.text =
                 AW_L10n.Text("aw_local_court_city_type", "City Type") +
                 ": " + pLocal.CityTypeName + "\n" +
                 AW_L10n.Text("aw_court_school", "School") + ": " +
-                SchoolName(pLocal.LocalSchoolId);
+                SchoolName(pLocal.LocalSchoolId) + "\n" +
+                AW_L10n.Text("aw_corruption_country", "Country corruption") +
+                ": " + (pLocal.CountryCorruption?.Score ?? 0) + "  " +
+                AW_L10n.Text("aw_corruption_local", "Local corruption") +
+                ": " + (pLocal.CityCorruption?.Score ?? 0);
             if (_civilServiceExamButton != null)
                 _civilServiceExamButton.gameObject.SetActive(false);
             if (_householdButton != null)
@@ -564,7 +570,12 @@ namespace AncientWarfare3.ui.windows
                                          "Political points") + ": " +
                                      KingdomPolicyService.GetPoliticalPoints(
                                          pKingdom).ToString("0.#");
+            CorruptionCountrySnapshot corruption = CorruptionService.ReadCountry(pKingdom);
             _summarySecondary.text = politicalPoints + "\n" +
+                                     AW_L10n.Text("aw_corruption_country", "Country corruption") +
+                                     ": " + corruption.Score + "  " +
+                                     AW_L10n.Text("aw_corruption_high_streak", "High streak") +
+                                     ": " + corruption.HighStreakYears + "\n" +
                                      AW_L10n.Text(
                                           "aw_court_institution_effects",
                                           "Institution Effects") + ": " +

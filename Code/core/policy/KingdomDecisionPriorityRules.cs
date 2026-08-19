@@ -35,6 +35,8 @@ namespace AncientWarfare3.core.policy
                     return pCityCount >= 2 ? 760 : 0;
                 case "aw_decision_control_slaves":
                     return pSlaveryEnabled ? 680 : 420;
+                case "aw_decision_clean_corruption":
+                    return 0;
                 case "aw_decision_year_name":
                     return 0;
                 case "aw_decision_appease_foreign_cities":

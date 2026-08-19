@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.court
 {
@@ -15,6 +16,8 @@ namespace AncientWarfare3.core.court
         public int TotalSeats { get; set; }
         public float Efficiency { get; set; }
         public string LocalSchoolId { get; set; } = string.Empty;
+        public CorruptionCountrySnapshot CountryCorruption { get; set; }
+        public CorruptionCitySnapshot CityCorruption { get; set; }
         public List<CourtPyramidNodeModel> Nodes { get; set; } =
             new List<CourtPyramidNodeModel>();
         public List<CustomCourtEdge> Edges { get; set; } =

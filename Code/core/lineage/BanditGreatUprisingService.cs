@@ -103,6 +103,8 @@ namespace AncientWarfare3.core.lineage
             cursor = NormalizeCursor(cursor, count);
             int budget = Math.Min(
                 BanditGreatUprisingRules.ConversionBudgetPerYear, count);
+            CorruptionCountrySnapshot corruption = CorruptionService.ReadCountry(
+                pOrigin);
             int converted = 0;
             for (int offset = 0; offset < budget; offset++)
             {
@@ -119,6 +121,9 @@ namespace AncientWarfare3.core.lineage
                         true,
                         PeasantRebelRouteService.IsBandit(candidate),
                         validOrigin)) continue;
+                if (!CorruptionRules.ShouldConvertCandidate(
+                        pOrigin.id, candidate.id, pYear, corruption.Score))
+                    continue;
                 try
                 {
                     if (PeasantRebelRouteService.ConvertBanditToFounding(
@@ -146,7 +151,10 @@ namespace AncientWarfare3.core.lineage
                     pYear);
             ModClass.LogInfo(
                 "[AW3 uprising] realm=" + pOrigin.id + " candidates=" +
-                count + " attempted=" + budget + " converted=" + converted);
+                count + " attempted=" + budget + " converted=" + converted +
+                " corruption=" + corruption.Score +
+                " chance_bp=" + CorruptionRules.ConversionChanceBasisPoints(
+                    corruption.Score));
         }
 
         private static void RebuildIndexIfNeeded(int pYear)
@@ -231,29 +239,8 @@ namespace AncientWarfare3.core.lineage
 
         private static bool IsLongTermCorruption(Kingdom pKingdom)
         {
-            int mandate = 50;
-            int authority = 50;
-            try
-            {
-                pKingdom.data.get(LineageKeys.MANDATE_VALUE,
-                    out mandate, mandate);
-                pKingdom.data.get(LineageKeys.MANDATE_AUTHORITY,
-                    out authority, authority);
-            }
-            catch { }
-
-            MandateReport report = MandateService.ReadReportReadOnly();
-            bool currentMandate = report?.active == true &&
-                                  report.kingdom_id == pKingdom.id;
-            if (currentMandate)
-            {
-                mandate = report.mandate_value;
-                authority = report.imperial_authority;
-            }
-            return mandate <= 30 || authority <= 30 ||
-                   (currentMandate &&
-                    (MandatePhaseService.CurrentPhase == MandatePhase.Decline ||
-                     MandatePhaseService.CurrentPhase == MandatePhase.Chaos));
+            return CorruptionService.ReadCountry(pKingdom).Score >=
+                   CorruptionRules.HighThreshold;
         }
 
         private static bool IsValidOrigin(Kingdom pKingdom)

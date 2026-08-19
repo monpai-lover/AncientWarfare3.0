@@ -1,0 +1,49 @@
+using System;
+using System.IO;
+
+internal static class CorruptionSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string service = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "CorruptionService.cs"));
+        string rules = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "CorruptionRules.cs"));
+        string uprising = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "BanditGreatUprisingService.cs"));
+        string policy = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "policy", "KingdomPolicyService.cs"));
+        string defs = File.ReadAllText(Path.Combine(root, "Code", "content",
+            "policies", "KingdomPolicyDefs.cs"));
+        string court = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "CourtWindow.cs"));
+        string local = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "LocalCourtReadModel.cs"));
+
+        Contains(service, "OnKingdomYear");
+        Contains(service, "CITY_CORRUPTION_SCORE");
+        Contains(service, "CORRUPTION_SCORE");
+        Contains(service, "CleanupPressureMultiplier");
+        Contains(rules, "StableHash");
+        Contains(uprising, "CorruptionService.ReadCountry");
+        DoesNotContain(uprising, "MandatePhaseService.CurrentPhase");
+        Contains(defs, "aw_decision_clean_corruption");
+        Contains(policy, "CorruptionService.ApplyCleanup");
+        Contains(court, "aw_corruption_country");
+        Contains(local, "CountryCorruption");
+        Contains(local, "CityCorruption");
+    }
+
+    private static void Contains(string source, string value)
+    {
+        if (!source.Contains(value, StringComparison.Ordinal))
+            throw new InvalidOperationException("Missing source guard: " + value);
+    }
+
+    private static void DoesNotContain(string source, string value)
+    {
+        if (source.Contains(value, StringComparison.Ordinal))
+            throw new InvalidOperationException("Forbidden source guard: " + value);
+    }
+}

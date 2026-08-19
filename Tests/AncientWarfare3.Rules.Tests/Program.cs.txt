@@ -8806,5 +8806,7 @@ PeacetimeCitizenJobRulesTests.Run();
 PeacetimeRtsOwnershipReleaseRulesTests.Run();
 PeasantRebelRouteRulesTests.Run();
 BanditGreatUprisingRulesTests.Run();
+CorruptionRulesTests.Run();
+CorruptionSourceGuardTests.Run();
 
 Console.WriteLine("Rule tests passed.");

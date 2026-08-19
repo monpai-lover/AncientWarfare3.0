@@ -17,6 +17,11 @@ aw_decision_change_capital,迁都,Move Capital,遷都
 aw_decision_change_capital_desc,非战时迁往更强的统治城市,Move the capital to a stronger city in peace,非戰時遷往更強的統治城市
 aw_decision_control_slaves,整饬奴隶,Discipline Slaves,整飭奴隸
 aw_decision_control_slaves_desc,重申奴隶管控与捕奴职责,Reinforce slave control and catcher duties,重申奴隸管控與捕奴職責
+aw_decision_clean_corruption,清理腐败,Clean Corruption,清理腐敗
+aw_decision_clean_corruption_desc,整饬官场与地方官府，降低国家和地方腐败,Reform the central and local courts to reduce country and local corruption,整飭官場與地方官府，降低國家和地方腐敗
+aw_corruption_country,国家腐败,Country corruption,國家腐敗
+aw_corruption_local,地方腐败,Local corruption,地方腐敗
+aw_corruption_high_streak,高腐败持续,High-corruption streak,高腐敗持續
 aw_decision_appease_foreign_cities,安抚异族,Appease Foreign Cities,安撫異族
 aw_decision_appease_foreign_cities_desc,安抚本国控制的异文化城市并降低占领民怨,Appease controlled foreign-culture cities and reduce occupation unrest,安撫本國控制的異文化城市並降低佔領民怨
 aw_west_decision_consolidate_royal_authority,巩固王权,Consolidate Royal Authority,鞏固王權
