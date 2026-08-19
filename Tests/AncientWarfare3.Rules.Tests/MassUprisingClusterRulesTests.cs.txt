@@ -1,0 +1,76 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.core.lineage;
+
+internal static class MassUprisingClusterRulesTests
+{
+    internal static void Run()
+    {
+        Thresholds();
+        ConnectedCultureClusters();
+        DeterministicClusterKeys();
+    }
+
+    private static void Thresholds()
+    {
+        Equal(true, MassUprisingClusterRules.IsCandidate(-1, false),
+            "negative loyalty is a candidate");
+        Equal(false, MassUprisingClusterRules.IsCandidate(0, false),
+            "zero loyalty is not a candidate");
+        Equal(false, MassUprisingClusterRules.IsCandidate(-1, true),
+            "capital-adjacent city is protected");
+        Equal(true, MassUprisingClusterRules.IsCore(-51),
+            "loyalty below minus fifty is core");
+        Equal(false, MassUprisingClusterRules.IsCore(-50),
+            "minus fifty is not core");
+        Equal(true, MassUprisingClusterRules.IsCapitalProtected(true),
+            "capital adjacency protects a city");
+        Equal(false, MassUprisingClusterRules.IsCapitalProtected(false),
+            "ordinary city is not capital protected");
+    }
+
+    private static void ConnectedCultureClusters()
+    {
+        var facts = new[]
+        {
+            new MassUprisingCityFact(1, 10, -60, false, new[] { 2L }),
+            new MassUprisingCityFact(2, 10, -10, false, new[] { 1L, 3L }),
+            new MassUprisingCityFact(3, 10, -55, false, new[] { 2L }),
+            new MassUprisingCityFact(4, 10, -60, false, Array.Empty<long>()),
+            new MassUprisingCityFact(5, 11, -60, false, Array.Empty<long>())
+        };
+        List<MassUprisingCluster> clusters =
+            MassUprisingClusterRules.BuildClusters(facts);
+        Equal(3, clusters.Count, "culture and connectivity split clusters");
+        SequenceEqual(new long[] { 1, 2, 3 }, clusters[0].CityIds,
+            "connected same-culture cities form one cluster");
+        SequenceEqual(new long[] { 4 }, clusters[1].CityIds,
+            "disconnected same-culture city forms another cluster");
+        SequenceEqual(new long[] { 5 }, clusters[2].CityIds,
+            "different culture forms another cluster");
+        Equal(true, clusters.All(item => item.HasCore),
+            "all returned clusters contain a core city");
+    }
+
+    private static void DeterministicClusterKeys()
+    {
+        MassUprisingCluster cluster = new MassUprisingCluster(7,
+            new[] { 8L, 3L, 5L }, true);
+        Equal("7:3,5,8", MassUprisingClusterRules.ClusterKey(7, cluster),
+            "cluster key is stable and sorted");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void SequenceEqual(IEnumerable<long> expected,
+        IEnumerable<long> actual, string message)
+    {
+        if (!expected.SequenceEqual(actual))
+            throw new InvalidOperationException(message);
+    }
+}
