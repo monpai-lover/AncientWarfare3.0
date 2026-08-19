@@ -37,6 +37,13 @@ if (args.Length == 1 && args[0] == "--regional-government-court")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--city-administration-mapmode")
+{
+    CityAdministrationMapModeRulesTests.Run();
+    Console.WriteLine("City administration map mode rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--custom-court-template")
 {
     CustomCourtTemplateRulesTests.Run();

@@ -19,6 +19,8 @@
     <Compile Include="RegionalGovernmentRulesTests.cs.txt" />
     <Compile Include="RegionalGovernmentTemplateRulesTests.cs.txt" />
     <Compile Include="RegionalGovernmentCourtRulesTests.cs.txt" />
+    <Compile Include="CityAdministrationMapModeRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\policy\CityAdministrationMapModeRules.cs" Link="Production\CityAdministrationMapModeRules.cs" />
     <Compile Include="..\..\Code\core\court\RegionalGovernmentRules.cs" Link="Production\RegionalGovernmentRules.cs" />
     <Compile Include="..\..\Code\core\court\RegionalGovernmentReadModel.cs" Link="Production\RegionalGovernmentReadModel.cs" />
     <Compile Include="..\..\Code\core\court\CustomLocalGovernmentRules.cs" Link="Production\CustomLocalGovernmentRules.cs" />

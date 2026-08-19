@@ -1,0 +1,34 @@
+using System;
+using System.Linq;
+using AncientWarfare3.core.policy;
+
+internal static class CityAdministrationMapModeRulesTests
+{
+    public static void Run()
+    {
+        var state = new CityAdministrationMapStateRules();
+        True(state.IsRegionLevel, "city mode starts at region level");
+        True(state.PushRegion(42L), "region focus pushes seat city");
+        Equal(42L, state.FocusSeatCityId, "focused seat is stable");
+        True(!state.IsRegionLevel, "focused city mode is member level");
+        True(state.PopRegion(), "outside click pops to region level");
+        True(state.IsRegionLevel, "pop restores region level");
+        Equal("city-admin:7:Regions:42:99", CityAdministrationMapModeRules
+            .CacheKey(7L, CityAdministrationMapLevel.Regions, 42L, 99L),
+            "cache key includes world level seat and entity");
+        True(CityAdministrationMapModeRules.OrderedMembers(
+            new[] { 8L, 2L, 8L }).SequenceEqual(new[] { 2L, 8L }),
+            "members are deterministic");
+    }
+
+    private static void True(bool pActual, string pMessage)
+    {
+        if (!pActual) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage);
+    }
+}

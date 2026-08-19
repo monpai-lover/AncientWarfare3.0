@@ -85,7 +85,8 @@ namespace AncientWarfare3.core.policy
             if (string.IsNullOrEmpty(pText)) return false;
             string[] parts = pText.Split(':');
             if (parts.Length != 5 || parts[0] != "world" ||
-                (parts[2] != "country" && parts[2] != "city") ||
+                (parts[2] != "country" && parts[2] != "city" &&
+                 parts[2] != "region") ||
                 !long.TryParse(parts[1], NumberStyles.Integer,
                     CultureInfo.InvariantCulture, out long world) ||
                 !long.TryParse(parts[3], NumberStyles.Integer,
