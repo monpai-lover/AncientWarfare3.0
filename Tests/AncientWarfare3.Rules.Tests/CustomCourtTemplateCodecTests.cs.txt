@@ -22,6 +22,93 @@ internal static class CustomCourtTemplateCodecTests
             "failed write cannot replace a saved template");
         False(CustomCourtTemplateStoreRules.ShouldReplaceAtomically(true, false),
             "failed read-back validation cannot replace a saved template");
+
+        ContextDocumentsRemainIndependent();
+        LocalDocumentsReplaceOrAppendOneTemplate();
+        LocalOfficeNamesComeFromTemplateData();
+    }
+
+    private static void ContextDocumentsRemainIndependent()
+    {
+        CustomCourtTemplate current = BuildWorkingTemplate();
+        CustomCourtTemplate incoming = BuildTemplate(false);
+        incoming.Id = "incoming_central";
+        incoming.Name = Text("新中央朝廷", "New Central Court");
+        incoming.LocalTemplates.Add(Local("foreign_local", "错误地方模板"));
+
+        CustomCourtTemplate centralDocument =
+            CustomCourtTemplateDocumentRules.CreateCentralDocument(incoming);
+        True(CustomCourtTemplateDocumentRules.IsCentralDocument(
+                centralDocument),
+            "central exports are classified as central-only documents");
+        Equal(0, centralDocument.LocalTemplates.Count,
+            "central exports contain no local templates");
+        True(CustomCourtTemplateDocumentRules.TryApplyCentralDocument(current,
+                centralDocument, out CustomCourtTemplate merged),
+            "valid central document imports into a working template");
+        Equal("incoming_central", merged.Id,
+            "central import updates central identity");
+        Equal("新中央朝廷", merged.Name.Chinese,
+            "central import updates central display name");
+        Equal("local_existing", merged.LocalTemplates.Single().Id,
+            "central import preserves existing local templates");
+    }
+
+    private static void LocalDocumentsReplaceOrAppendOneTemplate()
+    {
+        CustomCourtTemplate current = BuildWorkingTemplate();
+        CustomLocalCourtTemplate replacement = Local("local_existing",
+            "新地方官府");
+        replacement.Offices[0].Name = Text("新州牧", "New Governor");
+        CustomCourtTemplate replacementDocument =
+            CustomCourtTemplateDocumentRules.CreateLocalDocument(replacement);
+        True(CustomCourtTemplateDocumentRules.TryGetLocalDocument(
+                replacementDocument, out CustomLocalCourtTemplate projected),
+            "local exports are classified as one-template documents");
+        Equal("local_existing", projected.Id,
+            "local document exposes its one local template");
+        True(CustomCourtTemplateDocumentRules.TryApplyLocalDocument(current,
+                replacementDocument, out CustomCourtTemplate replaced,
+                out string replacedId),
+            "same-id local import replaces one template");
+        Equal("local_existing", replacedId,
+            "same-id local import selects the imported template");
+        Equal("central_existing", replaced.Offices.Single().Id,
+            "local replacement preserves central offices");
+        Equal("新地方官府", replaced.LocalTemplates.Single().Name.Chinese,
+            "same-id local template is replaced");
+
+        CustomCourtTemplate appendDocument =
+            CustomCourtTemplateDocumentRules.CreateLocalDocument(
+                Local("local_second", "第二地方官府"));
+        True(CustomCourtTemplateDocumentRules.TryApplyLocalDocument(current,
+                appendDocument, out CustomCourtTemplate appended,
+                out string appendedId),
+            "new-id local import appends one template");
+        Equal("local_second", appendedId,
+            "new local import selects the appended template");
+        Equal(2, appended.LocalTemplates.Count,
+            "new local import keeps unrelated local templates");
+        Equal("central_existing", appended.Offices.Single().Id,
+            "local append preserves central offices");
+
+        False(CustomCourtTemplateDocumentRules.TryApplyLocalDocument(current,
+                CustomCourtTemplateDocumentRules.CreateCentralDocument(
+                    BuildTemplate(false)), out _, out _),
+            "local import rejects central documents");
+        Equal(1, current.LocalTemplates.Count,
+            "rejected import leaves the source template unchanged");
+    }
+
+    private static void LocalOfficeNamesComeFromTemplateData()
+    {
+        CustomCourtTemplate template = BuildWorkingTemplate();
+        CustomCourtOffice office = CustomCourtTemplateRules.FindOffice(
+            template, "local_existing_governor");
+        True(office != null,
+            "office lookup searches local government templates");
+        Equal("地方州牧", office.Name.Chinese,
+            "local office lookup returns template-owned display text");
     }
 
     private static CustomCourtTemplate BuildTemplate(bool reverse)
@@ -56,6 +143,55 @@ internal static class CustomCourtTemplateCodecTests
             Edges = reverse
                 ? new[] { edge }.Reverse().ToList()
                 : new[] { edge }.ToList()
+        };
+    }
+
+    private static CustomCourtTemplate BuildWorkingTemplate()
+    {
+        var template = new CustomCourtTemplate
+        {
+            Id = "working_court",
+            Revision = 4,
+            Name = Text("现有朝廷", "Existing Court")
+        };
+        template.Offices.Add(new CustomCourtOffice
+        {
+            Id = "central_existing",
+            Name = Text("中央官", "Central Office"),
+            Layer = CourtOfficeLayer.Central,
+            Grade = 10,
+            Slots = 1
+        });
+        template.LocalTemplates.Add(Local("local_existing", "现有地方官府"));
+        return template;
+    }
+
+    private static CustomLocalCourtTemplate Local(string id, string name)
+    {
+        var local = new CustomLocalCourtTemplate
+        {
+            Id = id,
+            Name = Text(name, name),
+            DefaultKind = CustomLocalCourtDefaultKind.ManualOnly
+        };
+        local.Offices.Add(new CustomCourtOffice
+        {
+            Id = id + "_governor",
+            Name = Text("地方州牧", "Local Governor"),
+            Layer = CourtOfficeLayer.City,
+            Grade = 10,
+            Slots = 1
+        });
+        return local;
+    }
+
+    private static CustomCourtLocalizedText Text(string chinese,
+        string english)
+    {
+        return new CustomCourtLocalizedText
+        {
+            Chinese = chinese,
+            English = english
         };
     }
 

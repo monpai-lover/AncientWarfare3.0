@@ -45,6 +45,12 @@ internal static class CustomCourtTemplateRulesTests
             modRoot);
         Equal(Path.Combine(Path.GetFullPath(modRoot), "Courtjson"), courtJson,
             "court templates resolve inside the mod folder");
+        Equal(Path.Combine(courtJson, "Central"),
+            CustomCourtTemplatePathService.ResolveCentralRoot(modRoot),
+            "central court JSON uses its own directory");
+        Equal(Path.Combine(courtJson, "Local"),
+            CustomCourtTemplatePathService.ResolveLocalRoot(modRoot),
+            "local government JSON uses its own directory");
         Directory.CreateDirectory(modRoot);
         try
         {

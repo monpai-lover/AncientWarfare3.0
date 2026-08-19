@@ -25,6 +25,7 @@
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateJsonCodec.cs" Link="Production\CustomCourtTemplateJsonCodec.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateStore.cs" Link="Production\CustomCourtTemplateStore.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplatePathService.cs" Link="Production\CustomCourtTemplatePathService.cs" />
+    <Compile Include="..\..\Code\core\court\CustomCourtTemplateDocumentRules.cs" Link="Production\CustomCourtTemplateDocumentRules.cs" />
     <Compile Include="CustomCourtInstanceRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CustomCourtInstanceModels.cs" Link="Production\CustomCourtInstanceModels.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtInstanceRules.cs" Link="Production\CustomCourtInstanceRules.cs" />
