@@ -26,6 +26,8 @@
              Link="Production/CustomCourtTemplateModels.cs" />
     <Compile Include="../../Code/core/court/CustomLocalCourtTemplateRules.cs"
              Link="Production/CustomLocalCourtTemplateRules.cs" />
+    <Compile Include="../../Code/core/court/CustomLocalGovernmentPresetRules.cs"
+             Link="Production/CustomLocalGovernmentPresetRules.cs" />
     <Compile Include="../../Code/core/court/CustomCourtTemplateRules.cs"
              Link="Production/CustomCourtTemplateRules.cs" />
     <Compile Include="../../Code/core/court/CustomCourtTemplateJsonCodec.cs"
