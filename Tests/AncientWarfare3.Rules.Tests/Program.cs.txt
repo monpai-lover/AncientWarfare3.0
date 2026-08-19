@@ -8798,5 +8798,6 @@ ReflectionDelegateFactoryTests.Run();
 PeacetimeCitizenJobRulesTests.Run();
 PeacetimeRtsOwnershipReleaseRulesTests.Run();
 PeasantRebelRouteRulesTests.Run();
+BanditGreatUprisingRulesTests.Run();
 
 Console.WriteLine("Rule tests passed.");

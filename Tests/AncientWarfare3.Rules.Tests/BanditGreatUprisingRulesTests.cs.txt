@@ -1,0 +1,79 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class BanditGreatUprisingRulesTests
+{
+    public static void Run()
+    {
+        RatioBoundaries();
+        ActivationNeedsLongTermPressure();
+        StreaksResetAndCap();
+        CursorWraps();
+        ConversionNeedsActiveValidOrigin();
+    }
+
+    private static void RatioBoundaries()
+    {
+        True(BanditGreatUprisingRules.MeetsBanditRatio(5, 100),
+            "5 percent activates");
+        False(BanditGreatUprisingRules.MeetsBanditRatio(4, 100),
+            "below threshold stays inactive");
+        True(BanditGreatUprisingRules.MeetsBanditRatio(1, 0),
+            "zero origin population is safe");
+    }
+
+    private static void ActivationNeedsLongTermPressure()
+    {
+        True(BanditGreatUprisingRules.ShouldActivate(5, 100, 5, 0),
+            "corruption streak activates");
+        True(BanditGreatUprisingRules.ShouldActivate(5, 100, 0, 2),
+            "famine streak activates");
+        False(BanditGreatUprisingRules.ShouldActivate(5, 100, 4, 1),
+            "short streaks do not activate");
+    }
+
+    private static void StreaksResetAndCap()
+    {
+        Equal(5, BanditGreatUprisingRules.AdvanceStreak(4, true, 5),
+            "streak caps");
+        Equal(0, BanditGreatUprisingRules.AdvanceStreak(4, false, 5),
+            "broken streak resets");
+    }
+
+    private static void CursorWraps()
+    {
+        Equal(0, BanditGreatUprisingRules.AdvanceCursor(3, 2, 5),
+            "cursor wraps");
+        Equal(0, BanditGreatUprisingRules.AdvanceCursor(0, 2, 0),
+            "empty candidate list resets cursor");
+    }
+
+    private static void ConversionNeedsActiveValidOrigin()
+    {
+        True(BanditGreatUprisingRules.CanConvert(true, true, true),
+            "active origin converts bandit");
+        False(BanditGreatUprisingRules.CanConvert(false, true, true),
+            "inactive origin does not convert");
+        False(BanditGreatUprisingRules.CanConvert(true, false, true),
+            "non-bandit route does not convert");
+        False(BanditGreatUprisingRules.CanConvert(true, true, false),
+            "invalid origin does not convert");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                $": expected {expected}, got {actual}");
+    }
+}

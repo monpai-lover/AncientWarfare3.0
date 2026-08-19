@@ -110,6 +110,20 @@ namespace AncientWarfare3.core.lineage
             "aw_mandate_rebel_bandit_entry_city_ids";
         public const string MANDATE_REBEL_BANDIT_STRONGHOLD_STATE =
             "aw_mandate_rebel_bandit_stronghold_state";
+        public const string MANDATE_REBEL_GREAT_UPRISING_ACTIVE =
+            "aw_mandate_rebel_great_uprising_active";
+        public const string MANDATE_REBEL_GREAT_UPRISING_STARTED_YEAR =
+            "aw_mandate_rebel_great_uprising_started_year";
+        public const string MANDATE_REBEL_GREAT_UPRISING_LAST_YEAR =
+            "aw_mandate_rebel_great_uprising_last_year";
+        public const string MANDATE_REBEL_GREAT_UPRISING_CORRUPTION_STREAK =
+            "aw_mandate_rebel_great_uprising_corruption_streak";
+        public const string MANDATE_REBEL_GREAT_UPRISING_FAMINE_STREAK =
+            "aw_mandate_rebel_great_uprising_famine_streak";
+        public const string MANDATE_REBEL_GREAT_UPRISING_CONVERSION_CURSOR =
+            "aw_mandate_rebel_great_uprising_conversion_cursor";
+        public const string MANDATE_REBEL_GREAT_UPRISING_LAST_CONVERSION_YEAR =
+            "aw_mandate_rebel_great_uprising_last_conversion_year";
         public const string MANDATE_DECLINE_REBEL =
             "aw_mandate_decline_rebel";
         public const string MANDATE_DECLINE_REBEL_ORIGIN_ID =
