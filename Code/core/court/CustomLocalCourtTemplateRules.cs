@@ -188,6 +188,44 @@ namespace AncientWarfare3.core.court
                        StringComparison.Ordinal);
         }
 
+        public static void RebaseOfficeIds(CustomLocalCourtTemplate pTemplate,
+            string pNewTemplateId)
+        {
+            if (pTemplate == null || string.IsNullOrWhiteSpace(pNewTemplateId))
+                return;
+            pTemplate.Offices = pTemplate.Offices ??
+                                new List<CustomCourtOffice>();
+            pTemplate.Edges = pTemplate.Edges ??
+                              new List<CustomCourtEdge>();
+            var replacements = new Dictionary<string, string>(
+                StringComparer.Ordinal);
+            int number = 1;
+            foreach (CustomCourtOffice office in pTemplate.Offices)
+            {
+                if (office == null || string.IsNullOrWhiteSpace(office.Id))
+                    continue;
+                string next = pNewTemplateId + "_office_" + number++;
+                replacements[office.Id] = next;
+                office.Id = next;
+            }
+            foreach (CustomCourtEdge edge in pTemplate.Edges)
+            {
+                if (edge == null) continue;
+                if (replacements.TryGetValue(edge.FromOfficeId,
+                        out string from)) edge.FromOfficeId = from;
+                if (replacements.TryGetValue(edge.ToOfficeId,
+                        out string to)) edge.ToOfficeId = to;
+            }
+            foreach (CustomCourtOffice office in pTemplate.Offices)
+            {
+                string required = office?.Requirements?.RequiredOfficeId;
+                if (!string.IsNullOrWhiteSpace(required) &&
+                    replacements.TryGetValue(required, out string next))
+                    office.Requirements.RequiredOfficeId = next;
+            }
+            pTemplate.Id = pNewTemplateId;
+        }
+
         private static List<CustomLocalCourtTemplate> ValidTemplates(
             IReadOnlyList<CustomLocalCourtTemplate> pTemplates)
         {

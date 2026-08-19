@@ -71,6 +71,22 @@ internal static class CustomLocalGovernmentRulesTests
         Equal(11, Find(customized, "minzhou").Offices[0].Grade,
             "modified office properties are not overwritten");
 
+        CustomLocalCourtTemplate rebased =
+            CustomLocalGovernmentPresetRules.CreateMilitary("junfu");
+        rebased.Offices[3].Requirements.RequiredOfficeId = "junfu_sima";
+        CustomLocalCourtTemplateRules.RebaseOfficeIds(rebased,
+            "junfu_copy_1");
+        True(rebased.Offices.All(office => office.Id.StartsWith(
+                "junfu_copy_1_office_", StringComparison.Ordinal)),
+            "duplicate office ids are namespaced to the new template");
+        True(rebased.Edges.All(edge => rebased.Offices.Any(office =>
+                office.Id == edge.FromOfficeId) && rebased.Offices.Any(office =>
+                office.Id == edge.ToOfficeId)),
+            "duplicate management edges follow rebased office ids");
+        True(rebased.Offices.Any(office => office.Requirements
+                .RequiredOfficeId == "junfu_copy_1_office_3"),
+            "duplicate office prerequisites follow rebased office ids");
+
         RuntimeUsesCityFacts();
     }
 
@@ -147,6 +163,10 @@ internal static class CustomLocalGovernmentRulesTests
             "policy", "CityEconomyService.cs"));
         string effects = File.ReadAllText(Path.Combine(root, "Code", "core",
             "court", "CustomCourtRuntimeEffectService.cs"));
+        string battle = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "ArmyAbstractBattleService.cs"));
+        string workflow = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "CustomCourtWorkflowWindow.cs"));
         True(runtime.Contains(
                 "CustomLocalGovernmentCityService.HasForeignLandBorder("),
             "runtime reads actual city land borders");
@@ -171,8 +191,25 @@ internal static class CustomLocalGovernmentRulesTests
             "each active local template contributes to army effects once");
         True(effects.Contains("IsActiveLocalTemplateRow("),
             "stale local office rows do not grant army effects");
-        True(effects.Contains("FindOfficeIncludingLocal("),
-            "local office influence resolves through the court snapshot");
+        True(effects.Contains("FindOfficeForIncumbent("),
+            "duplicate local office ids resolve through the incumbent city");
+        True(effects.Contains("row.city_id"),
+            "local influence lookup retains city context");
+        True(battle.Contains(
+                "MoraleModifier = ResolveMoraleModifier(kingdom, moraleByKingdom)"),
+            "attacking abstract armies receive custom court morale");
+        True(battle.Contains(
+                "MoraleModifier = ResolveMoraleModifier(defenderKingdom, moraleByKingdom)"),
+            "defending abstract armies receive custom court morale");
+        True(battle.Contains(
+                "CustomCourtRuntimeEffectService.GetArmyModifier(pKingdom)"),
+            "abstract battle morale uses the custom court effect service");
+        True(workflow.Contains(
+                "CustomLocalCourtTemplateRules.RebaseOfficeIds(clone, id)"),
+            "duplicated local templates receive unique office ids");
+        True(workflow.Contains(
+                "if (pDefaultKind == CustomLocalCourtDefaultKind.ManualOnly)"),
+            "built-in local defaults preserve bilingual preset names");
         True(economy.Contains("cityEffectModifiers.TryGetValue("),
             "city economy consumes per-city local office modifiers");
     }

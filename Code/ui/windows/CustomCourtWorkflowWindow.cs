@@ -460,11 +460,14 @@ namespace AncientWarfare3.ui.windows
                 CustomLocalCourtDefaultKind.MilitaryDefault
                     ? CustomLocalGovernmentPresetRules.CreateMilitary(pId)
                     : CustomLocalGovernmentPresetRules.CreateCivil(pId);
-            local.Name = new CustomCourtLocalizedText
+            if (pDefaultKind == CustomLocalCourtDefaultKind.ManualOnly)
             {
-                Chinese = pName,
-                English = pName
-            };
+                local.Name = new CustomCourtLocalizedText
+                {
+                    Chinese = pName,
+                    English = pName
+                };
+            }
             local.DefaultKind = pDefaultKind;
             return local;
         }
@@ -667,7 +670,7 @@ namespace AncientWarfare3.ui.windows
             do { id = source.Id + "_copy_" + number++; }
             while (_template.LocalTemplates.Any(template => template != null &&
                        template.Id == id));
-            clone.Id = id;
+            CustomLocalCourtTemplateRules.RebaseOfficeIds(clone, id);
             clone.DefaultKind = CustomLocalCourtDefaultKind.ManualOnly;
             string suffix = AW_L10n.Text("aw_custom_local_court_copy",
                 "Copy");

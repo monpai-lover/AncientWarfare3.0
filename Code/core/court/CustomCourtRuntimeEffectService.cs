@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.court
@@ -136,10 +137,12 @@ namespace AncientWarfare3.core.court
             if (!TryGetRuntime(kingdom, out CustomCourtTemplate snapshot,
                     out List<CourtOfficerView> officers))
                 return CustomCourtEffectModifier.Identity;
-            CustomCourtOffice office = FindOfficeIncludingLocal(snapshot,
-                officeId);
+            CustomCourtOffice office = FindOfficeForIncumbent(snapshot,
+                kingdom, officeId, actorId, officers,
+                out CourtOfficerView incumbent);
             if (office == null || !HasActiveIncumbent(kingdom, office,
-                    officers, actorId))
+                    officers, actorId, row => row.layer == incumbent.layer &&
+                    row.city_id == incumbent.city_id))
                 return CustomCourtEffectModifier.Identity;
             return ComposeOfficeEffects(office,
                 CustomCourtEffectId.CourtInfluence,
@@ -256,17 +259,31 @@ namespace AncientWarfare3.core.court
             return null;
         }
 
-        private static CustomCourtOffice FindOfficeIncludingLocal(
-            CustomCourtTemplate snapshot, string officeId)
+        private static CustomCourtOffice FindOfficeForIncumbent(
+            CustomCourtTemplate snapshot, Kingdom kingdom, string officeId,
+            long actorId, List<CourtOfficerView> officers,
+            out CourtOfficerView incumbent)
         {
-            CustomCourtOffice central = FindOffice(snapshot, officeId);
-            if (central != null) return central;
-            foreach (CustomLocalCourtTemplate local in snapshot?.LocalTemplates ??
-                     new List<CustomLocalCourtTemplate>())
-                foreach (CustomCourtOffice office in local?.Offices ??
-                         new List<CustomCourtOffice>())
-                    if (office != null && string.Equals(office.Id, officeId,
-                            StringComparison.Ordinal)) return office;
+            incumbent = null;
+            foreach (CourtOfficerView row in officers ??
+                     new List<CourtOfficerView>())
+            {
+                if (row == null || row.actor_id != actorId ||
+                    !string.Equals(row.office_id, officeId,
+                        StringComparison.Ordinal)) continue;
+                incumbent = row;
+                if (row.layer != CourtOfficeLayer.City)
+                    return FindOffice(snapshot, officeId);
+                City city;
+                try { city = World.world?.cities?.get(row.city_id); }
+                catch { return null; }
+                if (city?.data == null || city.kingdom != kingdom ||
+                    !CustomCourtRuntime.TryGetLocalTemplate(kingdom, city,
+                        out CustomLocalCourtTemplate local)) return null;
+                return local?.Offices?.FirstOrDefault(office =>
+                    office != null && string.Equals(office.Id, officeId,
+                        StringComparison.Ordinal));
+            }
             return null;
         }
 
