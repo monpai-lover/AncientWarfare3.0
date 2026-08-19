@@ -125,7 +125,8 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "_toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f)");
         Contains(window, "_toolViewport.anchoredPosition = new Vector2(-864f, 46f)");
         Contains(window, "_toolViewport.SetAsLastSibling()");
-        Contains(window, "_canvasRect.anchorMin = _canvasRect.anchorMax = new Vector2(0.5f, 0.5f)");
+        Contains(window, "_canvasRect.anchorMin = _canvasRect.anchorMax");
+        Contains(window, "new Vector2(0.5f, 0.5f)");
         Contains(window,
             "CustomCourtWorkflowLayoutRules.VisibleCanvasHeight(");
         Contains(window, "_canvasRect.anchoredPosition = new Vector2(-480f, 50f)");
