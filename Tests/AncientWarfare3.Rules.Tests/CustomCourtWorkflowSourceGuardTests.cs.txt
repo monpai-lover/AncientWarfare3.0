@@ -127,6 +127,10 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "_canvasRect.anchorMax = Vector2.one");
         Contains(window, "_canvasRect.offsetMin = Vector2.zero");
         Contains(window, "_canvasRect.offsetMax = Vector2.zero");
+        Contains(window,
+            "_root.anchoredPosition = new Vector2(-500f, 0f)");
+        DoesNotContain(window,
+            "_root.anchoredPosition = Vector2.zero;");
         Contains(window, "ResolveWholePresetProfile(");
         Contains(window, "CustomCourtWholePresetRules.ResolveProfile(");
         DoesNotContain(window, "new Vector2(-864f, 46f)");
@@ -190,6 +194,14 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(stringDropdown, "typeof(GraphicRaycaster)");
         Contains(stringDropdown, "overrideSorting = true");
         Contains(stringDropdown, "sortingOrder = canvas.sortingOrder + 1");
+        Contains(stringDropdown,
+            "RectTransform overlayRect = _overlay?.transform as RectTransform;");
+        Contains(stringDropdown, "private void LateUpdate()");
+        Contains(stringDropdown, "PositionPopup();");
+        Contains(stringDropdown, "_popup.localPosition = local;");
+        DoesNotContain(stringDropdown, "PositionPopup(canvas);");
+        DoesNotContain(stringDropdown,
+            "_popup.anchoredPosition = local;");
         Contains(stringDropdown, "private void OnDisable()");
         Contains(stringDropdown, "if (!option.Enabled)");
         Contains(stringDropdown, "_onUnavailable?.Invoke(option)");
