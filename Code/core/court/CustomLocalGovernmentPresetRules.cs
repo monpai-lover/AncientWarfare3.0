@@ -7,6 +7,16 @@ namespace AncientWarfare3.core.court
         public const string CivilTemplateId = "minzhou";
         public const string MilitaryTemplateId = "junfu";
 
+        public static IReadOnlyList<CustomLocalCourtTemplate>
+            CreateBuiltInCatalog()
+        {
+            return new[]
+            {
+                CreateCivil(),
+                CreateMilitary()
+            };
+        }
+
         public static CustomLocalCourtTemplate CreateCivil(string pId =
             CivilTemplateId)
         {

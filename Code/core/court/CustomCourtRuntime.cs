@@ -8,6 +8,10 @@ namespace AncientWarfare3.core.court
 {
     public static class CustomCourtRuntime
     {
+        private static readonly IReadOnlyList<CustomLocalCourtTemplate>
+            BuiltInLocalTemplates = CustomLocalGovernmentPresetRules
+                .CreateBuiltInCatalog();
+
         public static readonly CustomCourtInstanceService Instances =
             new CustomCourtInstanceService();
 
@@ -62,10 +66,13 @@ namespace AncientWarfare3.core.court
             pTemplate = null;
             if (pKingdom?.data == null || pCity?.data == null ||
                 pCity.kingdom != pKingdom) return false;
-            CustomCourtTemplate snapshot;
-            if (!TryGetSnapshot(pKingdom, out snapshot) ||
-                snapshot.LocalTemplates == null ||
-                snapshot.LocalTemplates.Count == 0) return false;
+            IReadOnlyList<CustomLocalCourtTemplate> templates;
+            if (TryGetSnapshot(pKingdom, out CustomCourtTemplate snapshot) &&
+                snapshot.LocalTemplates != null &&
+                snapshot.LocalTemplates.Count > 0)
+                templates = snapshot.LocalTemplates;
+            else
+                templates = BuiltInLocalTemplates;
 
             pCity.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
                 out string persistedId, string.Empty);
@@ -79,8 +86,8 @@ namespace AncientWarfare3.core.court
             bool military = automaticKind ==
                 CustomLocalGovernmentDefaultKind.Military;
             string resolvedId = CustomLocalCourtTemplateRules.ResolveTemplateId(
-                snapshot.LocalTemplates, persistedId, manual, military);
-            pTemplate = snapshot.LocalTemplates.FirstOrDefault(template =>
+                templates, persistedId, manual, military);
+            pTemplate = templates.FirstOrDefault(template =>
                 template != null && string.Equals(template.Id, resolvedId,
                     System.StringComparison.Ordinal));
             if (pTemplate == null) return false;

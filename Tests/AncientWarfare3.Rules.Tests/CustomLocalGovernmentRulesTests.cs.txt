@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AncientWarfare3.core.court;
@@ -41,6 +42,17 @@ internal static class CustomLocalGovernmentRulesTests
             "civil preset default role");
         Equal(CustomLocalCourtDefaultKind.MilitaryDefault,
             military.DefaultKind, "military preset default role");
+        IReadOnlyList<CustomLocalCourtTemplate> builtIns =
+            CustomLocalGovernmentPresetRules.CreateBuiltInCatalog();
+        Equal(2, builtIns.Count, "built-in local government count");
+        Equal(4, Find(builtIns, "minzhou").Offices.Count,
+            "built-in civil government has all vacancies");
+        Equal(4, Find(builtIns, "junfu").Offices.Count,
+            "built-in military government has all vacancies");
+        IReadOnlyList<CustomLocalCourtTemplate> freshBuiltIns =
+            CustomLocalGovernmentPresetRules.CreateBuiltInCatalog();
+        True(!ReferenceEquals(builtIns[0], freshBuiltIns[0]),
+            "built-in local templates are fresh mutable instances");
         True(military.Offices.First(office =>
             office.Id == "junfu_dudu").MilitaryCapable,
             "military commander can lead troops");
@@ -143,6 +155,12 @@ internal static class CustomLocalGovernmentRulesTests
         string id)
     {
         return template.LocalTemplates.First(item => item.Id == id);
+    }
+
+    private static CustomLocalCourtTemplate Find(
+        IReadOnlyList<CustomLocalCourtTemplate> templates, string id)
+    {
+        return templates.First(item => item.Id == id);
     }
 
     private static void HasOffice(CustomLocalCourtTemplate template,

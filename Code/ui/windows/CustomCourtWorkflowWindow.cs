@@ -38,6 +38,7 @@ namespace AncientWarfare3.ui.windows
         private InputField _courtNameInput;
         private InputField _officeNameInput;
         private Button _wholePresetButton;
+        private Button _backButton;
         private Text _wholePresetButtonText;
         private AWStringDropdown _importDropdown;
         private AWStringDropdown _contextDropdown;
@@ -64,6 +65,7 @@ namespace AncientWarfare3.ui.windows
         private CourtWorkflowVacancyCard _edgeSource;
         private CourtWorkflowVacancyCard _edgeTarget;
         private WideWindowChrome _chrome;
+        private bool _focusGraphOnNextRender;
 
         private sealed class CityTemplateBindingChange
         {
@@ -85,6 +87,7 @@ namespace AncientWarfare3.ui.windows
             _localEntryMode = localMode;
             if (Instance == null)
                 CreateAndInit(AW_LineageWindowIds.CUSTOM_COURT_WORKFLOW);
+            if (Instance != null) Instance._focusGraphOnNextRender = true;
             AW_LineageWindowIds.SafeShow(
                 AW_LineageWindowIds.CUSTOM_COURT_WORKFLOW,
                 () => Instance?.Refresh());
@@ -93,6 +96,7 @@ namespace AncientWarfare3.ui.windows
         protected override void Init()
         {
             EnsureUi();
+            _backButton = CreateBackButton();
             ApplyLayout();
             _chrome = WideWindowChrome.Attach(BackgroundTransform,
                 () => _windowSize,
@@ -218,6 +222,11 @@ namespace AncientWarfare3.ui.windows
                 "aw_custom_court_apply", "Apply", ApplyCustomCourtTemplate);
             _status = CreateText(_toolPanel, "Status", 9,
                 TextAnchor.UpperLeft);
+            AttachWorkflowTooltips(_contextDropdown, _localTemplateDropdown,
+                _localDefaultDropdown, _replacementDropdown, _courtNameInput,
+                _officeNameInput, add, _createLocalTemplateButton,
+                _duplicateLocalTemplateButton, _deleteLocalTemplateButton,
+                save, export, _importDropdown, apply);
             Layout(_contextDropdown.RectTransform, 8f, 6f, 148f, 22f);
             Layout(_localTemplateDropdown.RectTransform, 8f, 32f, 148f, 22f);
             Layout(_localDefaultDropdown.RectTransform, 8f, 58f, 148f, 22f);
@@ -255,8 +264,13 @@ namespace AncientWarfare3.ui.windows
                 background.sizeDelta = _windowSize;
             Transform close = BackgroundTransform?.parent?.Find("CloseBackground");
             if (close != null)
+            {
                 close.localPosition = new Vector3(_windowSize.x * 0.5f - 20f,
                     _windowSize.y * 0.5f - 12f);
+                if (_backButton != null)
+                    _backButton.transform.localPosition =
+                        close.localPosition + new Vector3(-34f, 0f, 0f);
+            }
 
             Transform titleBackground = BackgroundTransform?.Find("TitleBackground");
             RectTransform titleRect = titleBackground?.GetComponent<RectTransform>();
@@ -307,7 +321,7 @@ namespace AncientWarfare3.ui.windows
             _root.anchorMin = _root.anchorMax = new Vector2(0.5f, 0.5f);
             _root.pivot = new Vector2(0.5f, 0.5f);
             _root.sizeDelta = new Vector2(contentWidth, viewportHeight);
-            _root.anchoredPosition = new Vector2(-500f, 0f);
+            _root.anchoredPosition = new Vector2(-530f, 0f);
             _layout = CustomCourtWorkflowLayoutRules.Resolve(contentWidth,
                 viewportHeight, ToolbarWidth, ToolbarScale,
                 ToolbarScrollbarWidth);
@@ -386,7 +400,8 @@ namespace AncientWarfare3.ui.windows
             _loadedLocalEntryMode = _localEntryMode;
             RefreshContextControls();
             SyncNameInputFromContext();
-            RenderCards();
+            RenderCards(contextChanged || _focusGraphOnNextRender);
+            _focusGraphOnNextRender = false;
             RefreshWholePresetOptions();
             RefreshImportFiles();
             SetStatus(AW_L10n.Text("aw_custom_court_ready", "Ready"));
@@ -594,7 +609,7 @@ namespace AncientWarfare3.ui.windows
             EnsureTemplateShape();
             RefreshContextControls();
             SyncNameInputFromContext();
-            RenderCards();
+            RenderCards(pFocusGraph: true);
         }
 
         private void SelectLocalTemplate(AWStringDropdownOption pOption)
@@ -605,7 +620,7 @@ namespace AncientWarfare3.ui.windows
             _edgeSource = _edgeTarget = null;
             RefreshContextControls();
             SyncNameInputFromContext();
-            RenderCards();
+            RenderCards(pFocusGraph: true);
         }
 
         private void SelectLocalDefaultKind(AWStringDropdownOption pOption)
@@ -656,7 +671,7 @@ namespace AncientWarfare3.ui.windows
             _replacementTemplateId = string.Empty;
             RefreshContextControls();
             SyncNameInputFromContext();
-            RenderCards();
+            RenderCards(pFocusGraph: true);
         }
 
         private void DuplicateLocalTemplate()
@@ -686,7 +701,7 @@ namespace AncientWarfare3.ui.windows
             _replacementTemplateId = string.Empty;
             RefreshContextControls();
             SyncNameInputFromContext();
-            RenderCards();
+            RenderCards(pFocusGraph: true);
         }
 
         private void DeleteLocalTemplate()
@@ -716,7 +731,7 @@ namespace AncientWarfare3.ui.windows
             _edgeSource = _edgeTarget = null;
             RefreshContextControls();
             SyncNameInputFromContext();
-            RenderCards();
+            RenderCards(pFocusGraph: true);
         }
 
         private int CountCitiesUsing(string pTemplateId)
@@ -739,7 +754,7 @@ namespace AncientWarfare3.ui.windows
                 pair.Value == pTemplateId);
         }
 
-        private void RenderCards()
+        private void RenderCards(bool pFocusGraph = false)
         {
             if (_workspaceRect == null || ActiveOffices == null) return;
             foreach (Transform child in _workspaceRect)
@@ -766,6 +781,43 @@ namespace AncientWarfare3.ui.windows
             }
             RenderEdges();
             RefreshSelectionVisuals();
+            if (pFocusGraph) FocusActiveGraph(canvas);
+        }
+
+        private void FocusActiveGraph(CourtWorkflowCanvas pCanvas)
+        {
+            if (_workspaceRect == null || _canvasRect == null ||
+                pCanvas?.Cards == null || pCanvas.Cards.Count == 0) return;
+            _workspaceRect.localScale = Vector3.one;
+            bool found = false;
+            Vector2 minimum = Vector2.zero;
+            Vector2 maximum = Vector2.zero;
+            foreach (CourtWorkflowVacancyCard card in pCanvas.Cards)
+            {
+                RectTransform rect = card?.GetComponent<RectTransform>();
+                if (rect == null) continue;
+                Vector3[] corners = new Vector3[4];
+                rect.GetWorldCorners(corners);
+                foreach (Vector3 corner in corners)
+                {
+                    Vector2 local = _canvasRect.InverseTransformPoint(corner);
+                    if (!found)
+                    {
+                        minimum = maximum = local;
+                        found = true;
+                    }
+                    else
+                    {
+                        minimum = Vector2.Min(minimum, local);
+                        maximum = Vector2.Max(maximum, local);
+                    }
+                }
+            }
+            if (!found) return;
+            Vector2 graphCenter = (minimum + maximum) * 0.5f;
+            Vector2 visibleCenter = _canvasRect.rect.center + new Vector2(
+                _layout.VisibleCanvasCenterOffsetX, 0f);
+            _workspaceRect.anchoredPosition += visibleCenter - graphCenter;
         }
 
         private void RenderEdges()
@@ -1153,7 +1205,7 @@ namespace AncientWarfare3.ui.windows
             _edgeTarget = null;
             if (_officeNameInput != null)
                 _officeNameInput.text = string.Empty;
-            RenderCards();
+            RenderCards(pFocusGraph: true);
             SetStatus(string.Format(CultureInfo.CurrentCulture,
                 AW_L10n.Text("aw_custom_court_whole_preset_loaded",
                     "Whole-court preset loaded: {0}"),
@@ -1195,7 +1247,7 @@ namespace AncientWarfare3.ui.windows
                 _selectedImportFile = option.Id;
                 RefreshContextControls();
                 SyncNameInputFromContext();
-                RenderCards();
+                RenderCards(pFocusGraph: true);
                 RefreshImportFiles();
                 SetStatus(AW_L10n.Text("aw_custom_court_imported",
                     "Template imported."));
@@ -1317,6 +1369,11 @@ namespace AncientWarfare3.ui.windows
         private IEnumerator ReturnToCourtAfterApply()
         {
             yield return null;
+            ReturnToCourt();
+        }
+
+        private void ReturnToCourt()
+        {
             if (_localEntryMode && _cityId >= 0L)
                 CourtWindow.OpenCity(_kingdomId, _cityId);
             else CourtWindow.OpenAndRefresh(_kingdomId);
@@ -1391,6 +1448,117 @@ namespace AncientWarfare3.ui.windows
             return button;
         }
 
+        private Button CreateBackButton()
+        {
+            Transform parent = BackgroundTransform?.parent;
+            if (parent == null) return null;
+            Transform existing = parent.Find("CustomCourtBackBackground");
+            GameObject obj = existing != null
+                ? existing.gameObject
+                : new GameObject("CustomCourtBackBackground",
+                    typeof(RectTransform), typeof(Image), typeof(Button),
+                    typeof(TipButton));
+            if (existing == null) obj.transform.SetParent(parent, false);
+            RectTransform rect = obj.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(30f, 30f);
+            Image background = obj.GetComponent<Image>();
+            AW_UIStyle.ApplyButton(background, 0.98f);
+            background.raycastTarget = true;
+            Button button = obj.GetComponent<Button>();
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(ReturnToCourt);
+
+            Transform iconTransform = obj.transform.Find("Icon");
+            GameObject iconObject = iconTransform != null
+                ? iconTransform.gameObject
+                : new GameObject("Icon", typeof(RectTransform), typeof(Image));
+            if (iconTransform == null)
+                iconObject.transform.SetParent(obj.transform, false);
+            RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+            iconRect.anchorMin = Vector2.zero;
+            iconRect.anchorMax = Vector2.one;
+            iconRect.offsetMin = new Vector2(5f, 5f);
+            iconRect.offsetMax = new Vector2(-5f, -5f);
+            Image icon = iconObject.GetComponent<Image>();
+            icon.sprite = SpriteTextureLoader.getSprite(
+                              "ui/icons/iconArrowMetaLeft") ??
+                          SpriteTextureLoader.getSprite(
+                              "ui/icons/iconArrowMetaRight") ??
+                          SpriteTextureLoader.getSprite(
+                              "ui/icons/iconKingdomList");
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+            if (icon.sprite != null && icon.sprite.name.IndexOf("Right",
+                    StringComparison.OrdinalIgnoreCase) >= 0)
+                iconRect.localScale = new Vector3(-1f, 1f, 1f);
+            AttachTooltip(obj, "aw_custom_court_back", "Back",
+                "aw_custom_court_back_desc",
+                "Return to the court window that opened this editor.");
+            return button;
+        }
+
+        private static void AttachWorkflowTooltips(
+            AWStringDropdown context, AWStringDropdown localTemplate,
+            AWStringDropdown localDefault, AWStringDropdown replacement,
+            InputField courtName, InputField officeName, Button add,
+            Button createLocal, Button duplicateLocal, Button deleteLocal,
+            Button save, Button export, AWStringDropdown import, Button apply)
+        {
+            AttachTooltip(context?.gameObject, "aw_custom_court_context",
+                "Edit layer", "aw_custom_court_context_desc",
+                "Switch between central court and local government templates.");
+            AttachTooltip(localTemplate?.gameObject,
+                "aw_local_court_choose_template", "Choose local government",
+                "aw_custom_local_court_template_desc",
+                "Choose the local-government template to edit.");
+            AttachTooltip(localDefault?.gameObject,
+                "aw_custom_local_court_default_kind", "Default use",
+                "aw_custom_local_court_default_kind_desc",
+                "Choose whether this template is assigned automatically to civil or military cities.");
+            AttachTooltip(replacement?.gameObject,
+                "aw_custom_local_court_replacement",
+                "Replacement when deleting",
+                "aw_custom_local_court_replacement_desc",
+                "Choose the template used by cities after deleting this template.");
+            AttachTooltip(courtName?.gameObject, "aw_custom_court_name",
+                "Court name", "aw_custom_court_name_desc",
+                "Set the displayed name of the active court or local-government template.");
+            AttachTooltip(officeName?.gameObject,
+                "aw_custom_court_office_name", "Office name",
+                "aw_custom_court_office_name_desc",
+                "Set the name used by a new or selected office card.");
+            AttachTooltip(add?.gameObject, "aw_custom_court_add_office",
+                "Add Office", "aw_custom_court_add_office_desc",
+                "Create a new office card at the center of the visible canvas.");
+            AttachTooltip(createLocal?.gameObject,
+                "aw_custom_local_court_create", "New local template",
+                "aw_custom_local_court_create_desc",
+                "Create an empty local-government template.");
+            AttachTooltip(duplicateLocal?.gameObject,
+                "aw_custom_local_court_duplicate", "Duplicate template",
+                "aw_custom_local_court_duplicate_desc",
+                "Copy the selected local-government template and all its offices.");
+            AttachTooltip(deleteLocal?.gameObject,
+                "aw_custom_local_court_delete", "Delete local template",
+                "aw_custom_local_court_delete_desc",
+                "Delete the selected template after choosing a replacement when required.");
+            AttachTooltip(save?.gameObject, "aw_custom_court_save", "Save",
+                "aw_custom_court_save_desc",
+                "Save the current template as JSON without applying it.");
+            AttachTooltip(export?.gameObject, "aw_custom_court_export",
+                "Export", "aw_custom_court_export_desc",
+                "Export the current template to the mod CourtJson folder.");
+            AttachTooltip(import?.gameObject,
+                "aw_custom_court_import_select", "Import JSON",
+                "aw_custom_court_import_select_desc",
+                "Choose a JSON file from the mod CourtJson folder to import.");
+            AttachTooltip(apply?.gameObject, "aw_custom_court_apply", "Apply",
+                "aw_custom_court_apply_desc",
+                "Apply this court and its local-government templates to the current kingdom.");
+        }
+
         private Scrollbar CreateToolbarScrollbar(Transform pParent)
         {
             var barObject = new GameObject("CourtWorkflowToolbarScrollbar",
@@ -1432,11 +1600,19 @@ namespace AncientWarfare3.ui.windows
             string titleFallback, string descriptionKey,
             string descriptionFallback)
         {
-            if (button == null) return;
-            TipButton tip = button.GetComponent<TipButton>() ??
-                button.gameObject.AddComponent<TipButton>();
+            AttachTooltip(button?.gameObject, titleKey, titleFallback,
+                descriptionKey, descriptionFallback);
+        }
+
+        private static void AttachTooltip(GameObject target, string titleKey,
+            string titleFallback, string descriptionKey,
+            string descriptionFallback)
+        {
+            if (target == null) return;
+            TipButton tip = target.GetComponent<TipButton>() ??
+                target.AddComponent<TipButton>();
             tip.type = AW_RawTooltip.TYPE;
-            tip.hoverAction = () => Tooltip.show(button.gameObject,
+            tip.hoverAction = () => Tooltip.show(target,
                 AW_RawTooltip.TYPE, new TooltipData
                 {
                     tip_name = AW_L10n.Text(titleKey, titleFallback),
