@@ -12,7 +12,8 @@ internal static class CustomCourtWholePresetRulesTests
         DuplicateOfficeIdsAreNormalizedDeterministically();
         EmptyPresetDoesNotReplaceTheGraph();
         GeneratedLayoutIsDeterministicAndCentered();
-        ShiftedCanvasFitsInsideViewport();
+        CanvasAlwaysMatchesViewport();
+        ToolbarDoesNotDriftWithWindowWidth();
     }
 
     private static void XiaOptionsContainAllHistoricalStages()
@@ -140,23 +141,36 @@ internal static class CustomCourtWholePresetRulesTests
         }
     }
 
-    private static void ShiftedCanvasFitsInsideViewport()
+    private static void CanvasAlwaysMatchesViewport()
     {
-        const float viewportHeight = 302f;
-        const float rootOffsetY = -8f;
-        const float canvasOffsetY = 50f;
-        float canvasHeight = CustomCourtWorkflowLayoutRules
-            .VisibleCanvasHeight(viewportHeight, rootOffsetY, canvasOffsetY);
-        Equal(218f, canvasHeight,
-            "shifted canvas height leaves both edges inside the viewport");
+        CustomCourtWorkflowLayout layout =
+            CustomCourtWorkflowLayoutRules.Resolve(
+                518f, 302f, 164f, 0.8f, 6f);
+        Equal(518f, layout.CanvasWidth,
+            "canvas width follows viewport");
+        Equal(302f, layout.CanvasHeight,
+            "canvas height follows viewport");
+        Equal(137.2f, layout.ToolbarViewportWidth,
+            "toolbar reserves scaled panel and scrollbar width");
+        Equal(302f, layout.ToolbarViewportHeight,
+            "toolbar height follows viewport");
+    }
 
-        float centerY = rootOffsetY + canvasOffsetY;
-        float halfViewport = viewportHeight * 0.5f;
-        float halfCanvas = canvasHeight * 0.5f;
-        True(centerY + halfCanvas <= halfViewport,
-            "shifted canvas top stays inside the viewport");
-        True(centerY - halfCanvas >= -halfViewport,
-            "shifted canvas bottom stays inside the viewport");
+    private static void ToolbarDoesNotDriftWithWindowWidth()
+    {
+        CustomCourtWorkflowLayout narrow =
+            CustomCourtWorkflowLayoutRules.Resolve(
+                378f, 222f, 164f, 0.8f, 6f);
+        CustomCourtWorkflowLayout wide =
+            CustomCourtWorkflowLayoutRules.Resolve(
+                858f, 592f, 164f, 0.8f, 6f);
+        Equal(0f, narrow.ToolbarLeft,
+            "narrow toolbar left edge");
+        Equal(narrow.ToolbarLeft, wide.ToolbarLeft,
+            "toolbar left edge is independent of window width");
+        Equal(narrow.ToolbarViewportWidth * 0.5f,
+            narrow.VisibleCanvasCenterOffsetX,
+            "new nodes center outside the toolbar-covered area");
     }
 
     private static CustomCourtTemplate SourceTemplate()

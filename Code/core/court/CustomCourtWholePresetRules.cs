@@ -4,13 +4,39 @@ using System.Linq;
 
 namespace AncientWarfare3.core.court
 {
+    public readonly struct CustomCourtWorkflowLayout
+    {
+        public CustomCourtWorkflowLayout(float canvasWidth,
+            float canvasHeight, float toolbarViewportWidth,
+            float toolbarViewportHeight)
+        {
+            CanvasWidth = canvasWidth;
+            CanvasHeight = canvasHeight;
+            ToolbarViewportWidth = toolbarViewportWidth;
+            ToolbarViewportHeight = toolbarViewportHeight;
+        }
+
+        public float CanvasWidth { get; }
+        public float CanvasHeight { get; }
+        public float ToolbarLeft => 0f;
+        public float ToolbarViewportWidth { get; }
+        public float ToolbarViewportHeight { get; }
+        public float VisibleCanvasCenterOffsetX =>
+            ToolbarViewportWidth * 0.5f;
+    }
+
     public static class CustomCourtWorkflowLayoutRules
     {
-        public static float VisibleCanvasHeight(float viewportHeight,
-            float rootOffsetY, float canvasOffsetY)
+        public static CustomCourtWorkflowLayout Resolve(float contentWidth,
+            float viewportHeight, float toolbarWidth, float toolbarScale,
+            float scrollbarWidth)
         {
-            return Math.Max(1f, viewportHeight - 2f * Math.Abs(
-                rootOffsetY + canvasOffsetY));
+            float canvasWidth = Math.Max(1f, contentWidth);
+            float canvasHeight = Math.Max(1f, viewportHeight);
+            float toolbarViewportWidth = Math.Max(1f,
+                toolbarWidth * toolbarScale + scrollbarWidth);
+            return new CustomCourtWorkflowLayout(canvasWidth, canvasHeight,
+                toolbarViewportWidth, canvasHeight);
         }
     }
 
