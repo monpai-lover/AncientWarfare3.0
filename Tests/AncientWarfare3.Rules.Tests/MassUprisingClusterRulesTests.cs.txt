@@ -11,6 +11,7 @@ internal static class MassUprisingClusterRulesTests
         ConnectedCultureClusters();
         DeterministicClusterKeys();
         PhaseTransitions();
+        CivilWarAdmissionIsIdempotent();
     }
 
     private static void Thresholds()
@@ -94,6 +95,22 @@ internal static class MassUprisingClusterRulesTests
                 allTargetsOwned: true, allClustersComplete: true,
                 survivorCount: 1, originAlive: false),
             "unification completes after the origin falls");
+    }
+
+    private static void CivilWarAdmissionIsIdempotent()
+    {
+        Equal(true, MassUprisingClusterRules.ShouldDeclareCivilWarPair(
+                MassUprisingPhase.CivilWar,
+                MassUprisingPhase.CivilWar, false),
+            "a new civil-war pair is eligible");
+        Equal(false, MassUprisingClusterRules.ShouldDeclareCivilWarPair(
+                MassUprisingPhase.CivilWar,
+                MassUprisingPhase.CivilWar, true),
+            "an existing civil-war pair is not declared again");
+        Equal(false, MassUprisingClusterRules.ShouldDeclareCivilWarPair(
+                MassUprisingPhase.ClusterComplete,
+                MassUprisingPhase.CivilWar, false),
+            "a non-civil phase cannot open a civil war");
     }
 
     private static void Equal<T>(T expected, T actual, string message)

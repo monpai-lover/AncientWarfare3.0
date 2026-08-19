@@ -166,5 +166,14 @@ namespace AncientWarfare3.core.lineage
                 return MassUprisingPhase.Completed;
             return pCurrent;
         }
+
+        internal static bool ShouldDeclareCivilWarPair(
+            MassUprisingPhase pAttackerPhase,
+            MassUprisingPhase pDefenderPhase, bool pAlreadyAtWar)
+        {
+            return !pAlreadyAtWar &&
+                   pAttackerPhase == MassUprisingPhase.CivilWar &&
+                   pDefenderPhase == MassUprisingPhase.CivilWar;
+        }
     }
 }
