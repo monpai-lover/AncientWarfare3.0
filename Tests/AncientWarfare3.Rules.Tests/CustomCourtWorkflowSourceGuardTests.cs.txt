@@ -109,27 +109,28 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "_toolScrollRect.content = _toolPanel;");
         Contains(window, "_toolScrollRect.vertical = true;");
         Contains(window, "_toolScrollRect.horizontal = false;");
-        Contains(window, "ToolbarTopOffset");
-        Contains(window, "ToolbarBottomInset");
-        Contains(window,
-            "viewportHeight - ToolbarTopOffset - ToolbarBottomInset");
         Contains(window, "Scrollbar CreateToolbarScrollbar(");
         Contains(window, "scrollbar.handleRect = handle;");
         Contains(window, "_toolScrollRect.verticalScrollbar = scrollbar;");
         Contains(window,
             "ScrollRect.ScrollbarVisibility.Permanent");
         Contains(window, "_toolPanel.localScale = Vector3.one * ToolbarScale;");
-        Contains(window,
-            "_toolPanel.anchoredPosition = new Vector2(-ToolbarScrollbarWidth / ToolbarScale, 0f)");
         Contains(window, "CourtWorkflowVacancyCard.Create");
-        Contains(window, "_toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f)");
-        Contains(window, "_toolViewport.anchoredPosition = new Vector2(-864f, 46f)");
-        Contains(window, "_toolViewport.SetAsLastSibling()");
-        Contains(window, "_canvasRect.anchorMin = _canvasRect.anchorMax");
-        Contains(window, "new Vector2(0.5f, 0.5f)");
+        Contains(window, "CustomCourtWorkflowLayoutRules.Resolve(");
         Contains(window,
-            "CustomCourtWorkflowLayoutRules.VisibleCanvasHeight(");
-        Contains(window, "_canvasRect.anchoredPosition = new Vector2(-480f, 50f)");
+            "_toolViewport.anchorMin = new Vector2(0f, 0f)");
+        Contains(window,
+            "_toolViewport.anchorMax = new Vector2(0f, 1f)");
+        Contains(window, "_toolViewport.anchoredPosition = Vector2.zero");
+        Contains(window, "_toolViewport.SetAsLastSibling()");
+        Contains(window, "_canvasRect.anchorMin = Vector2.zero");
+        Contains(window, "_canvasRect.anchorMax = Vector2.one");
+        Contains(window, "_canvasRect.offsetMin = Vector2.zero");
+        Contains(window, "_canvasRect.offsetMax = Vector2.zero");
+        Contains(window, "ResolveWholePresetProfile(");
+        Contains(window, "CustomCourtWholePresetRules.ResolveProfile(");
+        DoesNotContain(window, "new Vector2(-864f, 46f)");
+        DoesNotContain(window, "new Vector2(-480f, 50f)");
         Contains(window, "CanvasCenterLayout()");
         Contains(window, "_workspaceRect.InverseTransformPoint(");
         Contains(canvas, "CourtWorkflowCanvas");
