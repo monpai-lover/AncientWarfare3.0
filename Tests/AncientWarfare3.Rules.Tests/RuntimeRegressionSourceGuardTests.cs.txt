@@ -78,7 +78,8 @@ internal static class RuntimeRegressionSourceGuardTests
     private static string Read(params string[] pParts)
     {
         return File.ReadAllText(Path.Combine(
-            new[] { Directory.GetCurrentDirectory() }.Concat(pParts).ToArray()));
+                new[] { Directory.GetCurrentDirectory() }.Concat(pParts).ToArray()))
+            .Replace("\r\n", "\n");
     }
 
     private static void Assert(bool pCondition, string pMessage)
