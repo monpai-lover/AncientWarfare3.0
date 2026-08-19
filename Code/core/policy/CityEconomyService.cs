@@ -95,18 +95,21 @@ namespace AncientWarfare3.core.policy
                     policyEffects.AdministrationMultiplier;
                 float workshopTechMultiplier = 1f +
                     policyEffects.ExtraWorkshopAttempts * 0.05f;
-                CustomCourtEffectModifier customTax =
-                    CustomCourtRuntimeEffectService.GetCityModifier(pKingdom,
-                        CustomCourtEffectId.TaxIncome);
-                CustomCourtEffectModifier customFood =
-                    CustomCourtRuntimeEffectService.GetCityModifier(pKingdom,
-                        CustomCourtEffectId.FoodProduction);
-                CustomCourtEffectModifier customOrder =
-                    CustomCourtRuntimeEffectService.GetCityModifier(pKingdom,
-                        CustomCourtEffectId.CivilOrder);
+                Dictionary<long, CustomCourtCityEffectModifiers>
+                    cityEffectModifiers =
+                    CustomCourtRuntimeEffectService.BuildCityModifiers(
+                        pKingdom, cities);
                 var sums = new CityEconomyContributionSums { year = year };
                 foreach (City city in cities)
                 {
+                    cityEffectModifiers.TryGetValue(city.id,
+                        out CustomCourtCityEffectModifiers customEffects);
+                    CustomCourtEffectModifier customTax = customEffects?.Tax ??
+                        CustomCourtEffectModifier.Identity;
+                    CustomCourtEffectModifier customFood =
+                        customEffects?.Food ?? CustomCourtEffectModifier.Identity;
+                    CustomCourtEffectModifier customOrder =
+                        customEffects?.Order ?? CustomCourtEffectModifier.Identity;
                     bool providesToRealm =
                         OccupiedCitySupplyService.CanProvideToRealm(
                             city, pKingdom);
@@ -404,6 +407,17 @@ namespace AncientWarfare3.core.policy
             {
             }
             return state;
+        }
+
+        public static bool IsFrontierMilitary(Kingdom pKingdom, City pCity)
+        {
+            if (pKingdom?.data == null || pCity?.data == null ||
+                pCity.kingdom != pKingdom || pCity.isRekt()) return false;
+            CityEconomyStoredState state = ReadStoredState(pCity.id);
+            return state.has_record && state.kingdom_id == pKingdom.id &&
+                   string.Equals(state.role,
+                       CityEconomyRole.FrontierMilitary.ToString(),
+                       StringComparison.Ordinal);
         }
 
         private static Dictionary<long, CityEconomyStoredState> ReadStoredStatesForCities(List<City> pCities)

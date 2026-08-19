@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using AncientWarfare3.core.court;
 
@@ -69,6 +70,8 @@ internal static class CustomLocalGovernmentRulesTests
             "modified legacy template is preserved");
         Equal(11, Find(customized, "minzhou").Offices[0].Grade,
             "modified office properties are not overwritten");
+
+        RuntimeUsesCityFacts();
     }
 
     private static CustomCourtTemplate LegacyTemplate(bool includeMilitary)
@@ -131,6 +134,39 @@ internal static class CustomLocalGovernmentRulesTests
     {
         True(template.Offices.Any(office => office.Id == id),
             "missing office " + id);
+    }
+
+    private static void RuntimeUsesCityFacts()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string runtime = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "CustomCourtRuntime.cs"));
+        string cityFacts = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "CustomLocalGovernmentCityService.cs"));
+        string economy = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "policy", "CityEconomyService.cs"));
+        string effects = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "CustomCourtRuntimeEffectService.cs"));
+        True(runtime.Contains(
+                "CustomLocalGovernmentCityService.HasForeignLandBorder("),
+            "runtime reads actual city land borders");
+        True(runtime.Contains("CityEconomyService.IsFrontierMilitary("),
+            "runtime reads the city economy role");
+        True(!runtime.Contains(
+                "MilitaryGovernorateStore.TryGetRuntimeProjection("),
+            "realm-wide military governorate state is not a city fact");
+        True(cityFacts.Contains("pCity.neighbours_kingdoms"),
+            "border adapter stays bounded to city neighbours");
+        True(economy.Contains("public static bool IsFrontierMilitary("),
+            "economy exposes the stored frontier role");
+        True(effects.Contains("BuildCityModifiers("),
+            "local office effects are aggregated in one kingdom batch");
+        True(effects.Contains("row.city_id != pCity.id"),
+            "local incumbents are scoped to their city");
+        True(effects.Contains("snapshot.LocalTemplates"),
+            "runtime effects inspect local templates inside the custom court");
+        True(economy.Contains("cityEffectModifiers.TryGetValue("),
+            "city economy consumes per-city local office modifiers");
     }
 
     private static void True(bool actual, string message)

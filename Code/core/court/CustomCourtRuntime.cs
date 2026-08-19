@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.court
 {
@@ -70,8 +71,13 @@ namespace AncientWarfare3.core.court
                 out string persistedId, string.Empty);
             pCity.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_MANUAL,
                 out bool manual, false);
-            bool military = MilitaryGovernorateStore.TryGetRuntimeProjection(
-                pKingdom, out _, out _);
+            CustomLocalGovernmentDefaultKind automaticKind =
+                CustomLocalGovernmentRules.SelectDefault(manual,
+                    CustomLocalGovernmentCityService.HasForeignLandBorder(
+                        pCity, pKingdom),
+                    CityEconomyService.IsFrontierMilitary(pKingdom, pCity));
+            bool military = automaticKind ==
+                CustomLocalGovernmentDefaultKind.Military;
             string resolvedId = CustomLocalCourtTemplateRules.ResolveTemplateId(
                 snapshot.LocalTemplates, persistedId, manual, military);
             pTemplate = snapshot.LocalTemplates.FirstOrDefault(template =>
