@@ -110,6 +110,14 @@ namespace AncientWarfare3.core.court
             if (!templates.Any(template => template != null &&
                     string.Equals(template.Id, pTemplateId,
                         System.StringComparison.Ordinal))) return false;
+            if (!TryGetLocalTemplate(pKingdom, pCity,
+                    out CustomLocalCourtTemplate current) || current == null)
+                return false;
+            CustomLocalCourtTemplate target = templates.FirstOrDefault(template =>
+                template != null && template.Id == pTemplateId);
+            if (target == null || !CourtTemplateOfficerMigrationService
+                    .TryMigrateLocal(pKingdom, pCity, current, target))
+                return false;
             pCity.data.set(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
                 pTemplateId);
             pCity.data.set(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_MANUAL,
@@ -208,6 +216,13 @@ namespace AncientWarfare3.core.court
             if (!application.TryBuildInstance(KingdomKey(kingdom), template,
                     current, incumbents, out next) || !Instances.Save(next))
                 return false;
+            if (!CourtTemplateOfficerMigrationService.TryMigrateCentral(
+                    kingdom, current?.ResolvedSnapshot, next.ResolvedSnapshot))
+            {
+                if (current == null) Instances.Remove(KingdomKey(kingdom));
+                else Instances.Save(current);
+                return false;
+            }
             RegionalGovernmentAggregationService.Invalidate(kingdom);
             try
             {

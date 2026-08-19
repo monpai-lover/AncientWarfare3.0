@@ -16,6 +16,10 @@
     <Compile Include="CustomCourtTemplateRulesTests.cs.txt" />
     <Compile Include="CustomCourtTemplateCodecTests.cs.txt" />
     <Compile Include="CustomLocalGovernmentRulesTests.cs.txt" />
+    <Compile Include="MilitaryPrefectureCandidateRulesTests.cs.txt" />
+    <Compile Include="CourtTemplateOfficerMigrationRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CourtTemplateOfficerMigrationRules.cs" Link="Production\CourtTemplateOfficerMigrationRules.cs" />
+    <Compile Include="..\..\Code\core\court\MilitaryPrefectureCandidateRules.cs" Link="Production\MilitaryPrefectureCandidateRules.cs" />
     <Compile Include="RegionalGovernmentRulesTests.cs.txt" />
     <Compile Include="RegionalGovernmentTemplateRulesTests.cs.txt" />
     <Compile Include="RegionalGovernmentCourtRulesTests.cs.txt" />

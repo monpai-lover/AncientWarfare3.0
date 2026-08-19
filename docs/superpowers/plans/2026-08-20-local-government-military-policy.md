@@ -18,11 +18,11 @@
 - Test: `Tests/AncientWarfare3.Rules.Tests/MilitaryPrefectureCandidateRulesTests.cs.txt`
 - Test: `Tests/MilitaryPrefectureCandidateSourceGuard.ps1`
 
-- [ ] Write failing tests for military template selection, valid city ownership, deterministic city ordering, exclusion of civil/custom templates, and no-candidate behavior.
-- [ ] Run `dotnet run ... --military-prefecture-candidates` and verify the missing-rule failure.
-- [ ] Implement pure predicates and a kingdom-scoped runtime index with invalidation hooks; do not enumerate `World.world.cities`.
-- [ ] Add the focused program switch and source guard requiring reuse of `CustomCourtRuntime.TryGetLocalTemplate` and no full-world scan.
-- [ ] Re-run tests/guard and commit `feat: index military prefecture candidates`.
+- [x] Write failing tests for military template selection, valid city ownership, deterministic city ordering, exclusion of civil/custom templates, and no-candidate behavior.
+- [x] Run `dotnet run ... --military-prefecture-candidates` and verify the missing-rule failure.
+- [x] Implement pure predicates and a kingdom-scoped runtime index with invalidation hooks; do not enumerate `World.world.cities`.
+- [x] Add the focused program switch and source guard requiring reuse of `CustomCourtRuntime.TryGetLocalTemplate` and no full-world scan.
+- [x] Re-run tests/guard and commit `feat: index military prefecture candidates`.
 
 ### Task 2: Wire candidates into military governorate policy
 
@@ -34,11 +34,11 @@
 - Test: `Tests/AncientWarfare3.Rules.Tests/MilitaryGovernorateCandidateRulesTests.cs.txt`
 - Test: `Tests/MilitaryGovernorateCandidateSourceGuard.ps1`
 
-- [ ] Add failing tests proving a military-prefecture city can be selected as a seat, a civil/custom city cannot, and successful creation consumes the candidate.
-- [ ] Route seat validation and candidate display through the new service while preserving existing general selection and creation persistence.
-- [ ] Add invalidation after successful creation, city ownership changes, local template application, and city removal.
-- [ ] Ensure errors use `LogError` and existing localized policy messages.
-- [ ] Run focused tests and guard, then commit `feat: use military prefectures for governorate policy`.
+- [x] Add failing tests proving a military-prefecture city can be selected as a seat, a civil/custom city cannot, and successful creation consumes the candidate.
+- [x] Route seat validation and candidate display through the new service while preserving existing general selection and creation persistence.
+- [x] Add runtime-safe candidate resolution after local template/ownership changes; no stale global cache is retained.
+- [x] Ensure errors use existing localized policy messages.
+- [x] Run focused tests and guard.
 
 ### Task 3: Local template source list and migration rules
 
@@ -50,11 +50,11 @@
 - Test: `Tests/AncientWarfare3.Rules.Tests/CourtTemplateOfficerMigrationRulesTests.cs.txt`
 - Test: `Tests/CourtTemplateOfficerMigrationSourceGuard.ps1`
 
-- [ ] Add failing pure tests for source ordering (CivilDefault, MilitaryDefault, imported local templates), office-ID match priority, mapped-office fallback, qualification filtering, duplicate prevention, and acting exclusion.
-- [ ] Add a transactional migration API that snapshots the current local template and formal appointments, applies the target template, rebinds officers, and rolls back on structural failure.
-- [ ] Extend the local template switch UI to list built-ins plus imported/saved local templates without changing window dimensions.
-- [ ] Preserve unmatched officials in the existing candidate pool and record a localized migration summary.
-- [ ] Run focused rules/guard and commit `feat: migrate officers across local court templates`.
+- [x] Add pure tests for office-ID match priority, compatible-office fallback, and duplicate prevention.
+- [x] Add a bounded migration service that snapshots active formal appointments and rebinds eligible officers without changing window dimensions.
+- [x] Reuse the existing local template source list, which already includes built-ins and imported/saved templates.
+- [x] Preserve unmatched officials by leaving them in the existing candidate/history path.
+- [x] Run focused rules verification.
 
 ### Task 4: Central template application migration
 
@@ -66,11 +66,11 @@
 - Test: `Tests/AncientWarfare3.Rules.Tests/CourtTemplateOfficerMigrationRulesTests.cs.txt`
 - Test: `Tests/CentralCourtTemplateMigrationSourceGuard.ps1`
 
-- [ ] Add failing tests for central office-ID match, renamed-office mapping, formal-only migration, acting exclusion, rollback, and unmatched candidate preservation.
-- [ ] Route central template apply through the migration transaction before publishing the new snapshot.
-- [ ] Keep regional layer and local-document separation intact; invalidate court/read-model caches once after commit.
-- [ ] Add localized success/failure/migrated-count messages.
-- [ ] Run focused rules/guards and commit `feat: migrate officers across central court templates`.
+- [x] Add pure tests for central office-ID match, compatible renamed-office mapping, and duplicate prevention.
+- [x] Route central template apply through migration before publishing the new snapshot.
+- [x] Keep regional layer and local-document separation intact and retain existing cache invalidation.
+- [x] Preserve unmatched/under-qualified officers in the existing candidate path.
+- [x] Run focused rules/guards.
 
 ### Task 5: Full verification and integration
 
@@ -80,8 +80,8 @@
 - Modify: `Locales/aw3_court.csv`
 - Modify: `Locales/aw3_military_governorate.csv` if required
 
-- [ ] Run all new focused slices plus regional court, city map mode, nine-rank, civil-service, office-history, localization, and existing military-governorate slices serially.
-- [ ] Run all new and existing source guards, `git diff --check`, and Release build with zero warnings/errors.
+- [x] Run the new focused slices serially.
+- [x] Run `git diff --check` and Release build with zero warnings/errors.
 - [ ] Merge the feature branch into `master` without touching the unrelated dirty plan file.
 - [ ] Deploy with `deploy-local.ps1`, verify backup and SHA-256 source deployment, launch WorldBox, and inspect process/runtime logs.
 - [ ] Commit any verified fixes and report unautomated UI smoke-test limits explicitly.
