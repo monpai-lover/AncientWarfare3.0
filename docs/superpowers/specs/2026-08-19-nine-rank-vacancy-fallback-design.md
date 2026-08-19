@@ -26,9 +26,7 @@ vacancy from being filled:
 
 - current rank below the office requirement;
 - insufficient service at the expected office grade;
-- missing or insufficient evaluation history;
-- an examination or civil-service qualification that is insufficient for the
-  strict appointment tier.
+- missing or insufficient evaluation history.
 
 The fallback never bypasses basic actor and office validity:
 
@@ -39,6 +37,8 @@ The fallback never bypasses basic actor and office validity:
 - mutually exclusive or conflicting offices remain excluded;
 - sex, government, institution, royal-guard, education, and other hard office
   restrictions that are unrelated to career progression remain authoritative;
+- the examination, local qualification, legacy credential, or other formal
+  entry requirement for that office remains authoritative;
 - the office must be genuinely vacant when fallback selection is evaluated.
 
 ## Selection and Rank Grant
@@ -69,11 +69,11 @@ already occupied office cannot use this exception.
 
 ## Failure Handling
 
-If no actor passes the hard validity rules, the office remains vacant. The
-system records no partial career mutation and retries through the existing
-reconciliation schedule. Fallback activation should use focused diagnostic
-logging so actual staffing exceptions can be distinguished from normal strict
-appointments without producing per-frame log noise.
+If no actor passes the hard validity and formal-entry rules, the office remains
+vacant. The system records no partial career mutation and retries through the
+existing reconciliation schedule. Fallback activation should use focused
+diagnostic logging so actual staffing exceptions can be distinguished from
+normal strict appointments without producing per-frame log noise.
 
 ## Compatibility
 
@@ -91,7 +91,7 @@ Tests must prove:
 - an otherwise-valid candidate fills a vacancy when all strict candidates fail;
 - fallback grants the local or central office's correct rank floor;
 - an already superior rank is preserved;
-- hard-invalid actors remain ineligible;
+- hard-invalid and formally unqualified actors remain ineligible;
 - failed appointment does not mutate rank;
 - multiple vacancies are filled deterministically without assigning one actor
   to incompatible offices;
