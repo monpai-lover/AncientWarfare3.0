@@ -1534,10 +1534,12 @@ namespace AncientWarfare3.core.lineage
                         towerState.TowerBuildingId);
                 }
                 catch { }
-                if (building?.data == null) continue;
+                if (building?.data == null || building.isRekt() ||
+                    building.isRemoved() || building.isOnRemove() ||
+                    building.current_tile?.zone == null) continue;
                 try
                 {
-                    World.world.buildings.removeObject(building);
+                    building.removeBuildingFinal();
                 }
                 catch (Exception e)
                 {

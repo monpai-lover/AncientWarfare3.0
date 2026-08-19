@@ -67,6 +67,8 @@ namespace AncientWarfare3.core.performance
             ReigningRoyalLineageIndex.Reset();
             SuccessionDisputePersistenceService.Reset();
             ActorDeathArchiveService.Reset();
+            PeasantRebelBanditStrongholdPopulationService.Clear();
+            BanditStrongholdCityDisposalService.Clear();
         }
 
         private static void ProcessCycle(AWAuthorityCycleGate pGate,
@@ -139,6 +141,9 @@ namespace AncientWarfare3.core.performance
 
         private static void DrainDeferredAuthorityWork()
         {
+            PeasantRebelBanditStrongholdPopulationService.
+                ProcessAuthorityCycle();
+            BanditStrongholdCityDisposalService.ProcessAuthorityCycle();
             int itemLimit = DeferredRuntimeWorkRules.
                 ResolveItemsPerAuthorityFrame(
                 DeferredRuntimeWorkService.PendingCount);

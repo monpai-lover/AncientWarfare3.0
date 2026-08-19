@@ -82,13 +82,53 @@ internal static class CityManagerMutationScopeTests
                 "BanditStrongholdCityDisposalService.Schedule(",
                 StringComparison.Ordinal),
             "stronghold lifecycle schedules physical city disposal");
+        string towerRemoval = ExtractSection(stronghold,
+            "private static bool RemoveStrongholdTowers(",
+            "private static bool RestoreWalls(");
+        False(towerRemoval.Contains(
+                "World.world.buildings.removeObject(",
+                StringComparison.Ordinal),
+            "stronghold tower removal cannot bypass the native building cleanup lifecycle");
+        True(towerRemoval.Contains("building.removeBuildingFinal()",
+                 StringComparison.Ordinal),
+            "stronghold tower removal clears tiles and zone membership before disposal");
+        True(towerRemoval.Contains("building.isRekt()",
+                 StringComparison.Ordinal) &&
+             towerRemoval.Contains("building.isRemoved()",
+                 StringComparison.Ordinal) &&
+             towerRemoval.Contains("building.isOnRemove()",
+                 StringComparison.Ordinal),
+            "stronghold tower removal is idempotent for invalid or already-cleaned buildings");
 
         string authority = File.ReadAllText(Path.Combine(root, "Code",
             "core", "performance", "AWAuthorityCycleService.cs"));
-        True(authority.Contains(
-                "BanditStrongholdCityDisposalService.ProcessAuthorityCycle()",
-                StringComparison.Ordinal),
-            "the authority boundary drains pending stronghold city disposal");
+        string authorityReset = ExtractSection(authority,
+            "public static void Reset()",
+            "private static void ProcessCycle(");
+        True(CountOccurrences(authorityReset,
+                 "PeasantRebelBanditStrongholdPopulationService.Clear()") == 1,
+            "world reset clears pending stronghold population settlement exactly once");
+        True(CountOccurrences(authorityReset,
+                 "BanditStrongholdCityDisposalService.Clear()") == 1,
+            "world reset clears pending stronghold city disposal exactly once");
+        string deferredAuthority = ExtractSection(authority,
+            "private static void DrainDeferredAuthorityWork()",
+            "private static void FlushPendingWarParticipantSources()");
+        string compactDeferredAuthority = RemoveWhitespace(
+            deferredAuthority);
+        True(CountOccurrences(compactDeferredAuthority,
+                 "PeasantRebelBanditStrongholdPopulationService." +
+                 "ProcessAuthorityCycle()") == 1,
+            "the bounded authority stage settles empty strongholds exactly once");
+        True(CountOccurrences(compactDeferredAuthority,
+                 "BanditStrongholdCityDisposalService.ProcessAuthorityCycle()") == 1,
+            "the bounded authority stage drains stronghold city disposal exactly once");
+        True(compactDeferredAuthority.Contains(
+                 "DeferredRuntimeWorkRules.ResolveItemsPerAuthorityFrame(",
+                 StringComparison.Ordinal) &&
+             compactDeferredAuthority.Contains("DeferredRuntimeWorkService.DrainFrame(",
+                 StringComparison.Ordinal),
+            "stronghold settlement remains inside the existing bounded deferred authority stage");
     }
 
     private static void True(bool condition, string message)
@@ -99,5 +139,38 @@ internal static class CityManagerMutationScopeTests
     private static void False(bool condition, string message)
     {
         True(!condition, message);
+    }
+
+    private static string ExtractSection(string source, string startMarker,
+        string endMarker)
+    {
+        int start = source.IndexOf(startMarker, StringComparison.Ordinal);
+        if (start < 0) return string.Empty;
+        int end = source.IndexOf(endMarker, start + startMarker.Length,
+            StringComparison.Ordinal);
+        return end < 0 ? source.Substring(start) :
+            source.Substring(start, end - start);
+    }
+
+    private static int CountOccurrences(string source, string value)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = source.IndexOf(value, index,
+                   StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
+    }
+
+    private static string RemoveWhitespace(string source)
+    {
+        return source.Replace("\r", string.Empty,
+                StringComparison.Ordinal)
+            .Replace("\n", string.Empty, StringComparison.Ordinal)
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace("\t", string.Empty, StringComparison.Ordinal);
     }
 }
