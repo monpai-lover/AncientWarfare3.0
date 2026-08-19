@@ -413,6 +413,13 @@ namespace AncientWarfare3.ui.windows
         private void UpdateLocalSummary(Kingdom pKingdom,
             LocalCourtReadModel pLocal)
         {
+            string bannerId = "";
+            try { bannerId = pKingdom.getActorAsset()?.banner_id ?? ""; }
+            catch { }
+            KingdomFlagBuilder.Build(bannerId, pKingdom.data.banner_icon_id,
+                pKingdom.data.banner_background_id,
+                HistoryColors.FromKingdom(pKingdom), pKingdom.data.color_id,
+                _summaryFlagBackground, _summaryFlagIcon);
             UpdateCustomCourtWorkflowEntry(localMode: true);
             _summaryPrimary.color = KingdomColor(pKingdom);
             _summaryPrimary.text = pLocal.CityName + "  |  " +
@@ -443,13 +450,12 @@ namespace AncientWarfare3.ui.windows
         private void UpdateLocalTemplateOptions(Kingdom pKingdom,
             LocalCourtReadModel pLocal)
         {
-            CustomCourtTemplate snapshot;
-            bool available = CustomCourtRuntime.TryGetSnapshot(pKingdom,
-                out snapshot) && snapshot.LocalTemplates != null &&
-                snapshot.LocalTemplates.Count > 0;
+            IReadOnlyList<CustomLocalCourtTemplate> templates =
+                CustomCourtRuntime.ResolvedLocalTemplates(pKingdom);
+            bool available = templates != null && templates.Count > 0;
             _localTemplateDropdown.gameObject.SetActive(available);
             if (!available) return;
-            _localTemplateDropdown.SetOptions(snapshot.LocalTemplates
+            _localTemplateDropdown.SetOptions(templates
                 .Where(template => template != null)
                 .Take(CustomLocalCourtTemplateRules.MaximumTemplates)
                 .Select(template => new AWStringDropdownOption

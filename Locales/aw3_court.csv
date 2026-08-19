@@ -51,6 +51,10 @@ aw_local_office_zhoumu,州牧,Governor,州牧
 aw_local_office_changshi,长史,Chief Clerk,長史
 aw_local_office_sihu,司户,Household Officer,司戶
 aw_local_office_sicang,司仓,Granary Officer,司倉
+aw_court_office_minzhou_governor,州牧,Governor,州牧
+aw_court_office_minzhou_changshi,长史,Chief Clerk,長史
+aw_court_office_minzhou_sihu,司户,Household Officer,司戶
+aw_court_office_minzhou_sicang,司仓,Granary Officer,司倉
 aw_local_office_dudu,都督,Commander,都督
 aw_local_office_sima,司马,Marshal,司馬
 aw_local_office_canjun,参军,Staff Officer,參軍

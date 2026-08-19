@@ -26,7 +26,11 @@ namespace AncientWarfare3.core.lineage
                     pBackground.sprite = bg;
                     if (color != null) pBackground.color = color.getColorMainSecond();
                 }
-                else pBackground.enabled = false;
+                else
+                {
+                    pBackground.enabled = false;
+                    pBackground.sprite = null;
+                }
             }
 
             if (pIcon != null)
@@ -38,7 +42,11 @@ namespace AncientWarfare3.core.lineage
                     pIcon.sprite = icon;
                     if (color != null) pIcon.color = color.getColorBanner();
                 }
-                else pIcon.enabled = false;
+                else
+                {
+                    pIcon.enabled = false;
+                    pIcon.sprite = null;
+                }
             }
         }
 

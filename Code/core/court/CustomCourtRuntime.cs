@@ -66,13 +66,8 @@ namespace AncientWarfare3.core.court
             pTemplate = null;
             if (pKingdom?.data == null || pCity?.data == null ||
                 pCity.kingdom != pKingdom) return false;
-            IReadOnlyList<CustomLocalCourtTemplate> templates;
-            if (TryGetSnapshot(pKingdom, out CustomCourtTemplate snapshot) &&
-                snapshot.LocalTemplates != null &&
-                snapshot.LocalTemplates.Count > 0)
-                templates = snapshot.LocalTemplates;
-            else
-                templates = BuiltInLocalTemplates;
+            IReadOnlyList<CustomLocalCourtTemplate> templates =
+                ResolvedLocalTemplates(pKingdom);
 
             pCity.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
                 out string persistedId, string.Empty);
@@ -110,10 +105,9 @@ namespace AncientWarfare3.core.court
             if (pKingdom?.data == null || pCity?.data == null ||
                 pCity.kingdom != pKingdom || string.IsNullOrWhiteSpace(
                     pTemplateId)) return false;
-            CustomCourtTemplate snapshot;
-            if (!TryGetSnapshot(pKingdom, out snapshot) ||
-                snapshot.LocalTemplates == null ||
-                !snapshot.LocalTemplates.Any(template => template != null &&
+            IReadOnlyList<CustomLocalCourtTemplate> templates =
+                ResolvedLocalTemplates(pKingdom);
+            if (!templates.Any(template => template != null &&
                     string.Equals(template.Id, pTemplateId,
                         System.StringComparison.Ordinal))) return false;
             pCity.data.set(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
@@ -134,13 +128,33 @@ namespace AncientWarfare3.core.court
         public static string OfficeDisplayName(Kingdom kingdom,
             string officeId)
         {
-            CustomCourtTemplate snapshot;
-            if (!TryGetSnapshot(kingdom, out snapshot)) return string.Empty;
-            CustomCourtOffice office = CustomCourtTemplateRules.FindOffice(
-                snapshot, officeId);
+            CustomCourtOffice office = null;
+            if (TryGetSnapshot(kingdom, out CustomCourtTemplate snapshot))
+                office = CustomCourtTemplateRules.FindOffice(snapshot,
+                    officeId);
+            if (office == null)
+                foreach (CustomLocalCourtTemplate local in
+                         ResolvedLocalTemplates(kingdom))
+                {
+                    office = (local?.Offices ??
+                        new List<CustomCourtOffice>()).FirstOrDefault(item =>
+                        item != null && string.Equals(item.Id, officeId,
+                            System.StringComparison.Ordinal));
+                    if (office != null) break;
+                }
             return office == null
                 ? string.Empty
                 : LocalizedName(office.Name, office.Id);
+        }
+
+        internal static IReadOnlyList<CustomLocalCourtTemplate>
+            ResolvedLocalTemplates(Kingdom pKingdom)
+        {
+            if (TryGetSnapshot(pKingdom, out CustomCourtTemplate snapshot) &&
+                snapshot.LocalTemplates != null &&
+                snapshot.LocalTemplates.Count > 0)
+                return snapshot.LocalTemplates;
+            return BuiltInLocalTemplates;
         }
 
         private static string LocalizedName(CustomCourtLocalizedText value,
