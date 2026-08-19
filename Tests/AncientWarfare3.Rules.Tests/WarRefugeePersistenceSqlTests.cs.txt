@@ -20,6 +20,7 @@ internal static class WarRefugeePersistenceSqlTests
             State = WarRefugeeJourneyState.Traveling,
             DepartureYear = 40,
             ArrivalYear = 43,
+            NextRetryMonth = 45,
             ReservedCapacity = 3,
             SafeMonths = 4,
             LastAssimilationYear = 39
@@ -35,6 +36,8 @@ internal static class WarRefugeePersistenceSqlTests
         Equal(WarRefugeeJourneyState.Arrived, loaded.State,
             "latest state wins");
         Equal(2, loaded.ReservedCapacity, "capacity round trips");
+        Equal(45, loaded.NextRetryMonth,
+            "destination retry month is independent from arrival month");
 
         True(WarRefugeePersistence.InsertMember(db,
             new WarRefugeeMemberSnapshot
@@ -57,6 +60,26 @@ internal static class WarRefugeePersistenceSqlTests
         Equal(2, WarRefugeePersistence.CountActiveMembers(db, 10),
             "active member count reconstructs reservation");
 
+        True(WarRefugeePersistence.UpsertJourney(db,
+            new WarRefugeeJourneySnapshot
+            {
+                JourneyId = 30, DestinationCityId = 22,
+                State = WarRefugeeJourneyState.Traveling,
+                ReservedCapacity = 4
+            }), "first city reservation persists");
+        True(WarRefugeePersistence.UpsertJourney(db,
+            new WarRefugeeJourneySnapshot
+            {
+                JourneyId = 31, DestinationCityId = 33,
+                State = WarRefugeeJourneyState.Returning,
+                ReservedCapacity = 3
+            }), "second city reservation persists");
+        var reservations = WarRefugeePersistence.LoadActiveReservations(db);
+        Equal(4, reservations[22],
+            "reservation snapshot aggregates the first destination");
+        Equal(3, reservations[33],
+            "reservation snapshot aggregates the second destination");
+
         True(WarRefugeePersistence.InsertOrigin(db,
             new WarRefugeeOriginSnapshot
             {
@@ -71,6 +94,90 @@ internal static class WarRefugeePersistenceSqlTests
             }), "origin archive is idempotent");
         True(WarRefugeePersistence.HasOrigin(db, 100),
             "origin archive survives settlement");
+
+        var atomic = new WarRefugeeJourneySnapshot
+        {
+            JourneyId = 20, OriginKingdomId = 1, OriginCityId = 11,
+            DestinationKingdomId = 2, DestinationCityId = 22,
+            State = WarRefugeeJourneyState.Traveling, ReservedCapacity = 2
+        };
+        True(WarRefugeePersistence.TryCreateHouseholdAtomic(db, atomic,
+            new[]
+            {
+                new WarRefugeeMemberSnapshot { JourneyId = 20, ActorId = 200,
+                    IsLeader = true, Active = true },
+                new WarRefugeeMemberSnapshot { JourneyId = 20, ActorId = 201,
+                    Active = true }
+            }), "whole household creates in one transaction");
+        False(WarRefugeePersistence.TryCreateHouseholdAtomic(db,
+            new WarRefugeeJourneySnapshot { JourneyId = 21 }, new[]
+            {
+                new WarRefugeeMemberSnapshot { JourneyId = 21, ActorId = 200,
+                    Active = true }
+            }), "duplicate actor rolls back the whole new journey");
+        False(WarRefugeePersistence.TryLoadJourney(db, 21, out _),
+            "failed atomic household leaves no partial journey");
+
+        atomic.State = WarRefugeeJourneyState.Arrived;
+        atomic.ReservedCapacity = 0;
+        True(WarRefugeePersistence.TryCommitHouseholdArrival(db, atomic,
+            new[]
+            {
+                new WarRefugeeOriginSnapshot { ActorId = 200, JourneyId = 20,
+                    OriginKingdomId = 1, OriginCityId = 11,
+                    OriginCulture = "xia", SettledYear = 41 },
+                new WarRefugeeOriginSnapshot { ActorId = 201, JourneyId = 20,
+                    OriginKingdomId = 1, OriginCityId = 11,
+                    OriginCulture = "xia", SettledYear = 41 }
+            }, pReleaseMembers: false),
+            "whole household arrival archives and transitions atomically");
+        True(WarRefugeePersistence.HasOrigin(db, 200) &&
+             WarRefugeePersistence.HasOrigin(db, 201),
+            "atomic arrival retains every household origin");
+        var afterTen = WarRefugeePersistence.LoadActiveJourneys(db, 8, 10);
+        Equal(20L, afterTen[0].JourneyId,
+            "stable cursor continues after the previously processed journey");
+
+        False(WarRefugeePersistence.TryCommitHouseholdArrival(db,
+            new WarRefugeeJourneySnapshot { JourneyId = 999,
+                State = WarRefugeeJourneyState.Arrived }, new[]
+            {
+                new WarRefugeeOriginSnapshot { ActorId = 999, JourneyId = 999,
+                    OriginKingdomId = 1, OriginCityId = 1 }
+            }, false), "missing journey rolls back arrival archive writes");
+        False(WarRefugeePersistence.HasOrigin(db, 999),
+            "failed arrival transaction leaves no partial origin archive");
+
+        False(WarRefugeePersistence.TryTransitionHouseholdTerminalAtomic(db,
+            999, WarRefugeeJourneyState.Cancelled),
+            "missing journey rejects terminal ownership release");
+        True(WarRefugeePersistence.TryTransitionHouseholdTerminalAtomic(db,
+            20, WarRefugeeJourneyState.Settled),
+            "settlement atomically closes journey and member ownership");
+        Equal(0, WarRefugeePersistence.CountActiveMembers(db, 20),
+            "terminal transaction releases all active members");
+
+        True(WarRefugeePersistence.UpsertJourney(db,
+            new WarRefugeeJourneySnapshot
+            {
+                JourneyId = 40, State = WarRefugeeJourneyState.Settled
+            }), "terminal journey persists for stale ownership test");
+        True(WarRefugeePersistence.InsertMember(db,
+            new WarRefugeeMemberSnapshot
+            {
+                JourneyId = 40, ActorId = 400, Active = true
+            }), "stale active member row can be reproduced");
+        False(WarRefugeePersistence.TryGetActiveJourneyForActor(db, 400,
+                out _),
+            "terminal journey cannot provide active actor ownership");
+        True(WarRefugeePersistence.InsertMember(db,
+            new WarRefugeeMemberSnapshot
+            {
+                JourneyId = 999, ActorId = 401, Active = true
+            }), "orphan active member row can be reproduced");
+        False(WarRefugeePersistence.TryGetActiveJourneyForActor(db, 401,
+                out _),
+            "missing journey cannot provide active actor ownership");
     }
 
     private static void True(bool value, string message)

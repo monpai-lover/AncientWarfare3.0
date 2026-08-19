@@ -10,6 +10,16 @@ internal static class WarRefugeeRulesTests
         MilitaryAndAuthorityRolesAreExcluded();
         DestinationsAreSafeAndStableRanked();
         JourneysAlwaysMakeBoundedProgress();
+        LeaderArrivalRequiresWholeHousehold();
+        ReservationAccountingReleasesOnlyActiveCapacity();
+        PostArrivalLifecycleHasExplicitTerminalDecision();
+        FullyXiaizedHostsDisableNewAssimilation();
+        OnlyHostileAttackMissionsThreatenCities();
+        CapacityUsesPopulationAndOwnReservation();
+        PhysicalArrivalAndLeaderFallbackAreExplicit();
+        ForeignAdmissionIsDeterministic();
+        DestroyedOriginsEventuallySettle();
+        ReturnPreferenceUsesHouseholdFacts();
         ReturnRequiresTwelveSafeMonths();
         AssimilationHonoursGraceAndAnnualCadence();
     }
@@ -97,6 +107,125 @@ internal static class WarRefugeeRulesTests
             "twelve continuous safe months opens decision");
         False(WarRefugeeRules.CanEvaluateReturn(false, 120),
             "renewed threat closes the return gate");
+    }
+
+    private static void LeaderArrivalRequiresWholeHousehold()
+    {
+        False(WarRefugeeRules.IsHouseholdArrived(2, 1),
+            "one member joining cannot arrive the whole household");
+        True(WarRefugeeRules.IsHouseholdArrived(2, 2),
+            "household arrives only after every active member joins");
+        True(WarRefugeeRules.ShouldAdvanceAfterNoProgress(3),
+            "three failed physical progress attempts advance to a future month");
+        False(WarRefugeeRules.ShouldAdvanceAfterNoProgress(2),
+            "fewer than three failed attempts remain physical");
+    }
+
+    private static void ReservationAccountingReleasesOnlyActiveCapacity()
+    {
+        Equal(7, WarRefugeeRules.AvailableCapacityAfterReservations(10, 3),
+            "active reservations reduce readable capacity");
+        Equal(10, WarRefugeeRules.AvailableCapacityAfterReservations(10, -2),
+            "negative reservation totals cannot increase capacity");
+        True(WarRefugeeRules.ShouldReleaseReservation(WarRefugeeJourneyState.Arrived),
+            "arrival releases the destination reservation");
+        True(WarRefugeeRules.ShouldReleaseReservation(WarRefugeeJourneyState.Cancelled),
+            "cancellation releases the destination reservation");
+        False(WarRefugeeRules.ShouldReleaseReservation(WarRefugeeJourneyState.Traveling),
+            "active travel retains its reservation");
+    }
+
+    private static void PostArrivalLifecycleHasExplicitTerminalDecision()
+    {
+        Equal((long)WarRefugeeJourneyState.Returning,
+            (long)WarRefugeeRules.PostArrivalDecision(true, 12, true, false),
+            "safe origin and return preference create a return journey");
+        Equal((long)WarRefugeeJourneyState.Settled,
+            (long)WarRefugeeRules.PostArrivalDecision(true, 12, false, true),
+            "settlement preference ends active refugee ownership");
+        Equal((long)WarRefugeeJourneyState.Arrived,
+            (long)WarRefugeeRules.PostArrivalDecision(false, 12, true, false),
+            "unsafe origin keeps an arrived household in place");
+    }
+
+    private static void FullyXiaizedHostsDisableNewAssimilation()
+    {
+        True(WarRefugeeRules.IsHostNonXia(native: false, fullyXiaized: false),
+            "ordinary foreign host permits assimilation");
+        False(WarRefugeeRules.IsHostNonXia(native: false, fullyXiaized: true),
+            "fully Xiaized host disables new assimilation");
+        False(WarRefugeeRules.IsHostNonXia(native: true, fullyXiaized: false),
+            "native host disables new assimilation");
+    }
+
+    private static void OnlyHostileAttackMissionsThreatenCities()
+    {
+        True(WarRefugeeRules.IsThreateningMission(true, true, 5, 5),
+            "hostile attack mission threatens its exact target city");
+        False(WarRefugeeRules.IsThreateningMission(false, true, 5, 5),
+            "defend/retreat/front-hold missions are ignored");
+        False(WarRefugeeRules.IsThreateningMission(true, false, 5, 5),
+            "friendly attack mission is ignored");
+        False(WarRefugeeRules.IsThreateningMission(true, true, 5, 6),
+            "other target cities are ignored");
+    }
+
+    private static void CapacityUsesPopulationAndOwnReservation()
+    {
+        Equal(7, WarRefugeeRules.ReadableSpareCapacity(20, 10, 5, 2),
+            "population and other active reservations reduce capacity");
+        False(WarRefugeeRules.CanReceive(new WarRefugeeDestinationFacts(
+            8, true, false, false, false, 20, 20, 20,
+            WarRefugeeRelation.Domestic, 2, pFamine: true), 1),
+            "famine blocks admission");
+    }
+
+    private static void PhysicalArrivalAndLeaderFallbackAreExplicit()
+    {
+        True(WarRefugeeRules.HasLeaderReachedDestination(9, 9),
+            "leader inside arrival radius triggers household commit");
+        False(WarRefugeeRules.HasLeaderReachedDestination(25, 9),
+            "distant leader cannot commit arrival");
+        True(WarRefugeeRules.ShouldUseAbstractWithoutAdultLeader(
+            activeMembers: 2, livingAdults: 0),
+            "a child-only household leaves physical routing");
+    }
+
+    private static void ForeignAdmissionIsDeterministic()
+    {
+        bool first = WarRefugeeRules.AcceptForeignHost(
+            WarRefugeeRelation.Neutral, 100, 20, 3, 7, 9);
+        bool second = WarRefugeeRules.AcceptForeignHost(
+            WarRefugeeRelation.Neutral, 100, 20, 3, 7, 9);
+        Equal(first ? 1 : 0, second ? 1 : 0,
+            "foreign host acceptance is stable for the same batch");
+        True(WarRefugeeRules.AcceptForeignHost(
+            WarRefugeeRelation.ProtectedPartner, 10, 10, 2, 7, 9),
+            "protected partners accept a safe fitting household");
+    }
+
+    private static void DestroyedOriginsEventuallySettle()
+    {
+        True(WarRefugeeRules.ShouldSettleAfterOriginLoss(false, 12),
+            "destroyed origin permits permanent settlement after one year");
+        False(WarRefugeeRules.ShouldSettleAfterOriginLoss(false, 11),
+            "origin loss does not settle before the bounded grace period");
+        True(WarRefugeeRules.ShouldSettleAfterProlongedDanger(false, 60),
+            "five years of renewed danger permits permanent settlement");
+    }
+
+    private static void ReturnPreferenceUsesHouseholdFacts()
+    {
+        var homeBound = new WarRefugeeReturnFacts(true, 90, true, 40,
+            relativesAtOrigin: 3, residenceYears: 2, localMarriage: false,
+            hostBornChildren: false, establishedLivelihood: false);
+        var hostBound = new WarRefugeeReturnFacts(true, 30, true, 90,
+            relativesAtOrigin: 0, residenceYears: 12, localMarriage: true,
+            hostBornChildren: true, establishedLivelihood: true);
+        True(WarRefugeeRules.PreferReturn(homeBound, 7, 40),
+            "safe prosperous origin, relatives and short residence favor return");
+        False(WarRefugeeRules.PreferReturn(hostBound, 7, 40),
+            "host family and livelihood favor permanent settlement");
     }
 
     private static void AssimilationHonoursGraceAndAnnualCadence()

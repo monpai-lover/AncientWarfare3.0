@@ -25,6 +25,10 @@ namespace AncientWarfare3.core.lineage
         public int ReservedCapacity { get; set; }
         public int SafeMonths { get; set; }
         public int LastAssimilationYear { get; set; } = -1;
+        public int RouteRetries { get; set; }
+        public int LastDistance { get; set; } = int.MaxValue;
+        public int ConsecutiveDangerMonths { get; set; }
+        public int NextRetryMonth { get; set; } = -1;
     }
 
     public sealed class WarRefugeeMemberSnapshot
@@ -125,7 +129,7 @@ namespace AncientWarfare3.core.lineage
         public WarRefugeeDestinationFacts(long pId, bool pAlive,
             bool pWarGoal, bool pHostileArmy, bool pCombat,
             int pFood, int pHousing, int pCapacity,
-            WarRefugeeRelation pRelation, int pDistance)
+            WarRefugeeRelation pRelation, int pDistance, bool pFamine = false)
         {
             Id = pId;
             Alive = pAlive;
@@ -137,6 +141,7 @@ namespace AncientWarfare3.core.lineage
             Capacity = pCapacity;
             Relation = pRelation;
             Distance = pDistance;
+            Famine = pFamine;
         }
 
         public long Id { get; }
@@ -149,6 +154,7 @@ namespace AncientWarfare3.core.lineage
         public int Capacity { get; }
         public WarRefugeeRelation Relation { get; }
         public int Distance { get; }
+        public bool Famine { get; }
     }
 
     public readonly struct WarRefugeeLeaderCandidate
@@ -163,5 +169,33 @@ namespace AncientWarfare3.core.lineage
         public long Id { get; }
         public bool Adult { get; }
         public bool Alive { get; }
+    }
+
+    public readonly struct WarRefugeeReturnFacts
+    {
+        public WarRefugeeReturnFacts(bool originSafe, int originProsperity,
+            bool hostSafe, int hostProsperity, int relativesAtOrigin,
+            int residenceYears, bool localMarriage, bool hostBornChildren,
+            bool establishedLivelihood)
+        {
+            OriginSafe = originSafe;
+            OriginProsperity = Math.Max(0, originProsperity);
+            HostSafe = hostSafe;
+            HostProsperity = Math.Max(0, hostProsperity);
+            RelativesAtOrigin = Math.Max(0, relativesAtOrigin);
+            ResidenceYears = Math.Max(0, residenceYears);
+            LocalMarriage = localMarriage;
+            HostBornChildren = hostBornChildren;
+            EstablishedLivelihood = establishedLivelihood;
+        }
+        public bool OriginSafe { get; }
+        public int OriginProsperity { get; }
+        public bool HostSafe { get; }
+        public int HostProsperity { get; }
+        public int RelativesAtOrigin { get; }
+        public int ResidenceYears { get; }
+        public bool LocalMarriage { get; }
+        public bool HostBornChildren { get; }
+        public bool EstablishedLivelihood { get; }
     }
 }

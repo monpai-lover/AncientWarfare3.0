@@ -50,6 +50,12 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (pBaby?.data == null) return;
             if (SyntheticLevyService.SuppressPersonalHistory(pBaby)) return;
+            try { WarRefugeeService.OnActorBorn(pBaby, pParent1, pParent2); }
+            catch (System.Exception e)
+            {
+                ModClass.LogWarning("Refugee birth culture processing failed: " +
+                                    e.Message);
+            }
             try
             {
                 RulerHouseholdPregnancyService.ApplyBirthLegitimacy(pBaby,

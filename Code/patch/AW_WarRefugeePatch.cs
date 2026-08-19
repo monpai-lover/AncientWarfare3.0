@@ -16,15 +16,6 @@ namespace AncientWarfare3.patch
             WarRefugeeService.OnActorJoinedCity(__instance, pCity);
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(BabyHelper), nameof(BabyHelper.applyParentsMeta))]
-        private static void Birth_Postfix(Actor pParent1, Actor pParent2,
-            Actor pBaby)
-        {
-            if (AW3MultiplayerReplicaScope.IsApplying) return;
-            WarRefugeeService.OnActorBorn(pBaby, pParent1, pParent2);
-        }
-
         [HarmonyPriority(Priority.Last)]
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.clearWorld))]
