@@ -952,8 +952,9 @@ namespace AncientWarfare3.ui.windows
                     layout = new CustomCourtOfficeLayout
                     {
                         X = offices.Average(office => office.Layout.X),
-                        Y = Math.Max(0f, offices.Min(office =>
-                            office.Layout.Y) - 150f)
+                        Y = CustomCourtRegionalLayerLayoutRules
+                            .AboveLocalOffices(offices.Select(office =>
+                                office.Layout.Y), layout.Y)
                     };
             }
             return new CustomCourtOffice

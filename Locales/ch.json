@@ -2,6 +2,7 @@
   "aw_loyalty_local_corruption": "地方腐败",
   "aw_loyalty_local_corruption_negative": "地方腐败",
   "aw_shi_lineage_mapmode": "世家地圖",
+  "aw_shi_lineage_mapmode_description": "按城市顯示世家影響力",
   "aw_shi_mapmode_tooltip": "世家影響力地圖",
   "aw_shi_map_no_influence": "此地無世家影響",
   "aw_shi_map_dominant": "主要世家",

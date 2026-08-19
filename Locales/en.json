@@ -2,6 +2,7 @@
   "aw_loyalty_local_corruption": "Local corruption",
   "aw_loyalty_local_corruption_negative": "Local corruption",
   "aw_shi_lineage_mapmode": "Shi Lineage Map",
+  "aw_shi_lineage_mapmode_description": "Show Shi lineage influence by city",
   "aw_shi_mapmode_tooltip": "Shi lineage influence map",
   "aw_shi_map_no_influence": "No Shi influence",
   "aw_shi_map_dominant": "Dominant",

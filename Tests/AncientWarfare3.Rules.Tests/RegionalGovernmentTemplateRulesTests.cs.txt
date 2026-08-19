@@ -66,6 +66,16 @@ internal static class RegionalGovernmentTemplateRulesTests
             CustomCourtTemplateDocumentRules.CreateLocalDocument(local);
         False(localDocument.RegionalGovernmentLayer != null,
             "local document does not copy central layer");
+
+        Equal(-150f, CustomCourtRegionalLayerLayoutRules.AboveLocalOffices(
+                new[] { 0f, 160f, 160f }, 900f),
+            "dynamic regional superior stays above a governor at y zero");
+        Equal(-230f, CustomCourtRegionalLayerLayoutRules.AboveLocalOffices(
+                new[] { -80f, 120f }, 900f),
+            "dynamic regional superior follows a manually raised root");
+        Equal(900f, CustomCourtRegionalLayerLayoutRules.AboveLocalOffices(
+                Array.Empty<float>(), 900f),
+            "empty local templates retain the saved regional position");
     }
 
     private static void True(bool pActual, string pMessage)

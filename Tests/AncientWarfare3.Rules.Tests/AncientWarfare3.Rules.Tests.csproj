@@ -22,6 +22,7 @@
     <Compile Include="..\..\Code\core\court\MilitaryPrefectureCandidateRules.cs" Link="Production\MilitaryPrefectureCandidateRules.cs" />
     <Compile Include="RegionalGovernmentRulesTests.cs.txt" />
     <Compile Include="RegionalGovernmentTemplateRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CustomCourtRegionalLayerLayoutRules.cs" Link="Production\CustomCourtRegionalLayerLayoutRules.cs" />
     <Compile Include="RegionalGovernmentCourtRulesTests.cs.txt" />
     <Compile Include="CityAdministrationMapModeRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\policy\CityAdministrationMapModeRules.cs" Link="Production\CityAdministrationMapModeRules.cs" />

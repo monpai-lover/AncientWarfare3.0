@@ -153,7 +153,8 @@ internal static class ShiLineageMapModeSourceGuardTests
         string en = Read("Locales/en.json");
         string ch = Read("Locales/ch.json");
         string cz = Read("Locales/cz.json");
-        foreach (string key in new[] { "aw_shi_lineage_mapmode", "aw_shi_mapmode_tooltip",
+        foreach (string key in new[] { "aw_shi_lineage_mapmode",
+                     "aw_shi_lineage_mapmode_description", "aw_shi_mapmode_tooltip",
                      "aw_shi_map_no_influence", "aw_shi_map_dominant", "aw_shi_map_none",
                      "aw_shi_map_unknown", "aw_shi_map_composition" })
         {
