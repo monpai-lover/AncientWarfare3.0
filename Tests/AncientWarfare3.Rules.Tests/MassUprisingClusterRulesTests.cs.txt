@@ -10,6 +10,7 @@ internal static class MassUprisingClusterRulesTests
         Thresholds();
         ConnectedCultureClusters();
         DeterministicClusterKeys();
+        PhaseTransitions();
     }
 
     private static void Thresholds()
@@ -59,6 +60,40 @@ internal static class MassUprisingClusterRulesTests
             new[] { 8L, 3L, 5L }, true);
         Equal("7:3,5,8", MassUprisingClusterRules.ClusterKey(7, cluster),
             "cluster key is stable and sorted");
+    }
+
+    private static void PhaseTransitions()
+    {
+        Equal(MassUprisingPhase.ClusterUprising,
+            MassUprisingClusterRules.ResolvePhase(
+                MassUprisingPhase.ClusterUprising,
+                allTargetsOwned: false, allClustersComplete: false,
+                survivorCount: 3, originAlive: true),
+            "incomplete cluster remains in uprising");
+        Equal(MassUprisingPhase.ClusterComplete,
+            MassUprisingClusterRules.ResolvePhase(
+                MassUprisingPhase.ClusterUprising,
+                allTargetsOwned: true, allClustersComplete: false,
+                survivorCount: 3, originAlive: true),
+            "owned targets complete the cluster");
+        Equal(MassUprisingPhase.CivilWar,
+            MassUprisingClusterRules.ResolvePhase(
+                MassUprisingPhase.ClusterComplete,
+                allTargetsOwned: true, allClustersComplete: true,
+                survivorCount: 3, originAlive: true),
+            "completed clusters begin civil war");
+        Equal(MassUprisingPhase.Unification,
+            MassUprisingClusterRules.ResolvePhase(
+                MassUprisingPhase.CivilWar,
+                allTargetsOwned: true, allClustersComplete: true,
+                survivorCount: 1, originAlive: true),
+            "last rebel resumes unification against the origin");
+        Equal(MassUprisingPhase.Completed,
+            MassUprisingClusterRules.ResolvePhase(
+                MassUprisingPhase.Unification,
+                allTargetsOwned: true, allClustersComplete: true,
+                survivorCount: 1, originAlive: false),
+            "unification completes after the origin falls");
     }
 
     private static void Equal<T>(T expected, T actual, string message)

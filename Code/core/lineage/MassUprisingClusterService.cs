@@ -8,6 +8,7 @@ namespace AncientWarfare3.core.lineage
     internal static class MassUprisingClusterService
     {
         internal const string PhaseClusterUprising = "cluster_uprising";
+        internal const string PhaseClusterComplete = "cluster_complete";
         internal const string PhaseCivilWar = "civil_war";
         internal const string PhaseUnification = "unification";
         internal const string PhaseFailed = "failed";
@@ -59,6 +60,37 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MASS_UPRISING_CLUSTER_CURSOR,
                 MassUprisingClusterRules.AdvanceCursor(cursor, budget,
                     clusters.Count));
+            ProcessAuthorityCycle();
+        }
+
+        internal static void ProcessAuthorityCycle()
+        {
+            if (!CanMutate() || World.world?.kingdoms == null) return;
+            var processed = new HashSet<long>();
+            foreach (long rebelId in ActiveRebels.OrderBy(id => id).Take(4)
+                         .ToList())
+            {
+                if (!processed.Add(rebelId)) continue;
+                Kingdom rebel = ResolveKingdom(rebelId);
+                if (rebel?.data == null || !TryReadCluster(rebel,
+                        out string phase, out HashSet<long> targets,
+                        out long originId))
+                {
+                    ActiveRebels.Remove(rebelId);
+                    continue;
+                }
+                if (phase == PhaseClusterUprising && targets.Count > 0 &&
+                    targets.All(id => ResolveCity(id)?.kingdom == rebel))
+                {
+                    rebel.data.set(LineageKeys.MASS_UPRISING_CLUSTER_PHASE,
+                        PhaseClusterComplete);
+                    rebel.data.set(
+                        LineageKeys.MASS_UPRISING_CLUSTER_COMPLETED_YEAR,
+                        Date.getCurrentYear());
+                    phase = PhaseClusterComplete;
+                }
+                ResolveOriginPhase(originId);
+            }
         }
 
         internal static void ClearRuntime()
@@ -93,6 +125,82 @@ namespace AncientWarfare3.core.lineage
             return pCity?.data != null && targets.Contains(pCity.getID());
         }
 
+        internal static bool CanStartClusterWar(Kingdom pAttacker,
+            Kingdom pDefender, out bool pBypassTruce, out string pReason)
+        {
+            pBypassTruce = false;
+            pReason = "";
+            if (!TryReadCluster(pAttacker, out string attackerPhase,
+                    out _, out long attackerOrigin)) return false;
+            if (!TryReadCluster(pDefender, out string defenderPhase,
+                    out _, out long defenderOrigin))
+            {
+                if ((attackerPhase == PhaseClusterUprising ||
+                     attackerPhase == PhaseUnification) &&
+                    pDefender?.getID() == attackerOrigin)
+                {
+                    pBypassTruce = true;
+                    return true;
+                }
+                pReason = "mass_uprising_cluster_defender_not_cluster";
+                return false;
+            }
+            if (attackerOrigin != defenderOrigin ||
+                (attackerPhase != PhaseCivilWar &&
+                 !(attackerPhase == PhaseClusterUprising &&
+                   ResolveKingdom(attackerOrigin) == pDefender)) ||
+                (defenderPhase != PhaseCivilWar &&
+                 attackerPhase != PhaseClusterUprising))
+            {
+                pReason = "mass_uprising_cluster_war_not_ready";
+                return false;
+            }
+            pBypassTruce = true;
+            return true;
+        }
+
+        private static void ResolveOriginPhase(long pOriginId)
+        {
+            Kingdom origin = ResolveKingdom(pOriginId);
+            List<Kingdom> rebels = ActiveRebels.Select(ResolveKingdom)
+                .Where(rebel => rebel?.data != null &&
+                    TryReadCluster(rebel, out _, out _, out long id) &&
+                    id == pOriginId).OrderBy(rebel => rebel.getID()).ToList();
+            if (rebels.Count == 0) return;
+            bool allComplete = rebels.All(rebel =>
+                TryReadCluster(rebel, out string phase, out _, out _) &&
+                phase == PhaseClusterComplete || phase == PhaseCivilWar ||
+                phase == PhaseUnification);
+            if (!allComplete) return;
+            if (rebels.Count == 1)
+            {
+                Kingdom final = rebels[0];
+                final.data.set(LineageKeys.MASS_UPRISING_CLUSTER_PHASE,
+                    PhaseUnification);
+                if (origin?.data != null && !origin.isRekt())
+                    MandateRebelService.StartExistingRebelWar(origin, final);
+                return;
+            }
+            foreach (Kingdom rebel in rebels)
+                rebel.data.set(LineageKeys.MASS_UPRISING_CLUSTER_PHASE,
+                    PhaseCivilWar);
+            for (int i = 0; i < rebels.Count; i++)
+            for (int j = i + 1; j < rebels.Count; j++)
+            {
+                try
+                {
+                    WarDecisionService.TryStartInternalSystemWar(rebels[i],
+                        rebels[j], MandateService.WAR_TIANMING_REBEL,
+                        "mass_uprising_civil_war");
+                }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("Mass uprising civil war failed: " +
+                        error.Message);
+                }
+            }
+        }
+
         internal static bool TryReadCluster(Kingdom pRebel,
             out string pPhase, out HashSet<long> pTargets,
             out long pOriginId)
@@ -125,12 +233,6 @@ namespace AncientWarfare3.core.lineage
             if (!PeasantRebelBanditStrongholdService.TryCreateDirect(seed,
                     out Kingdom rebel, out _, out _)) return false;
             if (rebel?.data == null) return false;
-            try
-            {
-                PeasantRebelRouteService.ConvertBanditToFounding(
-                    rebel, pOrigin);
-            }
-            catch { }
             rebel.data.set(LineageKeys.MASS_UPRISING_CLUSTER_ORIGIN_ID,
                 pOrigin.getID());
             rebel.data.set(LineageKeys.MASS_UPRISING_CLUSTER_KEY, pKey);
@@ -212,6 +314,13 @@ namespace AncientWarfare3.core.lineage
         {
             if (pCityId <= 0L) return null;
             try { return World.world?.cities?.get(pCityId); }
+            catch { return null; }
+        }
+
+        private static Kingdom ResolveKingdom(long pKingdomId)
+        {
+            if (pKingdomId <= 0L) return null;
+            try { return World.world?.kingdoms?.get(pKingdomId); }
             catch { return null; }
         }
 

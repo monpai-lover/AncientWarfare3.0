@@ -4,6 +4,16 @@ using System.Linq;
 
 namespace AncientWarfare3.core.lineage
 {
+    internal enum MassUprisingPhase
+    {
+        ClusterUprising,
+        ClusterComplete,
+        CivilWar,
+        Unification,
+        Completed,
+        Failed
+    }
+
     internal sealed class MassUprisingCityFact
     {
         internal long CityId { get; }
@@ -130,6 +140,31 @@ namespace AncientWarfare3.core.lineage
             if (current < 0) current += pCount;
             int processed = Math.Max(0, pProcessed) % pCount;
             return (current + processed) % pCount;
+        }
+
+        internal static MassUprisingPhase ResolvePhase(
+            MassUprisingPhase pCurrent, bool allTargetsOwned,
+            bool allClustersComplete, int survivorCount, bool originAlive)
+        {
+            if (pCurrent == MassUprisingPhase.Failed ||
+                pCurrent == MassUprisingPhase.Completed) return pCurrent;
+            if (pCurrent == MassUprisingPhase.ClusterUprising)
+                return allTargetsOwned
+                    ? MassUprisingPhase.ClusterComplete
+                    : MassUprisingPhase.ClusterUprising;
+            if (pCurrent == MassUprisingPhase.ClusterComplete &&
+                allClustersComplete)
+                return survivorCount <= 1
+                    ? (originAlive ? MassUprisingPhase.Unification
+                        : MassUprisingPhase.Completed)
+                    : MassUprisingPhase.CivilWar;
+            if (pCurrent == MassUprisingPhase.CivilWar && survivorCount <= 1)
+                return originAlive
+                    ? MassUprisingPhase.Unification
+                    : MassUprisingPhase.Completed;
+            if (pCurrent == MassUprisingPhase.Unification && !originAlive)
+                return MassUprisingPhase.Completed;
+            return pCurrent;
         }
     }
 }
