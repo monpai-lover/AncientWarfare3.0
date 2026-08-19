@@ -7,6 +7,7 @@ using NeoModLoader.api;
 using NeoModLoader.General;
 using NeoModLoader.ui;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.ui.components;
 using UnityEngine;
 using UnityEngine.Events;
@@ -18,6 +19,8 @@ namespace AncientWarfare3.patch
     internal static class AW_ModConfigSelectPatch
     {
         private const string ModeId = "AW3_ARMY_RTS_WAR_RESOLUTION_MODE";
+        private const string FramePrioritySchedulerId =
+            "AW3_ENABLE_FRAME_PRIORITY_SCHEDULER";
         private const int ModeCount = 3;
         private const float SelectAreaWidth = 170f;
         private const float SelectAreaHeight = 46f;
@@ -63,6 +66,73 @@ namespace AncientWarfare3.patch
                                  pException.Message);
                 return true;
             }
+        }
+
+        [HarmonyPostfix]
+        private static void Postfix(object __instance, ModConfigItem pItem)
+        {
+            if (pItem == null || pItem.Type != ConfigItemType.SWITCH ||
+                !string.Equals(pItem.Id, FramePrioritySchedulerId,
+                    StringComparison.Ordinal)) return;
+            try { WireProtectedSchedulerSwitch(__instance, pItem); }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("AW3 protected scheduler switch setup failed: " +
+                                 exception.Message);
+            }
+        }
+
+        private static void WireProtectedSchedulerSwitch(object pInstance,
+            ModConfigItem pItem)
+        {
+            if (pInstance == null || pItem == null) return;
+            GameObject switchArea = GetArea(pInstance.GetType(), pInstance,
+                "switch_area");
+            NeoModLoader.General.UI.Prefabs.SwitchButton switchButton =
+                switchArea?.transform.Find("Button")?.GetComponent<
+                    NeoModLoader.General.UI.Prefabs.SwitchButton>();
+            if (switchButton == null) return;
+            RefreshProtectedSchedulerSwitch(switchButton, pItem);
+        }
+
+        private static void RefreshProtectedSchedulerSwitch(
+            NeoModLoader.General.UI.Prefabs.SwitchButton pSwitch,
+            ModConfigItem pItem)
+        {
+            if (pSwitch == null || pItem == null) return;
+            bool current = pItem.BoolVal;
+            pSwitch.icon.sprite = SpriteTextureLoader.getSprite(current
+                ? "ui/icons/iconOn"
+                : "ui/icons/iconOff");
+            pSwitch.text.text = current ? LM.Get("short_on") : LM.Get("short_off");
+            pSwitch.button.onClick.RemoveAllListeners();
+            pSwitch.button.onClick.AddListener(new UnityAction(() =>
+            {
+                bool requested = !pItem.BoolVal;
+                if (!FramePrioritySchedulerConfirmationRules.RequiresConfirmation(
+                        pItem.BoolVal, requested))
+                {
+                    ApplyProtectedSwitchValue(pItem, requested);
+                    RefreshProtectedSchedulerSwitch(pSwitch, pItem);
+                    return;
+                }
+
+                Transform parent = ModConfigureWindow.Instance?.transform;
+                FramePrioritySchedulerConfirmDialog.Show(parent, () =>
+                {
+                    ApplyProtectedSwitchValue(pItem, true);
+                    if (pSwitch != null)
+                        RefreshProtectedSchedulerSwitch(pSwitch, pItem);
+                });
+            }));
+        }
+
+        private static void ApplyProtectedSwitchValue(ModConfigItem pItem,
+            bool pValue)
+        {
+            if (pItem == null || pItem.BoolVal == pValue) return;
+            MarkModified(pItem);
+            pItem.SetValue(pValue, true);
         }
 
         private static void SetupSelect(object pInstance,

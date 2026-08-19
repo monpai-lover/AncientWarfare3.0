@@ -26,6 +26,10 @@ AW3_ENABLE_ASYNC_UI_QUERIES,启用异步界面候选计算,Enable asynchronous U
 AW3_ENABLE_ASYNC_UI_QUERIES Description,在后台准备大型界面的候选列表；重启游戏后生效,Prepare large interface candidate lists in the background; takes effect after restart,在背景準備大型介面的候選清單；重新啟動遊戲後生效
 AW3_ENABLE_FRAME_PRIORITY_SCHEDULER,启用帧优先调度,Enable frame-priority scheduling,啟用幀優先調度
 AW3_ENABLE_FRAME_PRIORITY_SCHEDULER Description,将一次原版大步长逻辑 tick 分摊到多个渲染帧；人物移动与寻路保持原版倍速语义,Spread one native large-step logic tick across render frames while preserving movement and pathfinding speed semantics,將一次原版大步長邏輯 tick 分攤到多個渲染幀；人物移動與尋路保持原版倍速語義
+aw_frame_scheduler_confirm_title,启用帧优先调度,Enable frame-priority scheduling,啟用幀優先調度
+aw_frame_scheduler_confirm_prompt,此功能属于实验性调度。输入小写 yes 才能启用。,This scheduler is experimental. Type lowercase yes to enable it.,此功能屬於實驗性調度。輸入小寫 yes 才能啟用。
+aw_frame_scheduler_confirm_placeholder,输入 yes,Type yes,輸入 yes
+aw_frame_scheduler_confirm_error,必须准确输入小写 yes,Enter exactly lowercase yes,必須準確輸入小寫 yes
 AW3_ENABLE_PERFORMANCE_DIAGNOSTICS,启用性能诊断 开启视为加入春秋制作组,Enable performance diagnostics,啟用效能診斷
 AW3_ENABLE_PERFORMANCE_DIAGNOSTICS Description,输出 AW3 性能统计；仅用于排查性能问题,Output AW3 performance statistics; use only for performance investigation,輸出 AW3 效能統計；僅用於排查效能問題
 AW3_ENABLE_PRESENTATION_SMOOTHING,启用单位表现平滑,Enable unit presentation smoothing,啟用單位表現平滑

@@ -1,0 +1,58 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.performance;
+
+internal static class FramePrioritySchedulerConfirmationRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, FramePrioritySchedulerConfirmationRules.IsAccepted("yes"),
+            "strict lowercase yes unlocks the scheduler");
+        Equal(false, FramePrioritySchedulerConfirmationRules.IsAccepted("Yes"),
+            "uppercase input does not unlock the scheduler");
+        Equal(false, FramePrioritySchedulerConfirmationRules.IsAccepted(" yes "),
+            "surrounding whitespace does not unlock the scheduler");
+        Equal(false, FramePrioritySchedulerConfirmationRules.IsAccepted(null),
+            "missing input does not unlock the scheduler");
+
+        Equal(true, FramePrioritySchedulerConfirmationRules.RequiresConfirmation(
+                currentValue: false, requestedValue: true),
+            "enabling the scheduler requires confirmation");
+        Equal(false, FramePrioritySchedulerConfirmationRules.RequiresConfirmation(
+                currentValue: true, requestedValue: false),
+            "disabling the scheduler remains immediate");
+
+        string root = Directory.GetCurrentDirectory();
+        string patch = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_ModConfigSelectPatch.cs"));
+        string dialog = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "components", "FramePrioritySchedulerConfirmDialog.cs"));
+        Contains(patch, "AW3_ENABLE_FRAME_PRIORITY_SCHEDULER");
+        Contains(patch, "FramePrioritySchedulerConfirmDialog.Show(");
+        Contains(patch, "ApplyProtectedSwitchValue(pItem, true)");
+        Contains(dialog, "FramePrioritySchedulerConfirmationRules.IsAccepted(");
+        Contains(dialog, "InputField.LineType.SingleLine");
+        foreach (string locale in new[] { "en.json", "cz.json", "ch.json" })
+        {
+            string localization = File.ReadAllText(Path.Combine(root,
+                "Locales", locale));
+            Contains(localization, "aw_frame_scheduler_confirm_title");
+            Contains(localization, "aw_frame_scheduler_confirm_prompt");
+            Contains(localization, "aw_frame_scheduler_confirm_placeholder");
+            Contains(localization, "aw_frame_scheduler_confirm_error");
+        }
+    }
+
+    private static void Contains(string text, string expected)
+    {
+        if (text?.Contains(expected, StringComparison.Ordinal) != true)
+            throw new InvalidOperationException("Expected source to contain: " + expected);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected=" + expected +
+                                                " actual=" + actual);
+    }
+}
