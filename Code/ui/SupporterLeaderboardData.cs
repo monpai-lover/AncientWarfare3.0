@@ -40,8 +40,8 @@ namespace AncientWarfare3.ui
                 {
                     Rank = 2,
                     Name = "Justin",
-                    Amount = "60",
-                    Date = "2026-08-15"
+                    Amount = "80",
+                    Date = "2026-08-19"
                 },
                 new SupporterLeaderboardEntry
                 {
@@ -133,6 +133,13 @@ namespace AncientWarfare3.ui
                     Name = "张九世",
                     Amount = "50",
                     Date = "2026-08-13"
+                },
+                new SupporterLeaderboardEntry
+                {
+                    Rank = 18,
+                    Name = "阿巴",
+                    Amount = "10",
+                    Date = "2026-08-19"
                 }
             };
 

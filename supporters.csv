@@ -1,7 +1,7 @@
 rank,name,amount,date
 # Optional fifth column: description for non-monetary contributions.
 1,一米,,,提供了技术支持和帮助:寻路/大步长调度器
-2,Justin,60,2026-08-15
+2,Justin,80,2026-08-19
 3,Jake,20,2026-08-02
 4,Au,10,2026-08-01
 5,贰肆,5,2026-07-31
@@ -17,3 +17,4 @@ rank,name,amount,date
 14,张九世,50,2026-08-13
 16,威行,50,2026-08-16
 17,快修bug,20,2026-08-14
+18,阿巴,10,2026-08-19

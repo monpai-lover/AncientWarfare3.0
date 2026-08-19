@@ -24,11 +24,14 @@ if ($csv -notmatch ('(?m)^1,' + [regex]::Escape($technicalName) + ',,,' +
         [regex]::Escape($technicalDescription) + '\r?$')) {
     throw 'technical support entry is missing or outdated'
 }
-if ($csv -notmatch '(?m)^2,Justin,60,2026-08-15\r?$') {
+if ($csv -notmatch '(?m)^2,Justin,80,2026-08-19\r?$') {
     throw 'Justin supporter entry is missing or outdated'
 }
 if ([regex]::Matches($csv, '(?m)^\d+,Justin,[^,\r\n]+,[^\r\n]+\r?$').Count -ne 1) {
     throw 'supporters.csv must contain exactly one Justin entry'
+}
+if ($csv -notmatch '(?m)^18,\u963f\u5df4,10,2026-08-19\r?$') {
+    throw 'Aba supporter entry is missing or outdated'
 }
 if ($csv -notmatch '(?m)^10,\u672a\u660e\u5929\u900d\u9065\u884c,20\.00,2026-08-02\r?$') {
     throw 'supporter entry 9 is missing'
@@ -57,8 +60,11 @@ if ($source -notmatch ('(?s)Rank = 1,\s*Name = "' +
         [regex]::Escape($technicalDescription) + '"')) {
     throw 'technical support fallback is missing or outdated'
 }
-if ($source -notmatch '(?s)Rank = 2,\s*Name = "Justin",\s*Amount = "60",\s*Date = "2026-08-15"') {
+if ($source -notmatch '(?s)Rank = 2,\s*Name = "Justin",\s*Amount = "80",\s*Date = "2026-08-19"') {
     throw 'Justin supporter fallback is missing or outdated'
+}
+if ($source -notmatch '(?s)Rank = 18,\s*Name = "\u963f\u5df4",\s*Amount = "10",\s*Date = "2026-08-19"') {
+    throw 'Aba supporter fallback is missing or outdated'
 }
 $builtIn = [regex]::Match(
     $source,
