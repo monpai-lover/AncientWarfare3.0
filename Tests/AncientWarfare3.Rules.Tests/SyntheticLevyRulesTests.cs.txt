@@ -4,6 +4,17 @@ using System.IO;
 
 internal static class SyntheticLevyRulesTests
 {
+    internal static void RunPopulationOnly()
+    {
+        Equal(80, SyntheticLevyRules.AuthenticPopulation(
+            reportedPopulation: 100, syntheticPopulation: 20),
+            "synthetic soldiers are excluded from city population");
+        Equal(0, SyntheticLevyRules.AuthenticPopulation(
+            reportedPopulation: 3, syntheticPopulation: 9),
+            "a stale synthetic counter cannot produce negative population");
+        SyntheticSoldiersAreExcludedFromCityPopulation();
+    }
+
     internal static void Run()
     {
         Equal("aw_synthetic_levy", LineageKeys.SYNTHETIC_LEVY,
@@ -39,6 +50,7 @@ internal static class SyntheticLevyRulesTests
         Equal(false, SyntheticLevyRules.SuppressPersonalHistory(
             synthetic: true, promoted: true),
             "promoted actors enter normal history");
+        RunPopulationOnly();
         Equal(true, SyntheticLevyRules.AllowTask(
             synthetic: true, SyntheticLevyTask.Military),
             "synthetic soldiers can execute military tasks");
@@ -143,6 +155,29 @@ internal static class SyntheticLevyRulesTests
         Equal(true, reproduction.Contains("ref Actor __result",
                 StringComparison.Ordinal),
             "blocked reproduction returns no child");
+    }
+
+    private static void SyntheticSoldiersAreExcludedFromCityPopulation()
+    {
+        string source = File.ReadAllText(Path.Combine(RepositoryRoot(),
+            "Code", "patch", "AW_SyntheticPopulationPatch.cs"));
+        Equal(true, source.Contains(
+                "nameof(City.getPopulationPeople)",
+                StringComparison.Ordinal),
+            "the normal city population API excludes synthetic soldiers");
+        Equal(true, source.Contains(
+                "\"getPopulationTotal\", new[] { typeof(bool) }",
+                StringComparison.Ordinal),
+            "compatible game versions also exclude synthetic soldiers " +
+            "from the total population API");
+        Equal(true, source.Contains(
+                "SyntheticMobilizationLedgerService.LiveSyntheticForCity(",
+                StringComparison.Ordinal),
+            "population queries use the existing O(1) synthetic ledger");
+        Equal(true, source.Contains(
+                "SyntheticLevyRules.AuthenticPopulation(",
+                StringComparison.Ordinal),
+            "both runtime APIs share the clamped population rule");
     }
 
     private static void RuntimeCreationIsAtomicAndImmediatelyMilitary()

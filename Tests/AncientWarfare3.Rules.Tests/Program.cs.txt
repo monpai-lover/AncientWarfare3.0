@@ -868,6 +868,13 @@ if (args.Length == 1 && args[0] == "--ruler-household-only")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--synthetic-population-slice")
+{
+    SyntheticLevyRulesTests.RunPopulationOnly();
+    Console.WriteLine("Synthetic population rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--army-rts")
 {
     ArmyRtsSchedulingRulesTests.Run();

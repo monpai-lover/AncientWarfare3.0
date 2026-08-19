@@ -29,6 +29,13 @@ namespace AncientWarfare3.core.lineage
 
     public static class SyntheticLevyRules
     {
+        public static int AuthenticPopulation(int reportedPopulation,
+            int syntheticPopulation)
+        {
+            return System.Math.Max(0, reportedPopulation -
+                System.Math.Max(0, syntheticPopulation));
+        }
+
         public static SyntheticLevyDisposition ResolveDemobilization(
             bool synthetic, bool alive, int militaryMerit)
         {
