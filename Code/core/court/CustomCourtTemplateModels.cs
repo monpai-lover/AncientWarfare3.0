@@ -164,6 +164,8 @@ namespace AncientWarfare3.core.court
             new CustomCourtLocalizedText { Chinese = "郡", English = "Commandery" };
         public CustomCourtLocalizedText GovernorTitle { get; set; } =
             new CustomCourtLocalizedText { Chinese = "郡守", English = "Regional Governor" };
+        public CustomCourtLocalizedText LocalLevelTitle { get; set; } =
+            new CustomCourtLocalizedText { Chinese = "州", English = "Prefecture" };
         public List<string> ManagementOfficeIds { get; set; } =
             new List<string>();
         public CustomCourtOfficeLayout Layout { get; set; } =

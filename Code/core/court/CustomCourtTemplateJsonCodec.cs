@@ -163,6 +163,8 @@ namespace AncientWarfare3.core.court
                 new CustomCourtLocalizedText();
             pLayer.GovernorTitle = pLayer.GovernorTitle ??
                 new CustomCourtLocalizedText();
+            pLayer.LocalLevelTitle = pLayer.LocalLevelTitle ??
+                new CustomCourtLocalizedText();
             if (string.IsNullOrWhiteSpace(pLayer.RegionTitle.Chinese))
                 pLayer.RegionTitle.Chinese = "郡";
             if (string.IsNullOrWhiteSpace(pLayer.RegionTitle.English))
@@ -171,6 +173,10 @@ namespace AncientWarfare3.core.court
                 pLayer.GovernorTitle.Chinese = "郡守";
             if (string.IsNullOrWhiteSpace(pLayer.GovernorTitle.English))
                 pLayer.GovernorTitle.English = "Regional Governor";
+            if (string.IsNullOrWhiteSpace(pLayer.LocalLevelTitle.Chinese))
+                pLayer.LocalLevelTitle.Chinese = "州";
+            if (string.IsNullOrWhiteSpace(pLayer.LocalLevelTitle.English))
+                pLayer.LocalLevelTitle.English = "Prefecture";
             pLayer.ManagementOfficeIds = (pLayer.ManagementOfficeIds ??
                     new List<string>()).Where(id => !string.IsNullOrWhiteSpace(id))
                 .Distinct(StringComparer.Ordinal).OrderBy(id => id,

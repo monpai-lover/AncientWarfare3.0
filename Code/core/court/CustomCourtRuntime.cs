@@ -150,14 +150,25 @@ namespace AncientWarfare3.core.court
         internal static void RegionalTitles(Kingdom pKingdom,
             out string pRegionTitle, out string pGovernorTitle)
         {
+            RegionalTitles(pKingdom, out pRegionTitle, out pGovernorTitle,
+                out _);
+        }
+
+        internal static void RegionalTitles(Kingdom pKingdom,
+            out string pRegionTitle, out string pGovernorTitle,
+            out string pLocalLevelTitle)
+        {
             pRegionTitle = "郡";
             pGovernorTitle = "郡守";
+            pLocalLevelTitle = "州";
             if (!TryGetSnapshot(pKingdom, out CustomCourtTemplate snapshot) ||
                 snapshot.RegionalGovernmentLayer == null) return;
             pRegionTitle = LocalizedName(snapshot.RegionalGovernmentLayer
                 .RegionTitle, pRegionTitle);
             pGovernorTitle = LocalizedName(snapshot.RegionalGovernmentLayer
                 .GovernorTitle, pGovernorTitle);
+            pLocalLevelTitle = LocalizedName(snapshot.RegionalGovernmentLayer
+                .LocalLevelTitle, pLocalLevelTitle);
         }
 
         internal static IReadOnlyList<CustomLocalCourtTemplate>

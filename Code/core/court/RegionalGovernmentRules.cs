@@ -55,9 +55,22 @@ namespace AncientWarfare3.core.court
             foreach (string suffix in new[] { "州", "府", "城" })
                 if (name.EndsWith(suffix, StringComparison.Ordinal))
                     name = name.Substring(0, name.Length - suffix.Length);
-            string title = string.IsNullOrWhiteSpace(pRegionTitle)
-                ? DefaultRegionTitle : pRegionTitle.Trim();
-            return name + title;
+            return name;
+        }
+
+        public static string CityName(string pCityName)
+        {
+            return pCityName ?? string.Empty;
+        }
+
+        public static string AdministrativeLabel(string pPlaceName,
+            string pLevelTitle)
+        {
+            string place = pPlaceName ?? string.Empty;
+            string level = (pLevelTitle ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(level)) return place;
+            if (string.IsNullOrEmpty(place)) return level;
+            return place + " · " + level;
         }
 
         private static bool IsValid(RegionalGovernmentCityFact pCity)

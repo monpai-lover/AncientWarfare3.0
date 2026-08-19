@@ -19,11 +19,20 @@ internal static class RegionalGovernmentTemplateRulesTests
             "default region title");
         Equal("郡守", imported.RegionalGovernmentLayer.GovernorTitle.Chinese,
             "default governor title");
+        Equal("州", imported.RegionalGovernmentLayer.LocalLevelTitle.Chinese,
+            "legacy central templates receive the default local level");
+        Equal("Prefecture",
+            imported.RegionalGovernmentLayer.LocalLevelTitle.English,
+            "legacy central templates receive the English local level");
 
         CustomCourtTemplate custom = CustomCourtTemplateJsonCodec.Normalize(
             imported);
         custom.RegionalGovernmentLayer.RegionTitle.Chinese = "道";
+        custom.RegionalGovernmentLayer.RegionTitle.English = "Circuit";
         custom.RegionalGovernmentLayer.GovernorTitle.Chinese = "观察使";
+        custom.RegionalGovernmentLayer.GovernorTitle.English = "Observer";
+        custom.RegionalGovernmentLayer.LocalLevelTitle.Chinese = "州";
+        custom.RegionalGovernmentLayer.LocalLevelTitle.English = "Prefecture";
         custom.RegionalGovernmentLayer.ManagementOfficeIds.Add("minister");
         custom.RegionalGovernmentLayer.ManagementOfficeIds.Add("missing");
         custom.RegionalGovernmentLayer.Layout.X = 321f;
@@ -35,6 +44,15 @@ internal static class RegionalGovernmentTemplateRulesTests
             "custom region title survives export");
         Equal("观察使", restored.RegionalGovernmentLayer.GovernorTitle.Chinese,
             "custom governor title survives export");
+        Equal("Circuit", restored.RegionalGovernmentLayer.RegionTitle.English,
+            "English regional title survives independently");
+        Equal("Observer", restored.RegionalGovernmentLayer.GovernorTitle.English,
+            "English governor title survives independently");
+        Equal("州", restored.RegionalGovernmentLayer.LocalLevelTitle.Chinese,
+            "custom local level survives export");
+        Equal("Prefecture",
+            restored.RegionalGovernmentLayer.LocalLevelTitle.English,
+            "English local level survives independently");
         Equal("minister", restored.RegionalGovernmentLayer.ManagementOfficeIds
             .Single(), "management link survives export");
         Equal(321f, restored.RegionalGovernmentLayer.Layout.X,

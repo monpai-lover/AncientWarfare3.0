@@ -22,10 +22,18 @@ internal static class RegionalGovernmentRulesTests
             "seat city is stable");
         Equal(3, regions.Single(region => region.SeatCityId == 10)
             .MemberCityIds.Count, "seat absorbs adjacent cities");
-        Equal("临淄郡", RegionalGovernmentRules.RegionName("临淄州", "郡"),
-            "州 suffix is removed");
-        Equal("安邑道", RegionalGovernmentRules.RegionName("安邑城", "道"),
-            "城 suffix and custom title are applied");
+        Equal("临淄", RegionalGovernmentRules.RegionName("临淄州", "郡"),
+            "region name is the seat stem without an appended level");
+        Equal("安邑", RegionalGovernmentRules.RegionName("安邑城", "道"),
+            "custom regional levels do not mutate the place name");
+        Equal("即墨", RegionalGovernmentRules.CityName("即墨"),
+            "the WorldBox city name is already the complete prefecture name");
+        Equal("临淄 · 郡", RegionalGovernmentRules.AdministrativeLabel(
+                "临淄", "郡"),
+            "court labels visually separate place and administrative level");
+        Equal("即墨 · 州", RegionalGovernmentRules.AdministrativeLabel(
+                RegionalGovernmentRules.CityName("即墨"), "州"),
+            "city labels visually separate the unchanged city name and level");
 
         IReadOnlyList<RegionalGovernmentFact> tie =
             RegionalGovernmentRules.Build(new[]
