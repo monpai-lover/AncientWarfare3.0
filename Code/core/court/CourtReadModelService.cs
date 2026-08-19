@@ -33,6 +33,7 @@ namespace AncientWarfare3.core.court
             AddGenerals(seeds, pKingdom);
             AddMilitaryGovernorates(seeds, pKingdom);
             AddFeudatoryPrinces(seeds, pKingdom);
+            AddRegionalGovernmentNodes(seeds, pKingdom);
             List<CourtPyramidNodeModel> result = CourtPyramidRules.BuildLayout(
                 seeds, HorizontalSpacing, VerticalSpacing);
             AddCachedHeirRole(result, pKingdom);
@@ -115,6 +116,15 @@ namespace AncientWarfare3.core.court
                 CountryCorruption = CorruptionService.ReadCountry(pKingdom),
                 CityCorruption = CorruptionService.ReadCity(pCity)
             };
+            if (RegionalGovernmentAggregationService.TryFindRegion(pKingdom,
+                    pCity.data.id, out RegionalGovernmentReadModel region))
+            {
+                model.RegionSeatCityId = region.SeatCityId;
+                model.RegionName = region.RegionName;
+                model.RegionTitle = region.RegionTitle;
+                model.RegionalGovernorTitle = region.GovernorTitle;
+                model.RegionalGovernorActorId = region.GovernorActorId;
+            }
 
             CustomLocalCourtTemplate localTemplate;
             if (CustomCourtRuntime.TryGetLocalTemplate(pKingdom, pCity,
@@ -146,6 +156,7 @@ namespace AncientWarfare3.core.court
             if (seats.Count > model.TotalSeats) model.TotalSeats = seats.Count;
             AddLocalNodes(model, pKingdom, pCity, seats, officers,
                 localTemplate, pCareerStates);
+            AddRegionalSuperiorNode(model, pKingdom, pCity);
             model.ActiveSeats = model.Nodes.Count(node =>
                 node != null && !node.IsVacancy && node.ActorId >= 0);
             model.LeaderNode = model.Nodes.FirstOrDefault(node =>
@@ -153,6 +164,65 @@ namespace AncientWarfare3.core.court
                 model.Nodes.FirstOrDefault(node => node != null &&
                     !node.IsVacancy);
             return model;
+        }
+
+        private static void AddRegionalGovernmentNodes(
+            List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
+        {
+            IReadOnlyList<RegionalGovernmentReadModel> regions =
+                RegionalGovernmentAggregationService.Build(pKingdom);
+            int order = 0;
+            foreach (RegionalGovernmentReadModel region in regions)
+            {
+                Actor governor = World.world?.units?.get(
+                    region.GovernorActorId);
+                if (!IsValid(governor, pKingdom)) continue;
+                string school = ActorSchool(governor, "");
+                pSeeds.Add(new CourtPyramidNodeModel(governor.data.id,
+                    "regional_government_layer:" + region.SeatCityId,
+                    CourtPyramidRoleId.RegionalGovernor,
+                    CourtPyramidRules.GovernorRank - 1, order++, false)
+                {
+                    OfficeLayer = CourtOfficeLayer.Regional,
+                    ActorName = SafeActorName(governor),
+                    SchoolId = school,
+                    SchoolIconPath = RegisteredSchoolIconPath(school),
+                    CityId = region.SeatCityId,
+                    CityName = FindCityName(pKingdom, region.SeatCityId),
+                    CommandName = region.RegionName + " · " +
+                        region.GovernorTitle,
+                    DisplayTitle = region.GovernorTitle,
+                    Influence = SafeStat(governor, "stewardship")
+                });
+            }
+        }
+
+        private static void AddRegionalSuperiorNode(LocalCourtReadModel pModel,
+            Kingdom pKingdom, City pCity)
+        {
+            if (pModel == null || pCity?.data == null ||
+                pModel.RegionalGovernorActorId < 0L) return;
+            Actor governor = World.world?.units?.get(
+                pModel.RegionalGovernorActorId);
+            if (!IsValid(governor, pKingdom)) return;
+            string school = ActorSchool(governor, "");
+            var node = new CourtPyramidNodeModel(governor.data.id,
+                "regional_superior:" + pModel.RegionSeatCityId,
+                CourtPyramidRoleId.RegionalGovernor,
+                CourtPyramidRules.KingRank, -1, false)
+            {
+                OfficeLayer = CourtOfficeLayer.Regional,
+                ActorName = SafeActorName(governor),
+                SchoolId = school,
+                SchoolIconPath = RegisteredSchoolIconPath(school),
+                CityId = pModel.RegionSeatCityId,
+                CityName = FindCityName(pKingdom, pModel.RegionSeatCityId),
+                CommandName = pModel.RegionName + " · " +
+                    pModel.RegionalGovernorTitle,
+                DisplayTitle = pModel.RegionalGovernorTitle
+            };
+            pModel.RegionalSuperiorNode = node;
+            pModel.Nodes.Insert(0, node);
         }
 
         private static List<string> BuildLocalSeats(Kingdom pKingdom,

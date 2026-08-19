@@ -1,0 +1,28 @@
+using System;
+using System.IO;
+
+internal static class RegionalGovernmentCourtRulesTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string source = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "CourtPyramidRules.cs"));
+        True(source.Contains("RegionalGovernor"),
+            "court pyramid defines regional governor role");
+        True(source.Contains("IsRegionalNode"),
+            "court pyramid protects regional projections from actor merge");
+    }
+
+    private static void True(bool pActual, string pMessage)
+    {
+        if (!pActual) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+}

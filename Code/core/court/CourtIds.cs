@@ -8,6 +8,7 @@ namespace AncientWarfare3.core.court
         public const string Military = "military";
         public const string Censor = "censor";
         public const string Feudatory = "feudatory";
+        public const string Regional = "regional";
     }
 
     public static class CourtOfficeId

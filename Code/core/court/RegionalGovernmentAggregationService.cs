@@ -12,11 +12,18 @@ namespace AncientWarfare3.core.court
             new Dictionary<long, IReadOnlyList<RegionalGovernmentReadModel>>();
 
         internal static IReadOnlyList<RegionalGovernmentReadModel> Build(
-            Kingdom pKingdom, string pRegionTitle = "郡",
-            string pGovernorTitle = "郡守")
+            Kingdom pKingdom, string pRegionTitle = null,
+            string pGovernorTitle = null)
         {
             if (pKingdom?.data == null || pKingdom.isRekt())
                 return Array.Empty<RegionalGovernmentReadModel>();
+            CustomCourtRuntime.RegionalTitles(pKingdom,
+                out string configuredRegionTitle,
+                out string configuredGovernorTitle);
+            if (string.IsNullOrWhiteSpace(pRegionTitle))
+                pRegionTitle = configuredRegionTitle;
+            if (string.IsNullOrWhiteSpace(pGovernorTitle))
+                pGovernorTitle = configuredGovernorTitle;
             if (Cache.TryGetValue(pKingdom.id, out IReadOnlyList<
                     RegionalGovernmentReadModel> cached)) return cached;
 

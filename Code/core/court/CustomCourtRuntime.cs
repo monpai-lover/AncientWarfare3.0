@@ -147,6 +147,19 @@ namespace AncientWarfare3.core.court
                 : LocalizedName(office.Name, office.Id);
         }
 
+        internal static void RegionalTitles(Kingdom pKingdom,
+            out string pRegionTitle, out string pGovernorTitle)
+        {
+            pRegionTitle = "郡";
+            pGovernorTitle = "郡守";
+            if (!TryGetSnapshot(pKingdom, out CustomCourtTemplate snapshot) ||
+                snapshot.RegionalGovernmentLayer == null) return;
+            pRegionTitle = LocalizedName(snapshot.RegionalGovernmentLayer
+                .RegionTitle, pRegionTitle);
+            pGovernorTitle = LocalizedName(snapshot.RegionalGovernmentLayer
+                .GovernorTitle, pGovernorTitle);
+        }
+
         internal static IReadOnlyList<CustomLocalCourtTemplate>
             ResolvedLocalTemplates(Kingdom pKingdom)
         {
@@ -184,6 +197,7 @@ namespace AncientWarfare3.core.court
             if (!application.TryBuildInstance(KingdomKey(kingdom), template,
                     current, incumbents, out next) || !Instances.Save(next))
                 return false;
+            RegionalGovernmentAggregationService.Invalidate(kingdom);
             try
             {
                 kingdom.data.set(LineageKeys.CUSTOM_COURT_TEMPLATE_ID,
