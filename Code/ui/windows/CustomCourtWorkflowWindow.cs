@@ -307,7 +307,7 @@ namespace AncientWarfare3.ui.windows
             _root.anchorMin = _root.anchorMax = new Vector2(0.5f, 0.5f);
             _root.pivot = new Vector2(0.5f, 0.5f);
             _root.sizeDelta = new Vector2(contentWidth, viewportHeight);
-            _root.anchoredPosition = Vector2.zero;
+            _root.anchoredPosition = new Vector2(-500f, 0f);
             _layout = CustomCourtWorkflowLayoutRules.Resolve(contentWidth,
                 viewportHeight, ToolbarWidth, ToolbarScale,
                 ToolbarScrollbarWidth);
