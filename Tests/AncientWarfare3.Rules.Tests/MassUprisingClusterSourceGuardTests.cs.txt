@@ -1,0 +1,63 @@
+using System;
+using System.IO;
+
+internal static class MassUprisingClusterSourceGuardTests
+{
+    internal static void Run()
+    {
+        string service = Read("Code/core/lineage/MassUprisingClusterService.cs");
+        string annual = Read("Code/core/policy/KingdomAnnualWorkService.cs");
+        string restore = Read("Code/core/multiplayer/AW3RuntimeRestorePipeline.cs");
+        string keys = Read("Code/core/lineage/LineageKeys.cs");
+        string routes = Read("Code/core/lineage/PeasantRebelRouteService.cs");
+        Contains(service, "CanMutateAuthority",
+            "cluster service must guard authority mutation");
+        Contains(service, "city.getLoyalty()",
+            "cluster service must use vanilla effective loyalty");
+        Contains(service, "neighbours_cities",
+            "cluster service must use geographic city connectivity");
+        Contains(service, "MassUprisingClusterRules.BuildClusters",
+            "cluster service must delegate grouping to pure rules");
+        Contains(service, "TryCreateDirect",
+            "cluster creation must reuse the existing rebel kingdom path");
+        Contains(service, "ConversionBudgetPerYear",
+            "cluster creation must use an explicit yearly bound");
+        Contains(service, "MASS_UPRISING_CLUSTER_TARGET_IDS",
+            "cluster target IDs must be persisted");
+        Contains(service, "MASS_UPRISING_CLUSTER_PLANS",
+            "initial cluster plans must remain stable after city transfer");
+        Contains(annual, "MassUprisingClusterService.OnKingdomYear",
+            "annual work must invoke cluster processing");
+        Contains(restore, "MassUprisingClusterService.RebuildRuntime",
+            "restore must rebuild cluster runtime indexes");
+        Contains(restore, "MassUprisingClusterService.ClearRuntime",
+            "world reset must clear cluster runtime indexes");
+        Contains(keys, "MASS_UPRISING_CLUSTER_PHASE",
+            "cluster phase must have an additive kingdom key");
+        Contains(service, "ProcessAuthorityCycle",
+            "cluster lifecycle must run in bounded authority work");
+        Contains(service, "TryStartInternalSystemWar",
+            "civil war must use the existing internal war authority");
+        Contains(service, "PhaseUnification",
+            "the final rebel must resume war against the protected capital");
+        Contains(routes, "MassUprisingClusterService.CanAcquireClusterTarget",
+            "rebel city acquisition must honor cluster targets");
+        Contains(routes, "MassUprisingClusterService.CanStartClusterWar",
+            "rebel war admission must honor cluster phases");
+    }
+
+    private static string Read(string relative)
+    {
+        return File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+                relative.Replace('/', Path.DirectorySeparatorChar)))
+            .Replace("\r\n", "\n");
+    }
+
+    private static void Contains(string source, string expected,
+        string message)
+    {
+        if ((source ?? string.Empty).IndexOf(expected,
+                StringComparison.OrdinalIgnoreCase) < 0)
+            throw new InvalidOperationException(message);
+    }
+}

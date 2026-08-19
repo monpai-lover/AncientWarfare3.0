@@ -1,3 +1,4 @@
+using System;
 using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.content
@@ -7,6 +8,8 @@ namespace AncientWarfare3.content
         private const string NON_CORE_LOYALTY_ID = "aw_non_core_territory";
         private const string BANDIT_PRESSURE_LOYALTY_ID =
             "aw_bandit_pressure";
+        private const string LOCAL_CORRUPTION_LOYALTY_ID =
+            "aw_local_corruption";
 
         public static void Init()
         {
@@ -22,6 +25,14 @@ namespace AncientWarfare3.content
                 id = BANDIT_PRESSURE_LOYALTY_ID,
                 translation_key = "aw_loyalty_bandit_pressure",
                 calc = CalculateBanditPressurePenalty
+            });
+            AddIfMissing(new LoyaltyAsset
+            {
+                id = LOCAL_CORRUPTION_LOYALTY_ID,
+                translation_key = "aw_loyalty_local_corruption",
+                translation_key_negative =
+                    "aw_loyalty_local_corruption_negative",
+                calc = CalculateLocalCorruptionPenalty
             });
         }
 
@@ -52,6 +63,13 @@ namespace AncientWarfare3.content
                 active: PeasantRebelBanditPressureService.
                     IsPressureTarget(pCity),
                 targetMatches: true);
+        }
+
+        private static int CalculateLocalCorruptionPenalty(City pCity)
+        {
+            if (pCity?.data == null || pCity.isRekt()) return 0;
+            int score = CorruptionService.ReadCity(pCity).Score;
+            return -Math.Max(0, Math.Min(100, score));
         }
     }
 }

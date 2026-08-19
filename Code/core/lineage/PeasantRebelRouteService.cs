@@ -392,6 +392,9 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool CanAcquireCity(Kingdom pRecipient, City pCity)
         {
+            if (MassUprisingClusterService.IsClusterRebel(pRecipient) &&
+                !MassUprisingClusterService.CanAcquireClusterTarget(
+                    pRecipient, pCity)) return false;
             if (pRecipient?.data != null && pCity?.kingdom?.data != null &&
                 pCity.kingdom != pRecipient &&
                 IsBanditOrEntering(pRecipient) &&
@@ -410,6 +413,15 @@ namespace AncientWarfare3.core.lineage
         {
             pBypassTruce = false;
             pReason = "";
+            if (MassUprisingClusterService.IsClusterRebel(pAttacker) ||
+                MassUprisingClusterService.IsClusterRebel(pDefender))
+            {
+                if (MassUprisingClusterService.CanStartClusterWar(
+                        pAttacker, pDefender, out pBypassTruce, out pReason))
+                    return true;
+                if (MassUprisingClusterService.IsClusterRebel(pAttacker))
+                    return false;
+            }
             bool attackerBandit = IsBanditOrEntering(pAttacker);
             bool defenderBandit = IsBanditOrEntering(pDefender);
             bool attackerIsOrigin = defenderBandit &&

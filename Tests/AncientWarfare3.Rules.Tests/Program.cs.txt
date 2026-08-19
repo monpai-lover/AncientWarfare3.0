@@ -18,6 +18,27 @@ if (args.Length == 1 && args[0] == "--shi-lineage-mapmode")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--mass-uprising-clusters")
+{
+    MassUprisingClusterRulesTests.Run();
+    Console.WriteLine("Mass uprising cluster rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--local-corruption-loyalty")
+{
+    LocalCorruptionLoyaltySourceGuardTests.Run();
+    Console.WriteLine("Local corruption loyalty source guard passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--mass-uprising-cluster-source")
+{
+    MassUprisingClusterSourceGuardTests.Run();
+    Console.WriteLine("Mass uprising cluster source guard passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--war-refugees")
 {
     WarRefugeeRulesTests.Run();
