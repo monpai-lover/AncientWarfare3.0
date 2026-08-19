@@ -526,9 +526,14 @@ namespace AncientWarfare3.ui.windows
                 float startX = (pCanvasSize.x - rowWidth) * 0.5f;
                 Text heading = GetRegionSectionLabel(labelIndex++);
                 LocalCourtReadModel first = group[0];
-                heading.text = string.IsNullOrWhiteSpace(first.RegionName)
+                string regionName = string.IsNullOrWhiteSpace(first.RegionName)
                     ? first.CityName
                     : first.RegionName;
+                heading.text = RegionalGovernmentRules.AdministrativeLabel(
+                    regionName, first.RegionTitle) + " · " + string.Format(
+                    AW_L10n.Text("aw_court_regional_member_count",
+                        "{0} prefectures"),
+                    Math.Max(1, first.RegionMemberCount));
                 heading.color = KingdomColor(pKingdom);
                 LayoutCanvasText(heading, startX, groupTopY + 20f,
                     rowWidth, RegionHeadingHeight);

@@ -17,9 +17,16 @@ namespace AncientWarfare3.ui.windows
     internal sealed class CustomCourtWorkflowWindow :
         AbstractWindow<CustomCourtWorkflowWindow>
     {
+        private enum RegionalTitleTarget
+        {
+            Region,
+            Governor,
+            LocalLevel
+        }
+
         private const float ToolbarScale = 0.8f;
         private const float ToolbarWidth = 164f;
-        private const float ToolbarContentHeight = 574f;
+        private const float ToolbarContentHeight = 598f;
         private const float ToolbarScrollbarWidth = 6f;
         private static long _kingdomId = -1L;
         private static long _cityId = -1L;
@@ -38,9 +45,14 @@ namespace AncientWarfare3.ui.windows
         private InputField _courtNameInput;
         private InputField _officeNameInput;
         private Text _regionTitleLabel;
-        private InputField _regionTitleInput;
+        private InputField _regionTitleChineseInput;
+        private InputField _regionTitleEnglishInput;
         private Text _governorTitleLabel;
-        private InputField _governorTitleInput;
+        private InputField _governorTitleChineseInput;
+        private InputField _governorTitleEnglishInput;
+        private Text _localLevelTitleLabel;
+        private InputField _localLevelTitleChineseInput;
+        private InputField _localLevelTitleEnglishInput;
         private Button _wholePresetButton;
         private Button _backButton;
         private Text _wholePresetButtonText;
@@ -186,18 +198,44 @@ namespace AncientWarfare3.ui.windows
                 TextAnchor.MiddleLeft);
             _regionTitleLabel.text = AW_L10n.Text(
                 "aw_custom_court_region_title", "Region title");
-            _regionTitleInput = CreateInput(_toolPanel, "RegionTitleInput",
-                "aw_custom_court_region_title_placeholder", "Commandery");
-            _regionTitleInput.onEndEdit.AddListener(ApplyRegionTitle);
+            _regionTitleChineseInput = CreateInput(_toolPanel,
+                "RegionTitleChineseInput", "aw_custom_court_language_zh",
+                "中");
+            _regionTitleChineseInput.onEndEdit.AddListener(
+                ApplyRegionTitleChinese);
+            _regionTitleEnglishInput = CreateInput(_toolPanel,
+                "RegionTitleEnglishInput", "aw_custom_court_language_en",
+                "EN");
+            _regionTitleEnglishInput.onEndEdit.AddListener(
+                ApplyRegionTitleEnglish);
             _governorTitleLabel = CreateText(_toolPanel,
                 "GovernorTitleLabel", 9, TextAnchor.MiddleLeft);
             _governorTitleLabel.text = AW_L10n.Text(
                 "aw_custom_court_governor_title", "Governor title");
-            _governorTitleInput = CreateInput(_toolPanel,
-                "GovernorTitleInput",
-                "aw_custom_court_governor_title_placeholder",
-                "Regional Governor");
-            _governorTitleInput.onEndEdit.AddListener(ApplyGovernorTitle);
+            _governorTitleChineseInput = CreateInput(_toolPanel,
+                "GovernorTitleChineseInput", "aw_custom_court_language_zh",
+                "中");
+            _governorTitleChineseInput.onEndEdit.AddListener(
+                ApplyGovernorTitleChinese);
+            _governorTitleEnglishInput = CreateInput(_toolPanel,
+                "GovernorTitleEnglishInput", "aw_custom_court_language_en",
+                "EN");
+            _governorTitleEnglishInput.onEndEdit.AddListener(
+                ApplyGovernorTitleEnglish);
+            _localLevelTitleLabel = CreateText(_toolPanel,
+                "LocalLevelTitleLabel", 9, TextAnchor.MiddleLeft);
+            _localLevelTitleLabel.text = AW_L10n.Text(
+                "aw_custom_court_local_level_title", "City level");
+            _localLevelTitleChineseInput = CreateInput(_toolPanel,
+                "LocalLevelTitleChineseInput", "aw_custom_court_language_zh",
+                "中");
+            _localLevelTitleChineseInput.onEndEdit.AddListener(
+                ApplyLocalLevelTitleChinese);
+            _localLevelTitleEnglishInput = CreateInput(_toolPanel,
+                "LocalLevelTitleEnglishInput", "aw_custom_court_language_en",
+                "EN");
+            _localLevelTitleEnglishInput.onEndEdit.AddListener(
+                ApplyLocalLevelTitleEnglish);
             Text officeNameLabel = CreateText(_toolPanel, "OfficeNameLabel", 9,
                 TextAnchor.MiddleLeft);
             officeNameLabel.text = AW_L10n.Text("aw_custom_court_office_name",
@@ -248,14 +286,30 @@ namespace AncientWarfare3.ui.windows
                 _officeNameInput, add, _createLocalTemplateButton,
                 _duplicateLocalTemplateButton, _deleteLocalTemplateButton,
                 save, export, _importDropdown, apply);
-            AttachTooltip(_regionTitleInput.gameObject,
+            AttachTooltip(_regionTitleChineseInput.gameObject,
                 "aw_custom_court_region_title", "Region title",
                 "aw_custom_court_region_title_desc",
                 "Name of the runtime grouping made from adjacent cities.");
-            AttachTooltip(_governorTitleInput.gameObject,
+            AttachTooltip(_regionTitleEnglishInput.gameObject,
+                "aw_custom_court_region_title", "Region title",
+                "aw_custom_court_region_title_desc",
+                "Name of the runtime grouping made from adjacent cities.");
+            AttachTooltip(_governorTitleChineseInput.gameObject,
                 "aw_custom_court_governor_title", "Governor title",
                 "aw_custom_court_governor_title_desc",
                 "Title shown for the seat city's leader when acting as regional governor.");
+            AttachTooltip(_governorTitleEnglishInput.gameObject,
+                "aw_custom_court_governor_title", "Governor title",
+                "aw_custom_court_governor_title_desc",
+                "Title shown for the seat city's leader when acting as regional governor.");
+            AttachTooltip(_localLevelTitleChineseInput.gameObject,
+                "aw_custom_court_local_level_title", "City level",
+                "aw_custom_court_local_level_title_desc",
+                "Administrative level shown beside the unchanged city name.");
+            AttachTooltip(_localLevelTitleEnglishInput.gameObject,
+                "aw_custom_court_local_level_title", "City level",
+                "aw_custom_court_local_level_title_desc",
+                "Administrative level shown beside the unchanged city name.");
             Layout(_contextDropdown.RectTransform, 8f, 6f, 148f, 22f);
             Layout(_localTemplateDropdown.RectTransform, 8f, 32f, 148f, 22f);
             Layout(_localDefaultDropdown.RectTransform, 8f, 58f, 148f, 22f);
@@ -265,29 +319,38 @@ namespace AncientWarfare3.ui.windows
                 148f, 20f);
             Layout(_wholePresetButton.GetComponent<RectTransform>(), 8f, 154f,
                 148f, 22f);
-            Layout(_regionTitleLabel.rectTransform, 8f, 180f, 72f, 16f);
-            Layout(_regionTitleInput.GetComponent<RectTransform>(), 84f, 178f,
-                72f, 20f);
-            Layout(_governorTitleLabel.rectTransform, 8f, 204f, 72f, 16f);
-            Layout(_governorTitleInput.GetComponent<RectTransform>(), 84f,
-                202f, 72f, 20f);
-            Layout(officeNameLabel.rectTransform, 8f, 232f, 148f, 16f);
-            Layout(_officeNameInput.GetComponent<RectTransform>(), 8f, 250f,
+            Layout(_regionTitleLabel.rectTransform, 8f, 180f, 48f, 16f);
+            Layout(_regionTitleChineseInput.GetComponent<RectTransform>(),
+                58f, 178f, 46f, 20f);
+            Layout(_regionTitleEnglishInput.GetComponent<RectTransform>(),
+                108f, 178f, 48f, 20f);
+            Layout(_governorTitleLabel.rectTransform, 8f, 204f, 48f, 16f);
+            Layout(_governorTitleChineseInput.GetComponent<RectTransform>(),
+                58f, 202f, 46f, 20f);
+            Layout(_governorTitleEnglishInput.GetComponent<RectTransform>(),
+                108f, 202f, 48f, 20f);
+            Layout(_localLevelTitleLabel.rectTransform, 8f, 228f, 48f, 16f);
+            Layout(_localLevelTitleChineseInput.GetComponent<RectTransform>(),
+                58f, 226f, 46f, 20f);
+            Layout(_localLevelTitleEnglishInput.GetComponent<RectTransform>(),
+                108f, 226f, 48f, 20f);
+            Layout(officeNameLabel.rectTransform, 8f, 256f, 148f, 16f);
+            Layout(_officeNameInput.GetComponent<RectTransform>(), 8f, 274f,
                 148f, 20f);
-            Layout(add.GetComponent<RectTransform>(), 8f, 276f, 148f, 22f);
-            Layout(manage.GetComponent<RectTransform>(), 8f, 302f, 148f, 22f);
-            Layout(prerequisite.GetComponent<RectTransform>(), 8f, 328f,
+            Layout(add.GetComponent<RectTransform>(), 8f, 300f, 148f, 22f);
+            Layout(manage.GetComponent<RectTransform>(), 8f, 326f, 148f, 22f);
+            Layout(prerequisite.GetComponent<RectTransform>(), 8f, 352f,
                 148f, 22f);
             Layout(_createLocalTemplateButton.GetComponent<RectTransform>(),
-                8f, 354f, 72f, 22f);
+                8f, 378f, 72f, 22f);
             Layout(_duplicateLocalTemplateButton.GetComponent<RectTransform>(),
-                84f, 354f, 72f, 22f);
+                84f, 378f, 72f, 22f);
             Layout(_deleteLocalTemplateButton.GetComponent<RectTransform>(),
-                8f, 380f, 148f, 22f);
-            Layout(save.GetComponent<RectTransform>(), 8f, 406f, 148f, 22f);
-            Layout(export.GetComponent<RectTransform>(), 8f, 432f, 148f, 22f);
-            Layout(_importDropdown.RectTransform, 8f, 458f, 148f, 22f);
-            Layout(apply.GetComponent<RectTransform>(), 8f, 484f, 148f, 22f);
+                8f, 404f, 148f, 22f);
+            Layout(save.GetComponent<RectTransform>(), 8f, 430f, 148f, 22f);
+            Layout(export.GetComponent<RectTransform>(), 8f, 456f, 148f, 22f);
+            Layout(_importDropdown.RectTransform, 8f, 482f, 148f, 22f);
+            Layout(apply.GetComponent<RectTransform>(), 8f, 508f, 148f, 22f);
         }
 
         private void ApplyLayout()
@@ -396,8 +459,8 @@ namespace AncientWarfare3.ui.windows
                     ToolbarScrollbarWidth, 0f);
                 _toolScrollbar.transform.SetAsLastSibling();
             }
-            Layout(_status.rectTransform, 8f, 512f, 148f,
-                Mathf.Max(1f, ToolbarContentHeight - 520f));
+            Layout(_status.rectTransform, 8f, 536f, 148f,
+                Mathf.Max(1f, ToolbarContentHeight - 544f));
             _canvasRect.GetComponent<TreeDragPanHandler>().Setup(_workspaceRect,
                 _canvasRect);
             _chrome?.RepositionResizeHandle();
@@ -580,9 +643,14 @@ namespace AncientWarfare3.ui.windows
             _deleteLocalTemplateButton?.gameObject.SetActive(localMode);
             _wholePresetButton?.gameObject.SetActive(!localMode);
             _regionTitleLabel?.gameObject.SetActive(!localMode);
-            _regionTitleInput?.gameObject.SetActive(!localMode);
+            _regionTitleChineseInput?.gameObject.SetActive(!localMode);
+            _regionTitleEnglishInput?.gameObject.SetActive(!localMode);
             _governorTitleLabel?.gameObject.SetActive(!localMode);
-            _governorTitleInput?.gameObject.SetActive(!localMode);
+            _governorTitleChineseInput?.gameObject.SetActive(!localMode);
+            _governorTitleEnglishInput?.gameObject.SetActive(!localMode);
+            _localLevelTitleLabel?.gameObject.SetActive(!localMode);
+            _localLevelTitleChineseInput?.gameObject.SetActive(!localMode);
+            _localLevelTitleEnglishInput?.gameObject.SetActive(!localMode);
             if (_nameLabel != null)
                 _nameLabel.text = localMode
                     ? AW_L10n.Text("aw_custom_local_court_name",
@@ -652,12 +720,24 @@ namespace AncientWarfare3.ui.windows
             {
                 CustomCourtRegionalGovernmentLayer layer =
                     _template.RegionalGovernmentLayer;
-                if (_regionTitleInput != null)
-                    _regionTitleInput.text = layer.RegionTitle?.Chinese ??
+                if (_regionTitleChineseInput != null)
+                    _regionTitleChineseInput.text =
+                        layer.RegionTitle?.Chinese ?? string.Empty;
+                if (_regionTitleEnglishInput != null)
+                    _regionTitleEnglishInput.text =
                         layer.RegionTitle?.English ?? string.Empty;
-                if (_governorTitleInput != null)
-                    _governorTitleInput.text = layer.GovernorTitle?.Chinese ??
+                if (_governorTitleChineseInput != null)
+                    _governorTitleChineseInput.text =
+                        layer.GovernorTitle?.Chinese ?? string.Empty;
+                if (_governorTitleEnglishInput != null)
+                    _governorTitleEnglishInput.text =
                         layer.GovernorTitle?.English ?? string.Empty;
+                if (_localLevelTitleChineseInput != null)
+                    _localLevelTitleChineseInput.text =
+                        layer.LocalLevelTitle?.Chinese ?? string.Empty;
+                if (_localLevelTitleEnglishInput != null)
+                    _localLevelTitleEnglishInput.text =
+                        layer.LocalLevelTitle?.English ?? string.Empty;
             }
         }
 
@@ -1155,33 +1235,99 @@ namespace AncientWarfare3.ui.windows
                 "Office renamed."));
         }
 
-        private void ApplyRegionTitle(string pValue)
+        private void ApplyRegionTitleChinese(string pValue)
         {
-            ApplyRegionalLocalizedTitle(pValue, pGovernor: false);
+            ApplyRegionalLocalizedTitleFromInput(pValue,
+                RegionalTitleTarget.Region, pEnglish: false);
         }
 
-        private void ApplyGovernorTitle(string pValue)
+        private void ApplyRegionTitleEnglish(string pValue)
         {
-            ApplyRegionalLocalizedTitle(pValue, pGovernor: true);
+            ApplyRegionalLocalizedTitleFromInput(pValue,
+                RegionalTitleTarget.Region, pEnglish: true);
         }
 
-        private void ApplyRegionalLocalizedTitle(string pValue,
-            bool pGovernor)
+        private void ApplyGovernorTitleChinese(string pValue)
+        {
+            ApplyRegionalLocalizedTitleFromInput(pValue,
+                RegionalTitleTarget.Governor, pEnglish: false);
+        }
+
+        private void ApplyGovernorTitleEnglish(string pValue)
+        {
+            ApplyRegionalLocalizedTitleFromInput(pValue,
+                RegionalTitleTarget.Governor, pEnglish: true);
+        }
+
+        private void ApplyLocalLevelTitleChinese(string pValue)
+        {
+            ApplyRegionalLocalizedTitleFromInput(pValue,
+                RegionalTitleTarget.LocalLevel, pEnglish: false);
+        }
+
+        private void ApplyLocalLevelTitleEnglish(string pValue)
+        {
+            ApplyRegionalLocalizedTitleFromInput(pValue,
+                RegionalTitleTarget.LocalLevel, pEnglish: true);
+        }
+
+        private void ApplyRegionalLocalizedTitleFromInput(string pValue,
+            RegionalTitleTarget pTarget, bool pEnglish)
+        {
+            if (ApplyRegionalLocalizedTitle(pValue, pTarget, pEnglish))
+                RenderCards();
+        }
+
+        private bool ApplyRegionalLocalizedTitle(string pValue,
+            RegionalTitleTarget pTarget, bool pEnglish)
         {
             if (_editingLocal || _template?.RegionalGovernmentLayer == null)
-                return;
+                return false;
             string value = pValue?.Trim() ?? string.Empty;
-            if (string.IsNullOrEmpty(value)) return;
-            CustomCourtLocalizedText text = pGovernor
-                ? _template.RegionalGovernmentLayer.GovernorTitle
-                : _template.RegionalGovernmentLayer.RegionTitle;
+            if (string.IsNullOrEmpty(value)) return false;
+            CustomCourtRegionalGovernmentLayer layer =
+                _template.RegionalGovernmentLayer;
+            CustomCourtLocalizedText text = pTarget ==
+                                             RegionalTitleTarget.Governor
+                ? layer.GovernorTitle
+                : pTarget == RegionalTitleTarget.LocalLevel
+                    ? layer.LocalLevelTitle
+                    : layer.RegionTitle;
             if (text == null) text = new CustomCourtLocalizedText();
-            text.Chinese = value;
-            text.English = value;
-            if (pGovernor)
-                _template.RegionalGovernmentLayer.GovernorTitle = text;
-            else _template.RegionalGovernmentLayer.RegionTitle = text;
-            RenderCards();
+            string oldValue = pEnglish ? text.English : text.Chinese;
+            if (string.Equals(oldValue, value, StringComparison.Ordinal))
+                return false;
+            if (pEnglish) text.English = value;
+            else text.Chinese = value;
+            if (pTarget == RegionalTitleTarget.Governor)
+                layer.GovernorTitle = text;
+            else if (pTarget == RegionalTitleTarget.LocalLevel)
+                layer.LocalLevelTitle = text;
+            else layer.RegionTitle = text;
+            return true;
+        }
+
+        private void SyncRegionalTitlesFromInputs()
+        {
+            bool changed = ApplyRegionalLocalizedTitle(
+                _regionTitleChineseInput?.text, RegionalTitleTarget.Region,
+                pEnglish: false);
+            changed |= ApplyRegionalLocalizedTitle(
+                _regionTitleEnglishInput?.text, RegionalTitleTarget.Region,
+                pEnglish: true);
+            changed |= ApplyRegionalLocalizedTitle(
+                _governorTitleChineseInput?.text,
+                RegionalTitleTarget.Governor, pEnglish: false);
+            changed |= ApplyRegionalLocalizedTitle(
+                _governorTitleEnglishInput?.text,
+                RegionalTitleTarget.Governor, pEnglish: true);
+            changed |= ApplyRegionalLocalizedTitle(
+                _localLevelTitleChineseInput?.text,
+                RegionalTitleTarget.LocalLevel, pEnglish: false);
+            changed |= ApplyRegionalLocalizedTitle(
+                _localLevelTitleEnglishInput?.text,
+                RegionalTitleTarget.LocalLevel, pEnglish: true);
+            if (changed) RenderCards();
         }
 
         private static string OfficeDisplayName(CustomCourtOffice office)
@@ -1596,10 +1742,7 @@ namespace AncientWarfare3.ui.windows
                     new CustomCourtLocalizedText();
                 _template.Name.Chinese = name;
                 _template.Name.English = name;
-                ApplyRegionalLocalizedTitle(_regionTitleInput?.text,
-                    pGovernor: false);
-                ApplyRegionalLocalizedTitle(_governorTitleInput?.text,
-                    pGovernor: true);
+                SyncRegionalTitlesFromInputs();
             }
             return true;
         }

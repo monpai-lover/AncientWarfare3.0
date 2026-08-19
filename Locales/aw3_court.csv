@@ -846,3 +846,9 @@ aw_custom_court_regional_dynamic_desc,按相邻城市实时生成且不产生空
 aw_custom_court_regional_read_only,区域上级需要在中央朝廷中设置,The regional superior is configured in the central court,區域上級需要在中央朝廷中設定
 aw_custom_court_regional_management_only,区域层只能与中央官职建立管理关系,The regional layer only accepts central management connections,區域層只能與中央官職建立管理關係
 aw_custom_court_regional_protected,动态区域层不能删除,The dynamic regional layer cannot be deleted,動態區域層不能刪除
+aw_custom_court_language_zh,中文,Chinese,中文
+aw_custom_court_language_en,英文,English,英文
+aw_custom_court_local_level_title,基层行政称呼,Local level title,基層行政稱呼
+aw_custom_court_local_level_title_desc,显示在原城市名称旁的基层行政等级称呼,Administrative level shown beside the unchanged city name,顯示在原城市名稱旁的基層行政等級稱呼
+aw_court_regional_member_count,辖领{0}州,{0} prefectures,轄領{0}州
+aw_court_regional_node_summary,{0} | {1} | 首府 {2} | 辖领 {3} 州,{0} | {1} | Seat {2} | {3} prefectures,{0} | {1} | 首府 {2} | 轄領 {3} 州

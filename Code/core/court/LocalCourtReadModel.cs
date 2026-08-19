@@ -15,6 +15,8 @@ namespace AncientWarfare3.core.court
         public string RegionName { get; set; } = string.Empty;
         public string RegionTitle { get; set; } = string.Empty;
         public string RegionalGovernorTitle { get; set; } = string.Empty;
+        public string LocalLevelTitle { get; set; } = string.Empty;
+        public int RegionMemberCount { get; set; }
         public long RegionalGovernorActorId { get; set; } = -1L;
         public CourtPyramidNodeModel RegionalSuperiorNode { get; set; }
         public CourtPyramidNodeModel LeaderNode { get; set; }

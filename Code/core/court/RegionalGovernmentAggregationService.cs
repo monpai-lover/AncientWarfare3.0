@@ -19,7 +19,8 @@ namespace AncientWarfare3.core.court
                 return Array.Empty<RegionalGovernmentReadModel>();
             CustomCourtRuntime.RegionalTitles(pKingdom,
                 out string configuredRegionTitle,
-                out string configuredGovernorTitle);
+                out string configuredGovernorTitle,
+                out string configuredLocalLevelTitle);
             if (string.IsNullOrWhiteSpace(pRegionTitle))
                 pRegionTitle = configuredRegionTitle;
             if (string.IsNullOrWhiteSpace(pGovernorTitle))
@@ -74,6 +75,7 @@ namespace AncientWarfare3.core.court
                         : pRegionTitle.Trim(),
                     GovernorTitle = string.IsNullOrWhiteSpace(pGovernorTitle)
                         ? "郡守" : pGovernorTitle.Trim(),
+                    LocalLevelTitle = configuredLocalLevelTitle,
                     RegionName = RegionalGovernmentRules.RegionName(
                         group.SeatCityName, pRegionTitle),
                     GovernorActorId = seat?.leader?.data?.id ?? -1L,

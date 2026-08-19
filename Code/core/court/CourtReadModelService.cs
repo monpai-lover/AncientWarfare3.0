@@ -123,6 +123,8 @@ namespace AncientWarfare3.core.court
                 model.RegionName = region.RegionName;
                 model.RegionTitle = region.RegionTitle;
                 model.RegionalGovernorTitle = region.GovernorTitle;
+                model.LocalLevelTitle = region.LocalLevelTitle;
+                model.RegionMemberCount = region.MemberCount;
                 model.RegionalGovernorActorId = region.GovernorActorId;
             }
 
@@ -189,8 +191,11 @@ namespace AncientWarfare3.core.court
                     SchoolIconPath = RegisteredSchoolIconPath(school),
                     CityId = region.SeatCityId,
                     CityName = FindCityName(pKingdom, region.SeatCityId),
-                    CommandName = region.RegionName + " · " +
+                    CommandName = RegionalGovernmentCommandName(
+                        region.RegionName, region.RegionTitle,
                         region.GovernorTitle,
+                        FindCityName(pKingdom, region.SeatCityId),
+                        region.MemberCount),
                     DisplayTitle = region.GovernorTitle,
                     Influence = SafeStat(governor, "stewardship")
                 });
@@ -217,12 +222,29 @@ namespace AncientWarfare3.core.court
                 SchoolIconPath = RegisteredSchoolIconPath(school),
                 CityId = pModel.RegionSeatCityId,
                 CityName = FindCityName(pKingdom, pModel.RegionSeatCityId),
-                CommandName = pModel.RegionName + " · " +
+                CommandName = RegionalGovernmentCommandName(
+                    pModel.RegionName, pModel.RegionTitle,
                     pModel.RegionalGovernorTitle,
+                    FindCityName(pKingdom, pModel.RegionSeatCityId),
+                    pModel.RegionMemberCount),
                 DisplayTitle = pModel.RegionalGovernorTitle
             };
             pModel.RegionalSuperiorNode = node;
             pModel.Nodes.Insert(0, node);
+        }
+
+        private static string RegionalGovernmentCommandName(
+            string pRegionName, string pRegionTitle, string pGovernorTitle,
+            string pSeatCityName, int pMemberCount)
+        {
+            return string.Format(AW_L10n.Text(
+                    "aw_court_regional_node_summary",
+                    "{0} | {1} | Seat {2} | {3} prefectures"),
+                RegionalGovernmentRules.AdministrativeLabel(
+                    pRegionName, pRegionTitle),
+                pGovernorTitle,
+                pSeatCityName,
+                Math.Max(1, pMemberCount));
         }
 
         private static List<string> BuildLocalSeats(Kingdom pKingdom,
