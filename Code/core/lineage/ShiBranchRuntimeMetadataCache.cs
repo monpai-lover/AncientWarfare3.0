@@ -20,6 +20,8 @@ namespace AncientWarfare3.core.lineage
             new CitySchoolDirtyQueue();
         private static readonly Dictionary<long, HashSet<long>> DependentCities =
             new Dictionary<long, HashSet<long>>();
+        private static readonly Dictionary<long, HashSet<long>> CityDependencies =
+            new Dictionary<long, HashSet<long>>();
 
         internal static bool TryGet(long pShiId, long pCityId,
             out ShiBranchRuntimeMetadata pMetadata)
@@ -38,6 +40,16 @@ namespace AncientWarfare3.core.lineage
             Cache.Remove(pShiId);
             Pending.Mark(pShiId);
             MarkDependentCitiesDirty(pShiId);
+        }
+
+        internal static void BeginCityRebuild(long pCityId)
+        {
+            RemoveCityDependencies(pCityId);
+        }
+
+        internal static void RemoveCity(long pCityId)
+        {
+            RemoveCityDependencies(pCityId);
         }
 
         internal static int ProcessPending(int pBudget)
@@ -68,6 +80,7 @@ namespace AncientWarfare3.core.lineage
             Cache.Clear();
             Pending.Clear();
             DependentCities.Clear();
+            CityDependencies.Clear();
         }
 
         private static ShiBranchRuntimeMetadata Build(long pShiId,
@@ -98,6 +111,27 @@ namespace AncientWarfare3.core.lineage
                 DependentCities[pShiId] = cities;
             }
             cities.Add(pCityId);
+            if (!CityDependencies.TryGetValue(pCityId,
+                    out HashSet<long> branches))
+            {
+                branches = new HashSet<long>();
+                CityDependencies[pCityId] = branches;
+            }
+            branches.Add(pShiId);
+        }
+
+        private static void RemoveCityDependencies(long pCityId)
+        {
+            if (pCityId < 0L || !CityDependencies.TryGetValue(pCityId,
+                    out HashSet<long> branches)) return;
+            foreach (long shiId in branches)
+            {
+                if (!DependentCities.TryGetValue(shiId,
+                        out HashSet<long> cities)) continue;
+                cities.Remove(pCityId);
+                if (cities.Count == 0) DependentCities.Remove(shiId);
+            }
+            CityDependencies.Remove(pCityId);
         }
 
         private static void MarkDependentCitiesDirty(long pShiId)

@@ -102,6 +102,7 @@ namespace AncientWarfare3.core.lineage
                 {
                     Snapshots.Remove(cityId);
                     Demanded.Remove(cityId);
+                    ShiBranchRuntimeMetadataCache.RemoveCity(cityId);
                     continue;
                 }
 
@@ -135,6 +136,7 @@ namespace AncientWarfare3.core.lineage
 
         private static CityShiInfluenceSnapshot Rebuild(City pCity)
         {
+            ShiBranchRuntimeMetadataCache.BeginCityRebuild(pCity.data.id);
             var contributions = new List<CityShiInfluenceContribution>();
             foreach (Actor actor in pCity.getUnits())
             {
@@ -175,10 +177,11 @@ namespace AncientWarfare3.core.lineage
                 pActor.data.id < 0L || pActor.city != pCity) return false;
             pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
             if (shiId < 0L) return false;
-            ShiBranchRuntimeMetadataCache.TryGet(shiId, pCity.data.id,
-                out ShiBranchRuntimeMetadata metadata);
+            if (!ShiBranchRuntimeMetadataCache.TryGet(shiId, pCity.data.id,
+                    out ShiBranchRuntimeMetadata metadata) ||
+                metadata == null || !metadata.IsValid) return false;
             pContribution = new CityShiInfluenceContribution(pActor.data.id,
-                shiId, ResolveRole(pActor), metadata?.CreatedOrder ?? long.MaxValue);
+                shiId, ResolveRole(pActor), metadata.CreatedOrder);
             return true;
         }
 

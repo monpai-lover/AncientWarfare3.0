@@ -124,6 +124,7 @@ namespace AncientWarfare3.core.lineage
                         SimpleColumnConstraint.CreateEq("SHI_ID", pShiId)
                     },
                     ColumnVal.Create("CLAN_NAME", pClanName)));
+            ShiBranchRuntimeMetadataCache.Invalidate(pShiId);
         }
 
         private static void UpdateArchivedActor(ActorArchiveTableItem pRow, string pClanName)

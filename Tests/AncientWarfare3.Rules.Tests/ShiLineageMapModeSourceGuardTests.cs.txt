@@ -28,6 +28,8 @@ internal static class ShiLineageMapModeSourceGuardTests
             "Code/core/lineage/WesternLineageAdmissionService.cs");
         string virtualTitles = Read(
             "Code/core/lineage/VirtualNobleTitleService.cs");
+        string clanRename = Read(
+            "Code/core/lineage/VisibleClanRenameService.cs");
         string replica = Read(
             "Code/core/multiplayer/AW3MultiplayerStrategicStateCoordinator.cs");
 
@@ -58,12 +60,24 @@ internal static class ShiLineageMapModeSourceGuardTests
             "city snapshot rebuilds must not query SQLite");
         Contains(snapshot, "ShiBranchRuntimeMetadataCache.TryGet",
             "city rebuilds must consume bounded runtime branch metadata");
+        Contains(snapshot, "!metadata.IsValid) return false;",
+            "missing or invalid branch metadata must not contribute influence");
+        Contains(snapshot, "ShiBranchRuntimeMetadataCache.BeginCityRebuild",
+            "city rebuilds must replace stale branch dependencies");
+        Contains(snapshot, "ShiBranchRuntimeMetadataCache.RemoveCity",
+            "deleted cities must release branch dependencies");
         Contains(metadata, "ProcessPending(int pBudget)",
             "branch metadata loads must expose a bounded drain");
         Contains(metadata, "attempts < budget",
             "failed branch metadata loads must consume bounded attempts");
         Contains(metadata, "LineageQuery.GetShiBranchInfo",
             "branch metadata lookup must be isolated from city rebuilds");
+        Contains(metadata, "CityDependencies",
+            "branch dependencies must have a city-to-branch reverse index");
+        Contains(metadata, "BeginCityRebuild",
+            "a rebuilt city must discard historical branch dependencies");
+        Contains(metadata, "RemoveCityDependencies",
+            "city dependency removal must update both indexes");
         Contains(service, "ShiBranchRuntimeMetadataCache.ProcessPending(1)",
             "each frame may load only a bounded branch metadata batch");
         Contains(service, "CityShiInfluenceSnapshotService.Demand(pCity);",
@@ -128,6 +142,8 @@ internal static class ShiLineageMapModeSourceGuardTests
             "slavery status changes must invalidate affected actors");
         Contains(virtualTitles, "CityShiInfluenceSnapshotService.MarkActorDirty",
             "virtual noble title changes must invalidate affected actors");
+        Contains(clanRename, "ShiBranchRuntimeMetadataCache.Invalidate(pShiId);",
+            "renaming a Shi branch must invalidate its cached display metadata");
         Contains(replica, "CityShiInfluenceSnapshotService.Clear();",
             "replica apply completion must reset Shi snapshots");
         Contains(deferred, "ShiLineageMapModeService.ProcessFrame",
