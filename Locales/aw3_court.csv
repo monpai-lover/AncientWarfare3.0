@@ -27,6 +27,7 @@ aw_custom_court_whole_preset_locked_requirement,需要先解锁{0}才能使用�
 aw_custom_court_whole_preset_loaded,已载入整套官场预设：{0},Whole-court preset loaded: {0},已載入整套官場預設：{0}
 aw_custom_court_whole_preset_unavailable,当前国家没有可用的整套官场预设,Whole-court presets are unavailable for this realm,目前國家沒有可用的整套官場預設
 aw_custom_court_whole_preset_empty,所选整套官场预设没有可用官职,The selected whole-court preset has no offices,所選整套官場預設沒有可用官職
+aw_custom_court_whole_preset_cycle,整套官场：{0},Whole court: {0},整套官場：{0}
 aw_custom_court_workflow,自定义朝廷,Custom Court Workflow,自定义朝廷
 aw_custom_court_workflow Title,自定义朝廷工作流,Custom Court Workflow,自定义朝廷工作流
 aw_custom_court_workflow_title,自定义朝廷工作流,Custom Court Workflow,自定义朝廷工作流

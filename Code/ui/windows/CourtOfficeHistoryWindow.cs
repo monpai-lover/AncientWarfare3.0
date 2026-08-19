@@ -14,6 +14,7 @@ namespace AncientWarfare3.ui.windows
     internal sealed class CourtOfficeHistoryWindow :
         AbstractWindow<CourtOfficeHistoryWindow>
     {
+        private const float ContentInsetX = 30f;
         private static readonly Vector2 DefaultSize = new(520f, 340f);
         private static readonly Vector2 MinimumSize = new(420f, 260f);
         private static readonly Vector2 MaximumSize = new(900f, 680f);
@@ -129,6 +130,7 @@ namespace AncientWarfare3.ui.windows
         {
             if (_root == null) return;
             float contentWidth = Mathf.Max(1f, _windowSize.x - 42f);
+            float usableWidth = Mathf.Max(1f, contentWidth - ContentInsetX);
             float viewportHeight = Mathf.Max(1f, _windowSize.y - 58f);
             RectTransform background = BackgroundTransform as RectTransform;
             if (background != null) background.sizeDelta = _windowSize;
@@ -152,18 +154,18 @@ namespace AncientWarfare3.ui.windows
                     viewportHeight);
             _root.anchorMin = _root.anchorMax = new Vector2(0f, 1f);
             _root.pivot = new Vector2(0f, 1f);
-            _root.anchoredPosition = Vector2.zero;
+            _root.anchoredPosition = new Vector2(ContentInsetX, 0f);
             float rowsHeight = 36f + _rowPool.Count *
                 CourtOfficeHistoryRow.Height;
-            _root.sizeDelta = new Vector2(contentWidth,
+            _root.sizeDelta = new Vector2(usableWidth,
                 Mathf.Max(viewportHeight, rowsHeight));
             Layout(_header.rectTransform, 8f, 5f,
-                contentWidth - 16f, 24f);
+                usableWidth - 16f, 24f);
             Layout(_empty.rectTransform, 8f, 42f,
-                contentWidth - 16f, 40f);
+                usableWidth - 16f, 40f);
             for (int i = 0; i < _rowPool.Count; i++)
                 _rowPool[i].Layout(34f +
-                    i * CourtOfficeHistoryRow.Height, contentWidth);
+                    i * CourtOfficeHistoryRow.Height, usableWidth);
             _chrome?.RepositionResizeHandle();
         }
 

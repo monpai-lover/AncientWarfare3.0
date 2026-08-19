@@ -61,14 +61,15 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "ApplyOfficeName");
         Contains(window, "SaveTemplate");
         Contains(window, "AWStringDropdown _importDropdown");
-        Contains(window, "AWStringDropdown _wholePresetDropdown");
+        Contains(window, "Button _wholePresetButton");
         Contains(window, "RefreshWholePresetOptions(");
-        Contains(window, "ReplaceWithWholePreset(");
-        Contains(window, "WholePresetUnavailable(");
+        Contains(window, "CycleWholePreset(");
+        Contains(window, "NextUnlockedPreset(");
+        DoesNotContain(window, "_wholePresetDropdown");
         Contains(window, "CustomCourtWholePresetRules.TryReplace(");
         Contains(window, "_edgeSource = null;");
         Contains(window, "_edgeTarget = null;");
-        Contains(window, "SyncCourtNameFromInput()");
+        Contains(window, "SyncContextNameFromInput()");
         Contains(window, "CustomCourtTemplatePathService.RootPath");
         Contains(window, "store.ListFileNames()");
         Contains(window, "store.TryLoadFile(option.Id");
@@ -82,7 +83,7 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "aw_custom_court_prerequisite_edge_desc");
         Contains(window, "CourtWindow.OpenAndRefresh(_kingdomId)");
         Contains(window, "text.raycastTarget = false;");
-        Contains(window, "SyncCourtNameFromInput()");
+        Contains(window, "SyncContextNameFromInput()");
         Contains(window, "text.font = LocalizedTextManager.current_font;");
         Contains(window, "BackgroundTransform?.Find(\"Scroll View\")");
         Contains(window, "scrollRect.sizeDelta = new Vector2(contentWidth,");
@@ -94,10 +95,17 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "new Vector2(560f, 360f)");
         Contains(window, "new Vector2(420f, 280f)");
         Contains(window, "new Vector2(900f, 650f)");
+        Contains(window, "private const float ToolbarScale = 0.8f;");
+        Contains(window, "CourtWorkflowToolViewport");
+        Contains(window, "typeof(RectMask2D), typeof(ScrollRect)");
+        Contains(window, "_toolScrollRect.content = _toolPanel;");
+        Contains(window, "_toolScrollRect.vertical = true;");
+        Contains(window, "_toolScrollRect.horizontal = false;");
+        Contains(window, "_toolPanel.localScale = Vector3.one * ToolbarScale;");
         Contains(window, "CourtWorkflowVacancyCard.Create");
         Contains(window, "_toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f)");
-        Contains(window, "_toolPanel.anchoredPosition = new Vector2(-864f, 46f)");
-        Contains(window, "_toolPanel.SetAsLastSibling()");
+        Contains(window, "_toolViewport.anchoredPosition = new Vector2(-864f, 46f)");
+        Contains(window, "_toolViewport.SetAsLastSibling()");
         Contains(window, "_canvasRect.anchorMin = _canvasRect.anchorMax = new Vector2(0.5f, 0.5f)");
         Contains(window,
             "CustomCourtWorkflowLayoutRules.VisibleCanvasHeight(");

@@ -31,6 +31,17 @@ if (-not $window.Contains('OfficialCareerHistoryReadService.Read(')) {
 if (-not $readService.Contains('OfficialCareerHistoryQuery.Read(')) {
     $failures.Add('History read gateway must use the bounded SQLite query.')
 }
+if (-not $window.Contains('private const float ContentInsetX = 30f;')) {
+    $failures.Add('History content must retain the requested 30-pixel inset.')
+}
+if (-not $window.Contains(
+        '_root.anchoredPosition = new Vector2(ContentInsetX, 0f);')) {
+    $failures.Add('History content root must move right by its inset.')
+}
+if (-not $window.Contains(
+        'float usableWidth = Mathf.Max(1f, contentWidth - ContentInsetX);')) {
+    $failures.Add('History content width must shrink by the rightward inset.')
+}
 if (-not $window.Contains('OfficialCareerHistoryRules.YearRange(')) {
     $failures.Add('History rows must use the shared year-range rule.')
 }

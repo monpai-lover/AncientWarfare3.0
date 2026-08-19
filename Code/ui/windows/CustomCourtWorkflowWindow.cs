@@ -17,18 +17,24 @@ namespace AncientWarfare3.ui.windows
     internal sealed class CustomCourtWorkflowWindow :
         AbstractWindow<CustomCourtWorkflowWindow>
     {
+        private const float ToolbarScale = 0.8f;
+        private const float ToolbarWidth = 164f;
+        private const float ToolbarContentHeight = 520f;
         private static long _kingdomId = -1L;
-        private static readonly Vector2 DefaultSize = new Vector2(560f, 560f);
-        private static readonly Vector2 MinimumSize = new Vector2(420f, 400f);
+        private static readonly Vector2 DefaultSize = new Vector2(560f, 360f);
+        private static readonly Vector2 MinimumSize = new Vector2(420f, 280f);
         private static readonly Vector2 MaximumSize = new Vector2(900f, 650f);
         private Vector2 _windowSize = DefaultSize;
         private RectTransform _root;
         private RectTransform _canvasRect;
         private RectTransform _workspaceRect;
+        private RectTransform _toolViewport;
         private RectTransform _toolPanel;
+        private ScrollRect _toolScrollRect;
         private InputField _courtNameInput;
         private InputField _officeNameInput;
-        private AWStringDropdown _wholePresetDropdown;
+        private Button _wholePresetButton;
+        private Text _wholePresetButtonText;
         private AWStringDropdown _importDropdown;
         private AWStringDropdown _contextDropdown;
         private AWStringDropdown _localTemplateDropdown;
@@ -40,6 +46,7 @@ namespace AncientWarfare3.ui.windows
         private Button _deleteLocalTemplateButton;
         private string _selectedImportFile = string.Empty;
         private string _selectedLocalTemplateId = string.Empty;
+        private string _selectedWholePresetId = string.Empty;
         private string _replacementTemplateId = string.Empty;
         private bool _editingLocal;
         private long _loadedKingdomId = -1L;
@@ -106,11 +113,28 @@ namespace AncientWarfare3.ui.windows
                 new Vector2(0.5f, 0.5f);
             _workspaceRect.pivot = new Vector2(0.5f, 0.5f);
             _workspaceRect.sizeDelta = new Vector2(2000f, 1500f);
+
+            _toolViewport = new GameObject("CourtWorkflowToolViewport",
+                typeof(RectTransform), typeof(Image),
+                typeof(RectMask2D), typeof(ScrollRect))
+                .GetComponent<RectTransform>();
+            _toolViewport.SetParent(_root, false);
+            _toolViewport.GetComponent<Image>().color =
+                new Color(0.12f, 0.09f, 0.06f, 0.98f);
+            _toolScrollRect = _toolViewport.GetComponent<ScrollRect>();
+            _toolScrollRect.viewport = _toolViewport;
+            _toolScrollRect.horizontal = false;
+            _toolScrollRect.vertical = true;
+            _toolScrollRect.movementType = ScrollRect.MovementType.Clamped;
+            _toolScrollRect.inertia = true;
+            _toolScrollRect.scrollSensitivity = 18f;
+
             _toolPanel = new GameObject("CourtWorkflowTools",
                 typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
-            _toolPanel.SetParent(_root, false);
+            _toolPanel.SetParent(_toolViewport, false);
             _toolPanel.GetComponent<Image>().color =
                 new Color(0.12f, 0.09f, 0.06f, 0.98f);
+            _toolScrollRect.content = _toolPanel;
             _contextDropdown = AWStringDropdown.Create(_toolPanel,
                 "CourtContext", 148f, 22f, SelectEditorContext);
             _localTemplateDropdown = AWStringDropdown.Create(_toolPanel,
@@ -124,13 +148,15 @@ namespace AncientWarfare3.ui.windows
             _nameLabel.text = AW_L10n.Text("aw_custom_court_name",
                 "Court name");
             _courtNameInput = CreateInput(_toolPanel, "CourtNameInput");
-            _wholePresetDropdown = AWStringDropdown.Create(_toolPanel,
-                "WholeCourtPreset", 148f, 22f, ReplaceWithWholePreset,
-                WholePresetUnavailable);
-            AttachTooltip(_wholePresetDropdown.GetComponent<Button>(),
+            _wholePresetButton = CreateButton(_toolPanel, "WholeCourtPreset",
+                "aw_custom_court_whole_preset", "Whole court preset",
+                CycleWholePreset);
+            _wholePresetButtonText = _wholePresetButton.transform.Find("Text")
+                ?.GetComponent<Text>();
+            AttachTooltip(_wholePresetButton,
                 "aw_custom_court_whole_preset", "Whole court preset",
                 "aw_custom_court_whole_preset_select",
-                "Select a built-in whole-court preset");
+                "Cycle through the unlocked whole-court presets");
             Text officeNameLabel = CreateText(_toolPanel, "OfficeNameLabel", 9,
                 TextAnchor.MiddleLeft);
             officeNameLabel.text = AW_L10n.Text("aw_custom_court_office_name",
@@ -183,7 +209,8 @@ namespace AncientWarfare3.ui.windows
             Layout(_nameLabel.rectTransform, 8f, 110f, 148f, 16f);
             Layout(_courtNameInput.GetComponent<RectTransform>(), 8f, 128f,
                 148f, 20f);
-            Layout(_wholePresetDropdown.RectTransform, 8f, 154f, 148f, 22f);
+            Layout(_wholePresetButton.GetComponent<RectTransform>(), 8f, 154f,
+                148f, 22f);
             Layout(officeNameLabel.rectTransform, 8f, 180f, 148f, 16f);
             Layout(_officeNameInput.GetComponent<RectTransform>(), 8f, 198f,
                 148f, 20f);
@@ -260,14 +287,22 @@ namespace AncientWarfare3.ui.windows
             _root.pivot = new Vector2(0.5f, 0.5f);
             _root.sizeDelta = new Vector2(contentWidth, viewportHeight);
             _root.anchoredPosition = new Vector2(0f, -8f);
+            _toolViewport.anchorMin = _toolViewport.anchorMax =
+                new Vector2(1f, 1f);
+            _toolViewport.pivot = new Vector2(1f, 1f);
+            _toolViewport.anchoredPosition = new Vector2(-864f, 46f);
+            _toolViewport.sizeDelta = new Vector2(
+                ToolbarWidth * ToolbarScale,
+                Mathf.Max(1f, viewportHeight - 8f));
+            _toolViewport.SetAsLastSibling();
             _toolPanel.anchorMin = _toolPanel.anchorMax = new Vector2(1f, 1f);
             _toolPanel.pivot = new Vector2(1f, 1f);
-            _toolPanel.anchoredPosition = new Vector2(-864f, 46f);
-            _toolPanel.sizeDelta = new Vector2(164f,
-                Mathf.Max(1f, viewportHeight - 8f));
-            _toolPanel.SetAsLastSibling();
+            _toolPanel.anchoredPosition = Vector2.zero;
+            _toolPanel.sizeDelta = new Vector2(ToolbarWidth,
+                ToolbarContentHeight);
+            _toolPanel.localScale = Vector3.one * ToolbarScale;
             Layout(_status.rectTransform, 8f, 460f, 148f,
-                Mathf.Max(1f, _toolPanel.sizeDelta.y - 468f));
+                Mathf.Max(1f, ToolbarContentHeight - 468f));
             _canvasRect.anchorMin = _canvasRect.anchorMax = new Vector2(0.5f, 0.5f);
             _canvasRect.pivot = new Vector2(0.5f, 0.5f);
             _canvasRect.sizeDelta = new Vector2(contentWidth,
@@ -290,8 +325,9 @@ namespace AncientWarfare3.ui.windows
                     out CustomCourtTemplate applied)
                     ? CustomCourtTemplateJsonCodec.Normalize(applied)
                     : NewTemplate();
-                _loadedKingdomId = _kingdomId;
-                _pendingReplacements.Clear();
+                    _loadedKingdomId = _kingdomId;
+                    _pendingReplacements.Clear();
+                    _selectedWholePresetId = string.Empty;
             }
             EnsureTemplateShape();
             RefreshContextControls();
@@ -421,7 +457,7 @@ namespace AncientWarfare3.ui.windows
             _createLocalTemplateButton?.gameObject.SetActive(localMode);
             _duplicateLocalTemplateButton?.gameObject.SetActive(localMode);
             _deleteLocalTemplateButton?.gameObject.SetActive(localMode);
-            _wholePresetDropdown?.gameObject.SetActive(!localMode);
+            _wholePresetButton?.gameObject.SetActive(!localMode);
             if (_nameLabel != null)
                 _nameLabel.text = localMode
                     ? AW_L10n.Text("aw_custom_local_court_name",
@@ -943,48 +979,41 @@ namespace AncientWarfare3.ui.windows
             ICourtProfile profile = CourtProfileRegistry.For(kingdom);
             if (kingdom?.data == null || profile == null)
             {
-                _wholePresetDropdown?.SetOptions(
-                    Array.Empty<AWStringDropdownOption>(), string.Empty,
-                    AW_L10n.Text("aw_custom_court_whole_preset_unavailable",
-                        "Whole-court presets unavailable"));
-                _wholePresetDropdown?.SetInteractable(false);
+                SetWholePresetButtonState(
+                    Array.Empty<CustomCourtWholePresetOption>());
                 return;
             }
 
             string currentInstitution =
                 CourtInstitutionService.GetInstitution(kingdom);
-            AWStringDropdownOption[] options = CustomCourtWholePresetRules
-                .Options(profile.Id, currentInstitution)
-                .Select(option =>
-                {
-                    string institutionName = CourtInstitutionService
-                        .InstitutionName(option.InstitutionId);
-                    string locked = AW_L10n.Text(
-                        "aw_custom_court_whole_preset_locked", "Locked");
-                    return new AWStringDropdownOption
-                    {
-                        Id = option.InstitutionId,
-                        Label = option.Unlocked
-                            ? institutionName
-                            : institutionName + " (" + locked + ")",
-                        Enabled = option.Unlocked,
-                        DisabledMessage = string.Format(
-                            CultureInfo.CurrentCulture,
-                            AW_L10n.Text(
-                                "aw_custom_court_whole_preset_locked_requirement",
-                                "Unlock {0} before using this preset."),
-                            institutionName)
-                    };
-                }).ToArray();
-            _wholePresetDropdown?.SetOptions(options, string.Empty,
-                AW_L10n.Text("aw_custom_court_whole_preset_select",
-                    "Select whole-court preset"));
-            _wholePresetDropdown?.SetInteractable(options.Length > 0);
+            SetWholePresetButtonState(CustomCourtWholePresetRules.Options(
+                profile.Id, currentInstitution));
         }
 
-        private void ReplaceWithWholePreset(AWStringDropdownOption option)
+        private void SetWholePresetButtonState(
+            IReadOnlyList<CustomCourtWholePresetOption> pOptions)
         {
-            if (option == null || string.IsNullOrEmpty(option.Id)) return;
+            CustomCourtWholePresetOption selected = pOptions?.FirstOrDefault(
+                option => option.Unlocked && string.Equals(option.InstitutionId,
+                    _selectedWholePresetId, StringComparison.Ordinal)) ??
+                CustomCourtWholePresetRules.NextUnlockedPreset(pOptions,
+                    string.Empty);
+            bool available = !string.IsNullOrEmpty(selected.InstitutionId);
+            if (_wholePresetButton == null) return;
+            _wholePresetButton.interactable = available;
+            if (_wholePresetButtonText != null)
+                _wholePresetButtonText.text = available
+                    ? string.Format(CultureInfo.CurrentCulture,
+                        AW_L10n.Text("aw_custom_court_whole_preset_cycle",
+                            "Whole court: {0}"),
+                        CourtInstitutionService.InstitutionName(
+                            selected.InstitutionId))
+                    : AW_L10n.Text("aw_custom_court_whole_preset_unavailable",
+                        "Whole-court presets unavailable");
+        }
+
+        private void CycleWholePreset()
+        {
             Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
             ICourtProfile profile = CourtProfileRegistry.For(kingdom);
             if (kingdom?.data == null || profile == null)
@@ -995,29 +1024,41 @@ namespace AncientWarfare3.ui.windows
                 return;
             }
 
-            CustomCourtWholePresetOption preset = CustomCourtWholePresetRules
-                .Options(profile.Id, CourtInstitutionService.GetInstitution(
-                    kingdom)).FirstOrDefault(candidate => string.Equals(
-                    candidate.InstitutionId, option.Id,
-                    StringComparison.Ordinal));
-            if (string.IsNullOrEmpty(preset.InstitutionId) || !preset.Unlocked)
+            CustomCourtWholePresetOption next =
+                CustomCourtWholePresetRules.NextUnlockedPreset(
+                    CustomCourtWholePresetRules.Options(profile.Id,
+                        CourtInstitutionService.GetInstitution(kingdom)),
+                    _selectedWholePresetId);
+            if (string.IsNullOrEmpty(next.InstitutionId))
             {
-                WholePresetUnavailable(option);
+                SetStatus(AW_L10n.Text(
+                    "aw_custom_court_whole_preset_unavailable",
+                    "Whole-court presets unavailable."));
                 return;
             }
-            if (!SyncContextNameFromInput()) return;
+            if (!ApplyWholePreset(next.InstitutionId, profile, kingdom)) return;
+            _selectedWholePresetId = next.InstitutionId;
+            RefreshWholePresetOptions();
+        }
+
+        private bool ApplyWholePreset(string pInstitutionId,
+            ICourtProfile pProfile, Kingdom pKingdom)
+        {
+            if (string.IsNullOrEmpty(pInstitutionId) || pProfile == null ||
+                pKingdom?.data == null || !SyncContextNameFromInput())
+                return false;
 
             CustomCourtOfficeLayout center = CanvasCenterLayout();
             bool replaced = CustomCourtWholePresetRules.TryReplace(_template,
-                profile, option.Id,
-                definition => PresetOfficeName(option.Id, definition),
+                pProfile, pInstitutionId,
+                definition => PresetOfficeName(pInstitutionId, definition),
                 center.X, center.Y, out CustomCourtTemplate replacement);
             if (!replaced)
             {
                 SetStatus(AW_L10n.Text(
                     "aw_custom_court_whole_preset_empty",
                     "The selected whole-court preset has no offices."));
-                return;
+                return false;
             }
 
             _template = replacement;
@@ -1029,15 +1070,9 @@ namespace AncientWarfare3.ui.windows
             RenderCards();
             SetStatus(string.Format(CultureInfo.CurrentCulture,
                 AW_L10n.Text("aw_custom_court_whole_preset_loaded",
-                    "Whole-court preset loaded: {0}"), option.Label));
-        }
-
-        private void WholePresetUnavailable(AWStringDropdownOption option)
-        {
-            SetStatus(!string.IsNullOrEmpty(option?.DisabledMessage)
-                ? option.DisabledMessage
-                : AW_L10n.Text("aw_custom_court_whole_preset_unavailable",
-                    "Whole-court presets unavailable."));
+                    "Whole-court preset loaded: {0}"),
+                CourtInstitutionService.InstitutionName(pInstitutionId)));
+            return true;
         }
 
         private static CustomCourtLocalizedText PresetOfficeName(
@@ -1066,6 +1101,7 @@ namespace AncientWarfare3.ui.windows
                 _template = imported;
                 _loadedKingdomId = _kingdomId;
                 _pendingReplacements.Clear();
+                _selectedWholePresetId = string.Empty;
                 EnsureTemplateShape();
                 if (ActiveLocalTemplate == null)
                     _selectedLocalTemplateId = _template.LocalTemplates

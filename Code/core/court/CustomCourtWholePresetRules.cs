@@ -66,6 +66,33 @@ namespace AncientWarfare3.core.court
                 .ToArray();
         }
 
+        public static CustomCourtWholePresetOption NextUnlockedPreset(
+            IReadOnlyList<CustomCourtWholePresetOption> options,
+            string currentInstitutionId)
+        {
+            if (options == null || options.Count == 0)
+                return default;
+
+            int start = -1;
+            for (int index = 0; index < options.Count; index++)
+            {
+                if (string.Equals(options[index].InstitutionId,
+                        currentInstitutionId, StringComparison.Ordinal))
+                {
+                    start = index;
+                    break;
+                }
+            }
+
+            for (int offset = 1; offset <= options.Count; offset++)
+            {
+                int index = (start + offset) % options.Count;
+                if (options[index].Unlocked)
+                    return options[index];
+            }
+            return default;
+        }
+
         public static bool TryReplace(CustomCourtTemplate source,
             ICourtProfile profile, string institutionId,
             Func<CourtOfficeDefinition, CustomCourtLocalizedText> nameResolver,
