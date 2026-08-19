@@ -1,0 +1,32 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.core.court;
+
+internal static class CourtTemplateOfficerMigrationRulesTests
+{
+    public static void Run()
+    {
+        var source = new[] { Office("same", 10), Office("old", 20) };
+        var target = new[] { Office("same", 10), Office("new", 20) };
+        var incumbents = new Dictionary<string, long>
+        { ["same"] = 4, ["old"] = 8 };
+        var result = CourtTemplateOfficerMigrationRules.Match(source, target,
+            incumbents);
+        Equal(4L, result["same"], "exact office id wins");
+        Equal(8L, result["new"], "compatible office receives unmatched officer");
+        var duplicate = CourtTemplateOfficerMigrationRules.Match(
+            source, new[] { Office("same", 10), Office("other", 10) },
+            new Dictionary<string, long> { ["same"] = 4, ["old"] = 4 });
+        Equal(1, duplicate.Count, "one actor cannot fill two offices");
+        Console.WriteLine("Court template officer migration rules passed.");
+    }
+    private static CustomCourtOffice Office(string id, int grade)
+    {
+        return new CustomCourtOffice { Id = id, Grade = grade,
+            Layer = CourtOfficeLayer.Central, Slots = 1 };
+    }
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual)) throw new InvalidOperationException(message);
+    }
+}

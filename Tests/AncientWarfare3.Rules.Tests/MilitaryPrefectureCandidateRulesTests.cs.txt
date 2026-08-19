@@ -1,0 +1,34 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.court;
+
+internal static class MilitaryPrefectureCandidateRulesTests
+{
+    public static void Run()
+    {
+        True(MilitaryPrefectureCandidateRules.IsMilitaryTemplate("junfu"),
+            "junfu is the military-prefecture template");
+        True(!MilitaryPrefectureCandidateRules.IsMilitaryTemplate("minzhou"),
+            "civil template is not a military-prefecture candidate");
+        True(!MilitaryPrefectureCandidateRules.IsMilitaryTemplate("custom"),
+            "custom template is not implicitly a military-prefecture candidate");
+        True(MilitaryPrefectureCandidateRules.IsCandidate(true, true, true,
+            "junfu"), "valid owned live junfu city is a candidate");
+        True(!MilitaryPrefectureCandidateRules.IsCandidate(false, true, true,
+            "junfu"), "dead city is excluded");
+        True(!MilitaryPrefectureCandidateRules.IsCandidate(true, true, false,
+            "junfu"), "foreign city is excluded");
+        string source = File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+            "Code", "core", "court", "MilitaryPrefectureCandidateService.cs"));
+        True(source.Contains("CustomCourtRuntime.TryGetLocalTemplate"),
+            "candidate service reuses runtime template resolution");
+        True(!source.Contains("World.world.cities"),
+            "candidate service does not scan the full world");
+        Console.WriteLine("Military prefecture candidate rules passed.");
+    }
+
+    private static void True(bool actual, string message)
+    {
+        if (!actual) throw new InvalidOperationException(message);
+    }
+}

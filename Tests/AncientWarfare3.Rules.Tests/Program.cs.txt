@@ -70,6 +70,18 @@ if (args.Length == 1 && args[0] == "--custom-local-government")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--military-prefecture-candidates")
+{
+    MilitaryPrefectureCandidateRulesTests.Run();
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--court-officer-migration")
+{
+    CourtTemplateOfficerMigrationRulesTests.Run();
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--regional-government")
 {
     RegionalGovernmentRulesTests.Run();

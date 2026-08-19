@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.court;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -240,6 +241,8 @@ namespace AncientWarfare3.core.lineage
             bool external = CentralizationBorderDeploymentService.
                 HasExternalLandBorderForRoot(pSeat, pSuzerain);
             return !pSeat.isRekt() && pSeat.isAlive() &&
+                   MilitaryPrefectureCandidateService.IsCandidate(
+                       pSuzerain, pSeat) &&
                    MilitaryGovernorateRules.IsEligibleSeat(
                        pSeat.kingdom == pSuzerain,
                        pSuzerain.capital == pSeat,
