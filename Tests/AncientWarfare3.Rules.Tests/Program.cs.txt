@@ -8835,5 +8835,6 @@ CorruptionSourceGuardTests.Run();
 HistoricalSchoolXiaAccessRulesTests.Run();
 HistoricalSchoolXiaAccessSourceGuardTests.Run();
 WarRefugeeRulesTests.Run();
+CityShiInfluenceSourceGuardTests.Run();
 
 Console.WriteLine("Rule tests passed.");
