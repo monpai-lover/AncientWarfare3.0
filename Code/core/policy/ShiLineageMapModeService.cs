@@ -12,15 +12,25 @@ namespace AncientWarfare3.core.policy
         private static readonly Dictionary<string, ColorAsset> Colors =
             new Dictionary<string, ColorAsset>(StringComparer.Ordinal);
         private static double _lastDirtyTime = -1d;
+        private static bool _wasActive;
+        private static City _ownedCity;
 
         public static long FocusShiId { get; private set; } = -1L;
         public static bool IsActive() => AWMapModeCoordinator.IsActive(POWER_ID);
 
         public static void ProcessFrame()
         {
-            if (IsActive()) CityShiInfluenceSnapshotService.ProcessDirty(4);
+            bool active = IsActive();
+            if (_wasActive && !active) DeactivateOwnedState();
+            _wasActive = active;
+            ShiBranchRuntimeMetadataCache.ProcessPending(1);
+            if (active) CityShiInfluenceSnapshotService.ProcessDirty(4);
             else if (CityShiInfluenceSnapshotService.HasPendingDemand)
                 CityShiInfluenceSnapshotService.ProcessDirty(1, true);
+            if (_ownedCity != null &&
+                (SelectedMetas.selected_city != _ownedCity ||
+                 SelectedObjects.getSelectedNanoObject() != _ownedCity))
+                _ownedCity = null;
             ShiLineageMapBottomBarController.ProcessFrame();
         }
 
@@ -54,6 +64,7 @@ namespace AncientWarfare3.core.policy
 
         public static string BuildTooltip(City pCity)
         {
+            CityShiInfluenceSnapshotService.Demand(pCity);
             CityShiInfluenceSnapshot snapshot =
                 CityShiInfluenceSnapshotService.GetSnapshot(pCity);
             if (snapshot == null || snapshot.TotalWeight <= 0)
@@ -83,8 +94,10 @@ namespace AncientWarfare3.core.policy
             if (pCity?.data == null || pCity.isRekt() || !pCity.isAlive() ||
                 ScrollWindow.getCurrentWindow() != null) return false;
             SelectedUnit.clear();
+            CityShiInfluenceSnapshotService.Demand(pCity);
             SelectedMetas.selected_city = pCity;
             SelectedObjects.setNanoObject(pCity);
+            _ownedCity = pCity;
             ShiLineageMapBottomBarController.Show(pCity);
             return true;
         }
@@ -123,10 +136,28 @@ namespace AncientWarfare3.core.policy
 
         internal static void ResetRuntime()
         {
+            DeactivateOwnedState();
             Colors.Clear();
-            FocusShiId = -1L;
             _lastDirtyTime = -1d;
+            _wasActive = false;
+        }
+
+        private static void DeactivateOwnedState()
+        {
+            FocusShiId = -1L;
             ShiLineageMapBottomBarController.Hide();
+            try
+            {
+                if (_ownedCity != null &&
+                    SelectedMetas.selected_city == _ownedCity &&
+                    SelectedObjects.getSelectedNanoObject() == _ownedCity)
+                {
+                    SelectedMetas.selected_city = null;
+                    SelectedObjects.unselectNanoObject();
+                }
+            }
+            catch { }
+            _ownedCity = null;
         }
 
         internal static string DisplayName(CityShiInfluenceBranch pBranch)

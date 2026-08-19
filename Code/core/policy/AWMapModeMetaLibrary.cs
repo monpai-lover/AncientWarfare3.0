@@ -498,8 +498,10 @@ namespace AncientWarfare3.core.policy
                 pSnapshot.DominantShiId);
             if (branch == null || !branch.IsValid) return null;
             string hex = ShiLineageMapModeRules.OverviewHex(branch.ShiId);
+            int share = pSnapshot.SharePercent(pSnapshot.DominantShiId);
+            string displayName = branch.DisplayName + "  " + share + "%";
             return GetMeta(AWMapModeMetaTypes.ShiLineage,
-                "nameplate:" + branch.ShiId, branch.DisplayName,
+                "nameplate:" + branch.ShiId + ":" + share, displayName,
                 MakeColor(hex));
         }
 

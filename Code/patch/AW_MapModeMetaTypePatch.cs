@@ -113,6 +113,12 @@ namespace AncientWarfare3.patch
                 pResult = AWMapModeMetaTypes.HierarchicalVassal;
                 return true;
             }
+            if (IsActive(AWMapModeMetaLibrary.ShiLineageAsset,
+                    pCheckOnlyOption))
+            {
+                pResult = AWMapModeMetaTypes.ShiLineage;
+                return true;
+            }
             if (IsActive(AWMapModeMetaLibrary.FeudatoryAsset,
                     pCheckOnlyOption))
             {
@@ -122,12 +128,6 @@ namespace AncientWarfare3.patch
             if (IsActive(AWMapModeMetaLibrary.SchoolAsset, pCheckOnlyOption))
             {
                 pResult = AWMapModeMetaTypes.School;
-                return true;
-            }
-            if (IsActive(AWMapModeMetaLibrary.ShiLineageAsset,
-                    pCheckOnlyOption))
-            {
-                pResult = AWMapModeMetaTypes.ShiLineage;
                 return true;
             }
             if (IsActive(AWMapModeMetaLibrary.MandateCoreAsset, pCheckOnlyOption))

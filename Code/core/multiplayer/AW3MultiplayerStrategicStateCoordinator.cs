@@ -154,6 +154,9 @@ namespace AncientWarfare3.core.multiplayer
                         pSnapshot.BanditStrongholds);
                     pStore.RebuildMilitaryReadModels();
                 }
+#if !AW3_RULES_TESTS
+                CityShiInfluenceSnapshotService.Clear();
+#endif
                 return AW3MultiplayerStrategicApplyResult.Success(
                     pSnapshot.Armies.Count, pSnapshot.Actors.Count);
             }

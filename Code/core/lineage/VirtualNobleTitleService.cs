@@ -510,6 +510,9 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdomId >= 0) KingdomCache.Remove(pKingdomId);
             if (pActorId >= 0) ActorCache.Remove(pActorId);
+            if (pActorId >= 0)
+                CityShiInfluenceSnapshotService.MarkActorDirty(
+                    World.world?.units?.get(pActorId));
         }
 
         private static void Add(SQLiteCommand pCommand, string pName,

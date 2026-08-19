@@ -15,9 +15,30 @@ internal static class ShiLineageMapModeSourceGuardTests
         string metaCache = Read("Code/core/policy/MapModeMetaCacheRules.cs");
         string deferred = Read("Code/patch/AW_DeferredRuntimeWorkPatch.cs");
         string lifecycle = Read("Code/patch/AW_ShiLineageSnapshotPatch.cs");
+        string coordinator = Read("Code/core/policy/AWMapModeCoordinator.cs");
+        string metadata = Read(
+            "Code/core/lineage/ShiBranchRuntimeMetadataCache.cs");
+        string court = Read("Code/core/court/CourtService.cs");
+        string slavery = Read("Code/core/lineage/SlaveService.cs");
+        string transition = Read(
+            "Code/core/lineage/XiaizedFamilyBranchTransitionService.cs");
+        string disposition = Read(
+            "Code/core/lineage/LineageDispositionService.cs");
+        string western = Read(
+            "Code/core/lineage/WesternLineageAdmissionService.cs");
+        string virtualTitles = Read(
+            "Code/core/lineage/VirtualNobleTitleService.cs");
+        string replica = Read(
+            "Code/core/multiplayer/AW3MultiplayerStrategicStateCoordinator.cs");
 
         Contains(metaPatch, "IsActive(AWMapModeMetaLibrary.ShiLineageAsset",
             "active map-mode selection must resolve Shi lineage");
+        Before(coordinator, "ShiLineageMapModeService.POWER_ID",
+            "FeudatoryMapModeService.POWER_ID",
+            "coordinator must prioritize selected Shi before Feudatory");
+        Before(metaPatch, "AWMapModeMetaLibrary.ShiLineageAsset",
+            "AWMapModeMetaLibrary.FeudatoryAsset",
+            "renderer priority must match the map-mode coordinator");
         Contains(nameplates, "AWMapModeMetaTypes.ShiLineage",
             "Shi lineage must be registered for nameplates");
         Contains(metaCache, "aw3_shi_lineage_map:",
@@ -28,6 +49,25 @@ internal static class ShiLineageMapModeSourceGuardTests
             "successful snapshots must invalidate an active rendered map");
         Contains(snapshot, "DisplayName", "snapshot branches must cache their display names");
         Contains(snapshot, "IsValid", "snapshot branches must cache branch validity");
+        Contains(snapshot, "MarkDirty(pCity);",
+            "ordinary snapshot misses must enter the normal dirty queue");
+        NotContains(snapshot,
+            "out CityShiInfluenceSnapshot snapshot) || Dirty.Contains(cityId))\n                Demand(pCity);",
+            "ordinary rendering reads must not promote every city to demand");
+        NotContains(snapshot, "LineageQuery.GetShiBranchInfo",
+            "city snapshot rebuilds must not query SQLite");
+        Contains(snapshot, "ShiBranchRuntimeMetadataCache.TryGet",
+            "city rebuilds must consume bounded runtime branch metadata");
+        Contains(metadata, "ProcessPending(int pBudget)",
+            "branch metadata loads must expose a bounded drain");
+        Contains(metadata, "attempts < budget",
+            "failed branch metadata loads must consume bounded attempts");
+        Contains(metadata, "LineageQuery.GetShiBranchInfo",
+            "branch metadata lookup must be isolated from city rebuilds");
+        Contains(service, "ShiBranchRuntimeMetadataCache.ProcessPending(1)",
+            "each frame may load only a bounded branch metadata batch");
+        Contains(service, "CityShiInfluenceSnapshotService.Demand(pCity);",
+            "selected and hovered cities must explicitly request demand priority");
         Contains(service, "branch.DisplayName", "map presentation must use cached branch labels");
         NotContains(service, "LineageQuery.GetShiBranchInfo",
             "map rendering and tooltip paths must not query SQLite");
@@ -46,8 +86,29 @@ internal static class ShiLineageMapModeSourceGuardTests
         Contains(element, "Button.interactable", "invalid Shi rows must be visibly disabled");
         Contains(element, "FamilyTreeWindow.OpenBigTree(shiId)",
             "primary Shi row click must open the existing genealogy directly");
+        NotContains(element, "LineageQuery.GetShiBranchInfo",
+            "opening a cached Shi row must not synchronously query SQLite");
+        NotContains(element, "_rows[i].gameObject.SetActive(valid);",
+            "invalid top Shi slots must remain visible as disabled rows");
+        Contains(element, "_rows[i].gameObject.SetActive(true);",
+            "top Shi slots must keep a stable visible layout");
+        Contains(element, "new Vector2(360f, 150f)",
+            "Shi composition panel must fit its title, dominant row, and top three");
+        Contains(element, "-52f - i * 30f",
+            "Shi rows must start below the dominant label");
+        Contains(element,
+            "_labels[i].rectTransform.offsetMax = new Vector2(-52f, 0f);",
+            "Shi row labels must reserve the focus-button inset");
         Contains(element, "ShiLineageMapModeService.SetFocus",
             "a reachable secondary focus command must be retained");
+        Contains(service, "DeactivateOwnedState",
+            "leaving or losing the Shi map mode must release owned UI state");
+        Contains(service, "SelectedObjects.unselectNanoObject()",
+            "Shi map cleanup must release its selected nano object");
+        Contains(service, "SelectedMetas.selected_city == _ownedCity",
+            "Shi cleanup must clear only the city selection it owns");
+        Contains(metaLibrary, "pSnapshot.SharePercent(pSnapshot.DominantShiId)",
+            "Shi nameplates must include the dominant branch share");
 
         Contains(lifecycle, "nameof(Actor.joinCity)",
             "actor city changes must invalidate both old and new city snapshots");
@@ -55,6 +116,20 @@ internal static class ShiLineageMapModeSourceGuardTests
             "actor identity lifecycle must invalidate its snapshot");
         Contains(lifecycle, "CityShiInfluenceSnapshotService.Clear",
             "world clear must release Shi snapshot caches");
+        Contains(transition, "CityShiInfluenceSnapshotService.MarkActorDirty",
+            "Xiaized branch publication must invalidate affected actors");
+        Contains(disposition, "CityShiInfluenceSnapshotService.MarkActorDirty",
+            "surname grant and expulsion must invalidate affected actors");
+        Contains(western, "CityShiInfluenceSnapshotService.MarkActorDirty",
+            "western lineage admission must invalidate affected actors");
+        Contains(court, "CityShiInfluenceSnapshotService.MarkActorDirty",
+            "office appointment and removal must invalidate affected actors");
+        Contains(slavery, "CityShiInfluenceSnapshotService.MarkActorDirty",
+            "slavery status changes must invalidate affected actors");
+        Contains(virtualTitles, "CityShiInfluenceSnapshotService.MarkActorDirty",
+            "virtual noble title changes must invalidate affected actors");
+        Contains(replica, "CityShiInfluenceSnapshotService.Clear();",
+            "replica apply completion must reset Shi snapshots");
         Contains(deferred, "ShiLineageMapModeService.ProcessFrame",
             "bounded Shi snapshot work must run outside the draw callback");
         NotContains(deferred, "World.world.units", "deferred map work must not scan world actors");
@@ -70,6 +145,17 @@ internal static class ShiLineageMapModeSourceGuardTests
             Contains(ch, "\"" + key + "\"", "Chinese locale missing " + key);
             Contains(cz, "\"" + key + "\"", "Czech locale missing " + key);
         }
+        Contains(ch, "\"aw_shi_lineage_mapmode\": \"世家地圖\"",
+            "Traditional Chinese Shi map locale must be readable");
+        Contains(ch, "\"aw_shi_map_composition\": \"世家構成\"",
+            "Traditional Chinese Shi composition locale must be readable");
+        Contains(cz, "\"aw_shi_lineage_mapmode\": \"世家地图\"",
+            "Simplified Chinese Shi map locale must follow repository convention");
+        Contains(cz, "\"aw_shi_map_composition\": \"世家构成\"",
+            "Simplified Chinese Shi composition locale must be translated");
+        NotContains(ch, "姘忔敮", "Simplified Chinese Shi locales must not contain mojibake");
+        NotContains(cz, "Shi lineage map",
+            "Traditional Chinese Shi locales must not retain English placeholders");
     }
 
     private static string Read(string pRelative)
@@ -88,6 +174,15 @@ internal static class ShiLineageMapModeSourceGuardTests
     private static void NotContains(string pText, string pNeedle, string pMessage)
     {
         if (pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Before(string pText, string pFirst, string pSecond,
+        string pMessage)
+    {
+        int first = pText.IndexOf(pFirst, StringComparison.Ordinal);
+        int second = pText.IndexOf(pSecond, StringComparison.Ordinal);
+        if (first < 0 || second < 0 || first >= second)
             throw new InvalidOperationException(pMessage);
     }
 }

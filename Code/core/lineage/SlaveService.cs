@@ -442,6 +442,7 @@ namespace AncientWarfare3.core.lineage
                     pContextCity ?? pActor.city, pActor);
 
             CheckCitySlaveLabor(pContextCity ?? pActor.city);
+            CityShiInfluenceSnapshotService.MarkActorDirty(pActor);
             return !wasSlave || pForceRecord;
         }
 
@@ -486,6 +487,7 @@ namespace AncientWarfare3.core.lineage
 
             UpsertSlaveState(pActor, pActive: false, pActor.city, pActor.kingdom);
             ChronicleEvents.OnFreedSlave(pActor, pReason, pActor.kingdom, pActor.city);
+            CityShiInfluenceSnapshotService.MarkActorDirty(pActor);
             return true;
         }
 
@@ -516,6 +518,7 @@ namespace AncientWarfare3.core.lineage
             LineageService.ApplyDisplayName(pActor);
             LineageService.ArchiveActor(pActor, pAlive: pActor.isAlive());
             try { pActor.clearGraphicsFully(); } catch { }
+            CityShiInfluenceSnapshotService.MarkActorDirty(pActor);
             return changed;
         }
 

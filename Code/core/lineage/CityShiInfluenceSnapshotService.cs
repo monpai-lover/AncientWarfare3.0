@@ -23,8 +23,8 @@ namespace AncientWarfare3.core.lineage
             if (!IsUsableCity(pCity)) return null;
             long cityId = pCity.data.id;
             if (!Snapshots.TryGetValue(cityId,
-                    out CityShiInfluenceSnapshot snapshot) || Dirty.Contains(cityId))
-                Demand(pCity);
+                    out CityShiInfluenceSnapshot snapshot))
+                MarkDirty(pCity);
             return snapshot;
         }
 
@@ -32,6 +32,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (!IsUsableCity(pCity)) return;
             long cityId = pCity.data.id;
+            if (Snapshots.ContainsKey(cityId) && !Dirty.Contains(cityId)) return;
             Demanded.Add(cityId);
             Dirty.Mark(cityId);
             DemandedDirty.Mark(cityId);
@@ -129,15 +130,15 @@ namespace AncientWarfare3.core.lineage
             DemandedDirty.Clear();
             Demanded.Clear();
             _generation = 0;
+            ShiBranchRuntimeMetadataCache.Clear();
         }
 
         private static CityShiInfluenceSnapshot Rebuild(City pCity)
         {
             var contributions = new List<CityShiInfluenceContribution>();
-            var branches = new Dictionary<long, ShiBranchInfo>();
             foreach (Actor actor in pCity.getUnits())
             {
-                if (!TryGetContribution(pCity, actor, branches,
+                if (!TryGetContribution(pCity, actor,
                         out CityShiInfluenceContribution contribution)) continue;
                 contributions.Add(contribution);
             }
@@ -148,10 +149,11 @@ namespace AncientWarfare3.core.lineage
             for (int i = 0; i < snapshot.Branches.Count; i++)
             {
                 CityShiInfluenceBranch result = snapshot.Branches[i];
-                if (!branches.TryGetValue(result.ShiId,
-                        out ShiBranchInfo branch) || branch == null) continue;
-                result.DisplayName = BuildDisplayName(branch);
-                result.IsValid = !string.IsNullOrWhiteSpace(result.DisplayName);
+                if (!ShiBranchRuntimeMetadataCache.TryGet(result.ShiId,
+                        pCity.data.id, out ShiBranchRuntimeMetadata metadata) ||
+                    metadata == null) continue;
+                result.DisplayName = metadata.DisplayName;
+                result.IsValid = metadata.IsValid;
             }
             return snapshot;
         }
@@ -166,7 +168,6 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static bool TryGetContribution(City pCity, Actor pActor,
-            Dictionary<long, ShiBranchInfo> pBranches,
             out CityShiInfluenceContribution pContribution)
         {
             pContribution = default;
@@ -174,15 +175,10 @@ namespace AncientWarfare3.core.lineage
                 pActor.data.id < 0L || pActor.city != pCity) return false;
             pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
             if (shiId < 0L) return false;
-            if (!pBranches.TryGetValue(shiId, out ShiBranchInfo branch))
-            {
-                try { branch = LineageQuery.GetShiBranchInfo(shiId); }
-                catch { branch = null; }
-                if (branch == null) return false;
-                pBranches[shiId] = branch;
-            }
+            ShiBranchRuntimeMetadataCache.TryGet(shiId, pCity.data.id,
+                out ShiBranchRuntimeMetadata metadata);
             pContribution = new CityShiInfluenceContribution(pActor.data.id,
-                shiId, ResolveRole(pActor), CreatedOrder(branch.created_time));
+                shiId, ResolveRole(pActor), metadata?.CreatedOrder ?? long.MaxValue);
             return true;
         }
 
@@ -200,24 +196,6 @@ namespace AncientWarfare3.core.lineage
             return status == LineageStatus.NOBLE || nobleDistance < 99
                 ? CityShiRole.Noble
                 : CityShiRole.Member;
-        }
-
-        private static long CreatedOrder(double pCreatedTime)
-        {
-            if (double.IsNaN(pCreatedTime) || double.IsInfinity(pCreatedTime))
-                return long.MaxValue;
-            double scaled = Math.Floor(Math.Max(0d, pCreatedTime) * 1000d);
-            return scaled >= long.MaxValue ? long.MaxValue : (long)scaled;
-        }
-
-        private static string BuildDisplayName(ShiBranchInfo pBranch)
-        {
-            if (pBranch == null) return "";
-            string origin = pBranch.origin_city_name ??
-                            pBranch.origin_city_chinese_name;
-            return ShiBranchRules.BuildDisplayName(origin,
-                pBranch.clan_name, pBranch.source_type,
-                pBranch.state_name);
         }
 
         private static bool IsUsableCity(City pCity)

@@ -25,7 +25,7 @@ namespace AncientWarfare3.ui.items
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0f, 1f);
             rect.anchoredPosition = new Vector2(8f, -8f);
-            rect.sizeDelta = new Vector2(360f, 128f);
+            rect.sizeDelta = new Vector2(360f, 150f);
             AW_UIStyle.ApplyPanel(obj.GetComponent<Image>(), .96f);
             var result = obj.AddComponent<ShiLineageCompositionElement>();
             result.Build();
@@ -52,18 +52,24 @@ namespace AncientWarfare3.ui.items
                     ? pSnapshot.Branches[i] : null;
                 bool valid = branch != null && branch.ShiId >= 0L &&
                     branch.IsValid;
-                _rows[i].gameObject.SetActive(valid);
+                _rows[i].gameObject.SetActive(true);
                 _focusButtons[i].gameObject.SetActive(valid);
                 // Invalid entries keep Button.interactable disabled so stale rows cannot be opened.
                 _rows[i].interactable = valid;
                 _focusButtons[i].interactable = valid;
-                if (!valid) continue;
+                _rows[i].onClick.RemoveAllListeners();
+                _focusButtons[i].onClick.RemoveAllListeners();
+                if (!valid)
+                {
+                    _labels[i].text = branch == null
+                        ? AW_L10n.Text("aw_shi_map_none", "No Shi")
+                        : AW_L10n.Text("aw_shi_map_unknown", "Unknown Shi");
+                    continue;
+                }
                 long shiId = branch.ShiId;
                 _labels[i].text = branch.DisplayName + "  " +
                     pSnapshot.SharePercent(shiId) + "%";
-                _rows[i].onClick.RemoveAllListeners();
                 _rows[i].onClick.AddListener(() => OpenTree(shiId));
-                _focusButtons[i].onClick.RemoveAllListeners();
                 _focusButtons[i].onClick.AddListener(() =>
                     ShiLineageMapModeService.SetFocus(shiId));
             }
@@ -75,7 +81,6 @@ namespace AncientWarfare3.ui.items
             if (shiId < 0L) return;
             try
             {
-                if (LineageQuery.GetShiBranchInfo(shiId) == null) return;
                 FamilyTreeWindow.OpenBigTree(shiId);
             }
             catch { }
@@ -85,7 +90,7 @@ namespace AncientWarfare3.ui.items
         {
             _title = AddText(transform, "Title", new Vector2(10f, -8f),
                 new Vector2(340f, 20f), 10, TextAnchor.UpperLeft);
-            _dominant = AddText(transform, "Dominant", new Vector2(10f, -27f),
+            _dominant = AddText(transform, "Dominant", new Vector2(10f, -30f),
                 new Vector2(340f, 18f), 8, TextAnchor.UpperLeft);
             for (int i = 0; i < _rows.Length; i++)
             {
@@ -96,13 +101,15 @@ namespace AncientWarfare3.ui.items
                 rect.anchorMin = new Vector2(0f, 1f);
                 rect.anchorMax = new Vector2(0f, 1f);
                 rect.pivot = new Vector2(0f, 1f);
-                rect.anchoredPosition = new Vector2(8f, -31f - i * 30f);
+                rect.anchoredPosition = new Vector2(8f, -52f - i * 30f);
                 rect.sizeDelta = new Vector2(344f, 26f);
                 AW_UIStyle.ApplyButton(row.GetComponent<Image>(), .96f);
                 _rows[i] = row.GetComponent<Button>();
                 _focusButtons[i] = CreateFocusButton(row.transform);
                 _labels[i] = AddText(row.transform, "Label", Vector2.zero,
                     Vector2.zero, 9, TextAnchor.MiddleLeft, true);
+                _labels[i].rectTransform.offsetMin = new Vector2(8f, 0f);
+                _labels[i].rectTransform.offsetMax = new Vector2(-52f, 0f);
             }
         }
 

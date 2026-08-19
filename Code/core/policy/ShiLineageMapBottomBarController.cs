@@ -24,6 +24,7 @@ namespace AncientWarfare3.core.policy
             _generation = -1;
             _showRequested = true;
             _visibleOrPending = true;
+            CityShiInfluenceSnapshotService.Demand(pCity);
             CityShiInfluenceSnapshot snapshot =
                 CityShiInfluenceSnapshotService.GetSnapshot(pCity);
             if (snapshot == null) return;
@@ -51,6 +52,7 @@ namespace AncientWarfare3.core.policy
                 return;
             }
             if (_cityId != city.data.id) { Show(city); return; }
+            CityShiInfluenceSnapshotService.Demand(city);
             CityShiInfluenceSnapshot snapshot =
                 CityShiInfluenceSnapshotService.GetSnapshot(city);
             if (snapshot == null) { _pendingCity = city; _showRequested = true; return; }
