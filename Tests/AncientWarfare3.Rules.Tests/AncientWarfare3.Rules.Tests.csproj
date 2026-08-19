@@ -418,6 +418,7 @@
     <Compile Include="VisibleSurnameRenameRulesTests.cs.txt" />
     <Compile Include="VisibleClanRenameRulesTests.cs.txt" />
     <Compile Include="VisibleSurnameRenameSqlRulesTests.cs.txt" />
+    <Compile Include="VisibleSurnameOverviewSourceGuardTests.cs.txt" />
     <Compile Include="FeudatoryIdentityRulesTests.cs.txt" />
     <Compile Include="FoundedBranchRulesTests.cs.txt" />
     <Compile Include="FoundedBranchWiringSourceGuardTests.cs.txt" />

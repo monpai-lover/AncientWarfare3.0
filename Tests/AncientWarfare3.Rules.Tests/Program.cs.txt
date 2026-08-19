@@ -527,6 +527,13 @@ if (args.Length == 1 && args[0] == "--visible-surname-sql")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--visible-surname-overview")
+{
+    VisibleSurnameOverviewSourceGuardTests.Run();
+    Console.WriteLine("Visible surname overview source guard passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--feudatory-identity")
 {
     FeudatoryIdentityRulesTests.Run();

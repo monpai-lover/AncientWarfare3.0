@@ -1,0 +1,28 @@
+using System;
+using System.IO;
+
+internal static class VisibleSurnameOverviewSourceGuardTests
+{
+    public static void Run()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "LineageQuery.cs"));
+
+        Contains(source, "ActorArchiveTableItem.GetTableName()",
+            "surname overview keeps the actor archive as a source");
+        Contains(source, "aa.SHI_ID",
+            "surname branch lookup can recover a branch from renamed actors");
+        Contains(source, "aa.FAMILY_NAME=@f",
+            "surname branch lookup matches the renamed family");
+        Contains(source, "OR EXISTS",
+            "surname branch lookup falls back when lineage group retains its original family");
+    }
+
+    private static void Contains(string source, string expected, string name)
+    {
+        if ((source ?? string.Empty).IndexOf(expected,
+                StringComparison.OrdinalIgnoreCase) < 0)
+            throw new InvalidOperationException(name + ": missing " + expected);
+    }
+}

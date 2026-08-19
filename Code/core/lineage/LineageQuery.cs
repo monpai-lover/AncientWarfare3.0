@@ -196,9 +196,12 @@ namespace AncientWarfare3.core.lineage
         {
             var db = DB;
             using var cmd = new SQLiteCommand(db);
+            string actorTable = ActorArchiveTableItem.GetTableName();
             cmd.CommandText =
-                $"SELECT COUNT(*) FROM {pShiTable} WHERE LINEAGE_ID IN " +
-                $"(SELECT LINEAGE_ID FROM {pLineageTable} WHERE FAMILY_NAME=@f)";
+                $"SELECT COUNT(*) FROM {pShiTable} sb WHERE sb.LINEAGE_ID IN " +
+                $"(SELECT LINEAGE_ID FROM {pLineageTable} WHERE FAMILY_NAME=@f) " +
+                $"OR EXISTS (SELECT 1 FROM {actorTable} aa " +
+                $"WHERE aa.SHI_ID=sb.SHI_ID AND aa.FAMILY_NAME=@f)";
             cmd.Parameters.AddWithValue("@f", pFamilyName);
             return (int)(long)cmd.ExecuteScalar();
         }
@@ -383,16 +386,22 @@ namespace AncientWarfare3.core.lineage
 
             string shiTable = ShiBranchTableItem.GetTableName();
             string lineageTable = LineageGroupTableItem.GetTableName();
+            string actorTable = ActorArchiveTableItem.GetTableName();
 
             using var cmd = new SQLiteCommand(db);
+            // A patrilineal surname edit changes only the affected actor
+            // records; the shared LineageGroup keeps its original family.
+            // Recover branches through renamed archive members as well.
             cmd.CommandText =
                 $"SELECT SHI_ID, LINEAGE_ID, CLAN_NAME, SOURCE_TYPE, CREATED_TIME, FOUNDER_ACTOR_ID, " +
                 $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1), " +
                 $"IFNULL(PARENT_SHI_ID, -1), IFNULL(STATE_NAME, ''), " +
                 $"IFNULL(STATE_NAME_SOURCE, ''), IFNULL(STATE_NAME_DECIDED_TIME, -1), " +
                 $"{ShiBranchIdentitySelectColumns} " +
-                $"FROM {shiTable} WHERE LINEAGE_ID IN " +
+                $"FROM {shiTable} sb WHERE sb.LINEAGE_ID IN " +
                 $"(SELECT LINEAGE_ID FROM {lineageTable} WHERE FAMILY_NAME=@f) " +
+                $"OR EXISTS (SELECT 1 FROM {actorTable} aa " +
+                $"WHERE aa.SHI_ID=sb.SHI_ID AND aa.FAMILY_NAME=@f) " +
                 $"ORDER BY CREATED_TIME ASC";
             cmd.Parameters.AddWithValue("@f", pFamilyName);
 
