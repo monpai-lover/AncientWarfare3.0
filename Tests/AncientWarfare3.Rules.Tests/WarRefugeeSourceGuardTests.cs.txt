@@ -1,0 +1,61 @@
+using System;
+using System.IO;
+
+internal static class WarRefugeeSourceGuardTests
+{
+    internal static void Run()
+    {
+        string root = FindRoot();
+        string service = Read(root, "Code/core/lineage/WarRefugeeService.cs");
+        string threat = Read(root, "Code/core/lineage/WarRefugeeThreatService.cs");
+        string journey = Read(root, "Code/core/lineage/WarRefugeeJourneyService.cs");
+        string authority = Read(root, "Code/core/performance/AWAuthorityCycleService.cs");
+        string patch = Read(root, "Code/patch/AW_WarRefugeePatch.cs");
+        Require(service, "ProcessAuthorityCycle(", "authority coordinator exists");
+        Require(service, "WarRefugeeThreatService.ProcessMonthly(",
+            "threat phase is monthly");
+        Require(service, "WarRefugeeJourneyService.ProcessMonthly(",
+            "journey phase is monthly");
+        Require(threat, "CityBudget", "city budget is explicit");
+        Require(threat, "WorldBudget", "world budget is explicit");
+        Require(journey, "HouseholdBudget", "household budget is explicit");
+        Require(journey, "ShouldUseAbstractJourney(",
+            "unreachable journeys have an abstract fallback");
+        Require(journey, "destination reservation",
+            "journey service documents reservation ownership");
+        Require(authority, "WarRefugeeService.ProcessAuthorityCycle(",
+            "authority cycle owns refugee processing");
+        Require(patch, "ActorJoinCity_Postfix", "city arrival lifecycle hook exists");
+        Require(patch, "Birth_Postfix", "host-born child lifecycle hook exists");
+        Require(patch, "MapBox.clearWorld", "world reset clears refugee runtime");
+        Reject(service, "P0", "refugees are outside military P0");
+        Reject(service, "ProcessEveryFrame", "refugees cannot be per-frame");
+    }
+
+    private static string FindRoot()
+    {
+        string path = AppContext.BaseDirectory;
+        while (!string.IsNullOrEmpty(path))
+        {
+            if (File.Exists(Path.Combine(path, "AncientWarfare3.csproj")))
+                return path;
+            path = Directory.GetParent(path)?.FullName;
+        }
+        throw new InvalidOperationException("repository root not found");
+    }
+
+    private static string Read(string root, string relative) =>
+        File.ReadAllText(Path.Combine(root, relative)).Replace("\r\n", "\n");
+
+    private static void Require(string source, string text, string message)
+    {
+        if (!source.Contains(text, StringComparison.Ordinal))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void Reject(string source, string text, string message)
+    {
+        if (source.Contains(text, StringComparison.Ordinal))
+            throw new InvalidOperationException(message);
+    }
+}

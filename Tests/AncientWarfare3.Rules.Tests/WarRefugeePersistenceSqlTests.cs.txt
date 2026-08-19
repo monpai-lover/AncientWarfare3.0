@@ -1,0 +1,92 @@
+using System;
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class WarRefugeePersistenceSqlTests
+{
+    internal static void Run()
+    {
+        using var db = new SQLiteConnection("Data Source=:memory:;Version=3;");
+        db.Open();
+        WarRefugeePersistence.EnsureSchema(db);
+
+        var journey = new WarRefugeeJourneySnapshot
+        {
+            JourneyId = 10,
+            OriginKingdomId = 1,
+            OriginCityId = 11,
+            DestinationKingdomId = 2,
+            DestinationCityId = 22,
+            State = WarRefugeeJourneyState.Traveling,
+            DepartureYear = 40,
+            ArrivalYear = 43,
+            ReservedCapacity = 3,
+            SafeMonths = 4,
+            LastAssimilationYear = 39
+        };
+        True(WarRefugeePersistence.UpsertJourney(db, journey),
+            "journey insert succeeds");
+        journey.State = WarRefugeeJourneyState.Arrived;
+        journey.ReservedCapacity = 2;
+        True(WarRefugeePersistence.UpsertJourney(db, journey),
+            "journey transition is idempotent");
+        True(WarRefugeePersistence.TryLoadJourney(db, 10, out var loaded),
+            "journey round trip loads");
+        Equal(WarRefugeeJourneyState.Arrived, loaded.State,
+            "latest state wins");
+        Equal(2, loaded.ReservedCapacity, "capacity round trips");
+
+        True(WarRefugeePersistence.InsertMember(db,
+            new WarRefugeeMemberSnapshot
+            {
+                JourneyId = 10, ActorId = 100, IsLeader = true, Active = true,
+                OriginCulture = "xia"
+            }), "first actor ownership succeeds");
+        False(WarRefugeePersistence.InsertMember(db,
+            new WarRefugeeMemberSnapshot
+            {
+                JourneyId = 11, ActorId = 100, IsLeader = false, Active = true,
+                OriginCulture = "xia"
+            }), "active actor cannot belong to two journeys");
+        True(WarRefugeePersistence.InsertMember(db,
+            new WarRefugeeMemberSnapshot
+            {
+                JourneyId = 10, ActorId = 101, IsLeader = false, Active = true,
+                OriginCulture = "xia"
+            }), "second actor ownership succeeds");
+        Equal(2, WarRefugeePersistence.CountActiveMembers(db, 10),
+            "active member count reconstructs reservation");
+
+        True(WarRefugeePersistence.InsertOrigin(db,
+            new WarRefugeeOriginSnapshot
+            {
+                ActorId = 100, JourneyId = 10, OriginKingdomId = 1,
+                OriginCityId = 11, OriginCulture = "xia", SettledYear = 44
+            }), "origin archive insert succeeds");
+        True(WarRefugeePersistence.InsertOrigin(db,
+            new WarRefugeeOriginSnapshot
+            {
+                ActorId = 100, JourneyId = 10, OriginKingdomId = 1,
+                OriginCityId = 11, OriginCulture = "xia", SettledYear = 44
+            }), "origin archive is idempotent");
+        True(WarRefugeePersistence.HasOrigin(db, 100),
+            "origin archive survives settlement");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                                                expected + ", actual " + actual);
+    }
+}

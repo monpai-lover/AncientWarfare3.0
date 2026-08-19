@@ -1,0 +1,147 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class WarRefugeeRulesTests
+{
+    internal static void Run()
+    {
+        RearCitiesDoNotEmitRefugees();
+        ThreatControlsBoundedDepartureQuota();
+        MilitaryAndAuthorityRolesAreExcluded();
+        DestinationsAreSafeAndStableRanked();
+        JourneysAlwaysMakeBoundedProgress();
+        ReturnRequiresTwelveSafeMonths();
+        AssimilationHonoursGraceAndAnnualCadence();
+    }
+
+    private static void RearCitiesDoNotEmitRefugees()
+    {
+        Equal(0, WarRefugeeRules.DeparturePermille(
+            new WarRefugeeThreatFacts(false, false, false, false, false), 1),
+            "war participation without direct threat emits nobody");
+    }
+
+    private static void ThreatControlsBoundedDepartureQuota()
+    {
+        int nearby = WarRefugeeRules.DeparturePermille(
+            new WarRefugeeThreatFacts(true, false, false, false, false), 11);
+        Between(10, 30, nearby, "nearby army uses 1-3 percent");
+        int siege = WarRefugeeRules.DeparturePermille(
+            new WarRefugeeThreatFacts(false, true, true, false, false), 12);
+        Between(50, 100, siege, "siege/combat uses 5-10 percent");
+        int famine = WarRefugeeRules.DeparturePermille(
+            new WarRefugeeThreatFacts(true, true, true, true, true), 13);
+        Between(100, 150, famine, "direct threat plus famine is capped at 15 percent");
+        Equal(7, WarRefugeeRules.DepartureQuota(100, 80, 10, 100, 20, 70),
+            "quota is bounded by city and world budgets");
+        Equal(0, WarRefugeeRules.DepartureQuota(100, 95, 100, 200, 20, 20),
+            "minimum population floor is preserved");
+    }
+
+    private static void MilitaryAndAuthorityRolesAreExcluded()
+    {
+        True(WarRefugeeRules.IsEligibleCivilian(new WarRefugeeActorFacts(
+            true, false, false, false, false, false, false, false, false)),
+            "ordinary living civilian is eligible");
+        for (int role = 0; role < 7; role++)
+        {
+            bool[] blocked = new bool[7];
+            blocked[role] = true;
+            False(WarRefugeeRules.IsEligibleCivilian(new WarRefugeeActorFacts(
+                true, blocked[0], blocked[1], blocked[2], blocked[3], blocked[4],
+                blocked[5], blocked[6], false)), "protected role is excluded " + role);
+        }
+        False(WarRefugeeRules.IsEligibleCivilian(new WarRefugeeActorFacts(
+            true, false, false, false, false, false, false, false, true)),
+            "actor already in a journey is excluded");
+    }
+
+    private static void DestinationsAreSafeAndStableRanked()
+    {
+        var domestic = Destination(1, WarRefugeeRelation.Domestic, 20, 20, 20);
+        var partner = Destination(2, WarRefugeeRelation.ProtectedPartner, 80, 80, 80);
+        var neutral = Destination(3, WarRefugeeRelation.Neutral, 100, 100, 100);
+        var enemy = Destination(4, WarRefugeeRelation.Enemy, 100, 100, 100);
+        True(WarRefugeeRules.CanReceive(domestic, 5), "safe domestic city receives");
+        False(WarRefugeeRules.CanReceive(enemy, 1), "enemy city is never eligible");
+        True(WarRefugeeRules.CompareDestinations(domestic, partner) < 0,
+            "domestic precedes protected partner");
+        True(WarRefugeeRules.CompareDestinations(partner, neutral) < 0,
+            "protected partner precedes neutral");
+        False(WarRefugeeRules.CanReceive(
+            Destination(5, WarRefugeeRelation.Domestic, 0, 20, 20), 1),
+            "food gate is authoritative");
+    }
+
+    private static void JourneysAlwaysMakeBoundedProgress()
+    {
+        Equal(7L, WarRefugeeRules.SelectLeader(new[]
+        {
+            new WarRefugeeLeaderCandidate(4, false, true),
+            new WarRefugeeLeaderCandidate(9, true, true),
+            new WarRefugeeLeaderCandidate(7, true, true)
+        }), "lowest-id living adult replaces a failed leader");
+        Equal(14, WarRefugeeRules.AbstractArrivalMonth(10, 450),
+            "abstract duration is positive and distance bounded");
+        True(WarRefugeeRules.ShouldUseAbstractJourney(true, false, 0),
+            "cross-sea travel uses abstract fallback");
+        True(WarRefugeeRules.ShouldUseAbstractJourney(false, false, 3),
+            "repeated unreachable land travel makes progress");
+    }
+
+    private static void ReturnRequiresTwelveSafeMonths()
+    {
+        False(WarRefugeeRules.CanEvaluateReturn(true, 11),
+            "eleven safe months is insufficient");
+        True(WarRefugeeRules.CanEvaluateReturn(true, 12),
+            "twelve continuous safe months opens decision");
+        False(WarRefugeeRules.CanEvaluateReturn(false, 120),
+            "renewed threat closes the return gate");
+    }
+
+    private static void AssimilationHonoursGraceAndAnnualCadence()
+    {
+        False(WarRefugeeRules.CanEvaluateAssimilation(false, 30, 6, 5),
+            "Xia host never assimilates refugees locally");
+        False(WarRefugeeRules.CanEvaluateAssimilation(true, 4, 6, 5),
+            "first five completed years are protected");
+        False(WarRefugeeRules.CanEvaluateAssimilation(true, 8, 8, 8),
+            "same actor-year cannot evaluate twice");
+        True(WarRefugeeRules.CanEvaluateAssimilation(true, 8, 7, 8),
+            "later actor-year can evaluate once");
+        int early = WarRefugeeRules.AssimilationPermille(6, false, false, false);
+        int established = WarRefugeeRules.AssimilationPermille(16, true, true, true);
+        True(established > early, "family and livelihood increase assimilation");
+    }
+
+    private static WarRefugeeDestinationFacts Destination(long pId,
+        WarRefugeeRelation pRelation, int pFood, int pHousing, int pCapacity)
+    {
+        return new WarRefugeeDestinationFacts(pId, true, false, false, false,
+            pFood, pHousing, pCapacity, pRelation, 5);
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal(long pExpected, long pActual, string pMessage)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(pMessage + ": expected " +
+                                                pExpected + ", actual " + pActual);
+    }
+
+    private static void Between(int pMin, int pMax, int pActual,
+        string pMessage)
+    {
+        if (pActual < pMin || pActual > pMax)
+            throw new InvalidOperationException(pMessage + ": " + pActual);
+    }
+}

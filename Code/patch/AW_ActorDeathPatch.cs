@@ -43,6 +43,7 @@ namespace AncientWarfare3.patch
             __state = new DieState();
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__instance?.data == null) return;
+            WarRefugeeService.OnActorDying(__instance);
             City dyingCity = __instance.getCity();
             if (PeasantRebelBanditStrongholdService.IsStronghold(dyingCity))
             {

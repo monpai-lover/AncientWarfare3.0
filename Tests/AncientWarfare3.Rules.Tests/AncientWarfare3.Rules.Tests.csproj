@@ -68,6 +68,12 @@
     <Compile Include="..\..\Code\core\performance\FramePrioritySchedulerConfirmationRules.cs" Link="Production\FramePrioritySchedulerConfirmationRules.cs" />
     <Compile Include="HistoricalSchoolXiaAccessRulesTests.cs.txt" />
     <Compile Include="HistoricalSchoolXiaAccessSourceGuardTests.cs.txt" />
+    <Compile Include="WarRefugeeRulesTests.cs.txt" />
+    <Compile Include="WarRefugeePersistenceSqlTests.cs.txt" />
+    <Compile Include="WarRefugeeSourceGuardTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\WarRefugeeModels.cs" Link="Production\WarRefugeeModels.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarRefugeeRules.cs" Link="Production\WarRefugeeRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarRefugeePersistence.cs" Link="Production\WarRefugeePersistence.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolXiaAccessRules.cs" Link="Production\HistoricalSchoolXiaAccessRules.cs" />
     <Compile Include="PeasantRebelBanditStrongholdRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditAnnexationRulesTests.cs.txt" />

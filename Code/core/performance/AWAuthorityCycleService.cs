@@ -118,6 +118,7 @@ namespace AncientWarfare3.core.performance
                 CityReservePoolService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
                 ArmyReplenishmentOperationService.ProcessAuthorityCycle);
+            WarRefugeeService.ProcessAuthorityCycle(pCycleToken, pPaused);
             Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,
                 DrainAuthorityCompletions);
             Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,

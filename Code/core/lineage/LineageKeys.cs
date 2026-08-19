@@ -14,6 +14,15 @@ namespace AncientWarfare3.core.lineage
             "aw_naming_parent_culture_id";
         public const string LINEAGE_ID = "aw_lineage_id";
         public const string SHI_ID = "aw_shi_id";
+        public const string WAR_REFUGEE_JOURNEY_ID = "aw_war_refugee_journey_id";
+        public const string WAR_REFUGEE_ORIGIN_KINGDOM_ID = "aw_war_refugee_origin_kingdom_id";
+        public const string WAR_REFUGEE_ORIGIN_CITY_ID = "aw_war_refugee_origin_city_id";
+        public const string WAR_REFUGEE_DESTINATION_KINGDOM_ID = "aw_war_refugee_destination_kingdom_id";
+        public const string WAR_REFUGEE_DESTINATION_CITY_ID = "aw_war_refugee_destination_city_id";
+        public const string WAR_REFUGEE_STATE = "aw_war_refugee_state";
+        public const string WAR_REFUGEE_DEPARTURE_MONTH = "aw_war_refugee_departure_month";
+        public const string WAR_REFUGEE_ARRIVAL_MONTH = "aw_war_refugee_arrival_month";
+        public const string WAR_REFUGEE_LAST_ASSIMILATION_YEAR = "aw_war_refugee_last_assimilation_year";
         public const string NOBLE_DISTANCE = "aw_noble_distance";
         public const string NOBLE_RANK = "aw_noble_rank";
         public const string NOBLE_TITLE_STYLE = "aw_noble_title_style";
