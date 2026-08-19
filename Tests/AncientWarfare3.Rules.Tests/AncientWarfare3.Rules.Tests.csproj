@@ -22,6 +22,7 @@
     <Compile Include="CityAdministrationMapModeRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\policy\CityAdministrationMapModeRules.cs" Link="Production\CityAdministrationMapModeRules.cs" />
     <Compile Include="RegionalGovernmentNineRankRulesTests.cs.txt" />
+    <Compile Include="OfficialCareerNobleIdentityRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\RegionalGovernmentRules.cs" Link="Production\RegionalGovernmentRules.cs" />
     <Compile Include="..\..\Code\core\court\RegionalGovernmentReadModel.cs" Link="Production\RegionalGovernmentReadModel.cs" />
     <Compile Include="..\..\Code\core\court\CustomLocalGovernmentRules.cs" Link="Production\CustomLocalGovernmentRules.cs" />
@@ -1035,5 +1036,6 @@
   </Target>
   <Target Name="KingdomAtlasSourceGuard" BeforeTargets="Build">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\KingdomAtlasSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\FormalOfficialNobleIdentitySourceGuard.ps1&quot;" />
   </Target>
 </Project>

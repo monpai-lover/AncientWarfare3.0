@@ -1,0 +1,26 @@
+using AncientWarfare3.core.court;
+
+internal static class OfficialCareerNobleIdentityRulesTests
+{
+    public static void Run()
+    {
+        True(CourtOfficerRecordRules.ShouldGrantNobleIdentity(true, false),
+            "a committed formal appointment grants noble identity");
+        False(CourtOfficerRecordRules.ShouldGrantNobleIdentity(true, true),
+            "an acting appointment does not grant noble identity");
+        False(CourtOfficerRecordRules.ShouldGrantNobleIdentity(false, false),
+            "a failed appointment does not grant noble identity");
+        False(CourtOfficerRecordRules.ShouldGrantNobleIdentity(false, true),
+            "a failed acting appointment does not grant noble identity");
+    }
+
+    private static void True(bool pActual, string pMessage)
+    {
+        if (!pActual) throw new System.InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pActual, string pMessage)
+    {
+        True(!pActual, pMessage);
+    }
+}

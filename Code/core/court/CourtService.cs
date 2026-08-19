@@ -1769,6 +1769,9 @@ namespace AncientWarfare3.core.court
                 city?.data?.id ?? -1L);
             pActor.data.set(LineageKeys.COURT_SCHOOL,
                 pAppointment.SchoolId ?? "");
+            if (!pAppointment.IsActing)
+                LineageService.EnsureOfficialShiAndClan(pActor,
+                    pAppointment.OfficeId);
             SyncSchoolTrait(pActor, active: true);
             CitySchoolSnapshotService.MarkActorDirty(pActor);
             CourtDirectionService.MarkDirty(kingdom);
@@ -1950,7 +1953,9 @@ namespace AncientWarfare3.core.court
                 pKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, pActor.data.id);
             CourtOfficerMilitaryTransitionService.ReleaseAfterCommittedAppointment(
                 pActor, pLayer, pOfficeId);
-            LineageService.EnsureOfficialShiAndClan(pActor, pOfficeId);
+            if (CourtOfficerRecordRules.ShouldGrantNobleIdentity(
+                    careerResult.IsCommitted, pActing))
+                LineageService.EnsureOfficialShiAndClan(pActor, pOfficeId);
             SyncSchoolTrait(pActor, active: true);
             if (pRecordCareerHistory && careerResult.CreatedAppointmentEvent)
             {
