@@ -266,7 +266,9 @@ namespace AncientWarfare3.core.policy
                         out NativeCityLabelEntry regionEntry))
                 {
                     regionEntry = AcquireNativeCityLabelEntry(seat);
-                    regionEntry.SetDisplayName(region.RegionName);
+                    regionEntry.SetDisplayName(
+                        RegionalGovernmentRules.AdministrativeLabel(
+                            region.RegionName, region.RegionTitle));
                     NativeCityLabels.Add(seat.id, regionEntry);
                 }
                 regionEntry.Add(pZone);
@@ -883,12 +885,28 @@ namespace AncientWarfare3.core.policy
             if (IsCityLayer)
             {
                 City city = clickedZone.city;
-                if (city?.data == null || city.isRekt()) return false;
-                if (CityAdministrationState.IsRegionLevel)
+                if (city?.data == null || city.isRekt())
+                    return ReturnToRootFromUnmappedClick();
+                bool mapped = RegionalGovernmentAggregationService.
+                    TryFindRegion(city.kingdom, city.id,
+                        out RegionalGovernmentReadModel clickedRegion);
+                CityAdministrationMapClickAction action =
+                    CityAdministrationMapModeRules.ResolveClick(
+                        CityAdministrationState.IsRegionLevel,
+                        CityAdministrationState.FocusSeatCityId,
+                        mapped ? clickedRegion.SeatCityId : -1L,
+                        mapped);
+                if (action == CityAdministrationMapClickAction.FocusRegion)
                     return HandleCityRegionClick(city);
-                if (city.id != CityAdministrationState.FocusSeatCityId &&
-                    !IsCityInFocusedRegion(city)) return false;
-                return TryInspectCity(pTile, pPowerId);
+                if (action == CityAdministrationMapClickAction.InspectCity)
+                    return TryInspectCity(pTile, pPowerId);
+                if (action == CityAdministrationMapClickAction.PopToRegions)
+                {
+                    bool popped = CityAdministrationState.PopRegion();
+                    if (popped) RefreshView();
+                    return popped;
+                }
+                return false;
             }
 
             EnsureHierarchyIndex();
@@ -937,6 +955,7 @@ namespace AncientWarfare3.core.policy
                 RefreshView();
                 return true;
             }
+            if (IsCityLayer) return false;
             if (State.IsRoot) return false;
             State.Reset();
             RefreshView();
@@ -1048,9 +1067,12 @@ namespace AncientWarfare3.core.policy
                 pCity, pZone);
         }
 
-        internal static void RemoveCity(City pCity)
+        internal static void RemoveCity(City pCity,
+            Kingdom pFormerKingdom = null)
         {
             if (pCity == null) return;
+            RegionalGovernmentAggregationService.Invalidate(pCity.kingdom);
+            RegionalGovernmentAggregationService.Invalidate(pFormerKingdom);
             _nativeDrawCacheValid = false;
             InvalidateCityMeta(pCity);
             HierarchicalVassalMapModeLabelLayer.EvictCity(pCity.id);
@@ -1058,6 +1080,9 @@ namespace AncientWarfare3.core.policy
             if (pCity.kingdom != null)
                 HierarchicalVassalMapModeLabelLayer.MarkKingdomDirty(
                     pCity.kingdom);
+            if (pFormerKingdom != null && pFormerKingdom != pCity.kingdom)
+                HierarchicalVassalMapModeLabelLayer.MarkKingdomDirty(
+                    pFormerKingdom);
         }
 
         public static void MarkKingdomDirty(Kingdom pKingdom)

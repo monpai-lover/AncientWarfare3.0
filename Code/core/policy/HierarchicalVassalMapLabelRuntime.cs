@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.court;
 
 namespace AncientWarfare3.core.policy
 {
@@ -687,7 +688,8 @@ namespace AncientWarfare3.core.policy
         {
             if (pSource == null || !pSource.HasVisibleLand ||
                 pSource.SeatCity?.data == null) return;
-            string name = pSource.Region.RegionName;
+            string name = RegionalGovernmentRules.AdministrativeLabel(
+                pSource.Region.RegionName, pSource.Region.RegionTitle);
             if (string.IsNullOrWhiteSpace(name)) return;
             var source = new LabelSource(
                 BuildKey(pFocusKey, pSource.Region.SeatCityId,

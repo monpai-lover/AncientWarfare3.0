@@ -10,6 +10,14 @@ namespace AncientWarfare3.core.policy
         Cities
     }
 
+    internal enum CityAdministrationMapClickAction
+    {
+        None,
+        FocusRegion,
+        InspectCity,
+        PopToRegions
+    }
+
     internal sealed class CityAdministrationMapStateRules
     {
         private readonly List<long> _regionBreadcrumbs = new List<long>();
@@ -51,6 +59,21 @@ namespace AncientWarfare3.core.policy
         {
             return (pCityIds ?? Array.Empty<long>()).Distinct().OrderBy(id => id)
                 .ToArray();
+        }
+
+        internal static CityAdministrationMapClickAction ResolveClick(
+            bool pIsRegionLevel, long pFocusSeatCityId,
+            long pClickedRegionSeatCityId, bool pClickedMapped)
+        {
+            if (!pClickedMapped)
+                return pIsRegionLevel
+                    ? CityAdministrationMapClickAction.None
+                    : CityAdministrationMapClickAction.PopToRegions;
+            if (pIsRegionLevel)
+                return CityAdministrationMapClickAction.FocusRegion;
+            return pClickedRegionSeatCityId == pFocusSeatCityId
+                ? CityAdministrationMapClickAction.InspectCity
+                : CityAdministrationMapClickAction.PopToRegions;
         }
     }
 }

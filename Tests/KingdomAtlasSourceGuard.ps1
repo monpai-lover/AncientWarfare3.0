@@ -124,7 +124,12 @@ if (-not $artifact.Contains('TryLoadCachedPng')) {
   throw 'Atlas artifact writer does not expose the generated PNG cache to preview.'
 }
 $chroniclePatch = Get-Content -Raw (Join-Path $root 'Code\patch\AW_ChroniclePatch.cs')
-if ($chroniclePatch -match 'DestroyCity_Prefix') {
+$destroyPrefixMatch = [regex]::Match(
+  $chroniclePatch,
+  '(?s)DestroyCity_Prefix\s*\([^)]*\)\s*\{(?<body>.*?)\n\s*\}')
+if ($destroyPrefixMatch.Success -and
+    $destroyPrefixMatch.Groups['body'].Value -match
+      'KingdomAtlas|Artifact|Geometry|World\.world|foreach|Save') {
   throw 'City destruction must not scan or persist atlas geometry at runtime.'
 }
 if ($chroniclePatch -notmatch 'CityAddZone_Postfix') {

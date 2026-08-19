@@ -144,6 +144,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.setLeader))]
         public static void SetLeader_Postfix(City __instance, Actor pActor, bool pNew, Actor __state)
         {
+            InvalidateRegionalGovernmentCache(__instance, __state);
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (GovernorRotationRuntimeScope.IsActive) return;
             if (__state?.data != null && __state != __instance?.leader)
@@ -162,12 +163,21 @@ namespace AncientWarfare3.patch
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(City), nameof(City.removeLeader))]
-        public static void RemoveLeader_Postfix(Actor __state)
+        public static void RemoveLeader_Postfix(City __instance, Actor __state)
         {
+            InvalidateRegionalGovernmentCache(__instance, __state);
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (GovernorRotationRuntimeScope.IsActive) return;
             if (__state?.data != null) EndLeaderCareer(__state, "removed");
             CourtDirectionService.MarkDirty(__state?.kingdom);
+        }
+
+        private static void InvalidateRegionalGovernmentCache(City pCity,
+            Actor pFormerLeader)
+        {
+            RegionalGovernmentAggregationService.Invalidate(
+                pFormerLeader?.kingdom);
+            RegionalGovernmentAggregationService.Invalidate(pCity?.kingdom);
         }
 
         private static void EndLeaderCareer(Actor pActor, string pReason)

@@ -188,11 +188,20 @@ namespace AncientWarfare3.patch
             CoupRestorationService.OnCityTransferCompleted(__instance);
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(City), nameof(City.destroyCity))]
+        public static void DestroyCity_Prefix(City __instance,
+            out Kingdom __state)
+        {
+            __state = __instance?.kingdom;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(City), nameof(City.destroyCity))]
-        public static void DestroyCity_Postfix(City __instance)
+        public static void DestroyCity_Postfix(City __instance,
+            Kingdom __state)
         {
-            HierarchicalVassalMapModeService.RemoveCity(__instance);
+            HierarchicalVassalMapModeService.RemoveCity(__instance, __state);
         }
 
         [HarmonyPostfix]

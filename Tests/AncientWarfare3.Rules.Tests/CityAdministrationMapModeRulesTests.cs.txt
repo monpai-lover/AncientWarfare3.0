@@ -19,6 +19,26 @@ internal static class CityAdministrationMapModeRulesTests
         True(CityAdministrationMapModeRules.OrderedMembers(
             new[] { 8L, 2L, 8L }).SequenceEqual(new[] { 2L, 8L }),
             "members are deterministic");
+        Equal(CityAdministrationMapClickAction.FocusRegion,
+            CityAdministrationMapModeRules.ResolveClick(
+                true, -1L, 42L, true),
+            "region-level click focuses the mapped region");
+        Equal(CityAdministrationMapClickAction.InspectCity,
+            CityAdministrationMapModeRules.ResolveClick(
+                false, 42L, 42L, true),
+            "member click inside the focused region inspects the city");
+        Equal(CityAdministrationMapClickAction.PopToRegions,
+            CityAdministrationMapModeRules.ResolveClick(
+                false, 42L, 99L, true),
+            "mapped city outside the focused region returns to regions");
+        Equal(CityAdministrationMapClickAction.PopToRegions,
+            CityAdministrationMapModeRules.ResolveClick(
+                false, 42L, -1L, false),
+            "unmapped click returns one city-administration level");
+        Equal(CityAdministrationMapClickAction.None,
+            CityAdministrationMapModeRules.ResolveClick(
+                true, -1L, -1L, false),
+            "unmapped region-level click does not affect kingdom hierarchy");
     }
 
     private static void True(bool pActual, string pMessage)
