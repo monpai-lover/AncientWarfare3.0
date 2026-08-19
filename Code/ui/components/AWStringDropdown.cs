@@ -195,7 +195,7 @@ namespace AncientWarfare3.ui.components
             _scroll.scrollSensitivity = 24f;
             _popup.anchorMin = _popup.anchorMax = Vector2.zero;
             BuildOptions();
-            PositionPopup(canvas);
+            PositionPopup();
             _popup.SetAsLastSibling();
         }
 
@@ -283,9 +283,12 @@ namespace AncientWarfare3.ui.components
             _onSelected?.Invoke(option);
         }
 
-        private void PositionPopup(Canvas canvas)
+        private void PositionPopup()
         {
-            RectTransform canvasRect = canvas.transform as RectTransform;
+            Canvas canvas = GetComponentInParent<Canvas>();
+            RectTransform overlayRect = _overlay?.transform as RectTransform;
+            if (canvas == null || overlayRect == null || _popup == null)
+                return;
             Camera camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay
                 ? null
                 : canvas.worldCamera;
@@ -307,8 +310,8 @@ namespace AncientWarfare3.ui.components
             _popup.pivot = above ? new Vector2(0f, 0f) :
                 new Vector2(0f, 1f);
             if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    canvasRect, anchor, camera, out Vector2 local))
-                _popup.anchoredPosition = local;
+                    overlayRect, anchor, camera, out Vector2 local))
+                _popup.localPosition = local;
         }
 
         private static Font ResolveFont()
@@ -337,6 +340,18 @@ namespace AncientWarfare3.ui.components
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.Escape)) CloseDropdown();
+        }
+
+        private void LateUpdate()
+        {
+            if (_popup == null) return;
+            if (!isActiveAndEnabled || !gameObject.activeInHierarchy ||
+                transform.parent == null)
+            {
+                CloseDropdown();
+                return;
+            }
+            PositionPopup();
         }
 
         private void OnDisable()
