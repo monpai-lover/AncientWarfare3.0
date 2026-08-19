@@ -1,0 +1,43 @@
+using System;
+using System.IO;
+
+internal static class CityShiInfluenceSourceGuardTests
+{
+    internal static void Run()
+    {
+        string source = Read("Code/core/lineage/CityShiInfluenceSnapshotService.cs");
+
+        Contains(source, "CitySchoolDirtyQueue", "Shi snapshots must use a deduplicated dirty queue");
+        Contains(source, "DemandedDirty", "selected or hovered cities must have a priority demand queue");
+        Contains(source, "ProcessDirty(int pBudget", "snapshot work must expose an explicit bounded budget");
+        Contains(source, "foreach (Actor actor in pCity.getUnits())", "rebuilds must use the city resident collection");
+        Contains(source, "LineageKeys.SHI_ID", "resident Shi identity must come from the actor SHI_ID");
+        Contains(source, "MarkActorDirty", "actor lifecycle invalidation must be available");
+        Contains(source, "MarkCityOwnershipChanged", "city ownership invalidation must be available");
+        Contains(source, "MarkKingdomDirty", "king or kingdom invalidation must be available");
+        Contains(source, "if (pBudget <= 0) return 0;", "zero budgets must not do work");
+
+        Equal(false, source.Contains("foreach (Actor actor in World.world.units",
+            StringComparison.Ordinal), "Shi rebuilds must not scan every world actor");
+        Equal(false, source.Contains("World.world.units.ToList", StringComparison.Ordinal),
+            "Shi rebuilds must not materialize a world-wide actor list");
+    }
+
+    private static string Read(string pRelative)
+    {
+        return File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+                pRelative.Replace('/', Path.DirectorySeparatorChar)))
+            .Replace("\r\n", "\n");
+    }
+
+    private static void Contains(string pText, string pNeedle, string pMessage)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal(bool pExpected, bool pActual, string pMessage)
+    {
+        if (pExpected != pActual) throw new InvalidOperationException(pMessage);
+    }
+}
