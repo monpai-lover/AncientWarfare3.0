@@ -7,15 +7,22 @@ aw_local_court_seats,官员 {0}/{1},Officials {0}/{1},官员 {0}/{1}
 aw_local_court_card_summary,官员 {0}/{1}  效率 {2},Officials {0}/{1}  Efficiency {2},官员 {0}/{1}  效率 {2}
 aw_local_court_choose_template,选择地方官署模板,Choose local government,选择地方官署模板
 aw_custom_court_context,编辑层级,Edit layer,编辑层级
+aw_custom_court_context_desc,切换编辑中央朝廷或地方官署模板,Switch between the central court and local government templates,切換編輯中央朝廷或地方官署模板
 aw_custom_local_court_name,地方官署模板名,Local template name,地方官署模板名
+aw_custom_local_court_template_desc,选择要编辑的地方官署模板,Choose the local government template to edit,選擇要編輯的地方官署模板
 aw_custom_local_court_create,新建地方模板,New Local,新建地方模板
+aw_custom_local_court_create_desc,新建一个空白的地方官署模板,Create an empty local government template,新建一個空白的地方官署模板
 aw_custom_local_court_duplicate,复制模板,Duplicate,复制模板
+aw_custom_local_court_duplicate_desc,复制当前模板及其全部官职和关系,Copy the selected template with all offices and links,複製目前模板及其全部官職和關係
 aw_custom_local_court_delete,删除地方模板,Delete Local,删除地方模板
+aw_custom_local_court_delete_desc,删除当前模板并按需将城市改用替代模板,Delete this template and rebind its cities when required,刪除目前模板並按需將城市改用替代模板
 aw_custom_local_court_manual,仅手动指定,Manual only,仅手动指定
 aw_custom_local_court_civil,民政默认,Civil default,民政默认
 aw_custom_local_court_military,军政默认,Military default,军政默认
 aw_custom_local_court_default_kind,默认用途,Default use,默认用途
+aw_custom_local_court_default_kind_desc,设置此模板自动用于普通城市或军事重镇,Assign this template automatically to civil or military cities,設定此模板自動用於普通城市或軍事重鎮
 aw_custom_local_court_replacement,删除时替换为,Replacement when deleting,删除时替换为
+aw_custom_local_court_replacement_desc,选择删除当前模板后城市改用的模板,Choose the template used by cities after deletion,選擇刪除目前模板後城市改用的模板
 aw_custom_local_court_limit,地方官署模板已达到上限,The local template limit has been reached,地方官署模板已达到上限
 aw_custom_local_court_default_name,地方官署,Local Government,地方官署
 aw_court_governor,地方长官,Governor,地方長官
@@ -32,6 +39,8 @@ aw_custom_court_whole_preset_cycle,整套官场：{0},Whole court: {0},整套官
 aw_custom_court_workflow,自定义朝廷,Custom Court Workflow,自定义朝廷
 aw_custom_court_workflow Title,自定义朝廷工作流,Custom Court Workflow,自定义朝廷工作流
 aw_custom_court_workflow_title,自定义朝廷工作流,Custom Court Workflow,自定义朝廷工作流
+aw_custom_court_back,返回官场,Back to court,返回官場
+aw_custom_court_back_desc,返回打开本编辑器的国家官场或当前城市官署,Return to the realm court or city government that opened this editor,返回打開本編輯器的國家官場或目前城市官署
 aw_custom_local_court_workflow,自定义官府,Custom Local Government,自訂官府
 aw_custom_local_court_workflow Title,自定义官府,Custom Local Government,自訂官府
 aw_custom_local_court_workflow_title,自定义官府,Custom Local Government,自訂官府
@@ -46,17 +55,23 @@ aw_local_office_dudu,都督,Commander,都督
 aw_local_office_sima,司马,Marshal,司馬
 aw_local_office_canjun,参军,Staff Officer,參軍
 aw_custom_court_add_office,添加官职,Add Office,添加官职
+aw_custom_court_add_office_desc,在当前可见画布中央新建官职卡片,Create an office card at the center of the visible canvas,在目前可見畫布中央新建官職卡片
 aw_custom_court_management_edge,管理关系,Management,管理关系
 aw_custom_court_prerequisite_edge,任职前置,Prerequisite,任职前置
 aw_custom_court_export,导出,Export,导出
+aw_custom_court_export_desc,将当前模板导出到模组 CourtJson 文件夹,Export the current template to the mod CourtJson folder,將目前模板匯出到模組 CourtJson 資料夾
 aw_custom_court_import,导入,Import,导入
 aw_custom_court_exported_path,导出成功：{0},Exported successfully: {0},导出成功：{0}
 aw_custom_court_import_select,导入 JSON,Import JSON,导入 JSON
+aw_custom_court_import_select_desc,从模组 CourtJson 文件夹选择 JSON 模板导入,Choose a JSON template from the mod CourtJson folder,從模組 CourtJson 資料夾選擇 JSON 模板匯入
 aw_custom_court_import_no_files,没有 JSON 文件,No JSON files,没有 JSON 文件
 aw_custom_court_import_invalid,选择的 JSON 文件无效,The selected JSON file is invalid,选择的 JSON 文件无效
 aw_custom_court_apply,应用,Apply,应用
+aw_custom_court_apply_desc,将当前朝廷和地方官署模板应用到这个国家,Apply this court and its local templates to the current kingdom,將目前朝廷和地方官署模板套用到這個國家
 aw_custom_court_save,保存,Save,保存
+aw_custom_court_save_desc,将当前模板保存为 JSON 但不立即应用,Save the current template as JSON without applying it,將目前模板儲存為 JSON 但不立即套用
 aw_custom_court_name,官场名称,Court name,官场名称
+aw_custom_court_name_desc,设置当前朝廷或地方官署模板的显示名称,Set the displayed name of the current court or local template,設定目前朝廷或地方官署模板的顯示名稱
 aw_custom_court_name_placeholder,输入官场名称,Enter court name,输入官场名称
 aw_custom_court_name_required,请先输入官场名称,Enter a court name before saving.,请先输入官场名称
 aw_custom_court_saved,官场已保存,Court saved.,官场已保存
@@ -72,6 +87,8 @@ aw_custom_court_edge_added,连接已添加,Connection added.,连接已添加
 aw_custom_court_office_name,官职名称,Office name,官職名稱
 aw_custom_court_office_name_placeholder,输入官职名称,Enter office name,輸入官職名稱
 aw_custom_court_office_default,官职,Office,官職
+aw_custom_court_delete_office,删除官职,Delete office,刪除官職
+aw_custom_court_delete_office_desc,删除此官职卡片及其全部连接关系,Remove this office card and all of its connections,刪除此官職卡片及其全部連接關係
 aw_custom_court_office_renamed,官职已重命名,Office renamed.,官職已重新命名
 aw_custom_court_management_edge_desc,第一个官职管理第二个官职并决定官场层级排版,The first office manages the second and defines the court hierarchy.,第一個官職管理第二個官職並決定官場層級排版
 aw_custom_court_prerequisite_edge_desc,必须先担任第一个官职才可任命到第二个官职,The first office must be held before appointment to the second.,必須先擔任第一個官職才可任命到第二個官職

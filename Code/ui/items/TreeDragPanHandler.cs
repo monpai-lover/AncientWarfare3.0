@@ -46,8 +46,23 @@ namespace AncientWarfare3.ui.items
             if (_target == null) return;
             float cur = _target.localScale.x;
             float next = Mathf.Clamp(cur + pEventData.scrollDelta.y * SCALE_STEP, MIN_SCALE, MAX_SCALE);
-            if (!Mathf.Approximately(next, cur))
-                _target.localScale = new Vector3(next, next, 1f);
+            if (Mathf.Approximately(next, cur)) return;
+
+            bool hasPointer = RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    _target,
+                    pEventData.position, pEventData.pressEventCamera,
+                    out Vector2 targetPoint);
+            Vector3 pointerWorld = hasPointer
+                ? _target.TransformPoint(targetPoint)
+                : Vector3.zero;
+            _target.localScale = new Vector3(next, next, 1f);
+            RectTransform parent = _target.parent as RectTransform;
+            if (!hasPointer || parent == null) return;
+
+            Vector2 pointerParent = parent.InverseTransformPoint(pointerWorld);
+            Vector2 movedParent = parent.InverseTransformPoint(
+                _target.TransformPoint(targetPoint));
+            _target.anchoredPosition += pointerParent - movedParent;
         }
     }
 }

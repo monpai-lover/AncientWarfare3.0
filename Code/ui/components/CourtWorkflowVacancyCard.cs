@@ -232,7 +232,7 @@ namespace AncientWarfare3.ui.components
             Action deleteRequested)
         {
             GameObject obj = new GameObject("DeleteButton", typeof(RectTransform),
-                typeof(Image), typeof(Button));
+                typeof(Image), typeof(Button), typeof(TipButton));
             obj.transform.SetParent(parent, false);
             RectTransform rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
@@ -258,6 +258,17 @@ namespace AncientWarfare3.ui.components
             text.color = Color.white;
             text.alignment = TextAnchor.MiddleCenter;
             text.raycastTarget = false;
+            TipButton tip = obj.GetComponent<TipButton>();
+            tip.type = AW_RawTooltip.TYPE;
+            tip.hoverAction = () => Tooltip.show(obj, AW_RawTooltip.TYPE,
+                new TooltipData
+                {
+                    tip_name = AW_L10n.Text(
+                        "aw_custom_court_delete_office", "Delete office"),
+                    tip_description = AW_L10n.Text(
+                        "aw_custom_court_delete_office_desc",
+                        "Remove this office card and its connections.")
+                });
             return button;
         }
 

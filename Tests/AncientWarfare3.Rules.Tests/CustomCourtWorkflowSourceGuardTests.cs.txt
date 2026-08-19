@@ -19,6 +19,8 @@ internal static class CustomCourtWorkflowSourceGuardTests
             "components", "CourtWorkflowEdgeView.cs"));
         string stringDropdown = File.ReadAllText(Path.Combine(root, "Code",
             "ui", "components", "AWStringDropdown.cs"));
+        string panHandler = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "items", "TreeDragPanHandler.cs"));
         string officeSettings = File.ReadAllText(Path.Combine(root, "Code",
             "ui", "windows", "CustomCourtOfficeSettingsWindow.cs"));
         string runtime = File.ReadAllText(Path.Combine(root, "Code", "core",
@@ -128,9 +130,19 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "_canvasRect.offsetMin = Vector2.zero");
         Contains(window, "_canvasRect.offsetMax = Vector2.zero");
         Contains(window,
+            "_root.anchoredPosition = new Vector2(-530f, 0f)");
+        DoesNotContain(window,
             "_root.anchoredPosition = new Vector2(-500f, 0f)");
         DoesNotContain(window,
             "_root.anchoredPosition = Vector2.zero;");
+        Contains(window, "Button _backButton");
+        Contains(window, "CreateBackButton(");
+        Contains(window, "ReturnToCourt()");
+        Contains(window, "FocusActiveGraph(");
+        Contains(window, "_workspaceRect.localScale = Vector3.one;");
+        Contains(panHandler,
+            "RectTransformUtility.ScreenPointToLocalPointInRectangle(");
+        Contains(panHandler, "_target.anchoredPosition +=");
         Contains(window, "ResolveWholePresetProfile(");
         Contains(window, "CustomCourtWholePresetRules.ResolveProfile(");
         DoesNotContain(window, "new Vector2(-864f, 46f)");
@@ -151,7 +163,12 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(vacancyCard, "HandleClick");
         Contains(vacancyCard, "SettingsButton");
         Contains(vacancyCard, "settingsRequested");
+        Contains(vacancyCard, "aw_custom_court_delete_office_desc");
         Contains(window, "CustomCourtOfficeSettingsWindow.Open(");
+        Contains(window, "AttachWorkflowTooltips(");
+        Contains(window, "aw_custom_court_context_desc");
+        Contains(window, "aw_custom_local_court_template_desc");
+        Contains(window, "aw_custom_court_import_select_desc");
         Contains(window, "CustomCourtOfficeSettingsWindow.Open(_kingdomId,");
         Contains(officeSettings, "Open(long kingdomId,");
         Contains(officeSettings, "BuiltInOfficePreset");
@@ -207,6 +224,10 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(stringDropdown, "_onUnavailable?.Invoke(option)");
         Contains(runtime, "DisplayName(Kingdom kingdom");
         Contains(runtime, "OfficeDisplayName(Kingdom kingdom");
+        Contains(runtime,
+            "BuiltInLocalTemplates = CustomLocalGovernmentPresetRules");
+        Contains(runtime, ".CreateBuiltInCatalog();");
+        Contains(runtime, "templates = BuiltInLocalTemplates;");
         DoesNotContain(courtReadModel, "ApplyCustomOfficeLayout");
         Contains(courtReadModel, "CustomCourtHierarchyLayoutRules.BuildRanks(");
         Contains(courtReadModel, "customGraph && !expectedOrder.ContainsKey");
@@ -275,6 +296,15 @@ internal static class CustomCourtWorkflowSourceGuardTests
         HasLocalizationKey(localization,
             "aw_custom_court_settings_preset_applied");
         HasLocalizationKey(localization, "aw_custom_court_apply");
+        HasLocalizationKey(localization, "aw_custom_court_back");
+        HasLocalizationKey(localization, "aw_custom_court_back_desc");
+        HasLocalizationKey(localization, "aw_custom_court_context_desc");
+        HasLocalizationKey(localization,
+            "aw_custom_local_court_template_desc");
+        HasLocalizationKey(localization,
+            "aw_custom_court_import_select_desc");
+        HasLocalizationKey(localization,
+            "aw_custom_court_delete_office_desc");
         HasLocalizationKey(localization, "aw_custom_court_saved");
         HasLocalizationKey(localization, "aw_custom_court_exported_path");
         HasLocalizationKey(localization, "aw_custom_court_import_select");
