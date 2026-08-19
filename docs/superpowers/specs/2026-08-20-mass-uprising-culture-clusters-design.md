@@ -1,6 +1,6 @@
 # Mass Uprising Culture Clusters Design
 
-**Date:** 2026-08-20  
+**Date:** 2026-08-20
 **Status:** Approved for inline implementation
 
 ## Goal

@@ -135,6 +135,8 @@ namespace AncientWarfare3.core.lineage
             "aw_mandate_rebel_great_uprising_last_conversion_year";
         public const string MASS_UPRISING_CLUSTER_KEYS =
             "aw_mass_uprising_cluster_keys";
+        public const string MASS_UPRISING_CLUSTER_PLANS =
+            "aw_mass_uprising_cluster_plans";
         public const string MASS_UPRISING_CLUSTER_CURSOR =
             "aw_mass_uprising_cluster_cursor";
         public const string MASS_UPRISING_CLUSTER_LAST_YEAR =

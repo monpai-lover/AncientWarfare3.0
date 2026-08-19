@@ -17,10 +17,22 @@ namespace AncientWarfare3.core.lineage
             new HashSet<long>();
         private static int _runtimeYear = int.MinValue;
 
+        private sealed class PlannedCluster
+        {
+            internal long CultureId;
+            internal List<long> CityIds = new List<long>();
+            internal List<long> CoreIds = new List<long>();
+
+            internal string Key => MassUprisingClusterRules.ClusterKey(
+                CultureId, new MassUprisingCluster(CultureId, CityIds,
+                    CoreIds.Count > 0));
+        }
+
         internal static void OnKingdomYear(Kingdom pKingdom)
         {
             if (!CanMutate() || !IsValidOrigin(pKingdom)) return;
             int year = Date.getCurrentYear();
+            ProcessAuthorityCycle();
             pKingdom.data.get(
                 LineageKeys.MANDATE_REBEL_GREAT_UPRISING_ACTIVE,
                 out bool active, false);
@@ -31,26 +43,40 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MASS_UPRISING_CLUSTER_LAST_YEAR,
                 year);
 
-            List<MassUprisingCluster> clusters = BuildClusters(pKingdom,
-                out Dictionary<long, int> loyaltyByCity);
-            if (clusters.Count == 0) return;
+            pKingdom.data.get(LineageKeys.MASS_UPRISING_CLUSTER_PLANS,
+                out string plansRaw, "");
+            List<PlannedCluster> plans = ParsePlans(plansRaw);
+            if (plans.Count == 0)
+            {
+                List<MassUprisingCluster> discovered = BuildClusters(pKingdom,
+                    out Dictionary<long, int> discoveredLoyalty);
+                plans = discovered.Select(cluster => new PlannedCluster
+                {
+                    CultureId = cluster.CultureId,
+                    CityIds = cluster.CityIds.ToList(),
+                    CoreIds = cluster.CityIds.Where(id =>
+                        discoveredLoyalty.TryGetValue(id, out int loyalty) &&
+                        MassUprisingClusterRules.IsCore(loyalty)).ToList()
+                }).ToList();
+                if (plans.Count == 0) return;
+                pKingdom.data.set(LineageKeys.MASS_UPRISING_CLUSTER_PLANS,
+                    SerializePlans(plans));
+            }
             pKingdom.data.get(LineageKeys.MASS_UPRISING_CLUSTER_KEYS,
                 out string createdRaw, "");
             HashSet<string> created = ParseKeys(createdRaw);
             pKingdom.data.get(LineageKeys.MASS_UPRISING_CLUSTER_CURSOR,
                 out int cursor, 0);
-            cursor = Normalize(cursor, clusters.Count);
+            cursor = Normalize(cursor, plans.Count);
             int budget = Math.Min(
                 BanditGreatUprisingRules.ConversionBudgetPerYear,
-                clusters.Count);
+                plans.Count);
             for (int offset = 0; offset < budget; offset++)
             {
-                MassUprisingCluster cluster =
-                    clusters[(cursor + offset) % clusters.Count];
-                string key = MassUprisingClusterRules.ClusterKey(
-                    cluster.CultureId, cluster);
+                PlannedCluster plan = plans[(cursor + offset) % plans.Count];
+                string key = plan.Key;
                 if (created.Contains(key)) continue;
-                if (!TryCreateCluster(pKingdom, cluster, loyaltyByCity,
+                if (!TryCreateCluster(pKingdom, plan,
                         key)) continue;
                 created.Add(key);
                 break;
@@ -59,13 +85,15 @@ namespace AncientWarfare3.core.lineage
                 string.Join("|", created.OrderBy(value => value)));
             pKingdom.data.set(LineageKeys.MASS_UPRISING_CLUSTER_CURSOR,
                 MassUprisingClusterRules.AdvanceCursor(cursor, budget,
-                    clusters.Count));
-            ProcessAuthorityCycle();
+                    plans.Count));
         }
 
         internal static void ProcessAuthorityCycle()
         {
             if (!CanMutate() || World.world?.kingdoms == null) return;
+            int year = Date.getCurrentYear();
+            if (_runtimeYear == year) return;
+            _runtimeYear = year;
             var processed = new HashSet<long>();
             foreach (long rebelId in ActiveRebels.OrderBy(id => id).Take(4)
                          .ToList())
@@ -220,13 +248,20 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static bool TryCreateCluster(Kingdom pOrigin,
-            MassUprisingCluster pCluster, Dictionary<long, int> pLoyalty,
-            string pKey)
+            PlannedCluster pPlan, string pKey)
         {
-            long seedId = pCluster.CityIds
-                .Where(id => pLoyalty.ContainsKey(id) &&
-                    MassUprisingClusterRules.IsCore(pLoyalty[id]))
-                .OrderBy(id => pLoyalty[id]).ThenBy(id => id)
+            var loyalty = new Dictionary<long, int>();
+            foreach (long cityId in pPlan.CoreIds)
+            {
+                City city = ResolveCity(cityId);
+                if (city?.data == null || city.isRekt() ||
+                    city.kingdom != pOrigin) continue;
+                try { loyalty[cityId] = city.getLoyalty(); }
+                catch { }
+            }
+            long seedId = pPlan.CoreIds
+                .Where(loyalty.ContainsKey)
+                .OrderBy(id => loyalty[id]).ThenBy(id => id)
                 .FirstOrDefault();
             City seed = ResolveCity(seedId);
             if (seed?.data == null || seed.kingdom != pOrigin) return false;
@@ -237,18 +272,17 @@ namespace AncientWarfare3.core.lineage
                 pOrigin.getID());
             rebel.data.set(LineageKeys.MASS_UPRISING_CLUSTER_KEY, pKey);
             rebel.data.set(LineageKeys.MASS_UPRISING_CLUSTER_CULTURE_ID,
-                pCluster.CultureId);
+                pPlan.CultureId);
             rebel.data.set(LineageKeys.MASS_UPRISING_CLUSTER_CORE_IDS,
-                string.Join(",", pCluster.CityIds.Where(id =>
-                    pLoyalty.ContainsKey(id) &&
-                    MassUprisingClusterRules.IsCore(pLoyalty[id]))));
+                string.Join(",", pPlan.CoreIds));
             rebel.data.set(LineageKeys.MASS_UPRISING_CLUSTER_TARGET_IDS,
-                string.Join(",", pCluster.CityIds));
+                string.Join(",", pPlan.CityIds));
             rebel.data.set(LineageKeys.MASS_UPRISING_CLUSTER_PHASE,
                 PhaseClusterUprising);
             rebel.data.set(LineageKeys.MASS_UPRISING_CLUSTER_COMPLETED_YEAR,
                 int.MinValue);
             ActiveRebels.Add(rebel.getID());
+            MandateRebelService.StartExistingRebelWar(pOrigin, rebel);
             return true;
         }
 
@@ -292,6 +326,36 @@ namespace AncientWarfare3.core.lineage
             return new HashSet<string>((pRaw ?? "").Split('|')
                 .Where(value => !string.IsNullOrWhiteSpace(value)),
                 StringComparer.Ordinal);
+        }
+
+        private static List<PlannedCluster> ParsePlans(string pRaw)
+        {
+            var result = new List<PlannedCluster>();
+            foreach (string raw in (pRaw ?? "").Split('|'))
+            {
+                string[] parts = raw.Split('~');
+                if (parts.Length != 3 || !long.TryParse(parts[0],
+                        out long cultureId) || cultureId <= 0L) continue;
+                List<long> cities = ParseIds(parts[1]).OrderBy(id => id).ToList();
+                List<long> cores = ParseIds(parts[2]).OrderBy(id => id).ToList();
+                if (cities.Count == 0 || cores.Count == 0) continue;
+                result.Add(new PlannedCluster
+                {
+                    CultureId = cultureId,
+                    CityIds = cities,
+                    CoreIds = cores
+                });
+            }
+            return result.OrderBy(plan => plan.Key).ToList();
+        }
+
+        private static string SerializePlans(IEnumerable<PlannedCluster> pPlans)
+        {
+            return string.Join("|", (pPlans ?? Enumerable.Empty<PlannedCluster>())
+                .OrderBy(plan => plan.Key)
+                .Select(plan => plan.CultureId + "~" +
+                    string.Join(",", plan.CityIds.OrderBy(id => id)) + "~" +
+                    string.Join(",", plan.CoreIds.OrderBy(id => id))));
         }
 
         private static HashSet<long> ParseIds(string pRaw)

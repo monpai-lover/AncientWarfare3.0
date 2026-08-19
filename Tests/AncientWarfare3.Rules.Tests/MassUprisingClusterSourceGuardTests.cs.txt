@@ -24,6 +24,8 @@ internal static class MassUprisingClusterSourceGuardTests
             "cluster creation must use an explicit yearly bound");
         Contains(service, "MASS_UPRISING_CLUSTER_TARGET_IDS",
             "cluster target IDs must be persisted");
+        Contains(service, "MASS_UPRISING_CLUSTER_PLANS",
+            "initial cluster plans must remain stable after city transfer");
         Contains(annual, "MassUprisingClusterService.OnKingdomYear",
             "annual work must invoke cluster processing");
         Contains(restore, "MassUprisingClusterService.RebuildRuntime",
