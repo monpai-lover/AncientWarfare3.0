@@ -9,6 +9,15 @@ using AncientWarfare3.core.presentation;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--shi-lineage-mapmode")
+{
+    CityShiInfluenceRulesTests.Run();
+    CityShiInfluenceSourceGuardTests.Run();
+    ShiLineageMapModeSourceGuardTests.Run();
+    Console.WriteLine("Shi lineage mapmode rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--war-refugees")
 {
     WarRefugeeRulesTests.Run();

@@ -1,0 +1,93 @@
+using System;
+using System.IO;
+
+internal static class ShiLineageMapModeSourceGuardTests
+{
+    internal static void Run()
+    {
+        string snapshot = Read("Code/core/lineage/CityShiInfluenceSnapshotService.cs");
+        string service = Read("Code/core/policy/ShiLineageMapModeService.cs");
+        string bottom = Read("Code/core/policy/ShiLineageMapBottomBarController.cs");
+        string element = Read("Code/ui/items/ShiLineageCompositionElement.cs");
+        string metaPatch = Read("Code/patch/AW_MapModeMetaTypePatch.cs");
+        string metaLibrary = Read("Code/core/policy/AWMapModeMetaLibrary.cs");
+        string nameplates = Read("Code/core/policy/AWMapModeNameplateRules.cs");
+        string metaCache = Read("Code/core/policy/MapModeMetaCacheRules.cs");
+        string deferred = Read("Code/patch/AW_DeferredRuntimeWorkPatch.cs");
+        string lifecycle = Read("Code/patch/AW_ShiLineageSnapshotPatch.cs");
+
+        Contains(metaPatch, "IsActive(AWMapModeMetaLibrary.ShiLineageAsset",
+            "active map-mode selection must resolve Shi lineage");
+        Contains(nameplates, "AWMapModeMetaTypes.ShiLineage",
+            "Shi lineage must be registered for nameplates");
+        Contains(metaCache, "aw3_shi_lineage_map:",
+            "Shi lineage dynamic meta entries must be cleared with other map modes");
+        Contains(snapshot, "int attempts = 0;", "failed rebuilds must consume bounded attempts");
+        Contains(snapshot, "TryDequeueNext", "demand work must be selected before normal dirty work");
+        Contains(snapshot, "ShiLineageMapModeService.DirtyMapIfActive();",
+            "successful snapshots must invalidate an active rendered map");
+        Contains(snapshot, "DisplayName", "snapshot branches must cache their display names");
+        Contains(snapshot, "IsValid", "snapshot branches must cache branch validity");
+        Contains(service, "branch.DisplayName", "map presentation must use cached branch labels");
+        NotContains(service, "LineageQuery.GetShiBranchInfo",
+            "map rendering and tooltip paths must not query SQLite");
+        NotContains(metaLibrary, "ShiLineageMapModeService.DisplayName",
+            "zone drawing must not resolve branch labels through lineage queries");
+
+        Contains(bottom, "_tabBeforeInitialization",
+            "Shi bottom bar must preserve the previous tab during delayed Start");
+        Contains(bottom, "ScrollWindow.getCurrentWindow()",
+            "Shi bottom bar must hide while another window is open");
+        Contains(bottom, "SelectedObjects.getSelectedNanoObject()",
+            "Shi bottom bar must validate native selected-object ownership");
+        Contains(bottom, "RestoreTabBeforeInitialization",
+            "Shi bottom bar must restore the tab displaced during initialization");
+        Contains(element, "DominantShi", "composition must show a distinct dominant branch row");
+        Contains(element, "Button.interactable", "invalid Shi rows must be visibly disabled");
+        Contains(element, "FamilyTreeWindow.OpenBigTree(shiId)",
+            "primary Shi row click must open the existing genealogy directly");
+        Contains(element, "ShiLineageMapModeService.SetFocus",
+            "a reachable secondary focus command must be retained");
+
+        Contains(lifecycle, "nameof(Actor.joinCity)",
+            "actor city changes must invalidate both old and new city snapshots");
+        Contains(lifecycle, "CityShiInfluenceSnapshotService.MarkActorDirty",
+            "actor identity lifecycle must invalidate its snapshot");
+        Contains(lifecycle, "CityShiInfluenceSnapshotService.Clear",
+            "world clear must release Shi snapshot caches");
+        Contains(deferred, "ShiLineageMapModeService.ProcessFrame",
+            "bounded Shi snapshot work must run outside the draw callback");
+        NotContains(deferred, "World.world.units", "deferred map work must not scan world actors");
+
+        string en = Read("Locales/en.json");
+        string ch = Read("Locales/ch.json");
+        string cz = Read("Locales/cz.json");
+        foreach (string key in new[] { "aw_shi_lineage_mapmode", "aw_shi_mapmode_tooltip",
+                     "aw_shi_map_no_influence", "aw_shi_map_dominant", "aw_shi_map_none",
+                     "aw_shi_map_unknown", "aw_shi_map_composition" })
+        {
+            Contains(en, "\"" + key + "\"", "English locale missing " + key);
+            Contains(ch, "\"" + key + "\"", "Chinese locale missing " + key);
+            Contains(cz, "\"" + key + "\"", "Czech locale missing " + key);
+        }
+    }
+
+    private static string Read(string pRelative)
+    {
+        return File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+                pRelative.Replace('/', Path.DirectorySeparatorChar)))
+            .Replace("\r\n", "\n");
+    }
+
+    private static void Contains(string pText, string pNeedle, string pMessage)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage);
+    }
+
+    private static void NotContains(string pText, string pNeedle, string pMessage)
+    {
+        if (pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage);
+    }
+}

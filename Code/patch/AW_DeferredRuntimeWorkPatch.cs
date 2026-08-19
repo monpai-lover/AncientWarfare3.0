@@ -33,6 +33,7 @@ namespace AncientWarfare3.patch
             MeasureOutside(RecentFeatureBenchmarkRules.SchoolMapIndex,
                 "school_map_presentation",
                 SchoolMapModeService.ProcessFrame);
+            ShiLineageMapModeService.ProcessFrame();
         }
 
         private static void DrainPresentationCompletions()

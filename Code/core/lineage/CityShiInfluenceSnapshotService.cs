@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -15,7 +16,7 @@ namespace AncientWarfare3.core.lineage
         private static readonly HashSet<long> Demanded = new HashSet<long>();
         private static int _generation;
 
-        public static bool HasPendingDemand => Demanded.Count > 0;
+        public static bool HasPendingDemand => DemandedDirty.Count > 0;
 
         public static CityShiInfluenceSnapshot GetSnapshot(City pCity)
         {
@@ -86,11 +87,13 @@ namespace AncientWarfare3.core.lineage
         public static int ProcessDirty(int pBudget, bool pDemandOnly = false)
         {
             if (pBudget <= 0) return 0;
-            CitySchoolDirtyQueue source = pDemandOnly ? DemandedDirty : Dirty;
             int rebuilt = 0;
             int budget = Math.Max(1, pBudget);
-            while (rebuilt < budget && source.TryDequeue(out long cityId))
+            int attempts = 0;
+            while (attempts < budget &&
+                   TryDequeueNext(pDemandOnly, out long cityId))
             {
+                attempts++;
                 Dirty.Remove(cityId);
                 DemandedDirty.Remove(cityId);
                 City city = World.world?.cities?.get(cityId);
@@ -109,10 +112,13 @@ namespace AncientWarfare3.core.lineage
                 }
                 catch
                 {
+                    // The failed item returns for a later frame. attempts, not
+                    // successful rebuilds, owns this frame's bounded budget.
                     Dirty.Mark(cityId);
                     if (Demanded.Contains(cityId)) DemandedDirty.Mark(cityId);
                 }
             }
+            if (rebuilt > 0) ShiLineageMapModeService.DirtyMapIfActive();
             return rebuilt;
         }
 
@@ -139,7 +145,24 @@ namespace AncientWarfare3.core.lineage
             CityShiInfluenceSnapshot snapshot = CityShiInfluenceRules.BuildSnapshot(
                 ++_generation, contributions);
             snapshot.CityId = pCity.data.id;
+            for (int i = 0; i < snapshot.Branches.Count; i++)
+            {
+                CityShiInfluenceBranch result = snapshot.Branches[i];
+                if (!branches.TryGetValue(result.ShiId,
+                        out ShiBranchInfo branch) || branch == null) continue;
+                result.DisplayName = BuildDisplayName(branch);
+                result.IsValid = !string.IsNullOrWhiteSpace(result.DisplayName);
+            }
             return snapshot;
+        }
+
+        private static bool TryDequeueNext(bool pDemandOnly,
+            out long pCityId)
+        {
+            if (DemandedDirty.TryDequeue(out pCityId)) return true;
+            if (!pDemandOnly && Dirty.TryDequeue(out pCityId)) return true;
+            pCityId = -1L;
+            return false;
         }
 
         private static bool TryGetContribution(City pCity, Actor pActor,
@@ -185,6 +208,16 @@ namespace AncientWarfare3.core.lineage
                 return long.MaxValue;
             double scaled = Math.Floor(Math.Max(0d, pCreatedTime) * 1000d);
             return scaled >= long.MaxValue ? long.MaxValue : (long)scaled;
+        }
+
+        private static string BuildDisplayName(ShiBranchInfo pBranch)
+        {
+            if (pBranch == null) return "";
+            string origin = pBranch.origin_city_name ??
+                            pBranch.origin_city_chinese_name;
+            return ShiBranchRules.BuildDisplayName(origin,
+                pBranch.clan_name, pBranch.source_type,
+                pBranch.state_name);
         }
 
         private static bool IsUsableCity(City pCity)

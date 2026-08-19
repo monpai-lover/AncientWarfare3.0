@@ -1,0 +1,151 @@
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
+
+internal static class CityShiInfluenceRulesTests
+{
+    internal static void Run()
+    {
+        RoleWeightsAreExclusivePerActor();
+        BranchOrderingAndSharesAreStable();
+        EmptyAndSingleBranchCitiesAreHandled();
+        BranchColorsAndFocusBlendingAreDeterministic();
+    }
+
+    private static void RoleWeightsAreExclusivePerActor()
+    {
+        Equal(1, CityShiInfluenceRules.RoleWeight(CityShiRole.Member),
+            "ordinary member weight");
+        Equal(2, CityShiInfluenceRules.RoleWeight(CityShiRole.Noble),
+            "noble weight");
+        Equal(4, CityShiInfluenceRules.RoleWeight(CityShiRole.Official),
+            "official weight");
+        Equal(6, CityShiInfluenceRules.RoleWeight(CityShiRole.Heir),
+            "heir weight");
+        Equal(8, CityShiInfluenceRules.RoleWeight(CityShiRole.CityLeader),
+            "city leader weight");
+        Equal(10, CityShiInfluenceRules.RoleWeight(CityShiRole.King),
+            "king weight");
+
+        CityShiInfluenceSnapshot snapshot = CityShiInfluenceRules.BuildSnapshot(
+            7, new[]
+            {
+                Contribution(100, 10, CityShiRole.Member, 20),
+                Contribution(100, 10, CityShiRole.Noble, 20),
+                Contribution(100, 10, CityShiRole.Official, 20),
+                Contribution(101, 10, CityShiRole.Member, 20)
+            });
+
+        Equal(5, snapshot.TotalWeight,
+            "one actor contributes only its highest role plus the other member");
+        Equal(2, snapshot.Branches[0].LivingMembers,
+            "duplicate role rows do not duplicate the living actor count");
+        Equal(4, snapshot.Branches[0].HighestMemberWeight,
+            "highest actor role is retained");
+    }
+
+    private static void BranchOrderingAndSharesAreStable()
+    {
+        CityShiInfluenceSnapshot snapshot = CityShiInfluenceRules.BuildSnapshot(
+            9, new[]
+            {
+                Contribution(1, 30, CityShiRole.Official, 30),
+                Contribution(2, 30, CityShiRole.Member, 30),
+                Contribution(3, 20, CityShiRole.Noble, 20),
+                Contribution(4, 20, CityShiRole.Noble, 20),
+                Contribution(5, 20, CityShiRole.Member, 20)
+            });
+
+        Equal(30L, snapshot.DominantShiId,
+            "dominant branch uses total weighted influence and stable ties");
+        Equal(2, snapshot.Branches.Count, "all valid branches are retained");
+        Equal(50, snapshot.SharePercent(20), "branch share uses total city weight");
+        Equal(500, snapshot.SharePerThousand(20),
+            "per-thousand share remains available for color blending");
+
+        CityShiInfluenceSnapshot memberTie = CityShiInfluenceRules.BuildSnapshot(
+            10, new[]
+            {
+                Contribution(20, 10, CityShiRole.Noble, 30),
+                Contribution(21, 10, CityShiRole.Member, 30),
+                Contribution(22, 10, CityShiRole.Member, 30),
+                Contribution(23, 10, CityShiRole.Member, 30),
+                Contribution(30, 20, CityShiRole.Noble, 20),
+                Contribution(31, 20, CityShiRole.Noble, 20),
+                Contribution(32, 20, CityShiRole.Member, 20)
+            });
+        Equal(10L, memberTie.DominantShiId,
+            "equal weights and roles prefer the larger living membership");
+
+        CityShiInfluenceSnapshot creationTie = CityShiInfluenceRules.BuildSnapshot(
+            11, new[]
+            {
+                Contribution(40, 90, CityShiRole.Member, 9),
+                Contribution(41, 80, CityShiRole.Member, 8)
+            });
+        Equal(80L, creationTie.DominantShiId,
+            "equal role and membership prefer the older branch");
+
+        CityShiInfluenceSnapshot idTie = CityShiInfluenceRules.BuildSnapshot(
+            12, new[]
+            {
+                Contribution(11, 9, CityShiRole.Member, 5),
+                Contribution(12, 7, CityShiRole.Member, 5)
+            });
+        Equal(7L, idTie.DominantShiId, "Shi ID is the final stable tie-breaker");
+    }
+
+    private static void EmptyAndSingleBranchCitiesAreHandled()
+    {
+        CityShiInfluenceSnapshot empty = CityShiInfluenceRules.BuildSnapshot(
+            1, new[]
+            {
+                Contribution(1, -1, CityShiRole.King, 0)
+            });
+        Equal(-1L, empty.DominantShiId, "invalid Shi IDs are ignored");
+        Equal(0, empty.TotalWeight, "empty city has zero weight");
+
+        CityShiInfluenceSnapshot single = CityShiInfluenceRules.BuildSnapshot(
+            2, new[] { Contribution(2, 88, CityShiRole.Member, 1) });
+        Equal(100, single.SharePercent(88), "single branch displays 100 percent");
+        Equal(1000, single.SharePerThousand(88),
+            "single branch has full focus intensity");
+    }
+
+    private static void BranchColorsAndFocusBlendingAreDeterministic()
+    {
+        string first = ShiLineageMapModeRules.OverviewHex(1234);
+        string second = ShiLineageMapModeRules.OverviewHex(1234);
+        True(first == second && first.StartsWith("#") && first.Length == 7,
+            "branch colors are stable RGB hex values");
+        True(first != ShiLineageMapModeRules.OverviewHex(1235),
+            "adjacent branch IDs do not collapse to one color");
+        Equal(ShiLineageMapModeRules.NeutralHex,
+            ShiLineageMapModeRules.OverviewHex(-1),
+            "missing branch uses neutral color");
+        Equal(ShiLineageMapModeRules.DesaturatedHex,
+            ShiLineageMapModeRules.FocusHex(1234, 0f),
+            "absent focus branch is desaturated");
+        True(ShiLineageMapModeRules.FocusHex(1234, 1f) !=
+             ShiLineageMapModeRules.FocusHex(1234, 0.25f),
+            "focus color scales with branch share");
+    }
+
+    private static CityShiInfluenceContribution Contribution(long pActorId,
+        long pShiId, CityShiRole pRole, long pCreated)
+    {
+        return new CityShiInfluenceContribution(pActorId, pShiId, pRole,
+            pCreated);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                                                expected + ", got " + actual);
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+}

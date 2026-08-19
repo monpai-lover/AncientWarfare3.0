@@ -765,7 +765,8 @@ internal static class AW3MultiplayerCatalogRulesTests
             "ArmyRtsControllerService.TryGetProjection",
             "KingdomAtlasArtifactWriter.TryLoadCachedPng",
             "KingdomAtlasArtifactWriter.TryLoadCachedPreviewPng",
-            "SchoolMapModeService.SetFocus"
+            "SchoolMapModeService.SetFocus",
+            "ShiLineageMapModeService.SetFocus"
         };
         var violations = new List<string>();
         foreach (string file in Directory.EnumerateFiles(root, "*.cs",

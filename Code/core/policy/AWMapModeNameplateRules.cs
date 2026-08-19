@@ -12,7 +12,8 @@ namespace AncientWarfare3.core.policy
             AWMapModeMetaTypes.MandateCore,
             AWMapModeMetaTypes.Development,
             AWMapModeMetaTypes.School,
-            AWMapModeMetaTypes.Feudatory
+            AWMapModeMetaTypes.Feudatory,
+            AWMapModeMetaTypes.ShiLineage
         };
 
         private static readonly string[] DefaultZoneOptionLocaleIds =

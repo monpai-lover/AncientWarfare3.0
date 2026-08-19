@@ -1,4 +1,12 @@
 {
+  "aw_shi_lineage_mapmode": "姘忔敮鍦板浘",
+  "aw_shi_mapmode_tooltip": "姘忔敮褰卞搷鍦板浘",
+  "aw_shi_map_no_influence": "鏃犳皬鏀奖鍝嶅姏",
+  "aw_shi_map_dominant": "涓昏姘忔敮",
+  "aw_shi_map_none": "鏃犳皬鏀?",
+  "aw_shi_map_unknown": "鏈煡姘忔敮",
+  "aw_shi_map_composition": "姘忔敮鏋勬垚",
+  "aw_shi_map_focus": "鐒︾偣",
   "AWPerformanceSettings": "AW3 效能設定",
   "aw_settings_btn": "AW3 設定",
   "aw_settings_btn Description": "開啟 AW3 模組設定",

@@ -20,6 +20,7 @@ namespace AncientWarfare3.core.policy
                    pKey.StartsWith("aw3_mandate_dynasty_map:") ||
                    pKey.StartsWith("aw3_mandate_core_map:") ||
                    pKey.StartsWith("aw3_school_map:") ||
+                   pKey.StartsWith("aw3_shi_lineage_map:") ||
                    pKey.StartsWith("aw3_feudatory_map:") ||
                    pKey.StartsWith("210:") ||
                    pKey.StartsWith("211:") ||
@@ -29,7 +30,9 @@ namespace AncientWarfare3.core.policy
                    pKey.StartsWith("215:") ||
                    pKey.StartsWith("216:") ||
                    pKey.StartsWith("217:") ||
-                   pKey.StartsWith("218:");
+                   pKey.StartsWith("218:") ||
+                   pKey.StartsWith("219:") ||
+                   pKey.StartsWith("220:");
         }
 
         public static bool ShouldClearForWorldSwitch(bool pHadAnyDynamicMeta)

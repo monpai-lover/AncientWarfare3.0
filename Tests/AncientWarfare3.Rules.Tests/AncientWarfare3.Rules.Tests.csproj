@@ -71,7 +71,11 @@
     <Compile Include="WarRefugeeRulesTests.cs.txt" />
     <Compile Include="WarRefugeePersistenceSqlTests.cs.txt" />
     <Compile Include="WarRefugeeSourceGuardTests.cs.txt" />
+    <Compile Include="CityShiInfluenceRulesTests.cs.txt" />
     <Compile Include="CityShiInfluenceSourceGuardTests.cs.txt" />
+    <Compile Include="ShiLineageMapModeSourceGuardTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\CityShiInfluenceRules.cs" Link="Production\CityShiInfluenceRules.cs" />
+    <Compile Include="..\..\Code\core\policy\ShiLineageMapModeRules.cs" Link="Production\ShiLineageMapModeRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarRefugeeModels.cs" Link="Production\WarRefugeeModels.cs" />
     <Compile Include="..\..\Code\core\lineage\WarRefugeeRules.cs" Link="Production\WarRefugeeRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarRefugeePersistence.cs" Link="Production\WarRefugeePersistence.cs" />

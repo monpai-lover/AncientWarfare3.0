@@ -1,4 +1,12 @@
 {
+  "aw_shi_lineage_mapmode": "Shi Lineage Map",
+  "aw_shi_mapmode_tooltip": "Shi lineage influence map",
+  "aw_shi_map_no_influence": "No Shi influence",
+  "aw_shi_map_dominant": "Dominant",
+  "aw_shi_map_none": "No Shi",
+  "aw_shi_map_unknown": "Unknown Shi",
+  "aw_shi_map_composition": "Shi Composition",
+  "aw_shi_map_focus": "Focus",
   "AWPerformanceSettings": "AW3 Performance",
   "aw_settings_btn": "AW3 Settings",
   "aw_settings_btn Description": "Open AW3 mod settings",

@@ -12,6 +12,7 @@ namespace AncientWarfare3.core.policy
         public const MetaType School = (MetaType)217;
         public const MetaType Feudatory = (MetaType)218;
         public const MetaType HierarchicalVassal = (MetaType)219;
+        public const MetaType ShiLineage = (MetaType)220;
 
         public const string TechId = "aw3_tech_map";
         public const string VassalId = "aw3_vassal_map";
@@ -24,6 +25,7 @@ namespace AncientWarfare3.core.policy
         public const string FeudatoryId = "aw3_feudatory_map";
         public const string HierarchicalVassalId =
             "aw3_hierarchical_vassal_map";
+        public const string ShiLineageId = "aw3_shi_lineage_map";
 
         public static bool TryAsString(MetaType pType, out string pResult)
         {
@@ -59,6 +61,9 @@ namespace AncientWarfare3.core.policy
                 case HierarchicalVassal:
                     pResult = HierarchicalVassalId;
                     return true;
+                case ShiLineage:
+                    pResult = ShiLineageId;
+                    return true;
                 default:
                     pResult = "";
                     return false;
@@ -79,6 +84,7 @@ namespace AncientWarfare3.core.policy
                 case SchoolId:
                 case FeudatoryId:
                 case HierarchicalVassalId:
+                case ShiLineageId:
                     return true;
                 default:
                     return false;
