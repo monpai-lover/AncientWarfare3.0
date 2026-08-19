@@ -25,6 +25,13 @@ if (args.Length == 1 && args[0] == "--mass-uprising-clusters")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--local-corruption-loyalty")
+{
+    LocalCorruptionLoyaltySourceGuardTests.Run();
+    Console.WriteLine("Local corruption loyalty source guard passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--war-refugees")
 {
     WarRefugeeRulesTests.Run();

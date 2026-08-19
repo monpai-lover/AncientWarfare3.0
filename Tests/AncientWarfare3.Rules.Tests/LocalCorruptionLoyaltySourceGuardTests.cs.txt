@@ -1,0 +1,42 @@
+using System;
+using System.IO;
+
+internal static class LocalCorruptionLoyaltySourceGuardTests
+{
+    internal static void Run()
+    {
+        string source = Read("Code/content/WarLoyaltyContent.cs");
+        Contains(source, "aw_local_corruption",
+            "local corruption must have a dedicated loyalty asset id");
+        Contains(source, "translation_key_negative",
+            "local corruption must expose the negative loyalty label");
+        Contains(source, "CorruptionService.ReadCity",
+            "loyalty asset must read the city corruption snapshot");
+        Contains(source, "return -Math.Max",
+            "local corruption must return a direct negative loyalty value");
+        Contains(Read("Locales/en.json"),
+            "aw_loyalty_local_corruption_negative",
+            "English local corruption negative label is present");
+        Contains(Read("Locales/ch.json"),
+            "aw_loyalty_local_corruption_negative",
+            "Chinese local corruption negative label is present");
+        Contains(Read("Locales/cz.json"),
+            "aw_loyalty_local_corruption_negative",
+            "Czech local corruption negative label is present");
+    }
+
+    private static string Read(string relative)
+    {
+        return File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+            relative.Replace('/', Path.DirectorySeparatorChar)))
+            .Replace("\r\n", "\n");
+    }
+
+    private static void Contains(string source, string expected,
+        string message)
+    {
+        if ((source ?? string.Empty).IndexOf(expected,
+                StringComparison.OrdinalIgnoreCase) < 0)
+            throw new InvalidOperationException(message);
+    }
+}
