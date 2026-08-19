@@ -8,6 +8,11 @@ select the appropriate automatic template from each city's current role.
 The change must preserve player-authored templates and the existing canvas
 editing interaction.
 
+The local-government editor is not an independent court system. It is a
+contextual sub-editor for the `LocalTemplates` collection inside one kingdom's
+`CustomCourtTemplate`. It creates no separate runtime instance, window-owned
+save object, or parallel application pipeline.
+
 ## Entry Points And Navigation
 
 - Opening the editor from a kingdom court continues to show the existing
@@ -22,6 +27,12 @@ editing interaction.
 - Local mode retains template selection, create, duplicate, delete,
   replacement, default-role, import, export, save, and apply controls. This is
   how one kingdom maintains multiple reusable local-government types.
+- These controls edit only the local-template portion of the in-memory custom
+  court draft. Central offices and all other local templates remain part of
+  the same draft and must survive every local edit unchanged.
+- Save, import, export, validation, and apply continue to use the existing
+  whole `CustomCourtTemplate` services and JSON format. There is no standalone
+  local-government JSON schema or runtime registration.
 - Applying from a city entry returns to that same city's local-government
   view. Applying from the kingdom entry returns to the kingdom court.
 - The editor stores an explicit entry context containing kingdom ID, optional
@@ -113,6 +124,8 @@ instance import both run the same migration.
 - Never rename or overwrite other templates.
 - Preserve city manual bindings and remap no city unless a deleted or invalid
   binding already falls through existing resolution rules.
+- Migration updates `LocalTemplates` inside the owning custom court snapshot;
+  it does not create a second instance beside that custom court.
 - Migration is idempotent: normalizing an already upgraded snapshot produces
   no further changes.
 
