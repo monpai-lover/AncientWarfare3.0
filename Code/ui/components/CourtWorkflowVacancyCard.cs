@@ -24,6 +24,8 @@ namespace AncientWarfare3.ui.components
         private bool _suppressClick;
 
         public CustomCourtOffice Office { get; private set; }
+        public bool IsRegionalLayerCard => Office?.Id ==
+            "regional_government_layer";
 
         public void Bind(CustomCourtOffice office,
             Action<CourtWorkflowVacancyCard> clicked,
@@ -51,7 +53,9 @@ namespace AncientWarfare3.ui.components
             if (string.IsNullOrWhiteSpace(name)) name = Office.Name?.English;
             if (string.IsNullOrWhiteSpace(name)) name = Office.Id;
             _name.text = name ?? string.Empty;
-            _subtitle.text = AW_L10n.Text("aw_court_no_officer", "Vacant");
+            _subtitle.text = IsRegionalLayerCard
+                ? AW_L10n.Text("aw_custom_court_regional_dynamic", "Dynamic layer")
+                : AW_L10n.Text("aw_court_no_officer", "Vacant");
         }
 
         public void SetSelectionState(int step)
@@ -64,7 +68,9 @@ namespace AncientWarfare3.ui.components
                 ? new Color(0.18f, 0.86f, 1f, 1f)
                 : step == 2
                     ? new Color(1f, 0.68f, 0.16f, 1f)
-                    : new Color(0.04f, 0.06f, 0.06f, 0.92f);
+                    : IsRegionalLayerCard
+                        ? new Color(0.25f, 0.72f, 0.78f, 0.96f)
+                        : new Color(0.04f, 0.06f, 0.06f, 0.92f);
             _outline.effectDistance = selected
                 ? new Vector2(4f, -4f)
                 : new Vector2(2f, -2f);
@@ -143,7 +149,65 @@ namespace AncientWarfare3.ui.components
             CreateDeleteButton(obj.transform,
                 () => deleteRequested?.Invoke(card));
             card.Bind(office, clicked, deleteRequested, dragEnded);
+            if (card.IsRegionalLayerCard)
+            {
+                Transform settings = obj.transform.Find("SettingsButton");
+                Transform delete = obj.transform.Find("DeleteButton");
+                if (settings != null) settings.gameObject.SetActive(false);
+                if (delete != null) delete.gameObject.SetActive(false);
+                card.GetComponent<Outline>().effectColor =
+                    new Color(0.25f, 0.72f, 0.78f, 0.96f);
+                card.CreateRegionalDashedBorder();
+                TipButton tip = obj.AddComponent<TipButton>();
+                tip.type = AW_RawTooltip.TYPE;
+                tip.hoverAction = () => Tooltip.show(obj,
+                    AW_RawTooltip.TYPE, new TooltipData
+                    {
+                        tip_name = AW_L10n.Text(
+                            "aw_custom_court_regional_dynamic",
+                            "Dynamic layer"),
+                        tip_description = AW_L10n.Text(
+                            "aw_custom_court_regional_dynamic_desc",
+                            "A runtime regional projection. It creates no vacancy or separate appointment.")
+                    });
+            }
             return card;
+        }
+
+        private void CreateRegionalDashedBorder()
+        {
+            const int horizontalCount = 9;
+            const int verticalCount = 6;
+            Color color = new Color(0.25f, 0.72f, 0.78f, 0.9f);
+            for (int index = 0; index < horizontalCount; index++)
+            {
+                float x = 4f + index * ((Width - 8f) / horizontalCount);
+                CreateDash(new Vector2(x, -2f), new Vector2(8f, 2f), color);
+                CreateDash(new Vector2(x, -Height + 2f),
+                    new Vector2(8f, 2f), color);
+            }
+            for (int index = 0; index < verticalCount; index++)
+            {
+                float y = -5f - index * ((Height - 10f) / verticalCount);
+                CreateDash(new Vector2(2f, y), new Vector2(2f, 8f), color);
+                CreateDash(new Vector2(Width - 2f, y),
+                    new Vector2(2f, 8f), color);
+            }
+        }
+
+        private void CreateDash(Vector2 pPosition, Vector2 pSize,
+            Color pColor)
+        {
+            Image dash = new GameObject("RegionalBorderDash",
+                typeof(RectTransform), typeof(Image)).GetComponent<Image>();
+            dash.transform.SetParent(transform, false);
+            RectTransform rect = dash.rectTransform;
+            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = pPosition;
+            rect.sizeDelta = pSize;
+            dash.color = pColor;
+            dash.raycastTarget = false;
         }
 
         private void BuildUi()

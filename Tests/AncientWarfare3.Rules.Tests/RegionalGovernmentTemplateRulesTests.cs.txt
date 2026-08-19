@@ -25,6 +25,9 @@ internal static class RegionalGovernmentTemplateRulesTests
         custom.RegionalGovernmentLayer.RegionTitle.Chinese = "道";
         custom.RegionalGovernmentLayer.GovernorTitle.Chinese = "观察使";
         custom.RegionalGovernmentLayer.ManagementOfficeIds.Add("minister");
+        custom.RegionalGovernmentLayer.ManagementOfficeIds.Add("missing");
+        custom.RegionalGovernmentLayer.Layout.X = 321f;
+        custom.RegionalGovernmentLayer.Layout.Y = 654f;
         string roundTrip = CustomCourtTemplateJsonCodec.Export(custom);
         True(CustomCourtTemplateJsonCodec.TryImport(roundTrip,
             out CustomCourtTemplate restored, out _), "custom layer round trips");
@@ -34,6 +37,10 @@ internal static class RegionalGovernmentTemplateRulesTests
             "custom governor title survives export");
         Equal("minister", restored.RegionalGovernmentLayer.ManagementOfficeIds
             .Single(), "management link survives export");
+        Equal(321f, restored.RegionalGovernmentLayer.Layout.X,
+            "regional card x survives export");
+        Equal(654f, restored.RegionalGovernmentLayer.Layout.Y,
+            "regional card y survives export");
 
         CustomLocalCourtTemplate local = CustomLocalGovernmentPresetRules
             .CreateCivil("local_only");

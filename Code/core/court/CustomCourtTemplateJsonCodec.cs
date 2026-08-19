@@ -58,7 +58,15 @@ namespace AncientWarfare3.core.court
             if (normalized.Offices.Count > 0)
                 EnsureRegionalLayer(normalized);
             if (normalized.RegionalGovernmentLayer != null)
+            {
                 NormalizeRegionalLayer(normalized.RegionalGovernmentLayer);
+                var centralIds = new HashSet<string>(normalized.Offices
+                    .Where(office => office != null)
+                    .Select(office => office.Id), StringComparer.Ordinal);
+                normalized.RegionalGovernmentLayer.ManagementOfficeIds =
+                    normalized.RegionalGovernmentLayer.ManagementOfficeIds
+                        .Where(centralIds.Contains).ToList();
+            }
             return normalized;
         }
 
@@ -167,6 +175,8 @@ namespace AncientWarfare3.core.court
                     new List<string>()).Where(id => !string.IsNullOrWhiteSpace(id))
                 .Distinct(StringComparer.Ordinal).OrderBy(id => id,
                     StringComparer.Ordinal).ToList();
+            pLayer.Layout = pLayer.Layout ??
+                new CustomCourtOfficeLayout { X = 1000f, Y = 900f };
         }
     }
 }

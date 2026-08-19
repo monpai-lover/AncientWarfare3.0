@@ -166,6 +166,8 @@ namespace AncientWarfare3.core.court
             new CustomCourtLocalizedText { Chinese = "郡守", English = "Regional Governor" };
         public List<string> ManagementOfficeIds { get; set; } =
             new List<string>();
+        public CustomCourtOfficeLayout Layout { get; set; } =
+            new CustomCourtOfficeLayout { X = 1000f, Y = 900f };
     }
 
     public readonly struct CustomCourtValidationIssue

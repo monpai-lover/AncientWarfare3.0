@@ -835,3 +835,14 @@ aw_court_history_end_dismissed,罢免,Dismissed,罷免
 aw_court_history_end_death,卒于任上,Died in office,卒於任上
 aw_court_history_end_city_transferred,城池易主,City transferred,城池易主
 aw_court_history_end_city_destroyed,城池毁灭,City destroyed,城池毀滅
+aw_custom_court_region_title,区域称呼,Region title,區域稱呼
+aw_custom_court_region_title_placeholder,郡,Commandery,郡
+aw_custom_court_region_title_desc,相邻城市运行时聚合层的称呼,Name of the runtime grouping made from adjacent cities,相鄰城市執行時聚合層的稱呼
+aw_custom_court_governor_title,区域长官称呼,Governor title,區域長官稱呼
+aw_custom_court_governor_title_placeholder,郡守,Regional Governor,郡守
+aw_custom_court_governor_title_desc,首府州牧兼任区域长官时显示的官职称呼,Title shown for the seat city leader when acting as regional governor,首府州牧兼任區域長官時顯示的官職稱呼
+aw_custom_court_regional_dynamic,动态区域层,Dynamic regional layer,動態區域層
+aw_custom_court_regional_dynamic_desc,按相邻城市实时生成且不产生空缺或独立任命记录,Generated from adjacent cities at runtime without vacancies or separate appointments,按相鄰城市即時生成且不產生空缺或獨立任命記錄
+aw_custom_court_regional_read_only,区域上级需要在中央朝廷中设置,The regional superior is configured in the central court,區域上級需要在中央朝廷中設定
+aw_custom_court_regional_management_only,区域层只能与中央官职建立管理关系,The regional layer only accepts central management connections,區域層只能與中央官職建立管理關係
+aw_custom_court_regional_protected,动态区域层不能删除,The dynamic regional layer cannot be deleted,動態區域層不能刪除

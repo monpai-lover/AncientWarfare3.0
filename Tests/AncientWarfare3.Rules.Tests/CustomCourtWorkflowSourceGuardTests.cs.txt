@@ -240,7 +240,8 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(runtime,
             "BuiltInLocalTemplates = CustomLocalGovernmentPresetRules");
         Contains(runtime, ".CreateBuiltInCatalog();");
-        Contains(runtime, "templates = BuiltInLocalTemplates;");
+        Contains(runtime, "ResolvedLocalTemplates(pKingdom)");
+        Contains(runtime, "return BuiltInLocalTemplates;");
         DoesNotContain(courtReadModel, "ApplyCustomOfficeLayout");
         Contains(courtReadModel, "CustomCourtHierarchyLayoutRules.BuildRanks(");
         Contains(courtReadModel, "customGraph && !expectedOrder.ContainsKey");
