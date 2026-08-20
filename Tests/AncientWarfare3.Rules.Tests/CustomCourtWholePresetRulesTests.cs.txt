@@ -8,6 +8,7 @@ internal static class CustomCourtWholePresetRulesTests
         WesternOptionsContainOnlyCanonicalStages();
         CurrentHanUnlocksOnlyZhouAndHan();
         EasternZhouUnlocksItsBuiltInPreset();
+        EmptySelectionFallsBackToFirstUnlockedPreset();
         KnownInstitutionRecoversMissingProfile();
         ExplicitProfileWinsOverInstitutionFallback();
         ReplacementPreservesTemplateIdentityAndName();
@@ -67,6 +68,20 @@ internal static class CustomCourtWholePresetRulesTests
             "Eastern Zhou remains selectable at rank zero");
         True(options.Skip(1).All(option => !option.Unlocked),
             "later Xia institutions remain locked at Eastern Zhou");
+    }
+
+    private static void EmptySelectionFallsBackToFirstUnlockedPreset()
+    {
+        IReadOnlyList<CustomCourtWholePresetOption> options =
+            CustomCourtWholePresetRules.Options(CourtProfileId.Xia,
+                CourtInstitutionId.Zhou);
+        CustomCourtWholePresetOption selected =
+            CustomCourtWholePresetRules.SelectAvailablePreset(options,
+                string.Empty);
+        Equal(CourtInstitutionId.Zhou, selected.InstitutionId,
+            "an empty editor selection uses the first unlocked preset");
+        True(selected.Unlocked,
+            "the automatic editor selection is available");
     }
 
     private static void KnownInstitutionRecoversMissingProfile()

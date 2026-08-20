@@ -132,6 +132,22 @@ namespace AncientWarfare3.core.court
             return default;
         }
 
+        public static CustomCourtWholePresetOption SelectAvailablePreset(
+            IReadOnlyList<CustomCourtWholePresetOption> options,
+            string selectedInstitutionId)
+        {
+            if (options == null || options.Count == 0)
+                return default;
+            for (int index = 0; index < options.Count; index++)
+            {
+                CustomCourtWholePresetOption option = options[index];
+                if (option.Unlocked && string.Equals(option.InstitutionId,
+                        selectedInstitutionId, StringComparison.Ordinal))
+                    return option;
+            }
+            return NextUnlockedPreset(options, string.Empty);
+        }
+
         public static bool TryReplace(CustomCourtTemplate source,
             ICourtProfile profile, string institutionId,
             Func<CourtOfficeDefinition, CustomCourtLocalizedText> nameResolver,

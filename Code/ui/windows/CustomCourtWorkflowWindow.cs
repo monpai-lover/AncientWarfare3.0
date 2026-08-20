@@ -419,10 +419,7 @@ namespace AncientWarfare3.ui.windows
             _root.anchorMin = _root.anchorMax = new Vector2(0.5f, 0.5f);
             _root.pivot = new Vector2(0.5f, 0.5f);
             _root.sizeDelta = new Vector2(contentWidth, viewportHeight);
-            if (_editingLocal)
-                _root.anchoredPosition = new Vector2(-530f, 0f);
-            else
-                _root.anchoredPosition = new Vector2(-510f, 0f);
+            _root.anchoredPosition = new Vector2(-510f, 0f);
             _layout = CustomCourtWorkflowLayoutRules.Resolve(contentWidth,
                 viewportHeight, ToolbarWidth, ToolbarScale,
                 ToolbarScrollbarWidth);
@@ -1538,11 +1535,9 @@ namespace AncientWarfare3.ui.windows
         private void SetWholePresetButtonState(
             IReadOnlyList<CustomCourtWholePresetOption> pOptions)
         {
-            CustomCourtWholePresetOption selected = pOptions?.FirstOrDefault(
-                option => option.Unlocked && string.Equals(option.InstitutionId,
-                    _selectedWholePresetId, StringComparison.Ordinal)) ??
-                CustomCourtWholePresetRules.NextUnlockedPreset(pOptions,
-                    string.Empty);
+            CustomCourtWholePresetOption selected =
+                CustomCourtWholePresetRules.SelectAvailablePreset(pOptions,
+                    _selectedWholePresetId);
             bool available = !string.IsNullOrEmpty(selected.InstitutionId);
             if (_wholePresetButton == null) return;
             _wholePresetButton.interactable = available;

@@ -74,7 +74,7 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "Button _wholePresetButton");
         Contains(window, "RefreshWholePresetOptions(");
         Contains(window, "CycleWholePreset(");
-        Contains(window, "NextUnlockedPreset(");
+        Contains(window, "SelectAvailablePreset(");
         DoesNotContain(window, "_wholePresetDropdown");
         Contains(window, "CustomCourtWholePresetRules.TryReplace(");
         Contains(window, "_edgeSource = null;");
@@ -142,6 +142,8 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "_canvasRect.offsetMin = Vector2.zero");
         Contains(window, "_canvasRect.offsetMax = Vector2.zero");
         Contains(window,
+            "_root.anchoredPosition = new Vector2(-510f, 0f)");
+        DoesNotContain(window,
             "_root.anchoredPosition = new Vector2(-530f, 0f)");
         DoesNotContain(window,
             "_root.anchoredPosition = new Vector2(-500f, 0f)");
