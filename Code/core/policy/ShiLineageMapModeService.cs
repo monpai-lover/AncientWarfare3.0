@@ -16,6 +16,7 @@ namespace AncientWarfare3.core.policy
         private static City _ownedCity;
 
         public static long FocusShiId { get; private set; } = -1L;
+        public static City SelectedCity => _ownedCity;
         public static bool IsActive() => AWMapModeCoordinator.IsActive(POWER_ID);
 
         public static void ProcessFrame()
@@ -27,10 +28,6 @@ namespace AncientWarfare3.core.policy
             if (active) CityShiInfluenceSnapshotService.ProcessDirty(4);
             else if (CityShiInfluenceSnapshotService.HasPendingDemand)
                 CityShiInfluenceSnapshotService.ProcessDirty(1, true);
-            if (_ownedCity != null &&
-                (SelectedMetas.selected_city != _ownedCity ||
-                 SelectedObjects.getSelectedNanoObject() != _ownedCity))
-                _ownedCity = null;
             ShiLineageMapBottomBarController.ProcessFrame();
         }
 
@@ -95,8 +92,6 @@ namespace AncientWarfare3.core.policy
                 ScrollWindow.getCurrentWindow() != null) return false;
             SelectedUnit.clear();
             CityShiInfluenceSnapshotService.Demand(pCity);
-            SelectedMetas.selected_city = pCity;
-            SelectedObjects.setNanoObject(pCity);
             _ownedCity = pCity;
             ShiLineageMapBottomBarController.Show(pCity);
             return true;
@@ -146,17 +141,16 @@ namespace AncientWarfare3.core.policy
         {
             FocusShiId = -1L;
             ShiLineageMapBottomBarController.Hide();
-            try
-            {
-                if (_ownedCity != null &&
-                    SelectedMetas.selected_city == _ownedCity &&
-                    SelectedObjects.getSelectedNanoObject() == _ownedCity)
-                {
-                    SelectedMetas.selected_city = null;
-                    SelectedObjects.unselectNanoObject();
-                }
-            }
-            catch { }
+            _ownedCity = null;
+        }
+
+        internal static void SetSelectedCity(City pCity)
+        {
+            _ownedCity = pCity;
+        }
+
+        internal static void ClearSelectedCity()
+        {
             _ownedCity = null;
         }
 

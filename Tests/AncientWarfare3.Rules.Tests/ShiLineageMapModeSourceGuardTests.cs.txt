@@ -6,7 +6,9 @@ internal static class ShiLineageMapModeSourceGuardTests
     internal static void Run()
     {
         string snapshot = Read("Code/core/lineage/CityShiInfluenceSnapshotService.cs");
+        string schoolService = Read("Code/core/policy/SchoolMapModeService.cs");
         string service = Read("Code/core/policy/ShiLineageMapModeService.cs");
+        string schoolBottom = Read("Code/core/policy/SchoolMapBottomBarController.cs");
         string bottom = Read("Code/core/policy/ShiLineageMapBottomBarController.cs");
         string element = Read("Code/ui/items/ShiLineageCompositionElement.cs");
         string metaPatch = Read("Code/patch/AW_MapModeMetaTypePatch.cs");
@@ -88,12 +90,45 @@ internal static class ShiLineageMapModeSourceGuardTests
         NotContains(metaLibrary, "ShiLineageMapModeService.DisplayName",
             "zone drawing must not resolve branch labels through lineage queries");
 
+        Contains(schoolService, "private static City _selectedCity;",
+            "school map mode must own its selected city");
+        Contains(schoolService, "public static City SelectedCity => _selectedCity;",
+            "school map mode must expose its owned city to its bottom bar");
+        Contains(schoolService, "_selectedCity = pCity;",
+            "school selection must write its private city state");
+        NotContains(schoolService, "SelectedObjects.setNanoObject",
+            "school selection must not activate the vanilla selected-object UI");
+        NotContains(schoolService, "SelectedMetas.selected_city = pCity",
+            "school selection must not publish through vanilla selected-meta state");
+        Contains(service, "public static City SelectedCity => _ownedCity;",
+            "Shi map mode must expose its owned city to its bottom bar");
+        NotContains(service, "SelectedObjects.setNanoObject",
+            "Shi selection must not activate the vanilla selected-object UI");
+        NotContains(service, "SelectedMetas.selected_city = pCity",
+            "Shi selection must not publish through vanilla selected-meta state");
+        Contains(schoolBottom, "SchoolMapModeService.SelectedCity",
+            "school bottom bar must consume service-owned city state");
+        NotContains(schoolBottom, "SelectedMetas.selected_city",
+            "school bottom bar must not read vanilla selected-meta state");
+        NotContains(schoolBottom, "SelectedObjects.getSelectedNanoObject",
+            "school bottom bar must not read vanilla selected-object state");
+        Contains(bottom, "ShiLineageMapModeService.SelectedCity",
+            "Shi bottom bar must consume service-owned city state");
+        NotContains(bottom, "SelectedMetas.selected_city",
+            "Shi bottom bar must not read vanilla selected-meta state");
+        NotContains(bottom, "SelectedObjects.getSelectedNanoObject",
+            "Shi bottom bar must not read vanilla selected-object state");
+        Contains(metaLibrary, "pAsset.get_selected = () => SchoolMapModeService.SelectedCity;",
+            "school meta selection must use service-owned state");
+        Contains(metaLibrary, "pAsset.get_selected = () => ShiLineageMapModeService.SelectedCity;",
+            "Shi meta selection must use service-owned state");
+
         Contains(bottom, "_tabBeforeInitialization",
             "Shi bottom bar must preserve the previous tab during delayed Start");
         Contains(bottom, "ScrollWindow.getCurrentWindow()",
             "Shi bottom bar must hide while another window is open");
-        Contains(bottom, "SelectedObjects.getSelectedNanoObject()",
-            "Shi bottom bar must validate native selected-object ownership");
+        NotContains(bottom, "SelectedObjects.getSelectedNanoObject()",
+            "Shi bottom bar must not validate native selected-object ownership");
         Contains(bottom, "RestoreTabBeforeInitialization",
             "Shi bottom bar must restore the tab displaced during initialization");
         Contains(element, "DominantShi", "composition must show a distinct dominant branch row");
@@ -117,10 +152,10 @@ internal static class ShiLineageMapModeSourceGuardTests
             "a reachable secondary focus command must be retained");
         Contains(service, "DeactivateOwnedState",
             "leaving or losing the Shi map mode must release owned UI state");
-        Contains(service, "SelectedObjects.unselectNanoObject()",
-            "Shi map cleanup must release its selected nano object");
-        Contains(service, "SelectedMetas.selected_city == _ownedCity",
-            "Shi cleanup must clear only the city selection it owns");
+        NotContains(service, "SelectedObjects.unselectNanoObject()",
+            "Shi map cleanup must not release the player's native selected object");
+        NotContains(service, "SelectedMetas.selected_city == _ownedCity",
+            "Shi cleanup must use only its private city selection");
         Contains(metaLibrary, "pSnapshot.SharePercent(pSnapshot.DominantShiId)",
             "Shi nameplates must include the dominant branch share");
 

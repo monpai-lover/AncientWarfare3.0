@@ -19,9 +19,12 @@ namespace AncientWarfare3.core.policy
         private static double _lastDirtyTime = -1d;
         private static int _windowDepth;
         private static bool _wasEnabledBeforeWindow;
+        private static bool _wasActive;
         private static string _focusBeforeWindow = CourtSchoolId.None;
+        private static City _selectedCity;
 
         public static string FocusSchoolId { get; private set; } = CourtSchoolId.None;
+        public static City SelectedCity => _selectedCity;
 
         public static bool IsActive() => AWMapModeCoordinator.IsActive(POWER_ID);
 
@@ -50,6 +53,8 @@ namespace AncientWarfare3.core.policy
         public static void ProcessFrame()
         {
             bool active = IsActive();
+            if (_wasActive && !active) DeactivateOwnedState();
+            _wasActive = active;
             if (active)
                 CitySchoolSnapshotService.ProcessDirty(4);
             else if (CitySchoolSnapshotService.HasPendingDemand)
@@ -127,8 +132,7 @@ namespace AncientWarfare3.core.policy
             if (!SchoolMapSelectionRules.CanSelectCity(cityValid,
                     ScrollWindow.getCurrentWindow() != null)) return false;
             SelectedUnit.clear();
-            SelectedMetas.selected_city = pCity;
-            SelectedObjects.setNanoObject(pCity);
+            _selectedCity = pCity;
             SchoolMapBottomBarController.Show(pCity);
             return true;
         }
@@ -176,8 +180,26 @@ namespace AncientWarfare3.core.policy
             _lastDirtyTime = -1d;
             _windowDepth = 0;
             _wasEnabledBeforeWindow = false;
+            _wasActive = false;
             _focusBeforeWindow = CourtSchoolId.None;
             FocusSchoolId = CourtSchoolId.None;
+            DeactivateOwnedState();
+        }
+
+        internal static void SetSelectedCity(City pCity)
+        {
+            _selectedCity = pCity;
+        }
+
+        internal static void ClearSelectedCity()
+        {
+            _selectedCity = null;
+        }
+
+        private static void DeactivateOwnedState()
+        {
+            SchoolMapBottomBarController.Hide();
+            _selectedCity = null;
         }
 
         internal static string GetSchoolDisplayName(string pSchoolId)
