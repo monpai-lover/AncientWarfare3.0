@@ -200,6 +200,11 @@ namespace AncientWarfare3.core.court
             AddLocalNodes(model, pKingdom, pCity, seats, officers,
                 localTemplate, pCareerStates);
             AddRegionalSuperiorNode(model, pKingdom, pCity);
+            // The regional superior is part of the local court graph and must
+            // participate in the same layout pass as the city officials.
+            // Otherwise it keeps the default (0, 0) position and can be
+            // hidden behind another node or rendered on top of it.
+            LayoutLocalHierarchy(model.Nodes);
             model.ActiveSeats = model.Nodes.Count(node =>
                 node != null && node.OfficeLayer == CourtOfficeLayer.City &&
                 !node.IsVacancy && node.ActorId >= 0);

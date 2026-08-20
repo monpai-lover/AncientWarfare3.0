@@ -497,16 +497,16 @@ namespace AncientWarfare3.ui.windows
                 GroupCityGovernmentsByRegion(pCities);
             if (groups.Count == 0)
                 return new Vector2(pBounds.Width, pBounds.Height);
-            float cityWidth = CanvasPadding * 2f +
-                CourtRegionalGovernmentFolder.Width;
-            float cityHeight = groups.Sum(group =>
+            float cityWidth = CanvasPadding * 2f + groups.Sum(group =>
+                CourtRegionalGovernmentFolder.WidthForCount(group.Count)) +
+                Mathf.Max(0, groups.Count - 1) * RegionGroupGap;
+            float cityHeight = groups.Max(group =>
             {
                 long regionId = RegionId(group);
                 return RegionHeadingHeight +
                     CourtRegionalGovernmentFolder.HeightForCount(group.Count,
-                        _expandedRegionIds.Contains(regionId)) +
-                    RegionGroupGap;
-            });
+                        _expandedRegionIds.Contains(regionId));
+            }) + RegionGroupGap;
             return new Vector2(Mathf.Max(pBounds.Width, cityWidth),
                 pBounds.Height + cityHeight + CanvasPadding);
         }
@@ -520,12 +520,17 @@ namespace AncientWarfare3.ui.windows
             List<List<LocalCourtReadModel>> groups =
                 GroupCityGovernmentsByRegion(pCities);
             float groupTopY = -pBounds.Height - 26f;
+            float totalWidth = groups.Sum(group =>
+                CourtRegionalGovernmentFolder.WidthForCount(group.Count)) +
+                Mathf.Max(0, groups.Count - 1) * RegionGroupGap;
+            float groupStartX = (pCanvasSize.x - totalWidth) * 0.5f;
             int folderIndex = 0;
             int labelIndex = 0;
             foreach (List<LocalCourtReadModel> group in groups)
             {
-                float startX = (pCanvasSize.x -
-                    CourtRegionalGovernmentFolder.Width) * 0.5f;
+                float groupWidth = CourtRegionalGovernmentFolder.WidthForCount(
+                    group.Count);
+                float startX = groupStartX;
                 Text heading = GetRegionSectionLabel(labelIndex++);
                 LocalCourtReadModel first = group[0];
                 string regionName = string.IsNullOrWhiteSpace(first.RegionName)
@@ -538,7 +543,7 @@ namespace AncientWarfare3.ui.windows
                     Math.Max(1, first.RegionMemberCount));
                 heading.color = KingdomColor(pKingdom);
                 LayoutCanvasText(heading, startX, groupTopY + 20f,
-                    CourtRegionalGovernmentFolder.Width, RegionHeadingHeight);
+                    groupWidth, RegionHeadingHeight);
                 heading.gameObject.SetActive(true);
                 heading.transform.SetAsLastSibling();
 
@@ -548,9 +553,7 @@ namespace AncientWarfare3.ui.windows
                     RenderRegionalGovernmentFolder(folderIndex++, group,
                         pKingdom, regionId, RegionalGovernorNode(pNodes,
                             first.RegionSeatCityId), startX, folderTopY);
-                groupTopY = folderTopY -
-                    CourtRegionalGovernmentFolder.HeightForCount(group.Count,
-                        _expandedRegionIds.Contains(regionId)) - RegionGroupGap;
+                groupStartX += groupWidth + RegionGroupGap;
             }
             if (_localSectionLabel != null)
             {
@@ -572,8 +575,10 @@ namespace AncientWarfare3.ui.windows
         {
             CourtRegionalGovernmentFolder folder = GetRegionalFolder(pIndex);
             RectTransform folderRect = folder.LinkTarget;
+            float folderWidth = CourtRegionalGovernmentFolder.WidthForCount(
+                pCities?.Count ?? 0);
             folderRect.anchoredPosition = new Vector2(
-                pX + CourtRegionalGovernmentFolder.Width * 0.5f, pY);
+                pX + folderWidth * 0.5f, pY);
             folder.Bind(pCities, pGovernor, pKingdom,
                 _expandedRegionIds.Contains(pRegionId),
                 expanded => SetRegionalFolderExpanded(pRegionId, expanded),

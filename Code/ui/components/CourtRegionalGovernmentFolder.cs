@@ -13,18 +13,17 @@ namespace AncientWarfare3.ui.components
         // Keep a conservative cell even if a parent canvas resets a child's
         // local scale during portrait refresh.
         internal const float CellWidth = 160f;
-        internal const float Width = CellWidth * Columns + 16f;
         internal const float CollapsedHeight = 32f;
         internal const float GovernorGap = 8f;
         internal const float GovernorBlockHeight = CourtActorNodeView.Height +
                                                     GovernorGap;
+        internal const float GovernorOffsetX = -100f;
         internal const float MiniScale = 0.56f;
         internal const float MiniWidth = CourtActorNodeView.Width * MiniScale;
         // The city name is part of the official's role line; reserve enough
         // vertical room for an unscaled card during a refresh pass.
         internal const float MiniHeight = 126f;
         internal const float Gap = 16f;
-        internal const int Columns = 3;
 
         private Text _label;
         private Text _arrow;
@@ -48,7 +47,7 @@ namespace AncientWarfare3.ui.components
             RectTransform rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0.5f, 1f);
-            rect.sizeDelta = new Vector2(Width,
+            rect.sizeDelta = new Vector2(WidthForCount(0),
                 HeightForCount(0, false));
             CourtRegionalGovernmentFolder folder =
                 obj.AddComponent<CourtRegionalGovernmentFolder>();
@@ -79,12 +78,13 @@ namespace AncientWarfare3.ui.components
                     regionTitle), countLabel);
             _arrow.text = pExpanded ? "-" : "+";
             SetExpanded(pExpanded);
+            float folderWidth = WidthForCount(cities.Count);
             if (_governorView == null)
                 _governorView = CourtActorNodeView.Create(_content);
             _governorView.Bind(pGovernor, pKingdom);
             RectTransform governorRect = _governorView.GetComponent<RectTransform>();
             governorRect.anchoredPosition = new Vector2(
-                Width * 0.5f, 0f);
+                folderWidth * 0.5f + GovernorOffsetX, 0f);
             governorRect.localScale = Vector3.one;
             bool showGovernor = pGovernor != null;
             _governorView.gameObject.SetActive(showGovernor);
@@ -96,8 +96,8 @@ namespace AncientWarfare3.ui.components
                 LocalCourtReadModel city = cities[index];
                 official.Bind(city.LeaderNode ?? VacancyNode(city), pKingdom);
                 RectTransform officialRect = official.GetComponent<RectTransform>();
-                int row = index / Columns;
-                int column = index % Columns;
+                int row = 0;
+                int column = index;
                 officialRect.anchoredPosition = new Vector2(
                     8f + column * CellWidth + CellWidth * 0.5f,
                     -GovernorBlockHeight - CollapsedHeight -
@@ -122,16 +122,19 @@ namespace AncientWarfare3.ui.components
             }
             HideUnused(cities.Count);
             GetComponent<RectTransform>().sizeDelta = new Vector2(
-                Width, HeightForCount(cities.Count, pExpanded));
+                folderWidth, HeightForCount(cities.Count, pExpanded));
+        }
+
+        internal static float WidthForCount(int pCount)
+        {
+            return CellWidth * Mathf.Max(1, pCount) + 16f;
         }
 
         internal static float HeightForCount(int pCount, bool pExpanded)
         {
-            if (!pExpanded) return CollapsedHeight;
-            int rows = Mathf.CeilToInt(Mathf.Max(1, pCount) / (float)Columns);
+            if (!pExpanded) return GovernorBlockHeight + CollapsedHeight;
             return GovernorBlockHeight + CollapsedHeight +
-                rows * MiniHeight +
-                Mathf.Max(0, rows - 1) * Gap + 8f;
+                MiniHeight + 8f;
         }
 
         internal void ToggleExpanded()
