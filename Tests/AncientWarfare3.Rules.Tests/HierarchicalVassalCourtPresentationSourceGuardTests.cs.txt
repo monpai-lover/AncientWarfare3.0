@@ -8,7 +8,7 @@ internal static class HierarchicalVassalCourtPresentationSourceGuardTests
         string service = Read("Code/core/policy/HierarchicalVassalMapModeService.cs");
         string clickPatch = Read("Code/patch/AW_HierarchicalVassalMapClickPatch.cs");
         string model = Read("Code/core/court/CourtReadModelService.cs");
-        string card = Read("Code/ui/components/CourtCityGovernmentCard.cs");
+        string folder = Read("Code/ui/components/CourtRegionalGovernmentFolder.cs");
         Contains(clickPatch, "clickedFinal", "hierarchy map must own large-map clicks");
         Contains(clickPatch, "MapBox.isRenderMiniMap()", "minimap click routing must remain native");
         Contains(clickPatch, "HandleZoneClick", "large-map clicks must use hierarchy state transitions");
@@ -24,14 +24,13 @@ internal static class HierarchicalVassalCourtPresentationSourceGuardTests
         Contains(runtime, "effectiveManual", "capital must not retain a manual military template");
         Contains(model, "AddRegionalGovernmentNodes(seeds, pKingdom)",
             "central court must render one regional governor per commandery");
-        Contains(card, "GovernorName", "state cards must expose the governor name without a portrait");
-        Contains(card, "_leader.gameObject.SetActive(false)",
-            "state cards must suppress duplicate governor portraits");
-        Contains(card, "pModel.RegionalSuperiorNode?.ActorName",
-            "state cards must display the regional governor name");
+        Contains(folder, "CourtActorNodeView.Create",
+            "expanded regional folders must render subordinate official cards");
+        Contains(folder, "ToggleExpanded",
+            "regional folders must support explicit collapse and expansion");
         string window = Read("Code/ui/windows/CourtWindow.cs");
         Contains(window, "RenderRegionalGovernmentLinks",
-            "regional governor must connect to managed prefecture cards");
+            "regional governor must connect to its subordinate folder");
     }
 
     private static string Read(string pRelative) => File.ReadAllText(

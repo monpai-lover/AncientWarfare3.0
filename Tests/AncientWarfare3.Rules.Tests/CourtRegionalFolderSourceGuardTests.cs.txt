@@ -1,0 +1,33 @@
+using System;
+using System.IO;
+
+internal static class CourtRegionalFolderSourceGuardTests
+{
+    internal static void Run()
+    {
+        string folder = Read("Code/ui/components/CourtRegionalGovernmentFolder.cs");
+        Contains(folder, "ToggleExpanded", "regional court folder must toggle expanded state");
+        Contains(folder, "CourtActorNodeView.Create", "expanded folder must render miniature official cards");
+        Contains(folder, "SetExpanded(false)", "regional court folder must default to collapsed");
+        Contains(folder, "aw_court_regional_folder_count", "regional folder count must be localized");
+        Contains(folder, "aw_court_regional_folder_desc_collapsed", "regional folder toggle must explain expansion");
+
+        string window = Read("Code/ui/windows/CourtWindow.cs");
+        Contains(window, "CourtRegionalGovernmentFolder", "court window must own regional folder views");
+        Contains(window, "_expandedRegionIds", "court window must preserve folder expansion by region");
+        Contains(window, "RenderRegionalGovernmentFolder", "court window must render one folder per region");
+        Contains(window, "folderRect", "regional link target must be the folder container");
+        Contains(window, "aw_court_regional_folder", "court window must use the localized folder label");
+    }
+
+    private static string Read(string pRelative) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            pRelative.Replace('/', Path.DirectorySeparatorChar)))
+        .Replace("\r\n", "\n");
+
+    private static void Contains(string pText, string pNeedle, string pMessage)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage);
+    }
+}

@@ -15,6 +15,7 @@ if (args.Length == 1 && args[0] == "--shi-lineage-mapmode")
     CityShiInfluenceSourceGuardTests.Run();
     ShiLineageMapModeSourceGuardTests.Run();
     HierarchicalVassalCourtPresentationSourceGuardTests.Run();
+    CourtRegionalFolderSourceGuardTests.Run();
     Console.WriteLine("Shi lineage mapmode rules passed.");
     return;
 }
@@ -5406,6 +5407,18 @@ Equal(CourtManualOfficeAction.Select,
 Equal(CourtManualOfficeAction.Replace,
     CourtManualAppointmentRules.ResolveOfficeAction(true, 42),
     "a filled central office shows a replace button");
+True(CourtManualAppointmentRules.IsSupportedAppointmentScope(
+        "central", -1),
+    "central appointments remain supported without a city context");
+True(CourtManualAppointmentRules.IsSupportedAppointmentScope(
+        "city", 73),
+    "local appointments require and accept their city context");
+Equal(false, CourtManualAppointmentRules.IsSupportedAppointmentScope(
+        "city", -1),
+    "local appointments cannot lose their target city");
+Equal(false, CourtManualAppointmentRules.IsSupportedAppointmentScope(
+        "military", 73),
+    "unsupported court layers cannot enter manual appointment");
 Equal(CourtManualAppointmentResult.Success,
     CourtManualAppointmentRules.ValidateTarget(true,
         expectedIncumbentActorId: -1, actualIncumbentActorId: -1),

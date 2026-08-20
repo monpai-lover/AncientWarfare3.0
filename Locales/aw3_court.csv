@@ -6,6 +6,10 @@ aw_local_court_city_type,城市类型,City Type,城市类型
 aw_local_court_seats,官员 {0}/{1},Officials {0}/{1},官员 {0}/{1}
 aw_local_court_card_summary,官员 {0}/{1}  效率 {2},Officials {0}/{1}  Efficiency {2},官员 {0}/{1}  效率 {2}
 aw_local_court_choose_template,选择地方官署模板,Choose local government,选择地方官署模板
+aw_court_regional_folder,{0} 郡守集合 {1},{0} Commandery Governors {1},{0} 郡守集合 {1}
+aw_court_regional_folder_count,辖领{0}郡,{0} commanderies,轄領{0}郡
+aw_court_regional_folder_desc_collapsed,展开下属郡守,Expand subordinate officials,展開下屬郡守
+aw_court_regional_folder_desc_expanded,收起下属郡守,Collapse subordinate officials,收起下屬郡守
 aw_custom_court_context,编辑层级,Edit layer,编辑层级
 aw_custom_court_context_desc,切换编辑中央朝廷或地方官署模板,Switch between the central court and local government templates,切換編輯中央朝廷或地方官署模板
 aw_custom_local_court_name,地方官署模板名,Local template name,地方官署模板名
