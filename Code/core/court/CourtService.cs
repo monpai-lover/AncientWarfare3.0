@@ -557,6 +557,47 @@ namespace AncientWarfare3.core.court
                 GetActiveOfficers(pKingdom, 96));
         }
 
+        internal static CourtImmediateVacancyOutcome
+            FillCentralVacanciesImmediately(Kingdom pKingdom,
+                out int pChangedCount)
+        {
+            pChangedCount = 0;
+            if (pKingdom?.data == null || pKingdom.isRekt())
+                return CourtImmediateVacancyOutcome.InvalidKingdom;
+            if (!KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom) ||
+                !LineageArchiveManager.Instance.IsOperational ||
+                (!HasOfficialCourt(pKingdom) && !HasPrimitiveCourt(pKingdom)))
+                return CourtImmediateVacancyOutcome.Unavailable;
+
+            string tier = ResolveTier(pKingdom);
+            List<Actor> roster = BuildYearRoster(pKingdom);
+            ValidateOfficers(pKingdom, roster, tier);
+
+            if (CourtImmediateVacancyModeRules.Resolve(
+                    IsWesternElective(pKingdom)) ==
+                CourtImmediateVacancyMode.QueueWesternElection)
+            {
+                pChangedCount = WesternCourtElectionService
+                    .QueueKingdomVacancies(pKingdom);
+                return CourtImmediateVacancyModeRules.ShouldReportQueued(
+                        pChangedCount)
+                    ? CourtImmediateVacancyOutcome.Queued
+                    : CourtImmediateVacancyOutcome.NoChange;
+            }
+
+            HashSet<string> occupied = BuildActiveOfficeSet(pKingdom, roster);
+            HashSet<long> occupiedActors = BuildActiveOfficerActorSet();
+            pChangedCount = EnsureMinimumCourt(pKingdom, roster, occupied,
+                tier, occupiedActors);
+            if (pChangedCount <= 0)
+                return CourtImmediateVacancyOutcome.NoChange;
+
+            CourtAristocraticGroupService.Refresh(pKingdom,
+                GetActiveOfficers(pKingdom, 96));
+            UpsertCourtSnapshot(pKingdom);
+            return CourtImmediateVacancyOutcome.Filled;
+        }
+
         private static void ValidateOfficers(Kingdom pKingdom, List<Actor> pRoster, string pTier)
         {
             CloseStaleOfficerRows(pKingdom);
@@ -610,14 +651,15 @@ namespace AncientWarfare3.core.court
             }
         }
 
-        private static void EnsureMinimumCourt(Kingdom pKingdom, List<Actor> pRoster,
+        private static int EnsureMinimumCourt(Kingdom pKingdom, List<Actor> pRoster,
             HashSet<string> pOccupiedOffices, string pTier,
             HashSet<long> pUnavailableActorIds,
             bool pAllowActing = true)
         {
-            if (!HasOfficialCourt(pKingdom) && !HasPrimitiveCourt(pKingdom)) return;
+            if (!HasOfficialCourt(pKingdom) && !HasPrimitiveCourt(pKingdom)) return 0;
 
             EnsureKingProjection(pKingdom);
+            int filledCount = 0;
 
             List<Actor> indexedFormalCandidates =
                 CivilServiceQualificationService.HasExaminationSystem(pKingdom)
@@ -626,19 +668,20 @@ namespace AncientWarfare3.core.court
 
             foreach (string office in
                      CentralOfficeIdsForCurrentProfile(pKingdom))
-                FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, office,
+                if (FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, office,
                     CourtProfileRegistry.PreferredSchoolFor(
                         pKingdom, office),
                     indexedFormalCandidates, pUnavailableActorIds,
-                    pAllowActing);
+                    pAllowActing)) filledCount++;
 
             foreach (string office in
                      MilitaryOfficeIdsForCurrentProfile(pKingdom))
-                FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, office,
+                if (FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, office,
                     CourtProfileRegistry.PreferredSchoolFor(
                         pKingdom, office),
                     indexedFormalCandidates, pUnavailableActorIds,
-                    pAllowActing, CourtOfficeLayer.Military);
+                    pAllowActing, CourtOfficeLayer.Military)) filledCount++;
+            return filledCount;
         }
 
         private static void EnsureKingProjection(Kingdom pKingdom)
@@ -861,17 +904,17 @@ namespace AncientWarfare3.core.court
                 pPersistCareer: pPersistCareer);
         }
 
-        private static void FillCentralOffice(Kingdom pKingdom, List<Actor> pRoster,
+        private static bool FillCentralOffice(Kingdom pKingdom, List<Actor> pRoster,
             HashSet<string> pOccupiedOffices, string pOfficeId, string pPreferredSchool,
             List<Actor> indexedFormalCandidates,
             HashSet<long> pUnavailableActorIds, bool pAllowActing,
             string pLayer = CourtOfficeLayer.Central)
         {
-            if (pOccupiedOffices != null && pOccupiedOffices.Contains(pOfficeId)) return;
+            if (pOccupiedOffices != null && pOccupiedOffices.Contains(pOfficeId)) return false;
             if (pOccupiedOffices == null && HasActiveOffice(pKingdom, pOfficeId,
-                    pLayer)) return;
+                    pLayer)) return false;
             if (SchoolGuestOfficeService.IsOfficeReserved(pKingdom.id, pOfficeId))
-                return;
+                return false;
 
             bool examinationSystem = CivilServiceQualificationService.
                 HasExaminationSystem(pKingdom);
@@ -913,10 +956,11 @@ namespace AncientWarfare3.core.court
                         hasExaminationSystem:
                         CivilServiceQualificationService.HasExaminationSystem(
                             pKingdom), formalCandidateFound: false,
-                        educatedCandidateFound: educatedCandidate != null)) return;
+                        educatedCandidateFound: educatedCandidate != null)) return false;
                 candidate = educatedCandidate;
                 acting = true;
             }
+            if (candidate == null) return false;
             string school = SchoolMembershipService.GetSchool(candidate.data.id);
             if (SetOfficer(candidate, pKingdom, pLayer,
                     pOfficeId, school, null, pActing: acting,
@@ -924,7 +968,9 @@ namespace AncientWarfare3.core.court
             {
                 pOccupiedOffices?.Add(pOfficeId);
                 pUnavailableActorIds?.Add(candidate.data.id);
+                return true;
             }
+            return false;
         }
 
         private static List<Actor> BuildIndexedFormalCandidateRoster(

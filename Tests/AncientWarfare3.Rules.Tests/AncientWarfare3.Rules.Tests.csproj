@@ -101,6 +101,8 @@
     <Compile Include="CourtHistoryLocalizationRegressionTests.cs.txt" />
     <Compile Include="MassUprisingClusterRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\MassUprisingClusterRules.cs" Link="Production\MassUprisingClusterRules.cs" />
+    <Compile Include="CourtImmediateVacancyModeRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CourtImmediateVacancyModeRules.cs" Link="Production\CourtImmediateVacancyModeRules.cs" />
     <Compile Include="LocalCorruptionLoyaltySourceGuardTests.cs.txt" />
     <Compile Include="MassUprisingClusterSourceGuardTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\CityShiInfluenceRules.cs" Link="Production\CityShiInfluenceRules.cs" />

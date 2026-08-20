@@ -347,7 +347,8 @@ namespace AncientWarfare3.api.multiplayer
         ReplaceMilitaryGovernorateGovernor = 33,
         ApplyCustomCourtTemplate = 34,
         GrantBanditAmnesty = 35,
-        CommitDomesticHousehold = 36
+        CommitDomesticHousehold = 36,
+        FillCentralCourtVacancies = 37
     }
 
     public enum AW3CommandStatus : byte
@@ -494,6 +495,9 @@ namespace AncientWarfare3.api.multiplayer
             key: Token(officeId, nameof(officeId)),
             secondaryKey: Token(layer, nameof(layer)));
 
+        public static AW3CommandRequest FillCentralCourtVacancies(
+            long countryId) => Create(
+            AW3CommandKind.FillCentralCourtVacancies, countryId);
         public static AW3CommandRequest SetCourtDisposition(long countryId,
             long actorId, string dispositionId, int intParameter,
             long cityId, string operationKey) =>

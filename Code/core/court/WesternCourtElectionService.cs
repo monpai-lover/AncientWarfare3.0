@@ -24,9 +24,10 @@ namespace AncientWarfare3.core.court
             QueuedVacancies.Clear();
         }
 
-        public static void QueueKingdomVacancies(Kingdom pKingdom)
+        public static int QueueKingdomVacancies(Kingdom pKingdom)
         {
-            if (!CourtService.IsWesternElective(pKingdom)) return;
+            if (!CourtService.IsWesternElective(pKingdom)) return 0;
+            int newlyQueued = 0;
             foreach (string layer in new[] { CourtOfficeLayer.Central,
                      CourtOfficeLayer.Military })
             foreach (string officeId in CourtProfileRegistry.OfficeIdsForLayer(
@@ -34,19 +35,23 @@ namespace AncientWarfare3.core.court
             {
                 if (CourtService.TryOpenWesternElectiveVacancy(pKingdom,
                         officeId, out long formerIncumbentActorId, layer))
-                    EnqueueVacancy(pKingdom, officeId,
-                        formerIncumbentActorId, layer);
+                {
+                    if (EnqueueVacancy(pKingdom, officeId,
+                            formerIncumbentActorId, layer))
+                        newlyQueued++;
+                }
             }
+            return newlyQueued;
         }
 
-        public static void EnqueueVacancy(Kingdom pKingdom,
+        public static bool EnqueueVacancy(Kingdom pKingdom,
             string pOfficeId, long pFormerIncumbentActorId = -1L,
             string pLayer = CourtOfficeLayer.Central)
         {
             if (!CourtService.IsWesternElectiveOffice(pKingdom, pOfficeId,
-                    pLayer)) return;
+                    pLayer)) return false;
             string key = VacancyKey(pKingdom.id, pLayer, pOfficeId);
-            if (!QueuedVacancies.Add(key)) return;
+            if (!QueuedVacancies.Add(key)) return false;
             VacancyQueue.Enqueue(new WesternCourtVacancy
             {
                 KingdomId = pKingdom.id,
@@ -54,6 +59,7 @@ namespace AncientWarfare3.core.court
                 Layer = pLayer,
                 FormerIncumbentActorId = pFormerIncumbentActorId
             });
+            return true;
         }
 
         public static void ProcessAuthorityCycle()

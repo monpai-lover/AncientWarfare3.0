@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
@@ -57,6 +58,9 @@ namespace AncientWarfare3.ui.windows
         private Button _civilServiceExamButton;
         private Text _civilServiceExamText;
         private TipButton _civilServiceExamTip;
+        private Button _centralVacancyButton;
+        private Text _centralVacancyText;
+        private TipButton _centralVacancyTip;
         private Button _householdButton;
         private Text _householdText;
         private TipButton _householdTip;
@@ -228,6 +232,13 @@ namespace AncientWarfare3.ui.windows
                 _civilServiceExamButton.GetComponent<TipButton>() ??
                 _civilServiceExamButton.gameObject.AddComponent<TipButton>();
             _civilServiceExamTip.type = AW_RawTooltip.TYPE;
+            _centralVacancyButton = EnsureButton(summary.transform,
+                "FillCentralCourtVacancies", "", FillCentralVacancies);
+            _centralVacancyText = _centralVacancyButton.transform.Find("Text")
+                ?.GetComponent<Text>();
+            _centralVacancyTip = _centralVacancyButton.GetComponent<TipButton>() ??
+                _centralVacancyButton.gameObject.AddComponent<TipButton>();
+            _centralVacancyTip.type = AW_RawTooltip.TYPE;
             _householdButton = EnsureButton(summary.transform,
                 "RulerHousehold", "", OpenRulerHousehold);
             _householdText = _householdButton.transform.Find("Text")
@@ -295,6 +306,8 @@ namespace AncientWarfare3.ui.windows
                     Mathf.Max(44f, pContentWidth - 84f), 4f, 76f, 23f);
                 LayoutSummaryButton(_civilServiceExamButton,
                     Mathf.Max(44f, pContentWidth - 166f), 4f, 76f, 23f);
+                LayoutSummaryButton(_centralVacancyButton,
+                    Mathf.Max(44f, pContentWidth - 330f), 4f, 76f, 23f);
                 LayoutSummaryButton(_householdButton,
                     Mathf.Max(44f, pContentWidth - 248f), 4f, 76f, 23f);
                 LayoutSummaryButton(_customCourtWorkflowButton,
@@ -451,6 +464,8 @@ namespace AncientWarfare3.ui.windows
                 ": " + (pLocal.CityCorruption?.Score ?? 0);
             if (_civilServiceExamButton != null)
                 _civilServiceExamButton.gameObject.SetActive(false);
+            if (_centralVacancyButton != null)
+                _centralVacancyButton.gameObject.SetActive(false);
             if (_householdButton != null)
                 _householdButton.gameObject.SetActive(false);
             UpdateLocalTemplateOptions(pKingdom, pLocal);
@@ -742,6 +757,7 @@ namespace AncientWarfare3.ui.windows
                                       AW_L10n.Text("aw_school_direction_technology", "Technology") + " " +
                                       Percent(pSnapshot.technology);
             UpdateCivilServiceExamEntry(pKingdom);
+            UpdateCentralVacancyEntry(pKingdom);
             UpdateHouseholdEntry(pKingdom);
         }
 
@@ -801,6 +817,31 @@ namespace AncientWarfare3.ui.windows
                 {
                     tip_name = label,
                     tip_description = description
+                });
+        }
+
+        private void UpdateCentralVacancyEntry(Kingdom pKingdom)
+        {
+            if (_centralVacancyButton == null) return;
+            _centralVacancyButton.gameObject.SetActive(
+                CourtImmediateVacancyModeRules.IsCentralEntry(_cityId));
+            if (!CourtImmediateVacancyModeRules.IsCentralEntry(_cityId)) return;
+            string label = AW_L10n.Text("aw_court_fill_vacancies",
+                "Fill vacancies");
+            if (_centralVacancyText != null) _centralVacancyText.text = label;
+            _centralVacancyButton.interactable = pKingdom?.data != null &&
+                !pKingdom.isRekt();
+            AW_UIStyle.ApplyButton(_centralVacancyButton.GetComponent<Image>(),
+                _centralVacancyButton.interactable ? .96f : .48f);
+            _centralVacancyTip.enabled = true;
+            _centralVacancyTip.hoverAction = () => Tooltip.show(
+                _centralVacancyButton.gameObject, AW_RawTooltip.TYPE,
+                new TooltipData
+                {
+                    tip_name = label,
+                    tip_description = AW_L10n.Text(
+                        "aw_court_fill_vacancies_desc",
+                        "Validate central officers and immediately fill vacancies; western institutions enter the election queue.")
                 });
         }
 
@@ -1186,6 +1227,14 @@ namespace AncientWarfare3.ui.windows
         private void OpenCivilServiceExam()
         {
             CivilServiceExamWindow.Open(_kingdomId);
+        }
+
+        private void FillCentralVacancies()
+        {
+            if (!CourtImmediateVacancyModeRules.IsCentralEntry(_cityId)) return;
+            AW3CommandResult result = AW3MultiplayerCommandFacade.DispatchFromUi(
+                AW3CommandRequest.FillCentralCourtVacancies(_kingdomId));
+            if (result.Accepted) Refresh();
         }
 
         private void OpenRulerHousehold()

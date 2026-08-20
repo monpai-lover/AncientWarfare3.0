@@ -15,6 +15,8 @@ namespace AncientWarfare3.core.multiplayer.commands
             {
                 case AW3CommandKind.AppointCourtOfficer:
                     return Appoint(request);
+                case AW3CommandKind.FillCentralCourtVacancies:
+                    return FillCentralVacancies(request);
                 case AW3CommandKind.SetCourtDisposition:
                     return SetDisposition(request);
                 case AW3CommandKind.ChangeCourtAuxiliaryLaw:
@@ -176,6 +178,37 @@ namespace AncientWarfare3.core.multiplayer.commands
                     "aw_custom_court_apply_failed", request.CountryId);
             return AW3CommandResult.Success("aw_custom_court_apply_ok",
                 request.CountryId);
+        }
+
+        private static AW3CommandResult FillCentralVacancies(
+            AW3CommandRequest request)
+        {
+            Kingdom kingdom = FindKingdom(request.CountryId);
+            CourtImmediateVacancyOutcome outcome =
+                CourtService.FillCentralVacanciesImmediately(kingdom,
+                    out int changedCount);
+            switch (outcome)
+            {
+                case CourtImmediateVacancyOutcome.Filled:
+                    return AW3CommandResult.Success(
+                        "aw_court_fill_vacancies_success",
+                        request.CountryId, changedCount);
+                case CourtImmediateVacancyOutcome.Queued:
+                    return AW3CommandResult.Success(
+                        "aw_court_fill_vacancies_queued",
+                        request.CountryId, changedCount);
+                case CourtImmediateVacancyOutcome.NoChange:
+                    return AW3CommandResult.Success(
+                        "aw_court_fill_vacancies_no_change",
+                        request.CountryId, changedCount);
+                case CourtImmediateVacancyOutcome.InvalidKingdom:
+                    return NotFound("aw_court_fill_vacancies_invalid");
+                default:
+                    return AW3CommandResult.Rejected(
+                        AW3CommandError.IllegalTarget,
+                        "aw_court_fill_vacancies_unavailable",
+                        request.CountryId);
+            }
         }
 
         private static AW3CommandResult GrantBanditAmnesty(

@@ -162,6 +162,8 @@ namespace AncientWarfare3.api.multiplayer
                     AW3WindowCategory.Domestic, Country() |
                     AW3WindowContextRequirement.Actor |
                     AW3WindowContextRequirement.Office),
+                Command(AW3CommandKind.FillCentralCourtVacancies,
+                    AW3WindowCategory.Domestic, Country()),
                 Command(AW3CommandKind.SetCourtDisposition,
                     AW3WindowCategory.Domestic, Country() |
                     AW3WindowContextRequirement.Actor),

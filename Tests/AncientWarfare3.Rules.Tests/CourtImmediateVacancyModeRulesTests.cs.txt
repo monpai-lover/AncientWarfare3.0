@@ -1,0 +1,33 @@
+using AncientWarfare3.core.court;
+
+internal static class CourtImmediateVacancyModeRulesTests
+{
+    internal static void Run()
+    {
+        Equal(CourtImmediateVacancyMode.DirectFill,
+            CourtImmediateVacancyModeRules.Resolve(false),
+            "ordinary institutions directly fill vacancies");
+        Equal(CourtImmediateVacancyMode.QueueWesternElection,
+            CourtImmediateVacancyModeRules.Resolve(true),
+            "western institutions queue elections");
+        Equal(true, CourtImmediateVacancyModeRules.ShouldReportQueued(1),
+            "new western vacancies are reported as queued");
+        Equal(false, CourtImmediateVacancyModeRules.ShouldReportQueued(0),
+            "duplicate western vacancies are not reported as new");
+        Equal(true, CourtImmediateVacancyModeRules.ShouldReportFilled(2),
+            "direct fills report completed appointments");
+        Equal(false, CourtImmediateVacancyModeRules.ShouldReportFilled(0),
+            "empty direct fill reports no change");
+        Equal(true, CourtImmediateVacancyModeRules.IsCentralEntry(-1L),
+            "central window exposes the entry");
+        Equal(false, CourtImmediateVacancyModeRules.IsCentralEntry(42L),
+            "local court window does not expose the central entry");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                ": expected " + pExpected + ", got " + pActual);
+    }
+}

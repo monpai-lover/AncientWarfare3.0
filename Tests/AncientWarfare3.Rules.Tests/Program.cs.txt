@@ -135,6 +135,12 @@ if (args.Length == 1 && args[0] == "--local-governor-identity")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--court-immediate-vacancies")
+{
+    CourtImmediateVacancyModeRulesTests.Run();
+    Console.WriteLine("Court immediate vacancy rules passed.");
+    return;
+}
 if (args.Length == 1 && args[0] == "--official-career-noble-identity")
 {
     OfficialCareerNobleIdentityRulesTests.Run();

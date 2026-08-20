@@ -24,6 +24,7 @@ namespace AncientWarfare3.core.multiplayer.commands
                 case AW3CommandKind.StartMandateDecision:
                     return AW3PolicyCommandHandler.Dispatch(request);
                 case AW3CommandKind.AppointCourtOfficer:
+                case AW3CommandKind.FillCentralCourtVacancies:
                     return AW3CourtCommandHandler.Dispatch(request);
                 case AW3CommandKind.SetCourtDisposition:
                     return AW3CourtCommandHandler.Dispatch(request);
