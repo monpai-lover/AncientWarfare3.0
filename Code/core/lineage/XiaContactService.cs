@@ -51,12 +51,11 @@ namespace AncientWarfare3.core.lineage
 
             float gain = XiaContactRules.CalculateYearlyGain(borders, diplomacy, vassal, occupied, mixedChildren,
                 official, nearby);
-            if (gain <= 0f) return;
-
             string sources = XiaContactRules.BuildSourceMask(borders, diplomacy, vassal, occupied, mixedChildren,
                 official, nearby);
             pKingdom.data.set(LineageKeys.XIA_CONTACT_LAST_SOURCE_MASK, sources);
             pKingdom.data.set(LineageKeys.XIA_CONTACT_LAST_GAIN, gain);
+            if (gain <= 0f) return;
 
             string reason = XiaContactRules.PrimaryReason(sources);
             XiaizationService.RegisterContactProgress(pKingdom, gain, reason, pRecord: true);

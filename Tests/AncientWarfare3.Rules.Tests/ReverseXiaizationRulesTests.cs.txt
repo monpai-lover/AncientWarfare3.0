@@ -1,0 +1,84 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ReverseXiaizationRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, ReverseXiaizationRules.ShouldRemainActive(false, 0.349f, true),
+            "reverse Xiaization starts below thirty-five percent");
+        Equal(false, ReverseXiaizationRules.ShouldRemainActive(false, 0.35f, true),
+            "reverse Xiaization does not start at the threshold");
+        Equal(true, ReverseXiaizationRules.ShouldRemainActive(true, 0.399f, true),
+            "an active city remains active below forty percent");
+        Equal(false, ReverseXiaizationRules.ShouldRemainActive(true, 0.40f, true),
+            "an active city stops at forty percent");
+        Equal(false, ReverseXiaizationRules.ShouldRemainActive(true, 0.10f, false),
+            "a city without a non-Xia target cannot continue");
+
+        Equal(0.05f, ReverseXiaizationRules.YearlyRate(0.149f),
+            "cities below fifteen percent use the accelerated rate");
+        Equal(0.02f, ReverseXiaizationRules.YearlyRate(0.15f),
+            "the normal rate starts at fifteen percent");
+
+        Equal(0f, ReverseXiaizationRules.ContactFactor(true, ""),
+            "native Xia kingdoms completely block reverse Xiaization");
+        Equal(1f, ReverseXiaizationRules.ContactFactor(false, "occupation"),
+            "occupation itself provides no Xia-contact protection");
+        True(ReverseXiaizationRules.ContactFactor(false, "border") < 1f,
+            "a Xia border slows reverse Xiaization");
+        Equal(0f, ReverseXiaizationRules.ContactFactor(false,
+                "border;vassal;diplomacy"),
+            "strong combined Xia contact completely blocks conversion");
+
+        Equal(true, ReverseXiaizationRules.IsXiaAssociatedCulture(true, false, false),
+            "native Xia culture counts as Xia-associated");
+        Equal(true, ReverseXiaizationRules.IsXiaAssociatedCulture(false, true, false),
+            "integrated cultures count as Xia-associated");
+        Equal(true, ReverseXiaizationRules.IsXiaAssociatedCulture(false, false, true),
+            "fully integrated cultures count as Xia-associated");
+        Equal(false, ReverseXiaizationRules.IsXiaAssociatedCulture(false, false, false),
+            "unintegrated foreign cultures remain eligible targets");
+
+        var targets = new[]
+        {
+            new ReverseXiaizationCultureFact(9, 6, false, false),
+            new ReverseXiaizationCultureFact(4, 6, true, false),
+            new ReverseXiaizationCultureFact(1, 20, false, true)
+        };
+        Equal(4L, ReverseXiaizationRules.SelectTargetCultureId(targets),
+            "a population tie prefers the city's current culture");
+        targets[1] = new ReverseXiaizationCultureFact(4, 6, false, false);
+        Equal(4L, ReverseXiaizationRules.SelectTargetCultureId(targets),
+            "a remaining tie is resolved by stable culture ID");
+
+        var budget = ReverseXiaizationRules.CalculateBudget(3, 0.02f, 1f, 0.95f);
+        Equal(1, budget.WholeConversions,
+            "fractional progress eventually produces a conversion");
+        Near(0.01f, budget.Remainder, 0.0001f,
+            "unused fractional conversion progress is retained");
+        Equal(true, ReverseXiaizationRules.ShouldSwitchCityCulture(6, 11),
+            "an absolute target majority switches city culture");
+        Equal(false, ReverseXiaizationRules.ShouldSwitchCityCulture(5, 10),
+            "an exact half is not an absolute majority");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+
+    private static void Near(float expected, float actual, float tolerance,
+        string message)
+    {
+        if (Math.Abs(expected - actual) > tolerance)
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

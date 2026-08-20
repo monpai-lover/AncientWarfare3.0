@@ -399,6 +399,13 @@ namespace AncientWarfare3.core.lineage
         public const string XIA_CONTACT_LAST_SOURCE_MASK = "aw_xia_contact_last_source_mask";
         public const string XIA_CONTACT_LAST_GAIN = "aw_xia_contact_last_gain";
         public const string XIA_CONTACT_TOTAL_MIXED_CHILDREN = "aw_xia_contact_total_mixed_children";
+        public const string REVERSE_XIA_ACTIVE = "aw_reverse_xia_active";
+        public const string REVERSE_XIA_TARGET_CULTURE_ID =
+            "aw_reverse_xia_target_culture_id";
+        public const string REVERSE_XIA_PROGRESS = "aw_reverse_xia_progress";
+        public const string REVERSE_XIA_LAST_YEAR = "aw_reverse_xia_last_year";
+        public const string REVERSE_XIA_START_RECORDED =
+            "aw_reverse_xia_start_recorded";
 
         public const string TRAIT_GUIZU = "guizu";
         public const string TRAIT_ZHUHOU = "zhuhou";

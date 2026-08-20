@@ -13,6 +13,8 @@
       <HintPath>$(WorldBoxManaged)\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="ReverseXiaizationRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\ReverseXiaizationRules.cs" Link="Production\ReverseXiaizationRules.cs" />
     <Compile Include="CustomCourtTemplateRulesTests.cs.txt" />
     <Compile Include="CustomCourtTemplateCodecTests.cs.txt" />
     <Compile Include="CustomLocalGovernmentRulesTests.cs.txt" />

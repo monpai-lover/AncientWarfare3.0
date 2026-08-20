@@ -237,6 +237,7 @@ namespace AncientWarfare3.core.policy
                     () =>
                     {
                         XiaContactService.OnKingdomYear(pKingdom);
+                        ReverseXiaizationService.OnKingdomYear(pKingdom);
                         XiaizationService.OnKingdomYear(pKingdom);
                     }));
             MeasureDiagnostic("annual_policy_core", () =>
