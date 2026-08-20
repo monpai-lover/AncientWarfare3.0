@@ -145,6 +145,13 @@ namespace AncientWarfare3.ui
             Register(groups, AWLineageTabLayoutRules.Mandate,
                 amnestyBanditButton);
 
+            PowerButton deJureRegionButton =
+                PowerButtonCreator.CreateGodPowerButton(
+                    content.GodPowerLibrary.DE_JURE_REGION,
+                    SpriteTextureLoader.getSprite("ui/icons/iconMap"));
+            Register(groups, AWLineageTabLayoutRules.Administration,
+                deJureRegionButton);
+
             PowerButton mandateCoreMapButton = CreateMapModeToggleButton(
                 MandateCoreMapModeService.POWER_ID,
                 SpriteTextureLoader.getSprite("ui/icons/iconMap")

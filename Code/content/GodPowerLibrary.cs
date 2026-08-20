@@ -22,6 +22,7 @@ namespace AncientWarfare3.content
         public const string SPAWN_BANDIT_STRONGHOLD =
             "aw_spawn_bandit_stronghold";
         public const string AMNESTY_BANDIT = "aw_amnesty_bandit";
+        public const string DE_JURE_REGION = "aw_de_jure_region";
         public const string BanditAmnestyIconPath =
             "ui/icons/aw_bandit_amnesty";
 
@@ -70,6 +71,7 @@ namespace AncientWarfare3.content
             RegisterMandateGrantPower();
             RegisterBanditStrongholdPower();
             RegisterBanditAmnestyPower();
+            RegisterDeJureRegionPower();
         }
 
         public static void ClearRuntime()
@@ -92,6 +94,7 @@ namespace AncientWarfare3.content
             _shiNameplateCandidatesReady = false;
             _shiNameplateCandidateSignature = 0UL;
             _shiNameplateCandidateRefreshAt = 0f;
+            DeJureRegionPowerService.ClearRuntime();
         }
 
         private static void RegisterSpawnXia()
@@ -1048,6 +1051,56 @@ namespace AncientWarfare3.content
                 click_special_action = new PowerActionWithID(
                     BanditAmnestyClick)
             });
+        }
+
+        private static void RegisterDeJureRegionPower()
+        {
+            RegisterMapModeOption(DE_JURE_REGION, new[]
+            {
+                "aw_de_jure_region_create",
+                "aw_de_jure_region_assign"
+            });
+            GodPower existing = AssetManager.powers.get(DE_JURE_REGION);
+            if (existing != null)
+            {
+                existing.path_icon = "ui/icons/iconMap";
+                existing.toggle_name = AWMapModeMetaRules.ResolveOptionId(
+                    DE_JURE_REGION);
+                existing.multi_toggle = true;
+                existing.force_map_mode = MetaType.City;
+                existing.unselect_when_window = false;
+                existing.allow_unit_selection = false;
+                existing.click_special_action = new PowerActionWithID(
+                    DeJureRegionClick);
+                return;
+            }
+            AssetManager.powers.add(new GodPower
+            {
+                id = DE_JURE_REGION,
+                name = DE_JURE_REGION,
+                path_icon = "ui/icons/iconMap",
+                toggle_name = AWMapModeMetaRules.ResolveOptionId(DE_JURE_REGION),
+                multi_toggle = true,
+                force_map_mode = MetaType.City,
+                unselect_when_window = false,
+                allow_unit_selection = false,
+                click_special_action = new PowerActionWithID(
+                    DeJureRegionClick)
+            });
+        }
+
+        private static bool DeJureRegionClick(WorldTile pTile,
+            string pPowerId)
+        {
+            int mode = 0;
+            string optionId = AWMapModeMetaRules.ResolveOptionId(
+                DE_JURE_REGION);
+            if (PlayerConfig.dict.TryGetValue(optionId,
+                    out PlayerOptionData option)) mode = option.intVal;
+            string key = DeJureRegionPowerService.Click(pTile, mode,
+                out bool success);
+            Tip(AW_L10n.Text(key, key));
+            return success;
         }
 
         private static bool BanditStrongholdClick(WorldTile pTile,

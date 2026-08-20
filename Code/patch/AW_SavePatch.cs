@@ -74,6 +74,7 @@ namespace AncientWarfare3.patch
                 }
                 ArmyRtsPlanSnapshotService.PublishToSave(pFolder);
                 AW3SaveDirectoryRegistry.Observe(pFolder);
+                DeJureRegionStore.PublishToSave(pFolder);
             }
             finally
             {
@@ -224,6 +225,7 @@ namespace AncientWarfare3.patch
             CityReservePoolService.BeginWorldLoadRestore();
             ArmyRtsPlanSnapshotService.ObserveLoadDirectory(pPath);
             AW3SaveDirectoryRegistry.Observe(pPath);
+            DeJureRegionStore.ObserveLoadDirectory(pPath);
             AW3WorldLoadCoordinator.ObserveLoadWorldStarted(pPath);
         }
 
@@ -235,6 +237,7 @@ namespace AncientWarfare3.patch
             AW3WorldLoadCoordinator.ObserveWorldDataQueued(pPath);
             ArmyRtsPlanSnapshotService.ObserveLoadDirectory(pPath);
             AW3SaveDirectoryRegistry.Observe(pPath);
+            DeJureRegionStore.ObserveLoadDirectory(pPath);
         }
 
         [HarmonyPrefix]
@@ -250,6 +253,7 @@ namespace AncientWarfare3.patch
         {
             ArmyRtsPlanSnapshotService.OnNewWorldGenerated();
             AW3SaveDirectoryRegistry.ClearForNewWorld();
+            DeJureRegionStore.ClearForNewWorld();
         }
     }
 }

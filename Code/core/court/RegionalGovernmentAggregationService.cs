@@ -28,6 +28,15 @@ namespace AncientWarfare3.core.court
             if (Cache.TryGetValue(pKingdom.id, out IReadOnlyList<
                     RegionalGovernmentReadModel> cached)) return cached;
 
+            IReadOnlyList<RegionalGovernmentReadModel> legal =
+                DeJureRegionReadModelService.Build(pKingdom, pRegionTitle,
+                    pGovernorTitle, configuredLocalLevelTitle);
+            if (legal.Count > 0)
+            {
+                Cache[pKingdom.id] = legal;
+                return legal;
+            }
+
             var cities = new List<City>();
             var facts = new List<RegionalGovernmentCityFact>();
             try

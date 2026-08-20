@@ -1,5 +1,6 @@
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.court;
 using AncientWarfare3.ui;
 using HarmonyLib;
 
@@ -31,6 +32,17 @@ namespace AncientWarfare3.patch
         private static bool TryShowMapModeTooltip(Tooltip pTooltip, City city, Kingdom kingdom)
         {
             string selected = GetSelectedMapModePower();
+            if ((selected == HierarchicalVassalMapModeService.POWER_ID ||
+                 (selected == null &&
+                  HierarchicalVassalMapModeService.IsActive())) &&
+                HierarchicalVassalMapModeService.IsCityLayer &&
+                city?.data != null)
+            {
+                ShowCityMapModeTooltip(pTooltip, city,
+                    "aw_de_jure_region_tooltip", "De jure state",
+                    DeJureRegionTooltipService.Build(city), "#A8DDE8");
+                return true;
+            }
             if (selected == FeudatoryMapModeService.POWER_ID ||
                 (selected == null && FeudatoryMapModeService.IsActive()))
             {

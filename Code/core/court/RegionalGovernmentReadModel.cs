@@ -31,6 +31,14 @@ namespace AncientWarfare3.core.court
         public string GovernorTitle { get; set; } = string.Empty;
         public string LocalLevelTitle { get; set; } = string.Empty;
         public long GovernorActorId { get; set; } = -1L;
+        public long RegionId { get; set; } = -1L;
+        public int TotalMemberCount { get; set; }
+        public int ControlledMemberCount { get; set; }
+        public int ForeignMemberCount { get; set; }
+        public bool IsSeatControlled { get; set; }
+        public bool HasForeignDeJureMembers { get; set; }
+        public Dictionary<long, int> ControllerMemberCounts { get; set; } =
+            new Dictionary<long, int>();
         public int MemberCount => MemberCityIds?.Count ?? 0;
         public List<long> MemberCityIds { get; set; } = new List<long>();
         public List<long> LocalGovernmentCityIds { get; set; } =
