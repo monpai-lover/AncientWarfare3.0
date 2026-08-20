@@ -25,9 +25,6 @@ namespace AncientWarfare3.core.court
                 pRegionTitle = configuredRegionTitle;
             if (string.IsNullOrWhiteSpace(pGovernorTitle))
                 pGovernorTitle = configuredGovernorTitle;
-            if (Cache.TryGetValue(pKingdom.id, out IReadOnlyList<
-                    RegionalGovernmentReadModel> cached)) return cached;
-
             IReadOnlyList<RegionalGovernmentReadModel> legal =
                 DeJureRegionReadModelService.Build(pKingdom, pRegionTitle,
                     pGovernorTitle, configuredLocalLevelTitle);
@@ -36,6 +33,8 @@ namespace AncientWarfare3.core.court
                 Cache[pKingdom.id] = legal;
                 return legal;
             }
+            if (Cache.TryGetValue(pKingdom.id, out IReadOnlyList<
+                    RegionalGovernmentReadModel> cached)) return cached;
 
             var cities = new List<City>();
             var facts = new List<RegionalGovernmentCityFact>();
