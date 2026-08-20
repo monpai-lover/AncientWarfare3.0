@@ -1,0 +1,20 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class DeJureRegionEligibilityRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, DeJureRegionEligibilityRules.CanParticipate(true, false),
+            "ordinary live city participates in de jure state");
+        Equal(false, DeJureRegionEligibilityRules.CanParticipate(true, true),
+            "bandit stronghold is excluded from de jure state");
+        Equal(false, DeJureRegionEligibilityRules.CanParticipate(false, false),
+            "dead city cannot participate in de jure state");
+    }
+
+    private static void Equal(bool expected, bool actual, string message)
+    {
+        if (expected != actual) throw new InvalidOperationException(message);
+    }
+}

@@ -237,7 +237,8 @@ namespace AncientWarfare3.core.multiplayer.commands
                  targetCity.kingdom != defender))
                 return StaleTarget();
             WarTerritoryService.WarTargetOption option = FindWarOption(
-                attacker, defender, request.Key, request.CityId);
+                attacker, defender, request.Key, request.CityId,
+                request.SecondaryId);
             if (option == null)
             {
                 string canonicalWarType = DiplomaticWarDeclarationService.
@@ -263,7 +264,7 @@ namespace AncientWarfare3.core.multiplayer.commands
 
         private static WarTerritoryService.WarTargetOption FindWarOption(
             Kingdom attacker, Kingdom defender, string goalType,
-            long cityId)
+            long cityId, long sourceDeJureRegionId)
         {
             List<WarTerritoryService.WarTargetOption> options =
                 WarTerritoryService.BuildTargetOptions(attacker, defender);
@@ -275,6 +276,11 @@ namespace AncientWarfare3.core.multiplayer.commands
                     continue;
                 long optionCityId = option.target_city?.data?.id ?? -1L;
                 if (optionCityId != cityId) continue;
+                if (string.Equals(goalType,
+                        WarTerritoryService.GOAL_TAKE_DE_JURE_REGION,
+                        StringComparison.Ordinal) &&
+                    option.source_de_jure_region_id !=
+                    sourceDeJureRegionId) continue;
                 return option;
             }
             return null;

@@ -98,7 +98,8 @@ namespace AncientWarfare3.core.lineage
                 goalType, warType, joiningExistingWar: false,
                 pairAlreadyAtWar: HasWar(pAttacker, pDefender));
             string signature = WarNoticeRules.BuildSignature(pAttacker.id,
-                pDefender.id, goalType, cityId, noticeYear);
+                pDefender.id, goalType, cityId, noticeYear,
+                pSourceDeJureRegionId);
             var record = new DiplomaticWarDeclarationRecord
             {
                 Signature = signature,
@@ -642,6 +643,19 @@ namespace AncientWarfare3.core.lineage
             long restorationClaimId = pRecord.RestorationClaimId;
             long sourceDeJureRegionId = pRecord.SourceDeJureRegionId;
             Actor claimant = FindActor(pRecord.ClaimantActorId);
+            if (goalType ==
+                WarTerritoryService.GOAL_TAKE_DE_JURE_REGION)
+            {
+                List<City> regionCities = WarTerritoryService
+                    .GetDeJureRegionCities(sourceDeJureRegionId, pDefender);
+                if (regionCities.Count == 0)
+                {
+                    pFailureReason = "missing_de_jure_region_target";
+                    return false;
+                }
+                city = regionCities.Find(p => p?.data?.id ==
+                    pRecord.TargetCityId) ?? regionCities[0];
+            }
 
             switch (goalType)
             {

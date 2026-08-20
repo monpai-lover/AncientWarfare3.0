@@ -498,6 +498,7 @@ namespace AncientWarfare3.api.multiplayer
         public static AW3CommandRequest FillCentralCourtVacancies(
             long countryId) => Create(
             AW3CommandKind.FillCentralCourtVacancies, countryId);
+
         public static AW3CommandRequest SetCourtDisposition(long countryId,
             long actorId, string dispositionId, int intParameter,
             long cityId, string operationKey) =>
@@ -590,6 +591,21 @@ namespace AncientWarfare3.api.multiplayer
             targetCountryId: Positive(targetCountryId,
                 nameof(targetCountryId)),
             cityId: Optional(cityId, nameof(cityId)),
+            key: Token(goalType, nameof(goalType)),
+            secondaryKey: Token(warType, nameof(warType)),
+            reasonKey: Token(reasonKey, nameof(reasonKey)),
+            text: DisplayText(displayText, nameof(displayText)));
+
+        public static AW3CommandRequest DeclareWar(long countryId,
+            long targetCountryId, long cityId, string goalType,
+            string warType, string reasonKey, string displayText,
+            long sourceDeJureRegionId) => Create(
+            AW3CommandKind.DeclareWar, countryId,
+            targetCountryId: Positive(targetCountryId,
+                nameof(targetCountryId)),
+            cityId: Optional(cityId, nameof(cityId)),
+            secondaryId: Optional(sourceDeJureRegionId,
+                nameof(sourceDeJureRegionId)),
             key: Token(goalType, nameof(goalType)),
             secondaryKey: Token(warType, nameof(warType)),
             reasonKey: Token(reasonKey, nameof(reasonKey)),

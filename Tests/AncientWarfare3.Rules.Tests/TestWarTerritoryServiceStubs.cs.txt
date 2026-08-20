@@ -8,6 +8,8 @@ namespace AncientWarfare3.core.lineage
         public const string GOAL_MANDATE_CONQUEST = "mandate_conquest";
         public const string GOAL_TAKE_CORE_CITY = "take_core_city";
         public const string GOAL_PRESS_CLAIM_CITY = "press_claim_city";
+        public const string GOAL_TAKE_DE_JURE_REGION =
+            "take_de_jure_region";
         public const string GOAL_FORCE_VASSAL = "force_vassal";
         public const string GOAL_FORCE_TRIBUTARY = "force_tributary";
         public const string GOAL_INDEPENDENCE = "independence";

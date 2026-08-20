@@ -1265,6 +1265,24 @@ namespace AncientWarfare3.ui.windows
                 "missing_claim_target" => AW_L10n.Text(
                     "aw_diplomacy_failure_missing_claim_target",
                     "There is no valid territorial claim to press"),
+                "missing_de_jure_region_target" => AW_L10n.Text(
+                    "aw_diplomacy_failure_missing_de_jure_region_target",
+                    "There is no valid city remaining in the selected de jure state"),
+                "invalid_de_jure_region_target" => AW_L10n.Text(
+                    "aw_diplomacy_failure_invalid_de_jure_region_target",
+                    "The selected de jure state is no longer valid"),
+                "city_outside_de_jure_region" => AW_L10n.Text(
+                    "aw_diplomacy_failure_city_outside_de_jure_region",
+                    "A peace term names a city outside the selected de jure state"),
+                "de_jure_goal_bundle_incomplete" => AW_L10n.Text(
+                    "aw_diplomacy_failure_de_jure_goal_bundle_incomplete",
+                    "The de jure state settlement bundle is incomplete"),
+                "de_jure_goal_not_ready" => AW_L10n.Text(
+                    "aw_diplomacy_failure_de_jure_goal_not_ready",
+                    "The de jure state goal is not ready to settle"),
+                "war_goal_score_insufficient" => AW_L10n.Text(
+                    "aw_diplomacy_failure_war_goal_score_insufficient",
+                    "The current war score cannot pay for the selected cities"),
                 "cannot_force_vassal" => AW_L10n.Text(
                     "aw_diplomacy_failure_cannot_force_vassal",
                     "The target cannot be forced into vassalage"),

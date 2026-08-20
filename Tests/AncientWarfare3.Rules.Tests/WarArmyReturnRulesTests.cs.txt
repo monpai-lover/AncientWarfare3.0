@@ -17,6 +17,12 @@ internal static class WarArmyReturnRulesTests
                 armyAlive: false, currentMissionWarId: 17L,
                 endedWarId: 17L),
             "a dead army cannot enter the return queue");
+        Equal(true, WarArmyReturnRules.ShouldReleaseActiveVoyageOnReturn(
+                returnEligible: true, activeVoyage: true),
+            "an old battle voyage must be released before return transport starts");
+        Equal(false, WarArmyReturnRules.ShouldReleaseActiveVoyageOnReturn(
+                returnEligible: true, activeVoyage: false),
+            "return without an active voyage does not release transport state");
         Equal(true, WarArmyReturnRules.HasArrived(
                 armyAlive: true, insideFriendlySafeCity: true),
             "a friendly safe city completes return intent");

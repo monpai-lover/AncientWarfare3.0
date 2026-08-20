@@ -73,6 +73,9 @@ namespace AncientWarfare3.core.lineage
                     return Check(pHasNormalCb, "missing_mandate_conquest_cb", out pReason);
                 case "take_core_city":
                     return Check(pHasCoreTarget, "missing_core_target", out pReason);
+                case "take_de_jure_region":
+                    return Check(pHasCoreTarget,
+                        "missing_de_jure_region_target", out pReason);
                 case "press_claim_city":
                     return Check(pHasClaimTarget, "missing_claim_target", out pReason);
                 case "force_vassal":

@@ -214,7 +214,8 @@ namespace AncientWarfare3.ui.windows
                             option.goal_type),
                         string.IsNullOrWhiteSpace(option.label)
                             ? option.goal_type
-                            : option.label));
+                            : option.label,
+                        option.source_de_jure_region_id));
             _commandPending = result.Status == AW3CommandStatus.Pending;
             if (_commandPending)
             {
@@ -556,7 +557,8 @@ namespace AncientWarfare3.ui.windows
             return (pOption?.goal_type ?? "") + ":" +
                    (pOption?.target_city?.data?.id ?? -1L) + ":" +
                    (pOption?.source_claim_id ?? -1L) + ":" +
-                   (pOption?.source_core_id ?? -1L);
+                   (pOption?.source_core_id ?? -1L) + ":" +
+                   (pOption?.source_de_jure_region_id ?? -1L);
         }
 
         private static void CreateScrollArea(Transform pParent,

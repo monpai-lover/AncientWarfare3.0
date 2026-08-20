@@ -135,12 +135,20 @@ if (args.Length == 1 && args[0] == "--local-governor-identity")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--de-jure-eligibility")
+{
+    DeJureRegionEligibilityRulesTests.Run();
+    Console.WriteLine("De jure eligibility rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--court-immediate-vacancies")
 {
     CourtImmediateVacancyModeRulesTests.Run();
     Console.WriteLine("Court immediate vacancy rules passed.");
     return;
 }
+
 if (args.Length == 1 && args[0] == "--official-career-noble-identity")
 {
     OfficialCareerNobleIdentityRulesTests.Run();
@@ -1175,6 +1183,7 @@ if (args.Length == 2 && args[0] == "--write-rts-plan-gif-sample")
 if (args.Length == 1 && args[0] == "--war-goal-settlement-slice")
 {
     WarGoalSettlementRulesTests.Run();
+    DeJureWarGoalSettlementRulesTests.Run();
     Console.WriteLine("War-goal settlement rules passed.");
     return;
 }
@@ -4955,6 +4964,12 @@ True(WarNoticeRules.RequiresNotice(
         joiningExistingWar: false,
         pairAlreadyAtWar: false),
     "every ordinary diplomatic declaration gives advance notice");
+Equal("1:2:press_claim_city:3:100",
+    WarNoticeRules.BuildSignature(1, 2, "press_claim_city", 3, 100),
+    "ordinary notice signatures remain backward compatible");
+Equal("1:2:take_de_jure_region:3:100:9",
+    WarNoticeRules.BuildSignature(1, 2, "take_de_jure_region", 3, 100, 9),
+    "de jure notice signatures include the selected region");
 Equal(false, WarNoticeRules.RequiresNotice(
         true, 5, true, "independence", "independence_war", false, false),
     "independence wars do not send advance notice");
@@ -8866,6 +8881,7 @@ ZhuluWarRulesTests.Run();
 ZhuluAgeRulesTests.Run();
 XiaizationStatusDisplayRulesTests.Run();
 WarGoalSettlementRulesTests.Run();
+DeJureWarGoalSettlementRulesTests.Run();
 WarExhaustionSettlementRulesTests.Run();
 WarScoreBudgetRulesTests.Run();
 WarScoreBudgetServiceTests.Run();

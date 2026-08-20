@@ -67,5 +67,18 @@ namespace AncientWarfare3.core.lineage
             return pAttackerId + ":" + pDefenderId + ":" + (pGoalType ?? "") + ":" +
                    pTargetCityId + ":" + pIssueYear;
         }
+
+        public static string BuildSignature(long pAttackerId,
+            long pDefenderId, string pGoalType, long pTargetCityId,
+            int pIssueYear, long pSourceDeJureRegionId)
+        {
+            string signature = BuildSignature(pAttackerId, pDefenderId,
+                pGoalType, pTargetCityId, pIssueYear);
+            if (string.Equals(pGoalType,
+                    WarTerritoryService.GOAL_TAKE_DE_JURE_REGION,
+                    StringComparison.Ordinal) && pSourceDeJureRegionId >= 0L)
+                return signature + ":" + pSourceDeJureRegionId;
+            return signature;
+        }
     }
 }

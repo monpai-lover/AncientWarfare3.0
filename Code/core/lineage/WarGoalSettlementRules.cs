@@ -26,7 +26,7 @@ namespace AncientWarfare3.core.lineage
         public WarGoalIdentity(string pGoalType, long pTargetCityId,
             long pTargetKingdomId, long pSourceClaimId,
             long pSourceCoreId, long pSourceProjectId,
-            long pClaimantActorId, long pSourceDeJureRegionId = -1L)
+            long pClaimantActorId, long pSourceDeJureRegionId = 0L)
         {
             GoalType = pGoalType ?? "";
             TargetCityId = pTargetCityId;
@@ -154,11 +154,16 @@ namespace AncientWarfare3.core.lineage
             {
                 case WarGoalTypeIds.TakeCoreCity:
                 case WarGoalTypeIds.PressClaimCity:
-                case WarGoalTypeIds.TakeDeJureRegion:
                 case WarGoalTypeIds.MandateConquest:
                     pProfile = new WarGoalAutomaticSettlementProfile(
                         WarGoalAutomaticSettlementEffect.CedeCity,
                         "city_control", MinimumRequiredScore,
+                        pUsesDynamicCityCost: true);
+                    return true;
+                case WarGoalTypeIds.TakeDeJureRegion:
+                    pProfile = new WarGoalAutomaticSettlementProfile(
+                        WarGoalAutomaticSettlementEffect.CedeCity,
+                        "de_jure_region_control", MinimumRequiredScore,
                         pUsesDynamicCityCost: true);
                     return true;
                 case WarGoalTypeIds.ForceVassal:

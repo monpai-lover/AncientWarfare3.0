@@ -352,7 +352,8 @@ namespace AncientWarfare3.ui.windows
                             pOption.goal_type),
                         string.IsNullOrWhiteSpace(pOption.label)
                             ? pOption.goal_type
-                            : pOption.label));
+                            : pOption.label,
+                        pOption.source_de_jure_region_id));
             _commandPending = result.Status == AW3CommandStatus.Pending;
             if (_commandPending)
             {

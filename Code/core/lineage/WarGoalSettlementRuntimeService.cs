@@ -40,16 +40,15 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool HasAffordableGoal(War pWar)
         {
+            if (DeJureWarGoalSettlementService.HasAffordableGoal(pWar))
+                return true;
             if (AW3MultiplayerReplicaScope.IsReplicaSession ||
                 pWar?.data == null || pWar.hasEnded() ||
                 ZhuluPeaceGuard.BlocksOrdinarySettlement(pWar) ||
                 RebellionDirectTerritoryTransferService
                     .BlocksOrdinarySettlement(pWar) ||
-                !DeJureWarGoalSettlementService.HasAffordableGoal(pWar) &&
                 !TryBuildPlan(pWar, out _, out var facts,
                     out int expectedGoalCount)) return false;
-            if (DeJureWarGoalSettlementService.HasAffordableGoal(pWar))
-                return true;
             return WarGoalSettlementRules.TryValidateForceBundle(
                 facts[0].AchievedScore, facts, expectedGoalCount, out _);
         }
@@ -97,6 +96,9 @@ namespace AncientWarfare3.core.lineage
             if (goals.Count == 0 ||
                 goals.Count > WarGoalSettlementRules.MaximumPersistedGoals)
                 return false;
+            for (int i = 0; i < goals.Count; i++)
+                if (goals[i]?.GoalType == WarGoalTypeIds.TakeDeJureRegion)
+                    return false;
 
             var allFacts = new List<WarGoalSettlementFacts>(goals.Count);
             for (int i = 0; i < goals.Count; i++)

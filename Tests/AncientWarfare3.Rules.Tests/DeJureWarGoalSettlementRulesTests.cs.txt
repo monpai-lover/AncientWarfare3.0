@@ -1,0 +1,88 @@
+using AncientWarfare3.core.lineage;
+
+internal static class DeJureWarGoalSettlementRulesTests
+{
+    public static void Run()
+    {
+        SelectsOnlyOccupiedDefenderRegionCities();
+        SelectsExpensiveCitiesFirstWithoutOverspending();
+        StableCityIdBreaksEqualCostTies();
+        DeJureGoalHasDedicatedSettlementProfile();
+        DeJureGoalIsAcceptedAsCasusBelli();
+    }
+
+    private static void SelectsOnlyOccupiedDefenderRegionCities()
+    {
+        var candidates = new[]
+        {
+            City(1, 10, region: true, defender: true, occupied: true),
+            City(2, 10, region: false, defender: true, occupied: true),
+            City(3, 10, region: true, defender: false, occupied: true),
+            City(4, 10, region: true, defender: true, occupied: false)
+        };
+        int[] selected = DeJureWarGoalSettlementRules.SelectAffordable(
+            candidates, 100, 16);
+        Equal(1, selected.Length, "only eligible city selected");
+        Equal(0, selected[0], "eligible city index retained");
+    }
+
+    private static void SelectsExpensiveCitiesFirstWithoutOverspending()
+    {
+        var candidates = new[]
+        {
+            City(1, 35), City(2, 25), City(3, 15)
+        };
+        int[] selected = DeJureWarGoalSettlementRules.SelectAffordable(
+            candidates, 50, 16);
+        Equal(2, selected.Length, "affordable subset selected");
+        Equal(0, selected[0], "highest cost city selected first");
+        Equal(2, selected[1], "later affordable city fills remainder");
+    }
+
+    private static void StableCityIdBreaksEqualCostTies()
+    {
+        var candidates = new[] { City(9, 10), City(3, 10) };
+        int[] selected = DeJureWarGoalSettlementRules.SelectAffordable(
+            candidates, 10, 16);
+        Equal(1, selected.Length, "one equal-cost city selected");
+        Equal(1, selected[0], "lower stable city id wins tie");
+    }
+
+    private static void DeJureGoalHasDedicatedSettlementProfile()
+    {
+        True(WarGoalSettlementRules.TryGetAutomaticSettlementProfile(
+            WarGoalTypeIds.TakeDeJureRegion, out var profile),
+            "de jure goal profile exists");
+        Equal("de_jure_region_control", profile.CompletionKind,
+            "de jure goal is not mistaken for a single-city goal");
+        Equal(WarGoalAutomaticSettlementEffect.CedeCity, profile.Effect,
+            "de jure goal reuses cede-city execution");
+    }
+
+    private static void DeJureGoalIsAcceptedAsCasusBelli()
+    {
+        True(WarDecisionQueueRules.CanQueueGoal(
+            WarGoalTypeIds.TakeDeJureRegion, true, false, false,
+            true, false, false, false, false, false, false, out _),
+            "valid de jure target enables declaration");
+    }
+
+    private static DeJureWarGoalCityCandidate City(long id, int cost,
+        bool region = true, bool defender = true, bool occupied = true)
+    {
+        return new DeJureWarGoalCityCandidate(id, cost, region, defender,
+            occupied);
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected=" +
+                expected + " actual=" + actual);
+    }
+}

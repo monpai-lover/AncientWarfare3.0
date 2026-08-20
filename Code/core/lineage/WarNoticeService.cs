@@ -69,6 +69,9 @@ namespace AncientWarfare3.core.lineage
                 out string warType, "");
             pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_TARGET_CITY_ID,
                 out long targetCityId, -1L);
+            pAttacker.data.get(
+                LineageKeys.DIPLOMATIC_WAR_SOURCE_DE_JURE_REGION_ID,
+                out long sourceDeJureRegionId, -1L);
             pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_NOTICE_SIGNATURE,
                 out string signature, "");
 
@@ -86,8 +89,9 @@ namespace AncientWarfare3.core.lineage
                     return;
 
                 int year = Date.getCurrentYear();
-                signature = WarNoticeRules.BuildSignature(pAttacker.id, defender.id, goalType,
-                    targetCityId, year);
+                signature = WarNoticeRules.BuildSignature(pAttacker.id,
+                    defender.id, goalType, targetCityId, year,
+                    sourceDeJureRegionId);
                 pAttacker.data.set(
                     LineageKeys.DIPLOMATIC_WAR_NOTICE_SIGNATURE, signature);
                 pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_NOTICE_YEAR,

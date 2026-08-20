@@ -46,7 +46,8 @@ namespace AncientWarfare3.core.lineage
                 return cost != 0 ? cost : pCandidates[left].CityId
                     .CompareTo(pCandidates[right].CityId);
             });
-            int available = Math.Min(WarPeaceTermsRules.MaximumWarScore,
+            int available = Math.Min(
+                WarGoalSettlementRules.MaximumRequiredScore,
                 pAvailableWarScore);
             var selected = new List<int>(Math.Min(indices.Count,
                 pMaximumTerms));

@@ -962,6 +962,7 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_goal_press_claim_city", "夺取宣称城市", "Press City Claim", "奪取宣稱城市"),
             new Entry("aw_hist_goal_press_strong_claim_city", "强宣称战争", "Strong Claim War", "強宣稱戰爭"),
             new Entry("aw_hist_goal_press_weak_claim_city", "弱宣称战争", "Weak Claim War", "弱宣稱戰爭"),
+            new Entry("aw_hist_goal_take_de_jure_region", "夺取法理州", "Take De Jure State", "奪取法理州"),
             new Entry("aw_hist_goal_take_mandate", "夺取天命", "Seize Mandate", "奪取天命"),
             new Entry("aw_hist_goal_mandate_conquest", "天命征服", "Mandate Conquest", "天命征服"),
             new Entry("aw_hist_goal_force_vassal", "强制臣服", "Force Vassalization", "強制臣服"),

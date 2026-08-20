@@ -225,6 +225,12 @@ aw_diplomatic_war_power_advantage,我方军力占优,Favorable balance,我方軍
 aw_diplomatic_war_power_even,双方势均力敌,Evenly matched,雙方勢均力敵
 aw_diplomatic_war_power_disadvantage,我方军力处于劣势,Unfavorable balance,我方軍力處於劣勢
 aw_diplomatic_war_power_desperate,敌方拥有压倒性优势,Severe disadvantage,敵方擁有壓倒性優勢
+aw_diplomacy_failure_missing_de_jure_region_target,没有可用的法理州目标,There is no valid city remaining in the selected de jure state,沒有可用的法理州目標
+aw_diplomacy_failure_invalid_de_jure_region_target,所选法理州已失效,The selected de jure state is no longer valid,所選法理州已失效
+aw_diplomacy_failure_city_outside_de_jure_region,和约城市不在目标法理州内,A peace term names a city outside the selected de jure state,和約城市不在目標法理州內
+aw_diplomacy_failure_de_jure_goal_bundle_incomplete,法理州和约条款不完整,The de jure state settlement bundle is incomplete,法理州和約條款不完整
+aw_diplomacy_failure_de_jure_goal_not_ready,法理州战争目标尚未达到结算条件,The de jure state goal is not ready to settle,法理州戰爭目標尚未達到結算條件
+aw_diplomacy_failure_war_goal_score_insufficient,战争分数不足以支付所选城市,The current war score cannot pay for the selected cities,戰爭分數不足以支付所選城市
 aw_diplomacy_event_time,第{0}年,Year {0},第{0}年
 aw_diplomacy_request_time,国书送达,Request sent,國書送達
 aw_diplomacy_response_time,复书送达,Reply received,覆書送達

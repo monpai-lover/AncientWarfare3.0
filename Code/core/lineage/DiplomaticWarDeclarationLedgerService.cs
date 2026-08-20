@@ -259,6 +259,9 @@ namespace AncientWarfare3.core.lineage
             pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_SOURCE_CORE_ID,
                 out record.SourceCoreId, -1L);
             pAttacker.data.get(
+                LineageKeys.DIPLOMATIC_WAR_SOURCE_DE_JURE_REGION_ID,
+                out record.SourceDeJureRegionId, -1L);
+            pAttacker.data.get(
                 LineageKeys.DIPLOMATIC_WAR_RESTORATION_CLAIM_ID,
                 out record.RestorationClaimId, -1L);
             pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_CLAIMANT_ACTOR_ID,
