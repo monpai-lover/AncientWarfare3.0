@@ -89,6 +89,7 @@ namespace AncientWarfare3
             ArmyRtsContent.Init();
 
             XiaNaming.Init();
+            CourtLocalizationRepair.Ensure();
 
             // 神力:spawn_xia 生成夏人单位(必须在 AW_LineageTab 之前,因 tab 按钮按 id 查 power)
             GodPowerLibrary.Init();

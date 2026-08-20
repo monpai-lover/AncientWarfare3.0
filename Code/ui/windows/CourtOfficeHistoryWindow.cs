@@ -30,6 +30,10 @@ namespace AncientWarfare3.ui.windows
         private Text _header;
         private Text _empty;
         private WideWindowChrome _chrome;
+        private ScrollRect _scrollRect;
+        private Scrollbar _scrollbar;
+        private RectTransform _historyViewport;
+        private RectTransform _historyContent;
 
         internal static void Open(long pKingdomId, long pCityId,
             string pOfficeLayer, string pOfficeId)
@@ -76,9 +80,33 @@ namespace AncientWarfare3.ui.windows
                 typeof(RectTransform));
             root.transform.SetParent(ContentTransform, false);
             _root = root.GetComponent<RectTransform>();
-            _header = CreateText(_root, "Header", 11,
+            var viewportObject = new GameObject("CourtOfficeHistoryViewport",
+                typeof(RectTransform), typeof(Image), typeof(Mask),
+                typeof(ScrollRect));
+            viewportObject.transform.SetParent(_root, false);
+            _historyViewport = viewportObject.GetComponent<RectTransform>();
+            viewportObject.GetComponent<Image>().color =
+                new Color(.035f, .032f, .027f, .98f);
+            viewportObject.GetComponent<Mask>().showMaskGraphic = false;
+            var contentObject = new GameObject("CourtOfficeHistoryContent",
+                typeof(RectTransform));
+            contentObject.transform.SetParent(_historyViewport, false);
+            _historyContent = contentObject.GetComponent<RectTransform>();
+            _historyContent.anchorMin = _historyContent.anchorMax =
+                new Vector2(0f, 1f);
+            _historyContent.pivot = new Vector2(0f, 1f);
+            _historyContent.anchoredPosition = Vector2.zero;
+            _scrollRect = viewportObject.GetComponent<ScrollRect>();
+            _scrollRect.viewport = _historyViewport;
+            _scrollRect.content = _historyContent;
+            _scrollRect.horizontal = false;
+            _scrollRect.vertical = true;
+            _scrollRect.movementType = ScrollRect.MovementType.Clamped;
+            _scrollRect.scrollSensitivity = 28f;
+            _scrollbar = CreateScrollbar(_root, _scrollRect);
+            _header = CreateText(_historyContent, "Header", 11,
                 TextAnchor.MiddleLeft);
-            _empty = CreateText(_root, "Empty", 10,
+            _empty = CreateText(_historyContent, "Empty", 10,
                 TextAnchor.MiddleCenter);
             _empty.color = new Color(0.78f, 0.78f, 0.74f, 1f);
         }
@@ -96,6 +124,12 @@ namespace AncientWarfare3.ui.windows
                                ? ""
                                : "  |  " + cityName);
 
+            if (_officeLayer == CourtOfficeLayer.City && _cityId >= 0L)
+            {
+                City city = World.world?.cities?.get(_cityId);
+                CourtService.EnsureLocalOfficerHistory(kingdom, city, _officeId);
+            }
+
             var scope = new OfficialCareerHistoryScope(_kingdomId, _cityId,
                 _officeLayer, _officeId);
             IReadOnlyList<OfficialCareerHistoryRow> rows =
@@ -103,7 +137,7 @@ namespace AncientWarfare3.ui.windows
             for (int i = 0; i < rows.Count; i++)
             {
                 while (_rowPool.Count <= i)
-                    _rowPool.Add(CourtOfficeHistoryRow.Create(_root));
+                    _rowPool.Add(CourtOfficeHistoryRow.Create(_historyContent));
                 OfficialCareerHistoryRow row = rows[i];
                 string range = OfficialCareerHistoryRules.YearRange(row,
                     AW_L10n.Text("aw_court_history_to_present", "Present"),
@@ -130,8 +164,10 @@ namespace AncientWarfare3.ui.windows
         {
             if (_root == null) return;
             float contentWidth = Mathf.Max(1f, _windowSize.x - 42f);
-            float usableWidth = Mathf.Max(1f, contentWidth - ContentInsetX);
             float viewportHeight = Mathf.Max(1f, _windowSize.y - 58f);
+            float rowsHeight = 36f + _rowPool.Count *
+                CourtOfficeHistoryRow.Height;
+            float contentHeight = Mathf.Max(viewportHeight, rowsHeight);
             RectTransform background = BackgroundTransform as RectTransform;
             if (background != null) background.sizeDelta = _windowSize;
             Transform close = BackgroundTransform?.parent?.Find(
@@ -152,21 +188,82 @@ namespace AncientWarfare3.ui.windows
             if (viewport != null)
                 viewport.sizeDelta = new Vector2(contentWidth,
                     viewportHeight);
+            Transform nativeScroll = BackgroundTransform?.Find("Scroll View");
+            RectTransform nativeRect = nativeScroll?.GetComponent<RectTransform>();
+            if (nativeRect != null)
+            {
+                nativeRect.sizeDelta = new Vector2(contentWidth, viewportHeight);
+                nativeRect.localPosition = new Vector3(0f, -20f, 0f);
+            }
+            ScrollRect nativeComponent = nativeScroll?.GetComponent<ScrollRect>();
+            if (nativeComponent != null)
+            {
+                nativeComponent.horizontal = false;
+                nativeComponent.vertical = false;
+            }
+            Transform nativeBar = BackgroundTransform?.Find(
+                "Scroll View/Scrollbar Vertical");
+            if (nativeBar != null)
+                foreach (Graphic graphic in nativeBar.GetComponentsInChildren<Graphic>(true))
+                {
+                    graphic.enabled = false;
+                    graphic.raycastTarget = false;
+                }
             _root.anchorMin = _root.anchorMax = new Vector2(0f, 1f);
             _root.pivot = new Vector2(0f, 1f);
-            _root.anchoredPosition = new Vector2(ContentInsetX, 0f);
-            float rowsHeight = 36f + _rowPool.Count *
-                CourtOfficeHistoryRow.Height;
-            _root.sizeDelta = new Vector2(usableWidth,
-                Mathf.Max(viewportHeight, rowsHeight));
+            _root.anchoredPosition = Vector2.zero;
+            _root.sizeDelta = new Vector2(contentWidth, viewportHeight);
+            Layout(_historyViewport, 6f, 6f,
+                Mathf.Max(1f, contentWidth - 22f),
+                Mathf.Max(1f, viewportHeight - 12f));
+            Layout(_scrollbar.GetComponent<RectTransform>(),
+                Mathf.Max(0f, contentWidth - 14f), 6f, 10f,
+                Mathf.Max(1f, viewportHeight - 12f));
+            _historyContent.sizeDelta = new Vector2(
+                Mathf.Max(1f, contentWidth - 22f), contentHeight);
             Layout(_header.rectTransform, 8f, 5f,
-                usableWidth - 16f, 24f);
+                contentWidth - 38f, 24f);
             Layout(_empty.rectTransform, 8f, 42f,
-                usableWidth - 16f, 40f);
+                contentWidth - 38f, 40f);
             for (int i = 0; i < _rowPool.Count; i++)
                 _rowPool[i].Layout(34f +
-                    i * CourtOfficeHistoryRow.Height, usableWidth);
+                    i * CourtOfficeHistoryRow.Height, contentWidth - 22f);
             _chrome?.RepositionResizeHandle();
+        }
+
+        private static Scrollbar CreateScrollbar(Transform pParent,
+            ScrollRect pScroll)
+        {
+            var barObject = new GameObject("CourtOfficeHistoryScrollbar",
+                typeof(RectTransform), typeof(Image), typeof(Scrollbar));
+            barObject.transform.SetParent(pParent, false);
+            Image track = barObject.GetComponent<Image>();
+            track.color = new Color(0.08f, 0.075f, 0.065f, 0.98f);
+            var slidingObject = new GameObject("Sliding Area",
+                typeof(RectTransform));
+            slidingObject.transform.SetParent(barObject.transform, false);
+            RectTransform sliding = slidingObject.GetComponent<RectTransform>();
+            sliding.anchorMin = Vector2.zero;
+            sliding.anchorMax = Vector2.one;
+            sliding.offsetMin = new Vector2(1f, 1f);
+            sliding.offsetMax = new Vector2(-1f, -1f);
+            var handleObject = new GameObject("Handle", typeof(RectTransform),
+                typeof(Image));
+            handleObject.transform.SetParent(sliding, false);
+            RectTransform handle = handleObject.GetComponent<RectTransform>();
+            handle.anchorMin = Vector2.zero;
+            handle.anchorMax = Vector2.one;
+            handle.offsetMin = handle.offsetMax = Vector2.zero;
+            Image handleImage = handleObject.GetComponent<Image>();
+            handleImage.color = new Color(0.82f, 0.68f, 0.28f, 0.95f);
+            Scrollbar scrollbar = barObject.GetComponent<Scrollbar>();
+            scrollbar.handleRect = handle;
+            scrollbar.targetGraphic = handleImage;
+            scrollbar.direction = Scrollbar.Direction.BottomToTop;
+            pScroll.verticalScrollbar = scrollbar;
+            pScroll.verticalScrollbarVisibility =
+                ScrollRect.ScrollbarVisibility.Permanent;
+            return scrollbar;
         }
 
         private static string ResolveCityName(Kingdom pKingdom,

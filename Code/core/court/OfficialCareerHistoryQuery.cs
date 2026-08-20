@@ -19,7 +19,7 @@ namespace AncientWarfare3.core.court
                 return rows;
 
             string cityPredicate = pScope.HasCity
-                ? " AND CITY_ID=@city"
+                ? " AND (CITY_ID=@city OR CITY_ID<0)"
                 : "";
             using var command = new SQLiteCommand(
                 "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID,CITY_ID," +

@@ -1,4 +1,21 @@
 key,cz,en,ch
+aw_de_jure_region,州法理,De jure state,州法理
+aw_de_jure_region_description,使用神力创建或划分州法理,Create or assign de jure states with one divine power,使用神力建立或劃分州法理
+aw_de_jure_region_create,建立州法理,Create de jure state,建立州法理
+aw_de_jure_region_assign,划入州法理,Assign to de jure state,劃入州法理
+aw_de_jure_region_invalid_city,请选择有效城市,Select a valid city,請選擇有效城市
+aw_de_jure_region_create_failed,州法理创建失败,Failed to create de jure state,州法理建立失敗
+aw_de_jure_region_created,已建立新的州法理,De jure state created,已建立新的州法理
+aw_de_jure_region_invalid_mode,无效的州法理模式,Invalid de jure state mode,無效的州法理模式
+aw_de_jure_region_select_capital,请先点击州法理首府,Select a legal capital first,請先點擊州法理首府
+aw_de_jure_region_target_selected,已选择目标州法理,Target de jure state selected,已選擇目標州法理
+aw_de_jure_region_assign_failed,州法理划分失败,Failed to assign city,州法理劃分失敗
+aw_de_jure_region_assigned,城市已划入州法理,City assigned to de jure state,城市已劃入州法理
+aw_de_jure_region_tooltip,州法理,De jure state,州法理
+aw_de_jure_region_label,法理州,De jure state,法理州
+aw_de_jure_region_members,法理成员,Legal members,法理成員
+aw_de_jure_region_capital,法理首府,Legal capital,法理首府
+aw_de_jure_region_uncontrolled,无实际控制国,Uncontrolled,無實際控制國
 aw_city_local_court_entry,地方官署,Local Government,地方官署
 aw_open_city_local_court,打开该城市的地方官署,Open this city's local government,打开该城市的地方官署
 aw_local_court_builtin_type,地方官署,Local Government,地方官署
@@ -126,19 +143,19 @@ aw_custom_court_settings_preset_locked_message,当前国家官制尚未解锁这
 aw_custom_court_settings_preset_applied,已应用原版官职预设,Built-in office preset applied,已套用原版官職預設
 aw_custom_court_office_name_desc,这个名称会显示在官场和官职卡片上,This name is displayed in the court and on the office card,這個名稱會顯示在官場和官職卡片上
 aw_custom_court_settings_layer,官场层级,Layer,官場層級
-aw_custom_court_settings_layer_desc,决定官职所属的官场区域和层级分类,Controls the court section and hierarchy containing this office,決定官職所屬的官場區域和層級分類
+aw_custom_court_settings_layer_desc,决定官职属于中央官场还是地方官场；并影响任职范围、显示位置和管理关系。例如：中央官职由国家朝廷管理；地方官职则绑定具体城市或郡县。,Determines whether the office belongs to the central or a local court; this affects its appointment scope; display position; and reporting relationship. For example; a central office is managed by the royal court; while a local office is tied to a city or commandery.,決定官職屬於中央官場還是地方官場；並影響任職範圍、顯示位置與管理關係。例如：中央官職由國家朝廷管理；地方官職則綁定具體城市或郡縣。
 aw_custom_court_settings_grade,品级,Grade,品級
-aw_custom_court_settings_grade_desc,用于比较官职地位和官场排序的正式品级,The formal grade used to rank this office against others,用於比較官職地位和官場排序的正式品級
+aw_custom_court_settings_grade_desc,官职本身的正式地位等级；用于比较官职高低、官场排序和层级布局。品级数字越小通常代表地位越高、排序越靠前。例如：将司徒设为10、县令设为30时；司徒会排在县令之前；这不会直接改变候选人的仕途等级。,The office's formal status grade; used for comparing offices; court ordering; and hierarchy layout. A smaller grade number normally means higher status and earlier placement. For example; if Situ is grade 10 and a county magistrate is grade 30; Situ is placed above the magistrate; this does not directly change a candidate's career rank.,官職本身的正式地位等級；用於比較官職高低、官場排序與層級布局。品級數字越小通常代表地位越高、排序越靠前。例如：將司徒設為10、縣令設為30時；司徒會排在縣令之前；這不會直接改變候選人的仕途等級。
 aw_custom_court_settings_slots,官位数量,Slots,官位數量
 aw_custom_court_settings_slots_desc,允许同时担任这个官职的人数,The number of officials who may hold this office at once,允許同時擔任這個官職的人數
 aw_custom_court_settings_military,可统军,Military capable,可統軍
 aw_custom_court_settings_military_desc,决定任职者是否可以承担军事职能,Controls whether office holders may perform military duties,決定任職者是否可以承擔軍事職能
 aw_custom_court_settings_preferred_school,偏好学派,Preferred school,偏好學派
 aw_custom_court_settings_preferred_school_desc,属于该学派的候选人会获得任职倾向,Applicants from this school receive appointment preference,屬於該學派的候選人會獲得任職傾向
-aw_custom_court_settings_minimum_rank,最低等级,Minimum rank,最低等級
-aw_custom_court_settings_minimum_rank_desc,候选人必须达到的最低仕途等级,The lowest career rank required for appointment,候選人必須達到的最低仕途等級
+aw_custom_court_settings_minimum_rank,最低仕途等级,Minimum career rank,最低仕途等級
+aw_custom_court_settings_minimum_rank_desc,候选人必须达到的最低仕途等级；是任命门槛而不是官职品级。例如：设置为10时；仕途等级9的候选人不能任职；等级10或更高的候选人才有资格；即使官职设为七品；也不会把候选人的仕途等级改成七品。,The minimum career rank a candidate must reach before appointment. This is an eligibility threshold; not the office's formal grade. For example; with a minimum rank of 10; a rank-9 candidate is ineligible while rank 10 or higher qualifies; setting the office to grade 7 does not change the candidate's career rank.,候選人必須達到的最低仕途等級；是任命門檻而不是官職品級。例如：設定為10時；仕途等級9的候選人不能任職；等級10或更高的候選人才有資格；即使官職設為七品；也不會把候選人的仕途等級改成七品。
 aw_custom_court_settings_required_school,要求学派,Required school,要求學派
-aw_custom_court_settings_required_school_desc,只有属于指定学派的人才能担任该官职,Only members of the selected school may hold this office,只有屬於指定學派的人才能擔任該官職
+aw_custom_court_settings_required_school_desc,限制能够担任该官职的学派。选择某个学派后；候选人必须属于该学派；选择“无”则不限制学派。例如：设置为法家后；儒家或农家成员不会通过这一条件。,Restricts which school may provide candidates for this office. After selecting a school; a candidate must belong to it; selecting None imposes no school restriction. For example; selecting Legalism excludes Confucian and Agricultural school members from this requirement.,限制能夠擔任該官職的學派。選擇某個學派後；候選人必須屬於該學派；選擇「無」則不限制學派。例如：設定為法家後；儒家或農家成員不會通過這一條件。
 aw_custom_court_settings_required_trait,要求特质,Required trait,要求特質
 aw_custom_court_settings_required_trait_desc,只有拥有填写的准确特质ID才能担任该官职,Only candidates with the exact entered trait ID are eligible,只有擁有填寫的準確特質ID才能擔任該官職
 aw_custom_court_settings_required_office,前置官职,Required office,前置官職
@@ -586,7 +603,7 @@ aw_court_appointment_loading,正在筛选 {0} 名国人...,Reviewing {0} subject
 aw_court_appointment_page,第 {0}/{1} 页 · 共 {2} 名合格者,Page {0}/{1} - {2} eligible,第 {0}/{1} 頁 · 共 {2} 名合格者
 aw_court_appointment_previous,上一页,Previous page,上一頁
 aw_court_appointment_next,下一页,Next page,下一頁
-aw_court_official_rank,官阶,Official rank,官階
+aw_court_official_rank,仕途等级,Career rank,仕途等級
 aw_court_rank_unranked,无品,Unranked,無品
 aw_court_official_rank_short,{0}·{1},{0} · {1},{0}·{1}
 aw_court_rank_1,从九品,Secondary Ninth Rank,從九品
@@ -840,6 +857,14 @@ aw_court_history_end_dismissed,罢免,Dismissed,罷免
 aw_court_history_end_death,卒于任上,Died in office,卒於任上
 aw_court_history_end_city_transferred,城池易主,City transferred,城池易主
 aw_court_history_end_city_destroyed,城池毁灭,City destroyed,城池毀滅
+aw_court_vacancy,空缺,Vacant,空缺
+aw_court_history_end_missing,原因不明,Reason unavailable,原因不明
+aw_court_history_end_invalid,任职失效,Appointment invalid,任職失效
+aw_court_history_end_local_office_reformed,官署改制,Local office reformed,官署改制
+aw_court_history_end_guest_term_expired,客卿任期届满,Guest term expired,客卿任期屆滿
+aw_court_office_heir,世子,Heir Apparent,世子
+aw_court_command,统帅,Command,統帥
+aw_court_regional_governor,区域长官,Regional Governor,區域長官
 aw_custom_court_region_title,区域称呼,Region title,區域稱呼
 aw_custom_court_region_title_placeholder,州,Prefecture,州
 aw_custom_court_region_title_desc,相邻城市运行时聚合层的称呼,Name of the runtime grouping made from adjacent cities,相鄰城市執行時聚合層的稱呼

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui;
@@ -98,8 +99,8 @@ namespace AncientWarfare3.ui.items
                 : "";
 
             _button.onClick.RemoveAllListeners();
-            bool officeAvailable = CourtService.IsManualOfficeInCurrentTier(
-                pKingdom, pNode.OfficeId) &&
+            bool officeAvailable = CourtService.IsManualOfficeAvailable(
+                pKingdom, pNode.OfficeId, pNode.OfficeLayer, pNode.CityId) &&
                 !IsMilitaryGovernorateCommandNode(pNode);
             bool appointmentAllowed = CourtService.CanUseManualAppointment(
                 pKingdom);
@@ -111,7 +112,8 @@ namespace AncientWarfare3.ui.items
                 _button.onClick.AddListener(() => ActionLibrary.openUnitWindow(actor));
             else if (canAppoint)
                 _button.onClick.AddListener(() =>
-                    CourtAppointmentWindow.Open(pKingdom.id, pNode.OfficeId));
+                    CourtAppointmentWindow.Open(pKingdom.id, pNode.OfficeId,
+                        -1L, pNode.OfficeLayer, pNode.CityId));
 
             long incumbentActorId = live && !pNode.IsVacancy
                 ? actor.data.id
@@ -125,16 +127,19 @@ namespace AncientWarfare3.ui.items
             bool canDispose = live && !pNode.IsVacancy && !actor.isKing() &&
                                !IsMilitaryGovernorateCommandNode(pNode);
             _dispositionObject.SetActive(canDispose);
-            bool canOpenHistory = !string.IsNullOrEmpty(pNode.OfficeId) &&
-                                  !string.IsNullOrEmpty(pNode.OfficeLayer);
+            ResolveActionableOffice(pNode, pKingdom,
+                out string historyOfficeLayer, out string historyOfficeId,
+                out long historyCityId);
+            bool canOpenHistory = !string.IsNullOrEmpty(historyOfficeId) &&
+                                  !string.IsNullOrEmpty(historyOfficeLayer);
             _historyObject.SetActive(canOpenHistory);
             _historyButton.onClick.RemoveAllListeners();
             if (canOpenHistory)
             {
                 long kingdomId = pKingdom.id;
-                long cityId = pNode.CityId;
-                string officeLayer = pNode.OfficeLayer;
-                string officeId = pNode.OfficeId;
+                long cityId = historyCityId;
+                string officeLayer = historyOfficeLayer;
+                string officeId = historyOfficeId;
                 _historyButton.onClick.AddListener(() =>
                     CourtOfficeHistoryWindow.Open(kingdomId, cityId,
                         officeLayer, officeId));
@@ -181,7 +186,8 @@ namespace AncientWarfare3.ui.items
                     ? AW_L10n.Text("aw_court_replace_officer", "Replace")
                     : AW_L10n.Text("aw_court_select_officer", "Select");
                 _manageOfficeButton.onClick.AddListener(() =>
-                    CourtAppointmentWindow.Open(pKingdom.id, pNode.OfficeId, incumbentActorId));
+                    CourtAppointmentWindow.Open(pKingdom.id, pNode.OfficeId,
+                        incumbentActorId, pNode.OfficeLayer, pNode.CityId));
                 string tipDescription = replacing
                     ? AW_L10n.Text("aw_court_replace_officer_desc",
                         "Choose a new actor to replace the current officer.")
@@ -227,6 +233,36 @@ namespace AncientWarfare3.ui.items
                 _dispositionTip.hoverAction = null;
             }
             SetTip(pNode, actor, pKingdom);
+        }
+
+        private static bool ResolveActionableOffice(CourtPyramidNodeModel pNode,
+            Kingdom pKingdom, out string pLayer, out string pOfficeId,
+            out long pCityId)
+        {
+            pLayer = pNode?.OfficeLayer ?? "";
+            pOfficeId = pNode?.OfficeId ?? "";
+            pCityId = pNode?.CityId ?? -1L;
+            if (pNode == null || pKingdom?.data == null) return false;
+
+            CourtOfficerView officer = CourtService.GetActiveOfficers(
+                    pKingdom, 512)
+                .Where(row => row != null && row.actor_id == pNode.ActorId &&
+                    !string.IsNullOrEmpty(row.office_id) &&
+                    row.office_id != CourtPyramidRoleId.Heir &&
+                    !string.IsNullOrEmpty(row.layer))
+                .OrderBy(row => row.layer == CourtOfficeLayer.Central ? 0 :
+                    row.layer == CourtOfficeLayer.City ? 1 : 2)
+                .ThenBy(row => row.office_id, System.StringComparer.Ordinal)
+                .FirstOrDefault();
+            if (officer != null)
+            {
+                // History is always keyed by the actual appointment. Identity
+                // roles such as heir are display roles and never a history scope.
+                pLayer = officer.layer;
+                pOfficeId = officer.office_id;
+                pCityId = officer.city_id;
+            }
+            return true;
         }
 
         public bool TryEnsurePortrait()
@@ -616,8 +652,22 @@ namespace AncientWarfare3.ui.items
         private static string RoleLine(CourtPyramidNodeModel pNode, Kingdom pKingdom)
         {
             var labels = new List<string>();
+            if (pNode.OfficeLayer == CourtOfficeLayer.City &&
+                !string.IsNullOrEmpty(pNode.OfficeId))
+            {
+                string place = RegionalGovernmentRules.AdministrativeLabel(
+                    RegionalGovernmentRules.CityName(pNode.CityName),
+                    pNode.DisplayTitle);
+                string office = OfficeName(pKingdom, pNode.OfficeId);
+                string localLabel = string.IsNullOrWhiteSpace(place)
+                    ? office : place + " " + office;
+                if (!string.IsNullOrEmpty(localLabel)) labels.Add(localLabel);
+            }
             foreach (string role in pNode.Roles ?? new List<string>())
             {
+                if (pNode.OfficeLayer == CourtOfficeLayer.City &&
+                    string.Equals(role, pNode.OfficeId,
+                        System.StringComparison.Ordinal)) continue;
                 string label = RoleName(role, pNode.CityName,
                     pNode.CommandName, pKingdom);
                 if (!string.IsNullOrEmpty(label) && !labels.Contains(label)) labels.Add(label);

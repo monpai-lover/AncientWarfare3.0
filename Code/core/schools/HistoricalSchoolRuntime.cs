@@ -28,6 +28,7 @@ namespace AncientWarfare3.core.schools
                 eligibleYear, lastWorldYear);
             HistoricalSchoolAcademyRepairService.LoadState();
             HistoricalAffiliationService.LoadState();
+            HistoricalAffiliationService.RepairShortServingTerms();
             HistoricalSchoolDescentService.LoadState();
             HistoricalAffiliationService.EnsureMembershipAffiliations();
             SchoolLineageService.LoadState();

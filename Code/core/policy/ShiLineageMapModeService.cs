@@ -103,6 +103,7 @@ namespace AncientWarfare3.core.policy
         {
             if (pCity?.data == null || pCity.isRekt() || !pCity.isAlive() ||
                 ScrollWindow.getCurrentWindow() != null) return false;
+            Tooltip.hideTooltip(pCity, true, "city");
             SelectedUnit.clear();
             CityShiInfluenceSnapshotService.Demand(pCity);
             _ownedCity = pCity;

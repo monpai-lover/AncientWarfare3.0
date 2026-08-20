@@ -259,6 +259,34 @@ namespace AncientWarfare3.core.court
             };
         }
 
+        internal static bool ExtendTermEndYear(Actor pActor, Kingdom pKingdom,
+            int pTermEndYear)
+        {
+            if (DB == null || pActor?.data == null || pKingdom?.data == null ||
+                pTermEndYear < 0) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " +
+                    OfficialCareerStateTableItem.GetTableName() +
+                    " SET TERM_END_YEAR=@term,UPDATED_TIME=@time " +
+                    "WHERE ACTOR_ID=@actor AND KINGDOM_ID=@kingdom";
+                command.Parameters.AddWithValue("@term", pTermEndYear);
+                command.Parameters.AddWithValue("@time", LineageService.CurTime());
+                command.Parameters.AddWithValue("@actor", pActor.data.id);
+                command.Parameters.AddWithValue("@kingdom", pKingdom.id);
+                if (command.ExecuteNonQuery() != 1) return false;
+                pActor.data.set(LineageKeys.OFFICER_TERM_END_YEAR, pTermEndYear);
+                return true;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Guest officer term extension failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
         internal static void PublishAppointment(
             OfficialCareerAppointmentProjection pProjection)
         {

@@ -10,6 +10,8 @@ internal static class SchoolGuestOfficeRulesTests
         FormalAppointmentsOutrankActingFallbacks();
         ActingFallbackWinsWhenNoFormalCandidateExists();
         QueuedAppointmentsReserveTheirOfficeImmediately();
+        GuestTermsHaveAtLeastFiveYears();
+        RenewalKeepsTheExistingServiceOpen();
         MissingCareerRecoveryOnlyClosesZeroActiveRows();
         GuestEndPreparationClassifiesDurableState();
         GuestEndRetryDiagnosticsAreBounded();
@@ -92,6 +94,26 @@ internal static class SchoolGuestOfficeRulesTests
         False(SchoolGuestOfficeRules.ReservesOffice(
                 GuestOfficeSubmissionOutcome.Rejected),
             "a rejected appointment leaves the office open");
+    }
+
+    private static void GuestTermsHaveAtLeastFiveYears()
+    {
+        Equal(5, SchoolGuestOfficeRules.MinimumTermYears,
+            "guest service minimum term is five years");
+        Equal(5, SchoolGuestOfficeRules.NormalizeTermYears(1),
+            "legacy short guest terms are raised to five years");
+        Equal(20, SchoolGuestOfficeRules.NormalizeTermYears(99),
+            "guest terms remain bounded by the maximum");
+    }
+
+    private static void RenewalKeepsTheExistingServiceOpen()
+    {
+        Equal(25, SchoolGuestOfficeRules.RenewedEndYear(20, 1),
+            "renewal clamps a legacy short term to five years");
+        False(SchoolGuestOfficeRules.ShouldCloseServiceOnRenewal(true),
+            "a successful renewal does not close the existing service");
+        True(SchoolGuestOfficeRules.ShouldCloseServiceOnRenewal(false),
+            "a failed renewal still permits normal service closure");
     }
 
     private static void MissingCareerRecoveryOnlyClosesZeroActiveRows()

@@ -131,6 +131,7 @@ namespace AncientWarfare3.core.policy
             bool cityValid = pCity?.data != null && !pCity.isRekt() && pCity.isAlive();
             if (!SchoolMapSelectionRules.CanSelectCity(cityValid,
                     ScrollWindow.getCurrentWindow() != null)) return false;
+            Tooltip.hideTooltip(pCity, true, "city");
             SelectedUnit.clear();
             _selectedCity = pCity;
             SchoolMapBottomBarController.Show(pCity);

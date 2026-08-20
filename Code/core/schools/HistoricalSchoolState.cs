@@ -326,6 +326,18 @@ namespace AncientWarfare3.core.schools
                 TravelWaitStartYear, TransportFailures, pStartYear, pEndYear);
         }
 
+        public HistoricalSchoolAffiliationSnapshot RenewService(int pEndYear)
+        {
+            if (ServiceKingdomId < 0 ||
+                LifecycleState != HistoricalSchoolLifecycleState.Serving ||
+                pEndYear <= ServiceStartYear)
+                return this;
+            return Copy(ResidenceCityId, PreviousResidenceCityId, -1,
+                ServiceKingdomId, HistoricalSchoolLifecycleState.Serving,
+                LastTravelYear, TravelWaitStartYear, TransportFailures,
+                ServiceStartYear, Math.Max(ServiceEndYear, pEndYear));
+        }
+
         public HistoricalSchoolAffiliationSnapshot EndService(int pYear)
         {
             if (ServiceKingdomId < 0 || LifecycleState != HistoricalSchoolLifecycleState.Serving)

@@ -286,6 +286,32 @@ namespace AncientWarfare3.core.schools
             return !ReferenceEquals(next, current) && Save(next);
         }
 
+        internal static bool RenewService(Actor pActor, int pEndYear)
+        {
+            HistoricalSchoolAffiliationSnapshot current =
+                Get(pActor?.data?.id ?? -1L);
+            if (current == null) return false;
+            HistoricalSchoolAffiliationSnapshot next = current.RenewService(pEndYear);
+            return !ReferenceEquals(next, current) && Save(next);
+        }
+
+        internal static void RepairShortServingTerms()
+        {
+            foreach (HistoricalSchoolAffiliationSnapshot state in
+                     ByActor.Values.ToArray())
+            {
+                if (state?.LifecycleState != HistoricalSchoolLifecycleState.Serving ||
+                    state.ServiceStartYear < 0 || state.ServiceEndYear <= state.ServiceStartYear ||
+                    state.ServiceEndYear - state.ServiceStartYear >=
+                        SchoolGuestOfficeRules.MinimumTermYears) continue;
+                int repairedEnd = state.ServiceStartYear +
+                    SchoolGuestOfficeRules.MinimumTermYears;
+                HistoricalSchoolAffiliationSnapshot repaired =
+                    state.RenewService(repairedEnd);
+                if (!ReferenceEquals(repaired, state)) Save(repaired);
+            }
+        }
+
         internal static bool AdoptCommittedService(
             HistoricalSchoolAffiliationSnapshot pCommittedState)
         {

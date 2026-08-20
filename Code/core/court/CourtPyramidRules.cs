@@ -188,7 +188,14 @@ namespace AncientWarfare3.core.court
                     .ThenBy(p => p.StableOrder)
                     .ThenBy(p => p.OfficeId, StringComparer.Ordinal)
                     .ToList();
-                CourtPyramidNodeModel merged = ordered[0].Clone();
+                // When one actor is both heir and an office holder, the
+                // office is the actionable identity for history, management,
+                // and appointment buttons. Keep the heir as an additional
+                // role instead of making it the node's primary office.
+                CourtPyramidNodeModel primary = ordered.FirstOrDefault(item =>
+                    item.RoleId != CourtPyramidRoleId.Heir &&
+                    !string.IsNullOrEmpty(item.OfficeLayer)) ?? ordered[0];
+                CourtPyramidNodeModel merged = primary.Clone();
                 merged.Roles.Clear();
                 foreach (CourtPyramidNodeModel item in ordered)
                 {

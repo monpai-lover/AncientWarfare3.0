@@ -125,6 +125,16 @@ namespace AncientWarfare3.core.court
                    pManualAppointmentAllowed;
         }
 
+        public static bool IsSupportedAppointmentScope(string pLayer,
+            long pCityId)
+        {
+            if (string.Equals(pLayer, CourtOfficeLayer.Central,
+                    StringComparison.Ordinal))
+                return pCityId < 0L;
+            return string.Equals(pLayer, CourtOfficeLayer.City,
+                       StringComparison.Ordinal) && pCityId >= 0L;
+        }
+
         public static CourtManualOfficeAction ResolveOfficeAction(
             bool officeInCurrentTier, long incumbentActorId)
         {

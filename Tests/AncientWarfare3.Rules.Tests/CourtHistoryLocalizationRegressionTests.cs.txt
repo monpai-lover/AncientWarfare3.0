@@ -1,0 +1,56 @@
+using System;
+using System.IO;
+
+internal static class CourtHistoryLocalizationRegressionTests
+{
+    private static string Read(string path) => File.ReadAllText(Path.Combine(
+        Directory.GetCurrentDirectory(), path.Replace('/',
+            Path.DirectorySeparatorChar)));
+
+    public static void Run()
+    {
+        string modClass = Read(Path.Combine("Code", "ModClass.cs"));
+        string history = Read(Path.Combine("Code", "ui", "windows",
+            "CourtOfficeHistoryWindow.cs"));
+        string node = Read(Path.Combine("Code", "ui", "items",
+            "CourtActorNodeView.cs"));
+        string query = Read(Path.Combine("Code", "core", "court",
+            "OfficialCareerHistoryQuery.cs"));
+        string readModel = Read(Path.Combine("Code", "core", "court",
+            "CourtReadModelService.cs"));
+        if (!modClass.Contains("CourtLocalizationRepair.Ensure()"))
+            throw new InvalidOperationException(
+                "court localization repair must run during mod load");
+        if (!history.Contains("EnsureLocalOfficerHistory"))
+            throw new InvalidOperationException(
+                "history window must repair legacy local officer history");
+        if (!node.Contains("ResolveActionableOffice"))
+            throw new InvalidOperationException(
+                "court node history must resolve the actual office for dual roles");
+        if (!query.Contains("CITY_ID=@city OR CITY_ID<0"))
+            throw new InvalidOperationException(
+                "legacy local career rows without city ids must remain readable");
+        if (!readModel.Contains("DisplayTitle = pModel.LocalLevelTitle"))
+            throw new InvalidOperationException(
+                "local court nodes must carry the administrative level title");
+        if (!readModel.Contains("OfficialCareerStateService.ReadRankFast"))
+            throw new InvalidOperationException(
+                "court cards must fall back to the actor's hot career rank when the batch state is missing");
+        if (!node.Contains("AdministrativeLabel") ||
+            !node.Contains("pNode.OfficeLayer == CourtOfficeLayer.City"))
+            throw new InvalidOperationException(
+                "local office labels must include city and administrative level");
+        string folder = Read(Path.Combine("Code", "ui", "components",
+            "CourtRegionalGovernmentFolder.cs"));
+        if (!folder.Contains("cityLabel.text = \"\""))
+            throw new InvalidOperationException(
+                "regional local cards must not duplicate the place label below the role line");
+        string historyWindow = Read(Path.Combine("Code", "ui", "windows",
+            "CourtOfficeHistoryWindow.cs"));
+        if (!historyWindow.Contains(
+                "_root.sizeDelta = new Vector2(contentWidth, viewportHeight)"))
+            throw new InvalidOperationException(
+                "history viewport must stay at window height while content grows");
+        Console.WriteLine("Court history/localization regression tests passed.");
+    }
+}

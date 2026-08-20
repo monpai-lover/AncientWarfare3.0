@@ -91,6 +91,7 @@
     <Compile Include="ShiLineageMapModeSourceGuardTests.cs.txt" />
     <Compile Include="HierarchicalVassalCourtPresentationSourceGuardTests.cs.txt" />
     <Compile Include="CourtRegionalFolderSourceGuardTests.cs.txt" />
+    <Compile Include="CourtHistoryLocalizationRegressionTests.cs.txt" />
     <Compile Include="MassUprisingClusterRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\MassUprisingClusterRules.cs" Link="Production\MassUprisingClusterRules.cs" />
     <Compile Include="LocalCorruptionLoyaltySourceGuardTests.cs.txt" />

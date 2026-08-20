@@ -85,13 +85,16 @@ namespace AncientWarfare3.core.court
         public readonly Dictionary<long, CivilServiceQualificationRecord>
             qualification_by_actor_id;
         public readonly bool qualifications_captured;
+        public readonly string layer;
+        public readonly long city_id;
 
         public CourtAppointmentCandidateScan(long pKingdomId, string pOfficeId,
             long pIncumbentActorId, long pHeirActorId, string pPreferredSchoolId,
             List<long> pActorIds, bool pNineRankSystem,
             Dictionary<long, CivilServiceQualificationRecord>
                 pQualificationByActorId,
-            bool pQualificationsCaptured)
+            bool pQualificationsCaptured, string pLayer = CourtOfficeLayer.Central,
+            long pCityId = -1L)
         {
             kingdom_id = pKingdomId;
             office_id = pOfficeId ?? "";
@@ -104,6 +107,8 @@ namespace AncientWarfare3.core.court
                                       new Dictionary<long,
                                           CivilServiceQualificationRecord>();
             qualifications_captured = pQualificationsCaptured;
+            layer = pLayer ?? CourtOfficeLayer.Central;
+            city_id = pCityId;
         }
     }
 
@@ -1104,15 +1109,25 @@ namespace AncientWarfare3.core.court
         internal static CourtManualAppointmentResult ValidateManualAppointmentTarget(
             Kingdom pKingdom, string pOfficeId, long pExpectedIncumbentActorId = -1L)
         {
+            return ValidateManualAppointmentTarget(pKingdom, pOfficeId,
+                pExpectedIncumbentActorId, CourtOfficeLayer.Central, -1L);
+        }
+
+        internal static CourtManualAppointmentResult ValidateManualAppointmentTarget(
+            Kingdom pKingdom, string pOfficeId, long pExpectedIncumbentActorId,
+            string pLayer, long pCityId)
+        {
             if (pKingdom?.data == null || pKingdom.isRekt())
                 return CourtManualAppointmentResult.InvalidKingdom;
-            bool officeAvailable = IsManualOfficeInCurrentTier(
-                pKingdom, pOfficeId);
+            if (string.IsNullOrEmpty(pLayer)) pLayer = CourtOfficeLayer.Central;
+            bool officeAvailable = IsManualOfficeAvailable(
+                pKingdom, pOfficeId, pLayer, pCityId);
             if (!officeAvailable)
                 return CourtManualAppointmentResult.InvalidOffice;
             if (!CanUseManualAppointment(pKingdom))
                 return CourtManualAppointmentResult.AppointmentNotAllowed;
-            Actor incumbent = FindActiveOfficeActor(pKingdom, pOfficeId);
+            Actor incumbent = FindActiveOfficeActor(pKingdom, pOfficeId,
+                pLayer, pCityId);
             return CourtManualAppointmentRules.ValidateTarget(
                 officeAvailable,
                 pExpectedIncumbentActorId, incumbent?.data?.id ?? -1L);
@@ -1122,15 +1137,26 @@ namespace AncientWarfare3.core.court
             Kingdom pKingdom, string pOfficeId, long pExpectedIncumbentActorId,
             out CourtAppointmentCandidateScan pScan)
         {
+            return BeginManualAppointmentScan(pKingdom, pOfficeId,
+                pExpectedIncumbentActorId, CourtOfficeLayer.Central, -1L,
+                out pScan);
+        }
+
+        internal static CourtManualAppointmentResult BeginManualAppointmentScan(
+            Kingdom pKingdom, string pOfficeId, long pExpectedIncumbentActorId,
+            string pLayer, long pCityId,
+            out CourtAppointmentCandidateScan pScan)
+        {
             pScan = null;
             if (pKingdom?.data == null || pKingdom.isRekt())
                 return CourtManualAppointmentResult.InvalidKingdom;
             CourtManualAppointmentResult validation =
                 ValidateManualAppointmentTarget(pKingdom, pOfficeId,
-                    pExpectedIncumbentActorId);
+                    pExpectedIncumbentActorId, pLayer, pCityId);
             if (validation != CourtManualAppointmentResult.Success) return validation;
 
-            Actor incumbent = FindActiveOfficeActor(pKingdom, pOfficeId);
+            Actor incumbent = FindActiveOfficeActor(pKingdom, pOfficeId,
+                pLayer, pCityId);
             long incumbentActorId = incumbent?.data?.id ?? -1L;
 
             var actorIds = new List<long>();
@@ -1148,7 +1174,7 @@ namespace AncientWarfare3.core.court
                 incumbentActorId, heir?.data?.id ?? -1L,
                 CourtProfileRegistry.PreferredSchoolFor(pKingdom, pOfficeId),
                 actorIds, HasNineRankSystem(pKingdom), qualifications,
-                examinationSystem);
+                examinationSystem, pLayer, pCityId);
             return CourtManualAppointmentResult.Success;
         }
 
@@ -1172,7 +1198,8 @@ namespace AncientWarfare3.core.court
                     pScan.office_id,
                     pAllowVacancyPromotion: pScan.incumbent_actor_id < 0,
                     pQualification: qualification,
-                    pQualificationsCaptured: pScan.qualifications_captured))
+                    pQualificationsCaptured: pScan.qualifications_captured,
+                    pLayer: pScan.layer))
                 return false;
 
             string school = SchoolMembershipService.GetSchool(actorId);
@@ -1209,15 +1236,26 @@ namespace AncientWarfare3.core.court
             long pKingdomId, string pOfficeId, long pActorId,
             long pExpectedIncumbentActorId = -1L)
         {
+            return TryManualAppointment(pKingdomId, pOfficeId, pActorId,
+                pExpectedIncumbentActorId, CourtOfficeLayer.Central, -1L);
+        }
+
+        internal static CourtManualAppointmentResult TryManualAppointment(
+            long pKingdomId, string pOfficeId, long pActorId,
+            long pExpectedIncumbentActorId, string pLayer, long pCityId)
+        {
             Kingdom kingdom = World.world?.kingdoms?.get(pKingdomId);
-            CloseStaleCentralOfficeRow(kingdom, pOfficeId);
+            if (string.IsNullOrEmpty(pLayer)) pLayer = CourtOfficeLayer.Central;
+            if (pLayer == CourtOfficeLayer.Central)
+                CloseStaleCentralOfficeRow(kingdom, pOfficeId);
             CourtManualAppointmentResult targetResult =
                 ValidateManualAppointmentTarget(kingdom, pOfficeId,
-                    pExpectedIncumbentActorId);
+                    pExpectedIncumbentActorId, pLayer, pCityId);
             if (targetResult != CourtManualAppointmentResult.Success)
                 return targetResult;
 
-            Actor incumbent = FindActiveOfficeActor(kingdom, pOfficeId);
+            Actor incumbent = FindActiveOfficeActor(kingdom, pOfficeId,
+                pLayer, pCityId);
             Actor actor = World.world?.units?.get(pActorId);
             if (actor?.data == null || actor.isRekt())
                 return CourtManualAppointmentResult.InvalidActor;
@@ -1226,18 +1264,22 @@ namespace AncientWarfare3.core.court
                 return CourtManualAppointmentResult.CandidateIneligible;
             bool vacancyPromotion = incumbent?.data == null;
             bool candidateEligible = IsManualCentralCandidateEligible(actor,
-                kingdom, pOfficeId, vacancyPromotion);
+                kingdom, pOfficeId, vacancyPromotion, null, pLayer);
             if (!candidateEligible)
                 return CourtManualAppointmentResult.CandidateIneligible;
             if (!HasCustomAppointmentPrerequisites(kingdom, pOfficeId))
                 return CourtManualAppointmentResult.CandidateIneligible;
 
             string school = SchoolMembershipService.GetSchool(actor.data.id);
+            City city = pCityId >= 0 ? World.world?.cities?.get(pCityId) : null;
             bool committed = incumbent?.data != null
-                ? ReplaceOfficer(incumbent, actor, kingdom, pOfficeId, school)
-                : SetOfficer(actor, kingdom, CourtOfficeLayer.Central,
-                    pOfficeId, school, null,
-                    pVacancyPromotion: true);
+                ? ReplaceOfficer(incumbent, actor, kingdom, pLayer, pOfficeId,
+                    school, city)
+                : SetOfficer(actor, kingdom, pLayer,
+                    pOfficeId, school, city,
+                    pVacancyPromotion: true,
+                    pAllowLocalLowerQualification:
+                        pLayer == CourtOfficeLayer.City);
             if (!committed)
                 return CourtManualAppointmentResult.PersistenceFailed;
             CourtAristocraticGroupService.Refresh(kingdom, GetActiveOfficers(kingdom, 96));
@@ -1345,6 +1387,25 @@ namespace AncientWarfare3.core.court
                 pKingdom, pOfficeId, CourtOfficeLayer.Central);
         }
 
+        internal static bool IsManualOfficeAvailable(Kingdom pKingdom,
+            string pOfficeId, string pLayer, long pCityId)
+        {
+            if (!CourtManualAppointmentRules.IsSupportedAppointmentScope(
+                    pLayer, pCityId) || string.IsNullOrEmpty(pOfficeId) ||
+                !KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom))
+                return false;
+            if (pLayer == CourtOfficeLayer.Central)
+                return IsManualOfficeInCurrentTier(pKingdom, pOfficeId);
+            City city = World.world?.cities?.get(pCityId);
+            if (city?.data == null || city.isRekt() || city.kingdom != pKingdom)
+                return false;
+            LocalCourtReadModel local = CourtReadModelService.BuildLocal(
+                pKingdom, city);
+            return local?.Nodes?.Any(node => node != null &&
+                node.OfficeLayer == CourtOfficeLayer.City &&
+                node.OfficeId == pOfficeId) == true;
+        }
+
         internal static bool CanUseManualAppointment(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return false;
@@ -1402,7 +1463,8 @@ namespace AncientWarfare3.core.court
         }
 
         private static bool ReplaceOfficer(Actor pIncumbent, Actor pCandidate,
-            Kingdom pKingdom, string pOfficeId, string pSchoolId)
+            Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId,
+            City pCity = null)
         {
             SQLiteConnection db = CourtDB;
             if (db == null || pIncumbent?.data == null || pCandidate?.data == null ||
@@ -1412,7 +1474,10 @@ namespace AncientWarfare3.core.court
             double now = LineageService.CurTime();
             OfficialCareerAppointment appointment =
                 OfficialCareerService.PrepareAppointment(pCandidate, pKingdom,
-                    CourtOfficeLayer.Central, pOfficeId, pSchoolId, null, year, now);
+                    pLayer, pOfficeId, pSchoolId, pCity, year, now,
+                    pVacancyPromotion: true,
+                    pAllowLocalLowerQualification:
+                        pLayer == CourtOfficeLayer.City);
             if (appointment == null) return false;
 
             bool guestIncumbent = CourtAffiliationResolver.IsValidGuestService(
@@ -1430,7 +1495,7 @@ namespace AncientWarfare3.core.court
             else
             {
                 localClose = new OfficialCareerCloseRequest(pIncumbent.data.id,
-                    pKingdom.id, CourtOfficeLayer.Central, pOfficeId, year, now,
+                    pKingdom.id, pLayer, pOfficeId, year, now,
                     "replaced");
             }
 
@@ -1442,8 +1507,8 @@ namespace AncientWarfare3.core.court
                     localClose, guestEnd, (connection, transaction) =>
                         candidateStateProjection = OfficialCareerStateService.
                             StageAppointment(connection, transaction, pCandidate,
-                                pKingdom, CourtOfficeLayer.Central, pOfficeId,
-                                null, pActing: false));
+                                pKingdom, pLayer, pOfficeId,
+                                pCity, pActing: false));
             if (!committed.IsCommitted) return false;
             OfficialCareerStateService.PublishAppointment(candidateStateProjection);
 
@@ -1460,7 +1525,7 @@ namespace AncientWarfare3.core.court
             }
 
             return ApplyCommittedOfficerProjection(pCandidate, pKingdom,
-                CourtOfficeLayer.Central, pOfficeId, pSchoolId, null,
+                pLayer, pOfficeId, pSchoolId, pCity,
                 committed.Appointment, candidateRuntimePrior,
                 pRecordCareerHistory: true,
                 pStateProjectionCommitted: true);
@@ -1646,6 +1711,20 @@ namespace AncientWarfare3.core.court
                 pOfficeId, SchoolMembershipService.GetSchool(pActor.data.id),
                 pCity, pActing: false, pVacancyPromotion,
                 pAllowLocalLowerQualification: true);
+        }
+
+        internal static bool EnsureLocalOfficerHistory(Kingdom pKingdom,
+            City pCity, string pOfficeId)
+        {
+            if (pKingdom?.data == null || pCity?.data == null ||
+                pCity.kingdom != pKingdom || string.IsNullOrEmpty(pOfficeId))
+                return false;
+            bool hasRow = GetActiveOfficers(pKingdom, 512).Any(row =>
+                row != null && row.layer == CourtOfficeLayer.City &&
+                row.city_id == pCity.data.id && row.office_id == pOfficeId);
+            if (hasRow) return true;
+            return TryAssignLocalOfficer(pCity.leader, pKingdom, pCity,
+                pOfficeId, pVacancyPromotion: true);
         }
 
         internal static bool TryAssignActingCityGovernor(Actor pActor,
@@ -2406,9 +2485,20 @@ namespace AncientWarfare3.core.court
         private static Actor FindActiveOfficeActor(Kingdom pKingdom,
             string pOfficeId)
         {
+            return FindActiveOfficeActor(pKingdom, pOfficeId,
+                CourtOfficeLayer.Central, -1L);
+        }
+
+        private static Actor FindActiveOfficeActor(Kingdom pKingdom,
+            string pOfficeId, string pLayer, long pCityId)
+        {
             if (pKingdom?.data == null || string.IsNullOrEmpty(pOfficeId))
                 return null;
-            CourtOfficerView officer = ReadActiveCentralOffice(pKingdom, pOfficeId);
+            CourtOfficerView officer = pLayer == CourtOfficeLayer.Central
+                ? ReadActiveCentralOffice(pKingdom, pOfficeId)
+                : GetActiveOfficers(pKingdom, 512).FirstOrDefault(row =>
+                    row != null && row.layer == pLayer &&
+                    row.city_id == pCityId && row.office_id == pOfficeId);
             if (officer == null) return null;
             Actor persistedActor = World.world?.units?.get(officer.actor_id);
             return IsValidActiveOfficeActor(persistedActor, pKingdom,

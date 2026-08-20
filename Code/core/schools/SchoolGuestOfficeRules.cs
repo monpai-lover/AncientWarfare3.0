@@ -32,8 +32,26 @@ namespace AncientWarfare3.core.schools
 
     public static class SchoolGuestOfficeRules
     {
-        public const int MinTermYears = 8;
+        public const int MinimumTermYears = 5;
+        public const int MinTermYears = MinimumTermYears;
         public const int MaxTermYears = 20;
+
+        public static int NormalizeTermYears(int pRequestedYears)
+        {
+            return Math.Max(MinimumTermYears,
+                Math.Min(MaxTermYears, pRequestedYears));
+        }
+
+        public static int RenewedEndYear(int pCurrentYear, int pRequestedYears)
+        {
+            long end = (long)pCurrentYear + NormalizeTermYears(pRequestedYears);
+            return end >= int.MaxValue ? int.MaxValue - 1 : (int)end;
+        }
+
+        public static bool ShouldCloseServiceOnRenewal(bool pRenewalSucceeded)
+        {
+            return !pRenewalSucceeded;
+        }
 
         public static bool CanInvite(bool realScholar, bool alive, bool adult,
             bool residenceInHost, bool available, bool serviceFree, bool forbidden,
@@ -66,10 +84,10 @@ namespace AncientWarfare3.core.schools
                 long value = pActorId * 6364136223846793005L +
                              pHostKingdomId * 1442695040888963407L + pYear * 31L;
                 value ^= value >> 33;
-                int span = MaxTermYears - MinTermYears + 1;
+                int span = MaxTermYears - MinimumTermYears + 1;
                 int offset = (int)(Math.Abs(value == long.MinValue ? long.MaxValue : value) %
                                    span);
-                return MinTermYears + offset;
+                return NormalizeTermYears(MinimumTermYears + offset);
             }
         }
 

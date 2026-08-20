@@ -16,6 +16,8 @@ namespace AncientWarfare3.ui.windows
     {
         private static long _kingdomId = -1L;
         private static string _officeId = "";
+        private static string _officeLayer = CourtOfficeLayer.Central;
+        private static long _cityId = -1L;
         private static long _expectedIncumbentActorId = -1L;
         private static CourtManualAppointmentResult? _feedback;
         private static bool _commandPending;
@@ -45,9 +47,20 @@ namespace AncientWarfare3.ui.windows
         public static void Open(long pKingdomId, string pOfficeId,
             long pExpectedIncumbentActorId)
         {
+            Open(pKingdomId, pOfficeId, pExpectedIncumbentActorId,
+                CourtOfficeLayer.Central, -1L);
+        }
+
+        public static void Open(long pKingdomId, string pOfficeId,
+            long pExpectedIncumbentActorId, string pOfficeLayer,
+            long pCityId)
+        {
             _kingdomId = pKingdomId;
             _officeId = pOfficeId ?? "";
             _expectedIncumbentActorId = pExpectedIncumbentActorId;
+            _officeLayer = string.IsNullOrEmpty(pOfficeLayer)
+                ? CourtOfficeLayer.Central : pOfficeLayer;
+            _cityId = pCityId;
             _feedback = null;
             if (Instance == null)
                 CreateAndInit(AW_LineageWindowIds.COURT_APPOINTMENT);
@@ -82,13 +95,16 @@ namespace AncientWarfare3.ui.windows
             if (_commandPending) return;
             AW3CommandResult result =
                 AW3MultiplayerCommandFacade.DispatchFromUi(
-                    AW3CommandRequest.AppointCourtOfficer(_kingdomId,
+                AW3CommandRequest.AppointCourtOfficer(_kingdomId,
                         pActorId, _officeId,
-                        _expectedIncumbentActorId));
+                        _expectedIncumbentActorId, _officeLayer, _cityId));
             if (result.Status == AW3CommandStatus.Accepted)
             {
                 _feedback = null;
-                CourtWindow.OpenAndRefresh(_kingdomId);
+                if (_officeLayer == CourtOfficeLayer.City && _cityId >= 0)
+                    CourtWindow.OpenCity(_kingdomId, _cityId);
+                else
+                    CourtWindow.OpenAndRefresh(_kingdomId);
                 return;
             }
             if (result.Status == AW3CommandStatus.Pending)
@@ -109,7 +125,8 @@ namespace AncientWarfare3.ui.windows
         {
             ResetCandidateWork();
             _candidateQueryKey = _queryState.Begin(_kingdomId,
-                _officeId + ":" + _expectedIncumbentActorId,
+                _officeLayer + ":" + _cityId + ":" + _officeId + ":" +
+                _expectedIncumbentActorId,
                 KingdomStrategyRevisionService.Current(_kingdomId));
             ClearList();
             ApplyTitle();
@@ -128,7 +145,8 @@ namespace AncientWarfare3.ui.windows
 
             CourtManualAppointmentResult target =
                 CourtService.BeginManualAppointmentScan(kingdom, _officeId,
-                    _expectedIncumbentActorId, out _candidateScan);
+                    _expectedIncumbentActorId, _officeLayer, _cityId,
+                    out _candidateScan);
             _visibleFeedback = _feedback ??
                 (target == CourtManualAppointmentResult.Success
                     ? (CourtManualAppointmentResult?)null
@@ -335,11 +353,22 @@ namespace AncientWarfare3.ui.windows
             string titleFallback = _expectedIncumbentActorId >= 0
                 ? "Replace Officer"
                 : "Appoint Officer";
+            string context = _officeLayer == CourtOfficeLayer.City &&
+                             _cityId >= 0
+                ? " - " + ResolveCityName(_cityId)
+                : "";
             window.titleText.text = AW_L10n.Text(titleKey, titleFallback) +
                 (string.IsNullOrEmpty(_officeId)
                 ? ""
                 : " - " + OfficeName(
-                    World.world?.kingdoms?.get(_kingdomId), _officeId));
+                    World.world?.kingdoms?.get(_kingdomId), _officeId)) +
+                context;
+        }
+
+        private static string ResolveCityName(long pCityId)
+        {
+            try { return World.world?.cities?.get(pCityId)?.data?.name ?? ""; }
+            catch { return ""; }
         }
 
         private void AddMessage(string pTitle, string pBody, bool pHeader = false,

@@ -1,4 +1,12 @@
 {
+  "aw_court_vacancy": "空缺",
+  "aw_court_history_end_missing": "原因不明",
+  "aw_court_history_end_invalid": "任职失效",
+  "aw_court_history_end_local_office_reformed": "官署改制",
+  "aw_court_history_end_guest_term_expired": "客卿任期届满",
+  "aw_court_office_heir": "世子",
+  "aw_court_command": "统帅",
+  "aw_court_regional_governor": "区域长官",
   "aw_loyalty_local_corruption": "地方腐败",
   "aw_loyalty_local_corruption_negative": "地方腐败",
   "aw_shi_lineage_mapmode": "世家地圖",

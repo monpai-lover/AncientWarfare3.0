@@ -190,6 +190,13 @@ namespace AncientWarfare3.core.court
             List<string> seats = BuildLocalSeats(pKingdom, pCity,
                 localTemplate, model.TotalSeats);
             if (seats.Count > model.TotalSeats) model.TotalSeats = seats.Count;
+            EnsurePersistedLocalLeader(pKingdom, pCity, seats, officers);
+            if (seats.Count > 0 && !officers.Any(row =>
+                    row.office_id == seats[0]))
+                officers = CourtService.GetActiveOfficers(pKingdom, 512)
+                    .Where(row => row != null &&
+                        row.layer == CourtOfficeLayer.City &&
+                        row.city_id == pCity.data.id).ToList();
             AddLocalNodes(model, pKingdom, pCity, seats, officers,
                 localTemplate, pCareerStates);
             AddRegionalSuperiorNode(model, pKingdom, pCity);
@@ -203,6 +210,21 @@ namespace AncientWarfare3.core.court
                     node.OfficeLayer == CourtOfficeLayer.City &&
                     !node.IsVacancy);
             return model;
+        }
+
+        private static void EnsurePersistedLocalLeader(Kingdom pKingdom,
+            City pCity, IReadOnlyList<string> pSeats,
+            IReadOnlyList<CourtOfficerView> pOfficers)
+        {
+            if (pSeats == null || pSeats.Count == 0 ||
+                pCity?.leader?.data == null || pCity.kingdom != pKingdom ||
+                pOfficers?.Any(row => row != null &&
+                    row.office_id == pSeats[0]) == true) return;
+            // Older saves can have a valid city leader projected in the UI
+            // without the corresponding career row. Backfill once through
+            // the normal appointment path so history is persistent.
+            CourtService.TryAssignLocalOfficer(pCity.leader, pKingdom,
+                pCity, pSeats[0], pVacancyPromotion: true);
         }
 
         private static void AddRegionalSuperiorNode(LocalCourtReadModel pModel,
@@ -335,6 +357,7 @@ namespace AncientWarfare3.core.court
                     OfficeLayer = CourtOfficeLayer.City,
                     CityId = pCity.data.id,
                     CityName = pCity.data.name ?? string.Empty,
+                    DisplayTitle = pModel.LocalLevelTitle ?? string.Empty,
                     ActorName = valid ? SafeActorName(actor) : string.Empty,
                     SchoolId = valid ? ActorSchool(actor, "") :
                         CourtSchoolId.None,
@@ -361,6 +384,7 @@ namespace AncientWarfare3.core.court
                     OfficeLayer = CourtOfficeLayer.City,
                     CityId = pCity.data.id,
                     CityName = pCity.data.name ?? string.Empty,
+                    DisplayTitle = pModel.LocalLevelTitle ?? string.Empty,
                     ActorName = SafeActorName(pCity.leader),
                     SchoolId = ActorSchool(pCity.leader, ""),
                     SchoolIconPath = RegisteredSchoolIconPath(
@@ -447,6 +471,10 @@ namespace AncientWarfare3.core.court
             var filled = new HashSet<string>();
             foreach (CourtOfficerView officer in pOfficers ?? new List<CourtOfficerView>())
             {
+                // City officials are rendered under their regional folder in
+                // the central court; keeping them here creates duplicate cards.
+                if (string.Equals(officer.layer, CourtOfficeLayer.City,
+                        System.StringComparison.Ordinal)) continue;
                 if (customGraph && !expectedOrder.ContainsKey(
                         officer.office_id)) continue;
                 Actor actor = World.world?.units?.get(officer.actor_id);
@@ -731,7 +759,29 @@ namespace AncientWarfare3.core.court
             {
                 if (node == null || node.ActorId < 0 ||
                     !pStates.TryGetValue(node.ActorId, out OfficialCareerStateView state))
+                {
+                    if (node?.ActorId < 0 || !pHasNineRankSystem) continue;
+                    Actor actor = World.world?.units?.get(node.ActorId);
+                    if (actor?.data == null) continue;
+                    int hotRank = OfficialCareerStateService.ReadRankFast(actor);
+                    if (!OfficialCareerRankRules.CanDisplayRankedCareer(
+                            pHasNineRankSystem, hotRank)) continue;
+                    node.OfficialRank = hotRank;
+                    actor.data.get(LineageKeys.OFFICER_TRACK,
+                        out node.OfficialTrack,
+                        OfficialCareerRankRules.CivilTrack);
+                    actor.data.get(LineageKeys.OFFICER_MERIT,
+                        out node.OfficialMerit, 0f);
+                    actor.data.get(LineageKeys.OFFICER_MERIT_CAP,
+                        out node.OfficialMeritCap, 1);
+                    actor.data.get(LineageKeys.OFFICER_TERM_END_YEAR,
+                        out node.OfficialTermEndYear, -1);
+                    actor.data.get(LineageKeys.OFFICER_LAST_KAOKE,
+                        out node.OfficialLastEvaluation, -1);
+                    actor.data.get(LineageKeys.OFFICER_LOCAL_GRADE,
+                        out node.OfficialLocalGrade, NineRankRules.Unranked);
                     continue;
+                }
                 bool rankedCareer = OfficialCareerRankRules.CanDisplayRankedCareer(
                     pHasNineRankSystem, state.Rank);
                 node.OfficialRank = rankedCareer

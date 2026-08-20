@@ -319,16 +319,12 @@ namespace AncientWarfare3.core.schools
                     ScholarReputation(pActor, membership), HostReceptiveness(pHost), 0,
                     pHost.data != null && !pHost.isRekt(), pActor.isAlive())) return false;
 
-            pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
-            City residence = HistoricalAffiliationService.ResidenceCity(pActor);
-            if (string.IsNullOrEmpty(office) || residence?.data == null) return false;
-            if (!CourtService.EndGuestOfficer(pActor, pHost, "guest_term_renewal", pYear))
-                return false;
-
             int term = SchoolGuestOfficeRules.TermYears(pActor.data.id, pHost.id, pYear);
-            return SchoolGuestOfficeRules.ReservesOffice(TryAppointAndRecord(
-                pActor, pHost, office, residence, pYear, term,
-                "guest_service_renewed", pActing: false));
+            int renewedEndYear = SchoolGuestOfficeRules.RenewedEndYear(pYear, term);
+            if (!OfficialCareerStateService.ExtendTermEndYear(
+                    pActor, pHost, renewedEndYear)) return false;
+            return HistoricalAffiliationService.RenewService(
+                pActor, renewedEndYear);
         }
 
         internal static bool EndGuestOfficer(Actor pActor, Kingdom pHost, string pReason,
@@ -379,6 +375,7 @@ namespace AncientWarfare3.core.schools
             Actor pActor, Kingdom pHost, string pOffice, City pResidence,
             int pStartYear, int pTermYears, string pEventType, bool pActing)
         {
+            pTermYears = SchoolGuestOfficeRules.NormalizeTermYears(pTermYears);
             if (pActor?.data == null || pHost?.data == null || pResidence?.data == null ||
                 pTermYears < SchoolGuestOfficeRules.MinTermYears ||
                 pTermYears > SchoolGuestOfficeRules.MaxTermYears)
@@ -633,6 +630,11 @@ namespace AncientWarfare3.core.schools
                     return false;
                 }
             }
+
+            if (pPending.StartRequest != null &&
+                !OfficialCareerStateService.ExtendTermEndYear(
+                    actor, host, pPending.StartRequest.EndYear))
+                return false;
 
             if (GuestOfficePendingRules.ShouldRetain(pPending.PersistenceOutcome,
                     pPending.AffiliationAdopted, pPending.CourtApplied,

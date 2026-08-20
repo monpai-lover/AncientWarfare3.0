@@ -484,12 +484,15 @@ namespace AncientWarfare3.api.multiplayer
 
         public static AW3CommandRequest AppointCourtOfficer(long countryId,
             long actorId, string officeId,
-            long expectedIncumbentActorId = -1L) => Create(
+            long expectedIncumbentActorId = -1L,
+            string layer = "central", long cityId = -1L) => Create(
             AW3CommandKind.AppointCourtOfficer, countryId,
             actorId: Positive(actorId, nameof(actorId)),
             targetActorId: Optional(expectedIncumbentActorId,
                 nameof(expectedIncumbentActorId)),
-            key: Token(officeId, nameof(officeId)));
+            cityId: Optional(cityId, nameof(cityId)),
+            key: Token(officeId, nameof(officeId)),
+            secondaryKey: Token(layer, nameof(layer)));
 
         public static AW3CommandRequest SetCourtDisposition(long countryId,
             long actorId, string dispositionId, int intParameter,

@@ -223,7 +223,7 @@ namespace AncientWarfare3.ui.windows
                 CyclePreferredSchool,
                 out _preferredSchoolText);
             _minimumRankInput = AddInputField(_basePanel, "MinimumRank", 1, 1,
-                "aw_custom_court_settings_minimum_rank", "Minimum rank",
+                "aw_custom_court_settings_minimum_rank", "Minimum career rank",
                 "aw_custom_court_settings_minimum_rank_desc",
                 "The lowest career rank eligible for appointment.");
             _requiredSchoolButton = AddCycleField(_basePanel,
@@ -248,7 +248,7 @@ namespace AncientWarfare3.ui.windows
                 "aw_custom_court_settings_grade_desc",
                 "The formal grade used to rank this office against others.");
             AddFieldHelp(_basePanel, "MinimumRank",
-                "aw_custom_court_settings_minimum_rank", "Minimum rank",
+                "aw_custom_court_settings_minimum_rank", "Minimum career rank",
                 "aw_custom_court_settings_minimum_rank_desc",
                 "The lowest career rank eligible for appointment.");
             AddFieldHelp(_basePanel, "RequiredSchool",

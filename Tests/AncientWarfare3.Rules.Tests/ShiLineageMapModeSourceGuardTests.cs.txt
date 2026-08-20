@@ -106,12 +106,16 @@ internal static class ShiLineageMapModeSourceGuardTests
             "school map mode must expose its owned city to its bottom bar");
         Contains(schoolService, "_selectedCity = pCity;",
             "school selection must write its private city state");
+        Contains(schoolService, "Tooltip.hideTooltip(pCity, true, \"city\")",
+            "school city selection must close the native city tooltip");
         NotContains(schoolService, "SelectedObjects.setNanoObject",
             "school selection must not activate the vanilla selected-object UI");
         NotContains(schoolService, "SelectedMetas.selected_city = pCity",
             "school selection must not publish through vanilla selected-meta state");
         Contains(service, "public static City SelectedCity => _ownedCity;",
             "Shi map mode must expose its owned city to its bottom bar");
+        Contains(service, "Tooltip.hideTooltip(pCity, true, \"city\")",
+            "Shi city selection must close the native city tooltip");
         NotContains(service, "SelectedObjects.setNanoObject",
             "Shi selection must not activate the vanilla selected-object UI");
         NotContains(service, "SelectedMetas.selected_city = pCity",

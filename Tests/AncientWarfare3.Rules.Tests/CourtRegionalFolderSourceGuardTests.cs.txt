@@ -18,6 +18,11 @@ internal static class CourtRegionalFolderSourceGuardTests
         Contains(window, "RenderRegionalGovernmentFolder", "court window must render one folder per region");
         Contains(window, "folderRect", "regional link target must be the folder container");
         Contains(window, "aw_court_regional_folder", "court window must use the localized folder label");
+        string readModel = Read("Code/core/court/CourtReadModelService.cs");
+        Contains(readModel, "City officials are rendered under their regional folder",
+            "central court must not add city officials beside the regional folder");
+        Contains(readModel, "string.Equals(officer.layer, CourtOfficeLayer.City",
+            "city-layer officers must be filtered from the central node pool");
     }
 
     private static string Read(string pRelative) => File.ReadAllText(
