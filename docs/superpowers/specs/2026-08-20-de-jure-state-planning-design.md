@@ -21,8 +21,8 @@ stable state data through its current read path.
 
 - Keep a state's legal/de jure membership stable when cities change hands.
 - Allow a player to create a new de jure state with a divine power.
-- Allow a player to move a city from one de jure state to another in the city
-  window.
+- Allow a player to move a city from one de jure state to another with the
+  same divine-power entry and a two-click map operation.
 - Allow a state to span multiple current countries after occupation or
   partition.
 - Keep de jure planning separate from actual control, war settlement, and
@@ -63,7 +63,7 @@ stable state data through its current read path.
 4. A de jure state may span multiple actual kingdoms.
 5. Changing `city.kingdom` never changes de jure membership.
 6. Destroying a kingdom never deletes de jure state records.
-7. Only an explicit player planning operation or the new divine power may
+7. Only an explicit operation through the de jure planning divine power may
    change de jure membership.
 8. Historical state records are retired, not physically deleted.
 9. De jure events are not territory-change events.
@@ -143,55 +143,78 @@ newly discovered, unassigned cities.
 
 ## Player Operations
 
-### Divine power: create de jure state
+### One divine-power entry with two modes
 
-The new divine power reuses the existing GodPower registration and click-action
-patterns:
+De jure editing uses one GodPower button and the existing multi-toggle/cycle
+option pattern. It does not create a planning window, target picker, or naming
+dialog. The button cycles between:
 
-1. Select the power.
-2. Click an existing city.
-3. Enter a state name and confirm.
-4. The clicked city becomes the new state's first member and legal capital.
-5. The old state loses that city; if it becomes empty, it is retired.
-6. The transaction is written to the save store and all affected read caches
-   are invalidated.
+```text
+Create de jure state
+Assign county to de jure state
+```
 
-The power creates only the new state. It does not automatically capture a
-geographic area or alter actual control. A new state may begin with one city,
-and its capital may currently be controlled by any kingdom.
+Changing mode, cancelling the power, closing the power tab, or changing worlds
+clears every pending click selection.
 
-### City window: move a city between states
+### Mode 1: create de jure state
 
-The existing city window gains a de jure planning section using its current
-window conventions. It displays:
+1. Select `Create de jure state`.
+2. Click any existing city.
+3. Remove the city from its previous state.
+4. Create a new state with the clicked city as its only member and legal
+   capital.
+5. Generate the state name from the existing capital-city regional naming
+   rules and the active court state-level title; do not open a naming window.
+6. Retire the previous state if it has no remaining members.
+7. Commit the transaction and invalidate affected caches.
 
-- current actual kingdom;
-- current de jure state;
-- legal capital;
-- whether this city is the legal capital;
-- controlled members versus total de jure members;
-- `Move to existing state`;
-- `Create new state with this city as capital`;
-- `Set legal capital`;
-- `View de jure history`.
+Creation does not alter `city.kingdom`, borders, diplomacy, or war state. A new
+state may begin with one city and may be created on a city controlled by any
+kingdom.
 
-The existing wide draggable window style is reused. The target-state picker
-lists active states from the current save and supports name, controlling
-kingdom, and distance filtering. The confirmation preview shows the source
-state, target state, resulting member counts, and any capital consequence.
+### Mode 2: assign county to de jure state
 
-### Capital changes
+This mode is a two-click state machine:
+
+```text
+AwaitCapital -> AwaitCounty -> AwaitCounty ... -> Cancelled
+```
+
+1. The first click must be the legal capital city of an active state. It locks
+   that state as the assignment target.
+2. The second click selects the city to move into the locked target state.
+3. A successful assignment keeps the same target locked, allowing repeated
+   second clicks to add more cities without clicking the capital again.
+4. Clicking another valid legal capital replaces the locked target.
+5. Clicking the currently locked capital does not move it; it confirms/switches
+   the target and provides selection feedback.
+6. Cancelling the power clears the locked target.
+
+The power displays native cursor/toast feedback for `select a legal capital`,
+`target state selected`, `county assigned`, and validation failures. It never
+opens an additional planning window. Selecting a non-capital on the first click
+does nothing and explains that a legal capital must be selected first.
+
+### City window
+
+The city window may display read-only de jure information already needed by
+the court/map read model: current state, legal capital, actual controller, and
+control share. It contains no create, assignment, capital-change, or target-
+selection controls.
+
+### Capital rules
 
 - A new state always uses its clicked city as capital.
-- A player may move the capital to another member city.
-- A capital move never changes membership.
 - If the capital is occupied, it remains the legal capital and is marked
   occupied; it is not silently replaced.
 - If the capital city is destroyed, the state remains active with a missing
-  capital marker. A replacement is proposed from the remaining members but is
-  not written until the player confirms.
-- Moving the capital city out of the state requires either selecting a new
-  capital or explicitly confirming a missing-capital state.
+  capital marker. The state cannot be selected as an assignment target until a
+  future dedicated capital-repair operation exists or a new state is created.
+- When an assignment moves the capital city of the source state, the source
+  state deterministically promotes its highest-development remaining member;
+  population and stable city ID are tie-breakers. This automatic repair is part
+  of the same atomic transaction and is recorded as `DeJureSeatChanged`.
 
 ### Planning constraints
 
@@ -201,7 +224,8 @@ state, target state, resulting member counts, and any capital consequence.
 - A target must be active and must contain at least one city after the move.
 - A historical/retired state cannot receive new members.
 - A city cannot be assigned twice in the same transaction.
-- Every operation requires confirmation and is atomic.
+- Every click operation is atomic. There is no confirmation window; failed
+  validation leaves both saved membership and the locked target unchanged.
 
 ## Occupation and Country Views
 
@@ -426,8 +450,8 @@ collisions. Repairs preserve history and never silently redraw a legal state.
    indexes.
 2. Add the de jure read model and replace persisted-region reads while keeping
    legacy aggregation for migration/candidates.
-3. Add the divine power and city-window planning operations with atomic
-   validation and history.
+3. Add the two-mode divine-power state machine, native feedback, atomic
+   creation/assignment, and history; keep the city window read-only.
 4. Apply court integration, foreign-member status, cache invalidation, and
    custom-template compatibility.
 5. Repair the expanded regional folder grid layout before final UI validation.
@@ -437,7 +461,9 @@ collisions. Repairs preserve history and never silently redraw a legal state.
 ## Acceptance Criteria
 
 - The player can create a legal state with the divine power.
-- The player can move a city between legal states from the city window.
+- The player can select a legal capital and then assign multiple cities to its
+  state through repeated map clicks.
+- No de jure planning or naming window is introduced.
 - A legal state remains stable through occupation, extinction, succession, and
   save reload.
 - The same legal state is visible from multiple country projections without
