@@ -10,12 +10,20 @@ namespace AncientWarfare3.ui.components
 {
     internal sealed class CourtRegionalGovernmentFolder : MonoBehaviour
     {
-        internal const float Width = 260f;
+        // Keep a conservative cell even if a parent canvas resets a child's
+        // local scale during portrait refresh.
+        internal const float CellWidth = 160f;
+        internal const float Width = CellWidth * Columns + 16f;
         internal const float CollapsedHeight = 32f;
+        internal const float GovernorGap = 8f;
+        internal const float GovernorBlockHeight = CourtActorNodeView.Height +
+                                                    GovernorGap;
         internal const float MiniScale = 0.56f;
         internal const float MiniWidth = CourtActorNodeView.Width * MiniScale;
-        internal const float MiniHeight = CourtActorNodeView.Height * MiniScale + 18f;
-        internal const float Gap = 8f;
+        // The city name is part of the official's role line; reserve enough
+        // vertical room for an unscaled card during a refresh pass.
+        internal const float MiniHeight = 126f;
+        internal const float Gap = 16f;
         internal const int Columns = 3;
 
         private Text _label;
@@ -25,6 +33,7 @@ namespace AncientWarfare3.ui.components
         private readonly List<CourtActorNodeView> _officialPool =
             new List<CourtActorNodeView>();
         private readonly List<Text> _cityLabels = new List<Text>();
+        private CourtActorNodeView _governorView;
         private Action<bool> _expandedChanged;
         private bool _expanded;
 
@@ -39,7 +48,8 @@ namespace AncientWarfare3.ui.components
             RectTransform rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0.5f, 1f);
-            rect.sizeDelta = new Vector2(Width, CollapsedHeight);
+            rect.sizeDelta = new Vector2(Width,
+                HeightForCount(0, false));
             CourtRegionalGovernmentFolder folder =
                 obj.AddComponent<CourtRegionalGovernmentFolder>();
             folder.BuildUi();
@@ -48,7 +58,8 @@ namespace AncientWarfare3.ui.components
         }
 
         internal void Bind(IReadOnlyList<LocalCourtReadModel> pCities,
-            Kingdom pKingdom, bool pExpanded, Action<bool> pOnExpandedChanged,
+            CourtPyramidNodeModel pGovernor, Kingdom pKingdom,
+            bool pExpanded, Action<bool> pOnExpandedChanged,
             Action<CourtActorNodeView> pQueuePortrait)
         {
             List<LocalCourtReadModel> cities = (pCities ??
@@ -68,6 +79,17 @@ namespace AncientWarfare3.ui.components
                     regionTitle), countLabel);
             _arrow.text = pExpanded ? "-" : "+";
             SetExpanded(pExpanded);
+            if (_governorView == null)
+                _governorView = CourtActorNodeView.Create(_content);
+            _governorView.Bind(pGovernor, pKingdom);
+            RectTransform governorRect = _governorView.GetComponent<RectTransform>();
+            governorRect.anchoredPosition = new Vector2(
+                Width * 0.5f, 0f);
+            governorRect.localScale = Vector3.one;
+            bool showGovernor = pGovernor != null;
+            _governorView.gameObject.SetActive(showGovernor);
+            if (showGovernor && _governorView.NeedsPortrait)
+                pQueuePortrait?.Invoke(_governorView);
             for (int index = 0; index < cities.Count; index++)
             {
                 CourtActorNodeView official = GetOfficial(index);
@@ -77,22 +99,23 @@ namespace AncientWarfare3.ui.components
                 int row = index / Columns;
                 int column = index % Columns;
                 officialRect.anchoredPosition = new Vector2(
-                    8f + MiniWidth * 0.5f + column * (MiniWidth + Gap),
-                    -CollapsedHeight - row * MiniHeight - 8f);
+                    8f + column * CellWidth + CellWidth * 0.5f,
+                    -GovernorBlockHeight - CollapsedHeight -
+                    row * (MiniHeight + Gap) - 8f);
                 officialRect.localScale = Vector3.one * MiniScale;
                 official.gameObject.SetActive(_expanded);
                 if (_expanded && official.NeedsPortrait)
                     pQueuePortrait?.Invoke(official);
                 Text cityLabel = GetCityLabel(index);
-                cityLabel.text = RegionalGovernmentRules.AdministrativeLabel(
-                    RegionalGovernmentRules.CityName(city.CityName),
-                    city.LocalLevelTitle);
+                cityLabel.text = "";
                 RectTransform cityRect = cityLabel.rectTransform;
                 cityRect.anchorMin = cityRect.anchorMax = new Vector2(0f, 1f);
                 cityRect.pivot = new Vector2(0f, 1f);
                 cityRect.anchoredPosition = new Vector2(
-                    8f + column * (MiniWidth + Gap),
-                    -CollapsedHeight - row * MiniHeight - 8f -
+                    8f + column * CellWidth +
+                    (CellWidth - MiniWidth) * 0.5f,
+                    -GovernorBlockHeight - CollapsedHeight -
+                    row * (MiniHeight + Gap) - 8f -
                     CourtActorNodeView.Height * MiniScale - 2f);
                 cityRect.sizeDelta = new Vector2(MiniWidth, 14f);
                 cityLabel.gameObject.SetActive(_expanded);
@@ -106,7 +129,9 @@ namespace AncientWarfare3.ui.components
         {
             if (!pExpanded) return CollapsedHeight;
             int rows = Mathf.CeilToInt(Mathf.Max(1, pCount) / (float)Columns);
-            return CollapsedHeight + rows * MiniHeight + Mathf.Max(0, rows - 1) * 4f + 8f;
+            return GovernorBlockHeight + CollapsedHeight +
+                rows * MiniHeight +
+                Mathf.Max(0, rows - 1) * Gap + 8f;
         }
 
         internal void ToggleExpanded()
@@ -136,7 +161,8 @@ namespace AncientWarfare3.ui.components
             headerRect.anchorMin = new Vector2(0f, 1f);
             headerRect.anchorMax = new Vector2(1f, 1f);
             headerRect.pivot = new Vector2(0.5f, 1f);
-            headerRect.anchoredPosition = Vector2.zero;
+            headerRect.anchoredPosition = new Vector2(0f,
+                -GovernorBlockHeight);
             headerRect.sizeDelta = new Vector2(0f, CollapsedHeight);
             AW_UIStyle.ApplyButton(header.GetComponent<Image>(), 0.96f);
             _toggle = header.GetComponent<Button>();

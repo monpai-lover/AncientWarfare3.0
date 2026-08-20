@@ -374,7 +374,11 @@ namespace AncientWarfare3.ui.windows
                 List<CourtPyramidNodeModel> nodes = local == null
                     ? CourtReadModelService.Build(kingdom)
                     : local.Nodes;
-                CourtPyramidCanvasBounds bounds = CourtPyramidRules.CalculateCanvasBounds(nodes,
+                List<CourtPyramidNodeModel> renderedNodes = local == null
+                    ? nodes.Where(node => !CourtPyramidRules.IsRegionalNode(node))
+                        .ToList()
+                    : nodes;
+                CourtPyramidCanvasBounds bounds = CourtPyramidRules.CalculateCanvasBounds(renderedNodes,
                     CourtActorNodeView.Width, CourtActorNodeView.Height, CanvasPadding);
                 List<LocalCourtReadModel> cityGovernments = local == null
                     ? CourtReadModelService.BuildLocalGovernments(kingdom)
@@ -386,16 +390,16 @@ namespace AncientWarfare3.ui.windows
                 IReadOnlyList<CustomCourtEdge> localEdges = local != null &&
                     !string.IsNullOrEmpty(local.TemplateId)
                     ? local.Edges : null;
-                BuildLinks(nodes, kingdom, KingdomColor(kingdom), nodeOffset,
+                BuildLinks(renderedNodes, kingdom, KingdomColor(kingdom), nodeOffset,
                     bounds, localEdges, local != null);
-                LayoutSectionMarkers(nodes, bounds, nodeOffset,
+                LayoutSectionMarkers(renderedNodes, bounds, nodeOffset,
                     KingdomColor(kingdom), local != null);
                 if (local == null)
                     RenderCityGovernmentCards(cityGovernments, kingdom,
                         nodes, nodeOffset, bounds, canvasSize);
                 int renderVersion = _renderVersion;
                 _renderCoroutine = StartCoroutine(RenderNodesBatched(
-                    nodes, kingdom, nodeOffset, renderVersion));
+                    renderedNodes, kingdom, nodeOffset, renderVersion));
                 _summaryRect.transform.SetAsLastSibling();
             }
             finally
@@ -542,10 +546,8 @@ namespace AncientWarfare3.ui.windows
                 long regionId = RegionId(group);
                 CourtRegionalGovernmentFolder folder =
                     RenderRegionalGovernmentFolder(folderIndex++, group,
-                        pKingdom, regionId, startX, folderTopY);
-                RectTransform folderRect = folder.LinkTarget;
-                RenderRegionalGovernmentLinks(pNodes, first.RegionSeatCityId,
-                    folderRect, pNodeOffset, pCanvasSize, pKingdom);
+                        pKingdom, regionId, RegionalGovernorNode(pNodes,
+                            first.RegionSeatCityId), startX, folderTopY);
                 groupTopY = folderTopY -
                     CourtRegionalGovernmentFolder.HeightForCount(group.Count,
                         _expandedRegionIds.Contains(regionId)) - RegionGroupGap;
@@ -565,19 +567,29 @@ namespace AncientWarfare3.ui.windows
 
         private CourtRegionalGovernmentFolder RenderRegionalGovernmentFolder(
             int pIndex, IReadOnlyList<LocalCourtReadModel> pCities,
-            Kingdom pKingdom, long pRegionId, float pX, float pY)
+            Kingdom pKingdom, long pRegionId,
+            CourtPyramidNodeModel pGovernor, float pX, float pY)
         {
             CourtRegionalGovernmentFolder folder = GetRegionalFolder(pIndex);
             RectTransform folderRect = folder.LinkTarget;
             folderRect.anchoredPosition = new Vector2(
                 pX + CourtRegionalGovernmentFolder.Width * 0.5f, pY);
-            folder.Bind(pCities, pKingdom,
+            folder.Bind(pCities, pGovernor, pKingdom,
                 _expandedRegionIds.Contains(pRegionId),
                 expanded => SetRegionalFolderExpanded(pRegionId, expanded),
                 node => _portraitRetries.Enqueue(node));
             folder.gameObject.SetActive(true);
             folder.transform.SetAsLastSibling();
             return folder;
+        }
+
+        private static CourtPyramidNodeModel RegionalGovernorNode(
+            IReadOnlyList<CourtPyramidNodeModel> pNodes, long pSeatCityId)
+        {
+            return (pNodes ?? Array.Empty<CourtPyramidNodeModel>())
+                .FirstOrDefault(node =>
+                    CourtPyramidRules.IsRegionalNode(node) &&
+                    node.CityId == pSeatCityId);
         }
 
         private void SetRegionalFolderExpanded(long pRegionId, bool pExpanded)
