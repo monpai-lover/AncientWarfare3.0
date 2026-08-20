@@ -17,7 +17,6 @@ namespace AncientWarfare3.ui.components
         internal const float GovernorGap = 8f;
         internal const float GovernorBlockHeight = CourtActorNodeView.Height +
                                                     GovernorGap;
-        internal const float GovernorOffsetX = -100f;
         internal const float MiniScale = 0.56f;
         internal const float MiniWidth = CourtActorNodeView.Width * MiniScale;
         // The city name is part of the official's role line; reserve enough
@@ -84,7 +83,7 @@ namespace AncientWarfare3.ui.components
             _governorView.Bind(pGovernor, pKingdom);
             RectTransform governorRect = _governorView.GetComponent<RectTransform>();
             governorRect.anchoredPosition = new Vector2(
-                folderWidth * 0.5f + GovernorOffsetX, 0f);
+                folderWidth * 0.5f, 0f);
             governorRect.localScale = Vector3.one;
             bool showGovernor = pGovernor != null;
             _governorView.gameObject.SetActive(showGovernor);
