@@ -23,6 +23,10 @@ namespace AncientWarfare3.content
             "aw_spawn_bandit_stronghold";
         public const string AMNESTY_BANDIT = "aw_amnesty_bandit";
         public const string DE_JURE_REGION = "aw_de_jure_region";
+        public const string DE_JURE_REGION_CREATE =
+            "aw_de_jure_region_create";
+        public const string DE_JURE_REGION_ASSIGN =
+            "aw_de_jure_region_assign";
         public const string BanditAmnestyIconPath =
             "ui/icons/aw_bandit_amnesty";
 
@@ -71,7 +75,10 @@ namespace AncientWarfare3.content
             RegisterMandateGrantPower();
             RegisterBanditStrongholdPower();
             RegisterBanditAmnestyPower();
-            RegisterDeJureRegionPower();
+            RegisterDeJureRegionPower(DE_JURE_REGION_CREATE,
+                DeJureRegionPowerService.CreateMode);
+            RegisterDeJureRegionPower(DE_JURE_REGION_ASSIGN,
+                DeJureRegionPowerService.AssignMode);
         }
 
         public static void ClearRuntime()
@@ -1053,59 +1060,40 @@ namespace AncientWarfare3.content
             });
         }
 
-        private static void RegisterDeJureRegionPower()
+        private static void RegisterDeJureRegionPower(string pPowerId,
+            int pMode)
         {
-            RegisterMapModeOption(DE_JURE_REGION, new[]
+            GodPower existing = AssetManager.powers.get(pPowerId);
+            PowerButtonClickAction reset = _ =>
             {
-                "aw_de_jure_region_create",
-                "aw_de_jure_region_assign"
-            });
-            GodPower existing = AssetManager.powers.get(DE_JURE_REGION);
-            if (existing != null)
+                DeJureRegionPowerService.ClearRuntime();
+                return false;
+            };
+            PowerActionWithID click = new PowerActionWithID(
+                (tile, id) => DeJureRegionClick(tile, id, pMode));
+            if (existing == null)
             {
-                existing.path_icon = "ui/Icons/aw_de_jure_region";
-                existing.toggle_name = AWMapModeMetaRules.ResolveOptionId(
-                    DE_JURE_REGION);
-                existing.multi_toggle = true;
-                existing.map_modes_switch = true;
-                existing.force_map_mode = MetaType.City;
-                existing.unselect_when_window = false;
-                existing.ignore_cursor_icon = true;
-                existing.allow_unit_selection = false;
-                existing.toggle_action = BuildMapModeToggleAction(
-                    DeJureRegionPowerService.ClearRuntime);
-                existing.click_special_action = new PowerActionWithID(
-                    DeJureRegionClick);
-                return;
+                existing = new GodPower
+                {
+                    id = pPowerId,
+                    name = pPowerId
+                };
+                AssetManager.powers.add(existing);
             }
-            AssetManager.powers.add(new GodPower
-            {
-                id = DE_JURE_REGION,
-                name = DE_JURE_REGION,
-                path_icon = "ui/Icons/aw_de_jure_region",
-                toggle_name = AWMapModeMetaRules.ResolveOptionId(DE_JURE_REGION),
-                multi_toggle = true,
-                map_modes_switch = true,
-                force_map_mode = MetaType.City,
-                unselect_when_window = false,
-                ignore_cursor_icon = true,
-                allow_unit_selection = false,
-                toggle_action = BuildMapModeToggleAction(
-                    DeJureRegionPowerService.ClearRuntime),
-                click_special_action = new PowerActionWithID(
-                    DeJureRegionClick)
-            });
+            existing.path_icon = "ui/Icons/aw_de_jure_region";
+            existing.type = PowerActionType.PowerSpecial;
+            existing.force_map_mode = MetaType.City;
+            existing.unselect_when_window = false;
+            existing.ignore_cursor_icon = true;
+            existing.allow_unit_selection = false;
+            existing.select_button_action = reset;
+            existing.click_special_action = click;
         }
 
         private static bool DeJureRegionClick(WorldTile pTile,
-            string pPowerId)
+            string pPowerId, int pMode)
         {
-            int mode = 0;
-            string optionId = AWMapModeMetaRules.ResolveOptionId(
-                DE_JURE_REGION);
-            if (PlayerConfig.dict.TryGetValue(optionId,
-                    out PlayerOptionData option)) mode = option.intVal;
-            string key = DeJureRegionPowerService.Click(pTile, mode,
+            string key = DeJureRegionPowerService.Click(pTile, pMode,
                 out bool success);
             Tip(AW_L10n.Text(key, key));
             return success;

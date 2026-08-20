@@ -19,6 +19,7 @@ namespace AncientWarfare3.ui
         {
             if (_inited) return;
             _inited = true;
+            AncientWarfare3.core.court.DeJureRegionLocalizationRepair.Ensure();
 
             PowersTab tab = TabManager.CreateTab(
                 TAB_ID,
@@ -145,15 +146,21 @@ namespace AncientWarfare3.ui
             Register(groups, AWLineageTabLayoutRules.Mandate,
                 amnestyBanditButton);
 
-            // Use the same native multi-toggle button as the hierarchy map
-            // modes.  The de jure power has two option states (create/assign),
-            // so a normal god-power button would hide the active operation.
-            PowerButton deJureRegionButton = CreateMapModeToggleButton(
-                content.GodPowerLibrary.DE_JURE_REGION,
+            PowerButton deJureRegionCreateButton =
+                PowerButtonCreator.CreateGodPowerButton(
+                content.GodPowerLibrary.DE_JURE_REGION_CREATE,
                 SpriteTextureLoader.getSprite("ui/Icons/aw_de_jure_region")
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconMap"));
             Register(groups, AWLineageTabLayoutRules.Administration,
-                deJureRegionButton);
+                deJureRegionCreateButton);
+
+            PowerButton deJureRegionAssignButton =
+                PowerButtonCreator.CreateGodPowerButton(
+                content.GodPowerLibrary.DE_JURE_REGION_ASSIGN,
+                SpriteTextureLoader.getSprite("ui/Icons/aw_de_jure_region")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconMap"));
+            Register(groups, AWLineageTabLayoutRules.Administration,
+                deJureRegionAssignButton);
 
             PowerButton mandateCoreMapButton = CreateMapModeToggleButton(
                 MandateCoreMapModeService.POWER_ID,
