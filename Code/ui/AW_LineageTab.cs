@@ -145,10 +145,13 @@ namespace AncientWarfare3.ui
             Register(groups, AWLineageTabLayoutRules.Mandate,
                 amnestyBanditButton);
 
-            PowerButton deJureRegionButton =
-                PowerButtonCreator.CreateGodPowerButton(
-                    content.GodPowerLibrary.DE_JURE_REGION,
-                    SpriteTextureLoader.getSprite("ui/icons/iconMap"));
+            // Use the same native multi-toggle button as the hierarchy map
+            // modes.  The de jure power has two option states (create/assign),
+            // so a normal god-power button would hide the active operation.
+            PowerButton deJureRegionButton = CreateMapModeToggleButton(
+                content.GodPowerLibrary.DE_JURE_REGION,
+                SpriteTextureLoader.getSprite("ui/Icons/aw_de_jure_region")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconMap"));
             Register(groups, AWLineageTabLayoutRules.Administration,
                 deJureRegionButton);
 

@@ -1063,13 +1063,17 @@ namespace AncientWarfare3.content
             GodPower existing = AssetManager.powers.get(DE_JURE_REGION);
             if (existing != null)
             {
-                existing.path_icon = "ui/icons/iconMap";
+                existing.path_icon = "ui/Icons/aw_de_jure_region";
                 existing.toggle_name = AWMapModeMetaRules.ResolveOptionId(
                     DE_JURE_REGION);
                 existing.multi_toggle = true;
+                existing.map_modes_switch = true;
                 existing.force_map_mode = MetaType.City;
                 existing.unselect_when_window = false;
+                existing.ignore_cursor_icon = true;
                 existing.allow_unit_selection = false;
+                existing.toggle_action = BuildMapModeToggleAction(
+                    DeJureRegionPowerService.ClearRuntime);
                 existing.click_special_action = new PowerActionWithID(
                     DeJureRegionClick);
                 return;
@@ -1078,12 +1082,16 @@ namespace AncientWarfare3.content
             {
                 id = DE_JURE_REGION,
                 name = DE_JURE_REGION,
-                path_icon = "ui/icons/iconMap",
+                path_icon = "ui/Icons/aw_de_jure_region",
                 toggle_name = AWMapModeMetaRules.ResolveOptionId(DE_JURE_REGION),
                 multi_toggle = true,
+                map_modes_switch = true,
                 force_map_mode = MetaType.City,
                 unselect_when_window = false,
+                ignore_cursor_icon = true,
                 allow_unit_selection = false,
+                toggle_action = BuildMapModeToggleAction(
+                    DeJureRegionPowerService.ClearRuntime),
                 click_special_action = new PowerActionWithID(
                     DeJureRegionClick)
             });
