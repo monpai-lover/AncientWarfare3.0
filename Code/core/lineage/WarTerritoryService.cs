@@ -143,7 +143,9 @@ namespace AncientWarfare3.core.lineage
             {
                 City city = World.world?.cities?.get(cityId);
                 if (city?.data != null && !city.isRekt() &&
-                    city.kingdom == pDefender) result.Add(city);
+                    city.kingdom == pDefender &&
+                    !PeasantRebelBanditStrongholdService.IsStrongholdCity(
+                        city)) result.Add(city);
             }
             result.Sort((a, b) => a.data.id.CompareTo(b.data.id));
             return result;
@@ -887,6 +889,7 @@ namespace AncientWarfare3.core.lineage
                     term.WarGoalId == pGoal.war_goal_id &&
                     TryGetDeJureRegion(pGoal.source_de_jure_region_id,
                         out DeJureRegion region) &&
+                    DeJureRegionStore.IsEligibleCityId(term.CityId) &&
                     region.MemberCityIds.Contains(term.CityId)) return true;
                 if (term.WarGoalId != pGoal.war_goal_id ||
                     !WarGoalSettlementRules.TryGetAutomaticSettlementProfile(
@@ -2558,7 +2561,8 @@ namespace AncientWarfare3.core.lineage
                 using var cmd = new SQLiteCommand(DB);
                 cmd.CommandText = $"SELECT WAR_GOAL_ID, ATTACKER_KINGDOM_ID, DEFENDER_KINGDOM_ID, GOAL_TYPE, " +
                                   $"TARGET_CITY_ID, TARGET_CITY_NAME, TARGET_KINGDOM_ID, TARGET_KINGDOM_NAME, " +
-                                  $"SOURCE_CLAIM_ID, SOURCE_CORE_ID, CLAIMANT_ACTOR_ID " +
+                                  $"SOURCE_CLAIM_ID, SOURCE_CORE_ID, CLAIMANT_ACTOR_ID, " +
+                                  $"SOURCE_DE_JURE_REGION_ID " +
                                   $"FROM {WarGoalTableItem.GetTableName()} WHERE WAR_ID=@w AND RESOLVED=0";
                 cmd.Parameters.AddWithValue("@w", pWarId);
                 using var reader = (SQLiteDataReader)cmd.ExecuteReader();
@@ -2576,7 +2580,9 @@ namespace AncientWarfare3.core.lineage
                         target_kingdom_name = reader.IsDBNull(7) ? "" : reader.GetString(7),
                         source_claim_id = reader.GetInt64(8),
                         source_core_id = reader.GetInt64(9),
-                        claimant_actor_id = reader.GetInt64(10)
+                        claimant_actor_id = reader.GetInt64(10),
+                        source_de_jure_region_id = reader.IsDBNull(11)
+                            ? -1L : reader.GetInt64(11)
                     });
                 }
             }
@@ -2679,6 +2685,7 @@ namespace AncientWarfare3.core.lineage
             public long source_claim_id;
             public long source_core_id;
             public long claimant_actor_id;
+            public long source_de_jure_region_id;
         }
     }
 }

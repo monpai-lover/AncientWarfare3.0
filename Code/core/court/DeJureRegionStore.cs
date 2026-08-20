@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.court
@@ -99,6 +100,10 @@ namespace AncientWarfare3.core.court
         {
             pRegion = null;
             if (pCityId < 0L) return false;
+            City requested = World.world?.cities?.get(pCityId);
+            if (requested?.data != null &&
+                PeasantRebelBanditStrongholdService.IsStrongholdCity(
+                    requested)) return false;
             EnsureInitialized();
             lock (Gate)
             {
@@ -126,12 +131,19 @@ namespace AncientWarfare3.core.court
             }
         }
 
+        internal static bool IsEligibleCityId(long pCityId)
+        {
+            if (pCityId < 0L) return false;
+            City city = World.world?.cities?.get(pCityId);
+            return IsDeJureEligibleCity(city);
+        }
+
         internal static bool CreateState(City pCity, string pReason,
             out DeJureRegion pCreated, out string pError)
         {
             pCreated = null;
             pError = string.Empty;
-            if (!IsLiveCity(pCity)) { pError = "invalid_city"; return false; }
+            if (!IsDeJureEligibleCity(pCity)) { pError = "invalid_city"; return false; }
             EnsureInitialized();
             lock (Gate)
             {
@@ -178,7 +190,7 @@ namespace AncientWarfare3.core.court
             out string pError)
         {
             pError = string.Empty;
-            if (!IsLiveCity(pCity)) { pError = "invalid_city"; return false; }
+            if (!IsDeJureEligibleCity(pCity)) { pError = "invalid_city"; return false; }
             EnsureInitialized();
             lock (Gate)
             {
@@ -257,12 +269,12 @@ namespace AncientWarfare3.core.court
             if (World.world?.cities == null) return;
             foreach (City city in World.world.cities)
             {
-                if (!IsLiveCity(city)) continue;
+                if (!IsDeJureEligibleCity(city)) continue;
                 cities.Add(city);
                 var neighbors = new List<long>();
                 if (city.neighbours_cities_kingdom != null)
                     foreach (City neighbor in city.neighbours_cities_kingdom)
-                        if (IsLiveCity(neighbor) &&
+                        if (IsDeJureEligibleCity(neighbor) &&
                             neighbor.kingdom == city.kingdom)
                             neighbors.Add(neighbor.data.id);
                 facts.Add(new RegionalGovernmentCityFact
@@ -406,6 +418,20 @@ namespace AncientWarfare3.core.court
 
         private static bool IsLiveCity(City pCity) => pCity?.data != null &&
             !pCity.isRekt() && pCity.data.id >= 0L;
+
+        private static bool IsDeJureEligibleCity(City pCity)
+        {
+            if (!IsLiveCity(pCity)) return false;
+            try
+            {
+                return DeJureRegionEligibilityRules.CanParticipate(
+                    liveCity: true,
+                    banditStronghold:
+                    PeasantRebelBanditStrongholdService.IsStrongholdCity(
+                        pCity));
+            }
+            catch { return true; }
+        }
 
         private static int SafeYear()
         {

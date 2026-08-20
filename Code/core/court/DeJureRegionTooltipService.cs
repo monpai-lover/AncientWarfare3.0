@@ -11,11 +11,15 @@ namespace AncientWarfare3.core.court
     {
         internal static string Build(City pCity)
         {
-            if (pCity?.data == null || !DeJureRegionStore.TryGetForCity(
+            if (pCity?.data == null ||
+                PeasantRebelBanditStrongholdService.IsStrongholdCity(pCity) ||
+                !DeJureRegionStore.TryGetForCity(
                     pCity.data.id, out DeJureRegion region)) return string.Empty;
             List<City> members = (region.MemberCityIds ?? new List<long>())
                 .Select(p => World.world?.cities?.get(p))
-                .Where(p => p?.data != null && !p.isRekt()).ToList();
+                .Where(p => p?.data != null && !p.isRekt() &&
+                    !PeasantRebelBanditStrongholdService.IsStrongholdCity(p))
+                .ToList();
             int total = members.Count;
             if (total == 0) return region.RegionName ?? string.Empty;
             var counts = new Dictionary<long, int>();

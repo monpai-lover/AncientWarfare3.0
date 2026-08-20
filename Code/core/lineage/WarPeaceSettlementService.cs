@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.core.court;
+using AncientWarfare3.core.db;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -269,8 +272,8 @@ namespace AncientWarfare3.core.lineage
                     out var region))
                 return new WarPeaceExecutionResult(false, -1,
                     "invalid_de_jure_region_target");
-            var regionCities = new HashSet<long>(region.MemberCityIds ??
-                new List<long>());
+            var regionCities = new HashSet<long>((region.MemberCityIds ??
+                new List<long>()).Where(DeJureRegionStore.IsEligibleCityId));
             int requested = 0;
             var cities = new HashSet<long>();
             for (int i = 0; i < pDraft.Terms.Count; i++)

@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.court
@@ -19,7 +20,12 @@ namespace AncientWarfare3.core.court
         {
             pSuccess = false;
             City city = pTile?.zone?.city;
-            if (city?.data == null || city.isRekt())
+            if (city?.data == null || city.isRekt() ||
+                !DeJureRegionEligibilityRules.CanParticipate(
+                    liveCity: true,
+                    banditStronghold:
+                    PeasantRebelBanditStrongholdService.IsStrongholdCity(
+                        city)))
                 return "aw_de_jure_region_invalid_city";
 
             if (pMode == CreateMode)

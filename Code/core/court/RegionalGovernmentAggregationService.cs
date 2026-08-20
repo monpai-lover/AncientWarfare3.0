@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.court
@@ -44,7 +45,9 @@ namespace AncientWarfare3.core.court
                          Array.Empty<City>())
                 {
                     if (city?.data == null || city.isRekt() ||
-                        city.kingdom != pKingdom) continue;
+                        city.kingdom != pKingdom ||
+                        !DeJureRegionStore.IsEligibleCityId(city.data.id))
+                        continue;
                     cities.Add(city);
                     var neighbors = new List<long>();
                     IEnumerable<City> neighborSource =
@@ -52,7 +55,9 @@ namespace AncientWarfare3.core.court
                         (IEnumerable<City>)Array.Empty<City>();
                     foreach (City neighbor in neighborSource)
                         if (neighbor?.data != null && !neighbor.isRekt() &&
-                            neighbor.kingdom == pKingdom)
+                            neighbor.kingdom == pKingdom &&
+                            DeJureRegionStore.IsEligibleCityId(
+                                neighbor.data.id))
                             neighbors.Add(neighbor.data.id);
                     facts.Add(new RegionalGovernmentCityFact
                     {

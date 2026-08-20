@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.db;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -47,10 +48,11 @@ namespace AncientWarfare3.core.lineage
                      new List<long>())
             {
                 City city = World.world?.cities?.get(cityId);
-                if (city?.data == null || city.isRekt()) continue;
+                if (city?.data == null || city.isRekt() ||
+                    PeasantRebelBanditStrongholdService.IsStrongholdCity(
+                        city)) continue;
                 bool defenderOwned = city.kingdom == defender;
-                bool occupied = IsOccupiedByAttacker(pWar, city,
-                    attacker.id);
+                bool occupied = IsOccupiedByAttackerSide(pWar, city);
                 int cost = WarPeaceTermsRules.CityCessionCost(
                     WarPeaceSettlementWorld.CityFacts(city, attacker.id,
                         defender.id));
@@ -101,16 +103,20 @@ namespace AncientWarfare3.core.lineage
             return null;
         }
 
-        private static bool IsOccupiedByAttacker(War pWar, City pCity,
-            long pAttackerId)
+        private static bool IsOccupiedByAttackerSide(War pWar, City pCity)
         {
             if (pCity?.data == null) return false;
-            return WarScoreService.TryGetFrozenOccupation(pWar.data.id,
-                       pCity.data.id, out long dataController) &&
-                   dataController == pAttackerId ||
-                   WarScoreService.TryGetFrozenOccupation(pWar.data.id,
-                       pCity.id, out long objectController) &&
-                   objectController == pAttackerId;
+            long controllerId = -1L;
+            bool occupied = WarScoreService.TryGetFrozenOccupation(
+                                pWar.data.id, pCity.data.id,
+                                out controllerId) ||
+                            WarScoreService.TryGetFrozenOccupation(
+                                pWar.data.id, pCity.id, out controllerId);
+            if (!occupied) return false;
+            Kingdom controller = World.world?.kingdoms?.get(controllerId);
+            try { return controller?.data != null &&
+                         pWar.isAttacker(controller); }
+            catch { return false; }
         }
     }
 }

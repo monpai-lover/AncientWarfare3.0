@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.court
@@ -15,7 +16,9 @@ namespace AncientWarfare3.core.court
                 return Array.Empty<RegionalGovernmentReadModel>();
             var controlled = (pKingdom.getCities() ?? Array.Empty<City>())
                 .Where(p => p?.data != null && !p.isRekt() &&
-                            p.kingdom == pKingdom)
+                            p.kingdom == pKingdom &&
+                            !PeasantRebelBanditStrongholdService.
+                                IsStrongholdCity(p))
                 .ToDictionary(p => p.data.id);
             if (controlled.Count == 0) return Array.Empty<RegionalGovernmentReadModel>();
 
@@ -27,7 +30,9 @@ namespace AncientWarfare3.core.court
                 if (members.Count == 0) continue;
                 List<City> allMembers = (legal.MemberCityIds ??
                     new List<long>()).Select(p => World.world?.cities?.get(p))
-                    .Where(p => p?.data != null && !p.isRekt()).ToList();
+                    .Where(p => p?.data != null && !p.isRekt() &&
+                        !PeasantRebelBanditStrongholdService.
+                            IsStrongholdCity(p)).ToList();
                 City seat = allMembers.FirstOrDefault(p =>
                     p.data.id == legal.SeatCityId);
                 var counts = new Dictionary<long, int>();
