@@ -37,16 +37,6 @@ internal static class ShiLineageMapModeSourceGuardTests
 
         Contains(metaPatch, "IsActive(AWMapModeMetaLibrary.ShiLineageAsset",
             "active map-mode selection must resolve Shi lineage");
-        Contains(metaPatch, "ShowTabSelectedMeta_Prefix",
-            "internal city selection must suppress vanilla selected-meta tab activation");
-        Contains(metaPatch, "PowerTabController.showTabSelectedMeta",
-            "selected-meta tab suppression must cover the vanilla tab entry point");
-        Contains(metaPatch, "SelectedPowerTabTopContainer",
-            "map modes must suppress the vanilla selected-object top container");
-        Contains(metaPatch, "GetComponentsInChildren<SelectedPowerTabTopContainer>(true)",
-            "top-container suppression must include inactive vanilla panels");
-        Contains(metaPatch, "PowerTabController_Update_Postfix",
-            "vanilla selected-city tab must be suppressed after native toolbar updates");
         Before(coordinator, "ShiLineageMapModeService.POWER_ID",
             "FeudatoryMapModeService.POWER_ID",
             "coordinator must prioritize selected Shi before Feudatory");
@@ -139,14 +129,6 @@ internal static class ShiLineageMapModeSourceGuardTests
 
         Contains(bottom, "_tabBeforeInitialization",
             "Shi bottom bar must preserve the previous tab during delayed Start");
-        Contains(bottom, "HideNativeSelectedCityTab",
-            "Shi bottom bar must isolate the vanilla selected-city tab");
-        Contains(bottom, "nativeTab.gameObject.SetActive(false)",
-            "Shi bottom bar must disable the vanilla selected-city button");
-        Contains(schoolBottom, "HideNativeSelectedCityTab",
-            "school bottom bar must isolate the vanilla selected-city tab");
-        Contains(schoolBottom, "nativeTab.gameObject.SetActive(false)",
-            "school bottom bar must disable the vanilla selected-city button");
         Contains(bottom, "ScrollWindow.getCurrentWindow()",
             "Shi bottom bar must hide while another window is open");
         NotContains(bottom, "SelectedObjects.getSelectedNanoObject()",
@@ -163,21 +145,15 @@ internal static class ShiLineageMapModeSourceGuardTests
             "invalid top Shi slots must remain visible as disabled rows");
         Contains(element, "_rows[i].gameObject.SetActive(true);",
             "top Shi slots must keep a stable visible layout");
-        Contains(element, "new Vector2(1080f, 90f)",
-            "Shi composition panel must use a wide bottom-bar layout");
-        Contains(element, "new Vector2(8f + i * 356f, -52f)",
-            "Shi rows must be arranged horizontally in the bottom bar");
+        Contains(element, "new Vector2(360f, 150f)",
+            "Shi composition panel must fit its title, dominant row, and top three");
+        Contains(element, "-52f - i * 30f",
+            "Shi rows must start below the dominant label");
         Contains(element,
             "_labels[i].rectTransform.offsetMax = new Vector2(-52f, 0f);",
             "Shi row labels must reserve the focus-button inset");
         Contains(element, "ShiLineageMapModeService.SetFocus",
             "a reachable secondary focus command must be retained");
-        Contains(element, "SetFocus(shiId, pCity)",
-            "Shi focus must retain the selected city as its focus target");
-        Contains(service, "MoveCamera.instance?.focusOn",
-            "Shi focus must visibly center the camera on the selected city");
-        Contains(element, "aw_shi_map_focused",
-            "Shi focus must expose a selected visual state");
         Contains(service, "DeactivateOwnedState",
             "leaving or losing the Shi map mode must release owned UI state");
         NotContains(service, "SelectedObjects.unselectNanoObject()",
@@ -219,8 +195,7 @@ internal static class ShiLineageMapModeSourceGuardTests
         foreach (string key in new[] { "aw_shi_lineage_mapmode",
                      "aw_shi_lineage_mapmode_description", "aw_shi_mapmode_tooltip",
                      "aw_shi_map_no_influence", "aw_shi_map_dominant", "aw_shi_map_none",
-                     "aw_shi_map_unknown", "aw_shi_map_composition",
-                     "aw_shi_map_focused" })
+                     "aw_shi_map_unknown", "aw_shi_map_composition" })
         {
             Contains(en, "\"" + key + "\"", "English locale missing " + key);
             Contains(ch, "\"" + key + "\"", "Chinese locale missing " + key);

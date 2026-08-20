@@ -30,7 +30,6 @@ namespace AncientWarfare3.core.policy
             _generation = -1;
             _showRequested = true;
             _visibleOrPending = true;
-            HideNativeSelectedCityTab();
             CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(pCity);
             if (snapshot == null) return;
             _generation = snapshot.Generation;
@@ -50,7 +49,6 @@ namespace AncientWarfare3.core.policy
                 if (_visibleOrPending) Hide();
                 return;
             }
-            HideNativeSelectedCityTab();
 
             City city = SchoolMapModeService.SelectedCity;
             if (!IsValidCity(city))
@@ -95,7 +93,6 @@ namespace AncientWarfare3.core.policy
             if (_element != null) _element.gameObject.SetActive(false);
             if (_tab != null && _tab.getAsset() != null && _tab.isCurrentPowerTabSelected())
                 PowersTab.unselect();
-            RestoreNativeSelectedCityTab();
         }
 
         private static bool EnsureTab()
@@ -172,21 +169,6 @@ namespace AncientWarfare3.core.policy
         {
             PowersTab active = PowersTab.getActiveTab();
             _tabBeforeInitialization = active != _tab ? active : null;
-        }
-
-        private static void HideNativeSelectedCityTab()
-        {
-            PowersTab nativeTab = PowerTabController.instance?.tab_selected_city;
-            if (nativeTab == null || nativeTab == _tab) return;
-            if (nativeTab.isCurrentPowerTabSelected()) nativeTab.hideTab();
-            nativeTab.gameObject.SetActive(false);
-        }
-
-        private static void RestoreNativeSelectedCityTab()
-        {
-            PowersTab nativeTab = PowerTabController.instance?.tab_selected_city;
-            if (nativeTab == null || SchoolMapModeService.IsActive()) return;
-            nativeTab.gameObject.SetActive(true);
         }
 
         private static void CancelPendingInitialization()
