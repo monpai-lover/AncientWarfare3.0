@@ -26,6 +26,11 @@ namespace AncientWarfare3.core.lineage
             if (!IsAlive(captain) || captain.kingdom != kingdom) return false;
             City target = ResolveTargetCity(pArmy, kingdom);
             if (!IsFriendlySafeCity(target, kingdom)) return false;
+            bool returnEligible = true;
+            if (WarArmyReturnRules.ShouldReleaseActiveVoyageOnReturn(
+                    returnEligible,
+                    ArmyRtsTransportService.HasActiveVoyage(pArmy)))
+                ArmyRtsTransportService.ReleaseArmy(pArmy);
             if (!Queue.Begin(pArmy.id, kingdom.id, target.id)) return false;
             Persist(pArmy, kingdom.id, target.id);
             EnsureReturnCaptainJob(pArmy);

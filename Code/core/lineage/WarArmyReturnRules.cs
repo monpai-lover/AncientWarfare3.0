@@ -41,6 +41,12 @@ namespace AncientWarfare3.core.lineage
             return !armyAlive || insideFriendlySafeCity;
         }
 
+        public static bool ShouldReleaseActiveVoyageOnReturn(
+            bool returnEligible, bool activeVoyage)
+        {
+            return returnEligible && activeVoyage;
+        }
+
         public static bool IsInsideReturnArrivalRadius(
             bool insideFriendlySafeCity, long deltaX, long deltaY)
         {
