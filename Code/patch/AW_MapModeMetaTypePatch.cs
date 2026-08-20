@@ -34,6 +34,23 @@ namespace AncientWarfare3.patch
 
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(PowerTabController), nameof(PowerTabController.showTabSelectedMeta))]
+        public static bool ShowTabSelectedMeta_Prefix(MetaTypeAsset pMetaTypeAsset)
+        {
+            if (!IsInternalCitySelectionMode()) return true;
+            return pMetaTypeAsset != AWMapModeMetaLibrary.SchoolAsset &&
+                pMetaTypeAsset != AWMapModeMetaLibrary.ShiLineageAsset &&
+                pMetaTypeAsset != MetaTypeLibrary.city;
+        }
+
+        private static bool IsInternalCitySelectionMode()
+        {
+            return SchoolMapModeService.IsActive() ||
+                ShiLineageMapModeService.IsActive();
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(MetaTypeAsset), nameof(MetaTypeAsset.getZoneOptionState))]
         public static bool GetZoneOptionState_Prefix(MetaTypeAsset __instance, ref int __result)
         {
