@@ -623,7 +623,12 @@ namespace AncientWarfare3.ui.items
                 if (!string.IsNullOrEmpty(label) && !labels.Contains(label)) labels.Add(label);
             }
             if (labels.Count == 0 && !string.IsNullOrEmpty(pNode.OfficeId))
-                labels.Add(OfficeName(pKingdom, pNode.OfficeId));
+                labels.Add(pNode.RoleId == CourtPyramidRoleId.RegionalGovernor
+                    ? (string.IsNullOrWhiteSpace(pNode.DisplayTitle)
+                        ? AW_L10n.Text("aw_court_office_regional_superior",
+                            "Regional Governor")
+                        : pNode.DisplayTitle)
+                    : OfficeName(pKingdom, pNode.OfficeId));
             return string.Join(" / ", labels.ToArray());
         }
 
@@ -689,6 +694,10 @@ namespace AncientWarfare3.ui.items
 
         private static string OfficeName(Kingdom pKingdom, string pOfficeId)
         {
+            if (!string.IsNullOrEmpty(pOfficeId) && pOfficeId.StartsWith(
+                    "regional_superior:", StringComparison.Ordinal))
+                return AW_L10n.Text("aw_court_office_regional_superior",
+                    "Regional Governor");
             return CourtInstitutionService.OfficeName(pKingdom, pOfficeId);
         }
 

@@ -165,18 +165,46 @@ namespace AncientWarfare3.core.court
                 new CustomCourtLocalizedText();
             pLayer.LocalLevelTitle = pLayer.LocalLevelTitle ??
                 new CustomCourtLocalizedText();
+
+            // Templates created before the hierarchy labels were corrected
+            // persisted the old 郡/郡守/州 combination. Migrate that exact
+            // built-in default so existing saves receive the text-only swap;
+            // custom titles remain untouched.
+            bool legacyChineseDefaults =
+                pLayer.RegionTitle.Chinese == "郡" &&
+                pLayer.GovernorTitle.Chinese == "郡守" &&
+                pLayer.LocalLevelTitle.Chinese == "州";
+            bool legacyEnglishDefaults =
+                pLayer.RegionTitle.English == "Commandery" &&
+                pLayer.GovernorTitle.English == "Regional Governor" &&
+                pLayer.LocalLevelTitle.English == "Prefecture";
+            if (legacyChineseDefaults || legacyEnglishDefaults)
+            {
+                if (legacyChineseDefaults)
+                {
+                    pLayer.RegionTitle.Chinese = "州";
+                    pLayer.GovernorTitle.Chinese = "州牧";
+                    pLayer.LocalLevelTitle.Chinese = "郡";
+                }
+                if (legacyEnglishDefaults)
+                {
+                    pLayer.RegionTitle.English = "Prefecture";
+                    pLayer.GovernorTitle.English = "Prefectural Governor";
+                    pLayer.LocalLevelTitle.English = "Commandery";
+                }
+            }
             if (string.IsNullOrWhiteSpace(pLayer.RegionTitle.Chinese))
-                pLayer.RegionTitle.Chinese = "郡";
+                pLayer.RegionTitle.Chinese = "州";
             if (string.IsNullOrWhiteSpace(pLayer.RegionTitle.English))
-                pLayer.RegionTitle.English = "Commandery";
+                pLayer.RegionTitle.English = "Prefecture";
             if (string.IsNullOrWhiteSpace(pLayer.GovernorTitle.Chinese))
-                pLayer.GovernorTitle.Chinese = "郡守";
+                pLayer.GovernorTitle.Chinese = "州牧";
             if (string.IsNullOrWhiteSpace(pLayer.GovernorTitle.English))
-                pLayer.GovernorTitle.English = "Regional Governor";
+                pLayer.GovernorTitle.English = "Prefectural Governor";
             if (string.IsNullOrWhiteSpace(pLayer.LocalLevelTitle.Chinese))
-                pLayer.LocalLevelTitle.Chinese = "州";
+                pLayer.LocalLevelTitle.Chinese = "郡";
             if (string.IsNullOrWhiteSpace(pLayer.LocalLevelTitle.English))
-                pLayer.LocalLevelTitle.English = "Prefecture";
+                pLayer.LocalLevelTitle.English = "Commandery";
             pLayer.ManagementOfficeIds = (pLayer.ManagementOfficeIds ??
                     new List<string>()).Where(id => !string.IsNullOrWhiteSpace(id))
                 .Distinct(StringComparer.Ordinal).OrderBy(id => id,

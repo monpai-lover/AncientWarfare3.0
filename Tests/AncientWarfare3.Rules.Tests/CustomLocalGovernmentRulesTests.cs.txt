@@ -20,6 +20,9 @@ internal static class CustomLocalGovernmentRulesTests
         Equal(CustomLocalGovernmentDefaultKind.Manual,
             CustomLocalGovernmentRules.SelectDefault(true, true, true),
             "manual template binding always wins");
+        Equal(CustomLocalGovernmentDefaultKind.Civil,
+            CustomLocalGovernmentRules.SelectDefault(false, true, true, true),
+            "capital city cannot default to military government");
 
         CustomLocalCourtTemplate civil =
             CustomLocalGovernmentPresetRules.CreateCivil("minzhou");

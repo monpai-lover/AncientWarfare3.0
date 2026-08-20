@@ -73,21 +73,25 @@ namespace AncientWarfare3.core.court
                 out string persistedId, string.Empty);
             pCity.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_MANUAL,
                 out bool manual, false);
+            bool isCapital = pCity == pKingdom.capital ||
+                pCity.isCapitalCity();
             CustomLocalGovernmentDefaultKind automaticKind =
                 CustomLocalGovernmentRules.SelectDefault(manual,
                     CustomLocalGovernmentCityService.HasForeignLandBorder(
                         pCity, pKingdom),
-                    CityEconomyService.IsFrontierMilitary(pKingdom, pCity));
+                    CityEconomyService.IsFrontierMilitary(pKingdom, pCity),
+                    isCapital);
             bool military = automaticKind ==
                 CustomLocalGovernmentDefaultKind.Military;
+            bool effectiveManual = manual && !isCapital;
             string resolvedId = CustomLocalCourtTemplateRules.ResolveTemplateId(
-                templates, persistedId, manual, military);
+                templates, persistedId, effectiveManual, military);
             pTemplate = templates.FirstOrDefault(template =>
                 template != null && string.Equals(template.Id, resolvedId,
                     System.StringComparison.Ordinal));
             if (pTemplate == null) return false;
 
-            bool validManual = manual && string.Equals(persistedId,
+            bool validManual = effectiveManual && string.Equals(persistedId,
                 resolvedId, System.StringComparison.Ordinal);
             if (!string.Equals(persistedId, resolvedId,
                     System.StringComparison.Ordinal))
@@ -166,9 +170,9 @@ namespace AncientWarfare3.core.court
             out string pRegionTitle, out string pGovernorTitle,
             out string pLocalLevelTitle)
         {
-            pRegionTitle = "郡";
-            pGovernorTitle = "郡守";
-            pLocalLevelTitle = "州";
+            pRegionTitle = "州";
+            pGovernorTitle = "州牧";
+            pLocalLevelTitle = "郡";
             if (!TryGetSnapshot(pKingdom, out CustomCourtTemplate snapshot) ||
                 snapshot.RegionalGovernmentLayer == null) return;
             pRegionTitle = LocalizedName(snapshot.RegionalGovernmentLayer

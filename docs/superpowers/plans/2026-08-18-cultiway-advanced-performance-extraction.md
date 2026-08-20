@@ -10,6 +10,19 @@
 
 ---
 
+## Current Status (Updated 2026-08-18)
+
+- Tasks 1-7 are implemented on `master` in commits `995b0765` through
+  `f8aa8419`.
+- Automated extraction verification is recorded by `bfb8b9cf` and that
+  baseline is present on `origin/master`.
+- The extracted scheduler remains opt-in. Interactive WorldBox validation,
+  installed-mod hash verification, default enablement, and deletion of
+  `origin/fix/cultiway-perf-large-scheduler-completion` remain pending.
+- The reference branch must stay available until the interactive matrix proves
+  the current `master` implementation under real save/load, land-war, and
+  amphibious-war workloads.
+
 ## File Map
 
 - `Code/core/performance/AWSchedulerStageDiagnostics.cs`: scheduler-stage timing buckets and immutable snapshots.
@@ -38,7 +51,7 @@
 - Modify: `Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj`
 - Modify: `Tests/CultiwayPerfSchedulerNonRegressionSourceGuard.ps1`
 
-- [ ] **Step 1: Add a focused source guard**
+- [x] **Step 1: Add a focused source guard**
 
 Create a method-block reader and assert these exact contracts:
 
@@ -59,7 +72,7 @@ Require-Contains $workerPool 'result.ExecutedItems != result.ScheduledItems' `
     'Persistent workers must reject incomplete operations.'
 ```
 
-- [ ] **Step 2: Register both Cultiway guards**
+- [x] **Step 2: Register both Cultiway guards**
 
 Add `Exec` entries after the existing non-regression guard:
 
@@ -68,7 +81,7 @@ Add `Exec` entries after the existing non-regression guard:
 <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\CultiwayAdvancedPerformanceExtractionSourceGuard.ps1&quot;" />
 ```
 
-- [ ] **Step 3: Run the focused guards**
+- [x] **Step 3: Run the focused guards**
 
 Run:
 
@@ -79,7 +92,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Tests\CultiwayAdvancedPerfor
 
 Expected: both report `passed`.
 
-- [ ] **Step 4: Commit the compatibility boundary**
+- [x] **Step 4: Commit the compatibility boundary**
 
 ```powershell
 git add -- Tests/CultiwayAdvancedPerformanceExtractionSourceGuard.ps1 Tests/CultiwayPerfSchedulerNonRegressionSourceGuard.ps1 Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj
@@ -98,7 +111,7 @@ git commit -m "test: lock Cultiway extraction compatibility boundaries"
 - Modify: `Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/PathfindingPerformanceTests.cs.txt`
 
-- [ ] **Step 1: Write failing stage snapshot tests**
+- [x] **Step 1: Write failing stage snapshot tests**
 
 Add assertions for bucket accumulation, frame totals, and formatting:
 
@@ -115,7 +128,7 @@ True(snapshot.FormatMilliseconds().Contains("actors:"),
     "actor stage diagnostics expose a stable label");
 ```
 
-- [ ] **Step 2: Run the rules project and verify RED**
+- [x] **Step 2: Run the rules project and verify RED**
 
 Run:
 
@@ -125,13 +138,13 @@ dotnet build Tests\AncientWarfare3.Rules.Tests\AncientWarfare3.Rules.Tests.cspro
 
 Expected: compilation fails because `AWSchedulerStageDiagnostics` is not registered.
 
-- [ ] **Step 3: Port the stage diagnostic type**
+- [x] **Step 3: Port the stage diagnostic type**
 
 Port `AWSchedulerStageDiagnostics.cs` from reference commit `97d6137a`, retaining the exact buckets `Maintenance`, `World`, `Map`, `Cities`, `Actors`, `Buildings`, `Armies`, `Kingdoms`, `Statuses`, `OtherVanilla`, and `Aw3Authority`.
 
 Register the production file in `AncientWarfare3.csproj` and link the same source file into `AncientWarfare3.Rules.Tests.csproj` so the RED/GREEN test cycle compiles against the real implementation.
 
-- [ ] **Step 4: Instrument the current runner without changing stage order**
+- [x] **Step 4: Instrument the current runner without changing stage order**
 
 Wrap the current stage switch, leaving `Aw3RtsLogicalPulse` untouched:
 
@@ -148,7 +161,7 @@ finally
 }
 ```
 
-- [ ] **Step 5: Add coordinator totals**
+- [x] **Step 5: Add coordinator totals**
 
 In `AWSimulationCoordinatorThread.Complete`, accumulate `WallTicks` and `WaitTicks`, then expose:
 
@@ -164,7 +177,7 @@ internal string GetDiagnostics()
 }
 ```
 
-- [ ] **Step 6: Partition actor timer work into fixed ranges**
+- [x] **Step 6: Partition actor timer work into fixed ranges**
 
 Keep current timer behavior and split batches into 128-actor ranges:
 
@@ -176,7 +189,7 @@ for (int start = 0; start < count; start += TimerRangeSize)
         actors, start, Math.Min(count, start + TimerRangeSize));
 ```
 
-- [ ] **Step 7: Verify and commit**
+- [x] **Step 7: Verify and commit**
 
 Run the three standard build/test commands from the spec, then:
 
@@ -193,7 +206,7 @@ git commit -m "perf: add scheduler stage diagnostics and timer partitioning"
 - Review only: `Code/core/performance/AWSimulationWorkerPool.cs`
 - Review only: `Code/core/performance/AWCooperativeBatchRunner.cs`
 
-- [ ] **Step 1: Add adversarial worker tests**
+- [x] **Step 1: Add adversarial worker tests**
 
 Extend `SimulationWorkerPoolTests.Run()` with tests that alternate one-item and 4096-item operations, inject an exception, and immediately run another operation. Assert every index is visited once and `ScheduledItems == ExecutedItems` after each successful operation.
 
@@ -212,15 +225,15 @@ for (int pass = 0; pass < 256; pass++)
 }
 ```
 
-- [ ] **Step 2: Verify the current stronger implementation**
+- [x] **Step 2: Verify the current stronger implementation**
 
 Run the rules executable. Expected: PASS without removing `_dispatchGate`. If a test fails, repair the current pool; do not replace it with the branch version.
 
-- [ ] **Step 3: Extend the guard against stale worker replacement**
+- [x] **Step 3: Extend the guard against stale worker replacement**
 
 Require `_dispatchGate.Assign`, `_dispatchGate.Consume`, `_activeGeneration`, and incomplete-operation failure text. Forbid a worker loop that runs solely after `_workerSignals[i].Set()` without consuming a generation token.
 
-- [ ] **Step 4: Commit test hardening**
+- [x] **Step 4: Commit test hardening**
 
 ```powershell
 git add -- Tests/AncientWarfare3.Rules.Tests/SimulationWorkerPoolTests.cs.txt Tests/CultiwayAdvancedPerformanceExtractionSourceGuard.ps1
@@ -237,23 +250,23 @@ git commit -m "test: harden persistent simulation worker contracts"
 - Modify: `Code/core/policy/RuntimePerformanceDiagnostic.cs`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/PathfindingPerformanceTests.cs.txt`
 
-- [ ] **Step 1: Write failing cache lifecycle tests**
+- [x] **Step 1: Write failing cache lifecycle tests**
 
 Add source-level assertions that `BeginPreparation()` precedes enemy-search worker admission, `EndPreparation()` runs in a `finally`, disposed kingdoms clear negative keys, and actor mutation remains in ordered commit methods.
 
-- [ ] **Step 2: Compare stage lists with reference commit `06844204`**
+- [x] **Step 2: Compare stage lists with reference commit `06844204`**
 
 Classify every reference stage as already present, AW3-specific replacement, or missing. Port only missing preparation/cache behavior. Do not replace the current file and do not remove RTS target locks or task ownership checks.
 
-- [ ] **Step 3: Keep worker/main-thread boundaries explicit**
+- [x] **Step 3: Keep worker/main-thread boundaries explicit**
 
 Worker stages may fill immutable arrays and cache decisions. Calls that change `Actor.ai`, `current_tile`, path cursors, armies, tasks, targets, or Unity presentation must remain in current ordered commit methods.
 
-- [ ] **Step 4: Add diagnostics and verify**
+- [x] **Step 4: Add diagnostics and verify**
 
 Append `AWEnemyPresenceCache.GetDiagnostics()` and actor-post worker/commit timings to the existing runtime performance record. Run focused rules, full rules, and production build.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add -- Code/core/performance/AWCooperativeActorPostRunner.cs Code/core/performance/AWEnemyPresenceCache.cs Code/patch/AW_EnemyFinderCachePatch.cs Code/core/performance/AWSimulationTickBenchmark.cs Code/core/policy/RuntimePerformanceDiagnostic.cs Tests/AncientWarfare3.Rules.Tests/PathfindingPerformanceTests.cs.txt
@@ -272,23 +285,23 @@ git commit -m "perf: complete actor post and enemy cache migration"
 - Modify: `Tests/AncientWarfare3.Rules.Tests/PathfindingPerformanceTests.cs.txt`
 - Modify: `Tests/CultiwayAdvancedPerformanceExtractionSourceGuard.ps1`
 
-- [ ] **Step 1: Add consistency tests before changing production code**
+- [x] **Step 1: Add consistency tests before changing production code**
 
 Cover repeated remove, kingdom transfer, cross-chunk move, actor disposal, full clear, and stale dirty records. Assert `_total_units == units_all.Count` and that an actor appears in at most one kingdom list.
 
-- [ ] **Step 2: Verify RED against any missing invariant**
+- [x] **Step 2: Verify RED against any missing invariant**
 
 Run the rules executable. Record the first failing invariant; do not change multiple spatial components at once.
 
-- [ ] **Step 3: Port only missing behavior from `07a2858e`, `5d3ea7d6`, `813369e0`, and `3acdf3cb`**
+- [x] **Step 3: Port only missing behavior from `07a2858e`, `5d3ea7d6`, `813369e0`, and `3acdf3cb`**
 
 Preserve current deterministic ordering and the stronger removal loop that clears stale references from every kingdom list. Keep full rebuild admission whenever generation, count, or rank validation fails.
 
-- [ ] **Step 4: Add a source guard for permanent fallbacks**
+- [x] **Step 4: Add a source guard for permanent fallbacks**
 
 Require `Validate`, full-clear invalidation, `container.units_all.Count`, and the vanilla rebuild call. Forbid a code path that catches membership corruption and silently continues without validation or fallback.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run focused rules, full rules, and production build, then:
 
@@ -307,15 +320,15 @@ git commit -m "perf: complete incremental spatial membership migration"
 - Modify: `Tests/AncientWarfare3.Rules.Tests/ArmyRtsTransportP0RulesTests.cs.txt`
 - Modify: `Tests/CultiwayAdvancedPerformanceExtractionSourceGuard.ps1`
 
-- [ ] **Step 1: Write failing source guards**
+- [x] **Step 1: Write failing source guards**
 
 Assert `HasOwnership()` and `DescribeRuntimeState()` contain no `.Poll(` or `OpenReadyCursor(`. Assert only `IsUsing`, `Update`, or their private lifecycle helpers may call those APIs.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Expected: the guard fails because current `DescribeRuntimeState()` calls `finder.Poll(actorId)`.
 
-- [ ] **Step 3: Add a read-only path session snapshot**
+- [x] **Step 3: Add a read-only path session snapshot**
 
 Add an immutable state query to `AWPathFinder` that does not call the stream:
 
@@ -334,15 +347,15 @@ public AWPathSessionState ReadState(long pActorId)
 
 Use this snapshot in `DescribeRuntimeState()` and leave formal `Poll()` consumption unchanged.
 
-- [ ] **Step 4: Lock deferred request behavior**
+- [x] **Step 4: Lock deferred request behavior**
 
 Test stable actor order, latest-request replacement, capacity rejection, main-thread frame-start flush, and `Clear()` on world teardown. Preserve the current immediate submission fallback when capture is unavailable.
 
-- [ ] **Step 5: Add teardown safety without copying branch movement code**
+- [x] **Step 5: Add teardown safety without copying branch movement code**
 
 At finder teardown, return a non-consuming `NoRequest`/stop decision. Do not copy the branch's parallel smooth-movement implementation or move actor tile mutation to a worker thread.
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run path rules, transport rules, full rules, and production build, then:
 
@@ -362,19 +375,19 @@ git commit -m "fix: keep Cultiway path diagnostics non-consuming"
 - Modify: `Tests/AncientWarfare3.Rules.Tests/WarriorDecisionAndCombatRegressionTests.cs.txt`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/ArmyRtsTransportP0RulesTests.cs.txt`
 
-- [ ] **Step 1: Add adversarial scenarios**
+- [x] **Step 1: Add adversarial scenarios**
 
 Cover land march, no-port embark, unload, next-city siege continuation, captain death, war end, peacetime native release, and hunger-task recovery. Every scenario must assert progress within a bounded number of logical pulses.
 
-- [ ] **Step 2: Freeze RTS ownership at cycle admission**
+- [x] **Step 2: Freeze RTS ownership at cycle admission**
 
 Snapshot the current scheduling mode once per admitted cycle and use the same value for army and AW authority stages. Do not let a setting toggle split ownership inside a cycle.
 
-- [ ] **Step 3: Preserve current handoffs**
+- [x] **Step 3: Preserve current handoffs**
 
 Keep transport P0, siege task repair, return-to-vanilla release, and captain succession logic. Port only cache/index lookups that avoid repeated scans; do not replace the controller state machine.
 
-- [ ] **Step 4: Run RTS-specific verification**
+- [x] **Step 4: Run RTS-specific verification**
 
 Run:
 
@@ -385,14 +398,14 @@ dotnet run --project Tests\AncientWarfare3.Rules.Tests\AncientWarfare3.Rules.Tes
 
 Expected: all scenarios and rules pass with no stalled ownership state.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add -- Code/core/performance/ArmyRtsSchedulingService.cs Code/core/performance/AWCooperativeSimulationRunner.cs Code/core/lineage/ArmyRtsControllerService.cs Code/core/lineage/ArmyRtsTransportService.cs Tests/ArmyRtsAdversarialSimulation/ContinuityAcceptanceSuite.cs Tests/AncientWarfare3.Rules.Tests/WarriorDecisionAndCombatRegressionTests.cs.txt Tests/AncientWarfare3.Rules.Tests/ArmyRtsTransportP0RulesTests.cs.txt
 git commit -m "perf: integrate upgraded scheduler with current RTS ownership"
 ```
 
-### Task 8: Full Verification, Deployment, and Default Enablement
+### Task 8: Interactive Validation, Default Enablement, and Branch Cleanup
 
 **Files:**
 - Modify: `Code/core/performance/AWPerformanceSettings.cs`
@@ -400,7 +413,7 @@ git commit -m "perf: integrate upgraded scheduler with current RTS ownership"
 - Modify: `Tests/CultiwayAdvancedPerformanceExtractionSourceGuard.ps1`
 - Modify: `docs/superpowers/plans/2026-08-18-cultiway-advanced-performance-extraction.md`
 
-- [ ] **Step 1: Run all static verification**
+- [x] **Step 1: Run all static verification**
 
 Run `git diff --check`, the production build, the rules build, the full rules executable, both Cultiway source guards, and RTS adversarial simulation. All must exit zero.
 
@@ -425,9 +438,20 @@ git add -- Code/core/performance/AWPerformanceSettings.cs Code/core/policy/Runti
 git commit -m "perf: enable validated Cultiway advanced pipeline"
 ```
 
-- [ ] **Step 6: Request final review and push**
+- [x] **Step 6: Record and push the automated extraction baseline**
 
-Request spec-compliance and code-quality reviews, rerun the full verification commands on the reviewed HEAD, then push `master`. Delete `origin/fix/cultiway-perf-large-scheduler-completion` only after confirming every reference behavior is either ported, superseded by a stronger current implementation, or intentionally excluded in the committed audit.
+Commits `995b0765` through `f8aa8419` implement the extraction, and
+`bfb8b9cf` records the automated verification. This baseline is present on
+`origin/master`.
+
+- [ ] **Step 7: Complete final review and remove the reference branch**
+
+After Steps 2-5 pass, request final spec-compliance and code-quality reviews,
+rerun the full verification commands on the reviewed HEAD, and push any
+default-enablement or measurement commit. Delete
+`origin/fix/cultiway-perf-large-scheduler-completion` only after confirming
+that every reference behavior is ported, superseded by a stronger current
+implementation, or intentionally excluded in the committed audit.
 
 ## Implementation Record
 

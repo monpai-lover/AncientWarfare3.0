@@ -7,7 +7,7 @@ namespace AncientWarfare3.core.court
     internal static class RegionalGovernmentRules
     {
         public const int MaximumNeighborMembers = 4;
-        public const string DefaultRegionTitle = "郡";
+        public const string DefaultRegionTitle = "州";
 
         public static IReadOnlyList<RegionalGovernmentFact> Build(
             IEnumerable<RegionalGovernmentCityFact> pCities,
@@ -70,7 +70,7 @@ namespace AncientWarfare3.core.court
             string level = (pLevelTitle ?? string.Empty).Trim();
             if (string.IsNullOrEmpty(level)) return place;
             if (string.IsNullOrEmpty(place)) return level;
-            return place + " · " + level;
+            return place + level;
         }
 
         private static bool IsValid(RegionalGovernmentCityFact pCity)

@@ -11,6 +11,7 @@ internal static class CorruptionRulesTests
         Streaks();
         ConversionBandsAndHash();
         CleanupReduction();
+        AdministrativeGrace();
     }
 
     private static void SeverityBoundaries()
@@ -55,6 +56,14 @@ internal static class CorruptionRulesTests
     {
         Equal(30, CorruptionRules.ReduceScore(50, 20), "cleanup reduction");
         Equal(0, CorruptionRules.ReduceScore(5, 20), "cleanup lower clamp");
+    }
+
+    private static void AdministrativeGrace()
+    {
+        Equal(0f, CorruptionRules.LocalOfficialPressure(false, 0, 1, 25f),
+            "uninitialized bureau has no vacancy pressure");
+        True(CorruptionRules.LocalOfficialPressure(true, 0, 1, 25f) > 0f,
+            "mature empty bureau still reports vacancy pressure");
     }
 
     private static void True(bool value, string message)

@@ -19,6 +19,7 @@ namespace AncientWarfare3.core.policy
         public const float MaximumLabelSize = 40.0f;
         public const float CountryLabelVisualScale = 2.0f;
         public const float CityLabelVisualScale = 1.65f;
+        public const float RegionLabelVisualScale = 0.75f;
         public const string CountryLabelMinimapSortingLayer = "MapOverlay";
         public const string CountryLabelMainMapSortingLayer = "EffectsBack";
         public const int CountryLabelMinimapSortingOrder = 32760;

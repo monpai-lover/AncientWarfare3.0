@@ -93,6 +93,40 @@ namespace AncientWarfare3.core.court
                     pKingdom?.id ?? -1L));
         }
 
+        private static void AddRegionalGovernmentNodes(
+            List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
+        {
+            IReadOnlyList<RegionalGovernmentReadModel> regions =
+                RegionalGovernmentAggregationService.Build(pKingdom);
+            int order = 0;
+            foreach (RegionalGovernmentReadModel region in regions)
+            {
+                Actor governor = World.world?.units?.get(
+                    region.GovernorActorId);
+                if (!IsValid(governor, pKingdom)) continue;
+                string school = ActorSchool(governor, "");
+                pSeeds.Add(new CourtPyramidNodeModel(governor.data.id,
+                    "regional_government_layer:" + region.SeatCityId,
+                    CourtPyramidRoleId.RegionalGovernor,
+                    CourtPyramidRules.GovernorRank - 1, order++, false)
+                {
+                    OfficeLayer = CourtOfficeLayer.Regional,
+                    ActorName = SafeActorName(governor),
+                    SchoolId = school,
+                    SchoolIconPath = RegisteredSchoolIconPath(school),
+                    CityId = region.SeatCityId,
+                    CityName = FindCityName(pKingdom, region.SeatCityId),
+                    CommandName = RegionalGovernmentCommandName(
+                        region.RegionName, region.RegionTitle,
+                        region.GovernorTitle,
+                        FindCityName(pKingdom, region.SeatCityId),
+                        region.MemberCount),
+                    DisplayTitle = region.GovernorTitle,
+                    Influence = SafeStat(governor, "stewardship")
+                });
+            }
+        }
+
         private static LocalCourtReadModel BuildLocal(Kingdom pKingdom,
             City pCity, IReadOnlyDictionary<long, CityBureauView> pBureaus,
             IReadOnlyList<CourtOfficerView> pOfficers,
@@ -160,55 +194,35 @@ namespace AncientWarfare3.core.court
                 localTemplate, pCareerStates);
             AddRegionalSuperiorNode(model, pKingdom, pCity);
             model.ActiveSeats = model.Nodes.Count(node =>
-                node != null && !node.IsVacancy && node.ActorId >= 0);
+                node != null && node.OfficeLayer == CourtOfficeLayer.City &&
+                !node.IsVacancy && node.ActorId >= 0);
             model.LeaderNode = model.Nodes.FirstOrDefault(node =>
-                node?.ActorId == pCity.leader?.data?.id) ??
+                node?.OfficeLayer == CourtOfficeLayer.City &&
+                node.ActorId == pCity.leader?.data?.id) ??
                 model.Nodes.FirstOrDefault(node => node != null &&
+                    node.OfficeLayer == CourtOfficeLayer.City &&
                     !node.IsVacancy);
             return model;
-        }
-
-        private static void AddRegionalGovernmentNodes(
-            List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
-        {
-            IReadOnlyList<RegionalGovernmentReadModel> regions =
-                RegionalGovernmentAggregationService.Build(pKingdom);
-            int order = 0;
-            foreach (RegionalGovernmentReadModel region in regions)
-            {
-                Actor governor = World.world?.units?.get(
-                    region.GovernorActorId);
-                if (!IsValid(governor, pKingdom)) continue;
-                string school = ActorSchool(governor, "");
-                pSeeds.Add(new CourtPyramidNodeModel(governor.data.id,
-                    "regional_government_layer:" + region.SeatCityId,
-                    CourtPyramidRoleId.RegionalGovernor,
-                    CourtPyramidRules.GovernorRank - 1, order++, false)
-                {
-                    OfficeLayer = CourtOfficeLayer.Regional,
-                    ActorName = SafeActorName(governor),
-                    SchoolId = school,
-                    SchoolIconPath = RegisteredSchoolIconPath(school),
-                    CityId = region.SeatCityId,
-                    CityName = FindCityName(pKingdom, region.SeatCityId),
-                    CommandName = RegionalGovernmentCommandName(
-                        region.RegionName, region.RegionTitle,
-                        region.GovernorTitle,
-                        FindCityName(pKingdom, region.SeatCityId),
-                        region.MemberCount),
-                    DisplayTitle = region.GovernorTitle,
-                    Influence = SafeStat(governor, "stewardship")
-                });
-            }
         }
 
         private static void AddRegionalSuperiorNode(LocalCourtReadModel pModel,
             Kingdom pKingdom, City pCity)
         {
             if (pModel == null || pCity?.data == null ||
-                pModel.RegionalGovernorActorId < 0L) return;
-            Actor governor = World.world?.units?.get(
-                pModel.RegionalGovernorActorId);
+                pModel.RegionSeatCityId < 0L) return;
+            City seatCity = null;
+            try
+            {
+                seatCity = pKingdom?.getCities()?.FirstOrDefault(city =>
+                    city?.data?.id == pModel.RegionSeatCityId &&
+                    !city.isRekt() && city.kingdom == pKingdom);
+            }
+            catch { }
+            Actor governor = seatCity?.leader;
+            if (!IsValid(governor, pKingdom) &&
+                pModel.RegionalGovernorActorId >= 0L)
+                governor = World.world?.units?.get(
+                    pModel.RegionalGovernorActorId);
             if (!IsValid(governor, pKingdom)) return;
             string school = ActorSchool(governor, "");
             var node = new CourtPyramidNodeModel(governor.data.id,
@@ -303,6 +317,12 @@ namespace AncientWarfare3.core.court
                 if (officer != null) remaining.Remove(officer);
                 Actor actor = officer == null ? null :
                     World.world?.units?.get(officer.actor_id);
+                if (index == 0 && !IsValid(actor, pKingdom) &&
+                    IsValid(pCity.leader, pKingdom))
+                {
+                    officer = null;
+                    actor = pCity.leader;
+                }
                 bool valid = IsValid(actor, pKingdom);
                 int graphRank = ranks != null &&
                     ranks.TryGetValue(officeId, out int resolvedRank)
@@ -322,8 +342,10 @@ namespace AncientWarfare3.core.court
                         ? RegisteredSchoolIconPath(ActorSchool(actor, ""))
                         : string.Empty,
                     AppointmentYear = valid
-                        ? officer.appointed_year : -1,
-                    Influence = valid ? officer.influence : 0f
+                        ? officer?.appointed_year ?? -1 : -1,
+                    Influence = valid
+                        ? officer?.influence ?? SafeStat(actor, "stewardship")
+                        : 0f
                 };
                 pModel.Nodes.Add(node);
             }

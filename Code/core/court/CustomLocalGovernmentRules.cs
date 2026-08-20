@@ -11,8 +11,10 @@ namespace AncientWarfare3.core.court
     {
         public static CustomLocalGovernmentDefaultKind SelectDefault(
             bool pManualBinding, bool pHasForeignLandBorder,
-            bool pFrontierMilitaryRole)
+            bool pFrontierMilitaryRole, bool pIsCapital = false)
         {
+            if (pIsCapital)
+                return CustomLocalGovernmentDefaultKind.Civil;
             if (pManualBinding)
                 return CustomLocalGovernmentDefaultKind.Manual;
             return pHasForeignLandBorder || pFrontierMilitaryRole

@@ -14,6 +14,7 @@ if (args.Length == 1 && args[0] == "--shi-lineage-mapmode")
     CityShiInfluenceRulesTests.Run();
     CityShiInfluenceSourceGuardTests.Run();
     ShiLineageMapModeSourceGuardTests.Run();
+    HierarchicalVassalCourtPresentationSourceGuardTests.Run();
     Console.WriteLine("Shi lineage mapmode rules passed.");
     return;
 }

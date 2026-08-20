@@ -9,7 +9,7 @@ namespace AncientWarfare3.ui.components
         private RectTransform _from;
         private RectTransform _to;
         private Image _line;
-        private Image _endMarker;
+        private Text _directionArrow;
         private Text _label;
 
         public CustomCourtEdge Edge { get; private set; }
@@ -33,20 +33,26 @@ namespace AncientWarfare3.ui.components
 
         private void EnsureDecorations()
         {
-            if (_endMarker == null)
+            if (_directionArrow == null)
             {
-                GameObject marker = new GameObject("DirectionMarker",
-                    typeof(RectTransform), typeof(Image));
+                GameObject marker = new GameObject("DirectionArrow",
+                    typeof(RectTransform), typeof(Text));
                 marker.transform.SetParent(transform, false);
-                _endMarker = marker.GetComponent<Image>();
-                _endMarker.raycastTarget = false;
-                RectTransform markerRect = _endMarker.rectTransform;
+                _directionArrow = marker.GetComponent<Text>();
+                _directionArrow.font = LocalizedTextManager.current_font;
+                _directionArrow.fontSize = 12;
+                _directionArrow.fontStyle = FontStyle.Bold;
+                _directionArrow.alignment = TextAnchor.MiddleCenter;
+                _directionArrow.horizontalOverflow = HorizontalWrapMode.Overflow;
+                _directionArrow.verticalOverflow = VerticalWrapMode.Overflow;
+                _directionArrow.text = "▶";
+                _directionArrow.raycastTarget = false;
+                RectTransform markerRect = _directionArrow.rectTransform;
                 markerRect.anchorMin = markerRect.anchorMax =
                     new Vector2(1f, 0.5f);
                 markerRect.pivot = new Vector2(0.5f, 0.5f);
                 markerRect.anchoredPosition = Vector2.zero;
-                markerRect.sizeDelta = new Vector2(7f, 7f);
-                markerRect.localRotation = Quaternion.Euler(0f, 0f, 45f);
+                markerRect.sizeDelta = new Vector2(16f, 16f);
             }
 
             if (_label == null)
@@ -87,7 +93,7 @@ namespace AncientWarfare3.ui.components
                 ? new Color(0.18f, 0.86f, 1f, 0.94f)
                 : new Color(1f, 0.58f, 0.12f, 0.94f);
             if (_line != null) _line.color = color;
-            if (_endMarker != null) _endMarker.color = color;
+            if (_directionArrow != null) _directionArrow.color = color;
             if (_label != null)
             {
                 _label.color = color;

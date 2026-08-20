@@ -7,12 +7,20 @@ internal static class CityAdministrationMapModeRulesTests
     public static void Run()
     {
         var state = new CityAdministrationMapStateRules();
-        True(state.IsRegionLevel, "city mode starts at region level");
+        True(state.IsCountryLevel, "city mode starts at country level");
+        True(state.PushKingdom(7L), "country focus pushes kingdom");
+        Equal(7L, state.FocusKingdomId, "focused kingdom is stable");
+        True(state.IsRegionLevel, "country focus starts at commandery level");
         True(state.PushRegion(42L), "region focus pushes seat city");
         Equal(42L, state.FocusSeatCityId, "focused seat is stable");
-        True(!state.IsRegionLevel, "focused city mode is member level");
-        True(state.PopRegion(), "outside click pops to region level");
-        True(state.IsRegionLevel, "pop restores region level");
+        True(state.IsCityLevel, "region focus enters prefecture level");
+        True(state.PopRegion(), "outside click pops to commandery level");
+        True(state.IsRegionLevel, "pop restores commandery level");
+        True(state.PopKingdom(), "outside click pops to country level");
+        True(state.IsCountryLevel, "pop restores country level");
+        True(state.PushKingdom(7L), "country focus can be entered again");
+        True(state.PopKingdom(), "country focus can be exited");
+        True(state.IsCountryLevel, "country level remains after reset");
         Equal("city-admin:7:Regions:42:99", CityAdministrationMapModeRules
             .CacheKey(7L, CityAdministrationMapLevel.Regions, 42L, 99L),
             "cache key includes world level seat and entity");
@@ -39,6 +47,11 @@ internal static class CityAdministrationMapModeRulesTests
             CityAdministrationMapModeRules.ResolveClick(
                 true, -1L, -1L, false),
             "unmapped region-level click does not affect kingdom hierarchy");
+        Equal("#4A6FA5", CityAdministrationMapModeRules.RegionColorHex(0L),
+            "first commandery uses the stable region palette");
+        True(CityAdministrationMapModeRules.RegionColorHex(0L) !=
+             CityAdministrationMapModeRules.RegionColorHex(1L),
+            "adjacent commanderies must have visibly distinct colors");
     }
 
     private static void True(bool pActual, string pMessage)

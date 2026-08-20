@@ -9,14 +9,15 @@ namespace AncientWarfare3.ui.components
     internal sealed class CourtCityGovernmentCard : MonoBehaviour
     {
         internal const float Width = 148f;
-        internal const float Height = 140f;
+        internal const float Height = 58f;
 
         private Text _title;
+        private Text _governorName;
         private Text _summary;
         private Button _openButton;
         private CourtActorNodeView _leader;
 
-        internal CourtActorNodeView LeaderNode => _leader;
+        internal CourtActorNodeView LeaderNode => null;
 
         internal static CourtCityGovernmentCard Create(Transform pParent)
         {
@@ -42,6 +43,9 @@ namespace AncientWarfare3.ui.components
                 RegionalGovernmentRules.CityName(pModel.CityName),
                 pModel.LocalLevelTitle);
             _title.text = cityLabel + " | " + pModel.CityTypeName;
+            _governorName.text = AW_L10n.Text("aw_local_office_zhoumu", "郡守") +
+                ": " + (pModel.RegionalSuperiorNode?.ActorName ??
+                    AW_L10n.Text("aw_court_vacancy", "Vacant"));
             _summary.text = string.Format(
                 AW_L10n.Text("aw_local_court_card_summary",
                     "Officials {0}/{1}  Efficiency {2}"),
@@ -54,9 +58,8 @@ namespace AncientWarfare3.ui.components
             _openButton.onClick.RemoveAllListeners();
             long cityId = pModel.CityId;
             _openButton.onClick.AddListener(() => pOpenCity?.Invoke(cityId));
-            _leader.gameObject.SetActive(pModel.LeaderNode != null);
-            if (pModel.LeaderNode != null)
-                _leader.Bind(pModel.LeaderNode, pKingdom);
+            _leader.gameObject.SetActive(false);
+            _summary.gameObject.SetActive(false);
         }
 
         private void BuildUi()
@@ -85,12 +88,20 @@ namespace AncientWarfare3.ui.components
             _title.rectTransform.offsetMax = new Vector2(-3f, -1f);
 
             _leader = CourtActorNodeView.Create(transform);
-            RectTransform leaderRect = _leader.GetComponent<RectTransform>();
-            leaderRect.pivot = new Vector2(0.5f, 1f);
-            leaderRect.anchoredPosition = new Vector2(Width * 0.5f, -22f);
+            _leader.gameObject.SetActive(false);
+
+            _governorName = CreateText(transform, "GovernorName", 8,
+                TextAnchor.MiddleCenter);
+            RectTransform governorRect = _governorName.rectTransform;
+            governorRect.anchorMin = new Vector2(0f, 1f);
+            governorRect.anchorMax = new Vector2(1f, 1f);
+            governorRect.pivot = new Vector2(0.5f, 1f);
+            governorRect.anchoredPosition = new Vector2(0f, -24f);
+            governorRect.sizeDelta = new Vector2(-8f, 24f);
 
             _summary = CreateText(transform, "Summary", 7,
                 TextAnchor.MiddleCenter);
+            _summary.gameObject.SetActive(false);
             RectTransform summaryRect = _summary.rectTransform;
             summaryRect.anchorMin = new Vector2(0f, 0f);
             summaryRect.anchorMax = new Vector2(1f, 0f);

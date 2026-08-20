@@ -380,8 +380,8 @@ namespace AncientWarfare3.core.policy
                         _pendingCityZones.Add(zone);
                     if (zone.tiles_with_ground > 0) _pendingVisible = true;
                     if (_kind != HierarchicalVassalLabelDiscoveryKind.
-                        ActiveView || !HierarchicalVassalMapModeService.
-                        IsCityLayer)
+                        ActiveView || HierarchicalVassalMapModeService.
+                        IsCityCountryLayer)
                         AddTerritoryZone(_pendingRepresentative, zone);
                 }
                 if (_pendingZoneIndex < zones.Count) return;
@@ -394,7 +394,7 @@ namespace AncientWarfare3.core.policy
                     _cities.Add(_pendingCity);
                 if (_pendingVisible && (_kind ==
                         HierarchicalVassalLabelDiscoveryKind.ActiveView &&
-                        HierarchicalVassalMapModeService.IsCityLayer ||
+                        HierarchicalVassalMapModeService.IsCityMemberLayer ||
                     _kind == HierarchicalVassalLabelDiscoveryKind.RootCities))
                     _citySources.Add(new HierarchicalVassalMapLabelCitySource(
                         _pendingCity, _pendingCityZones, _pendingCityZoneIds,
@@ -502,14 +502,31 @@ namespace AncientWarfare3.core.policy
         private void FinalizeSources(int pBudget)
         {
             if (_kind == HierarchicalVassalLabelDiscoveryKind.ActiveView &&
-                HierarchicalVassalMapModeService.IsCityLayer ||
+                (HierarchicalVassalMapModeService.IsCityRegionLayer ||
+                 HierarchicalVassalMapModeService.IsCityMemberLayer) ||
                 _kind == HierarchicalVassalLabelDiscoveryKind.RootCities)
             {
                 IReadOnlyList<HierarchicalVassalMapLabelRegionSource> regions =
                     HierarchicalVassalMapModeService.
-                        BuildCityAdministrationRegionSources(_cities);
+                        BuildCityAdministrationRegionSources(_cities,
+                            _kind == HierarchicalVassalLabelDiscoveryKind.RootCities
+                                ? -1L : _focus);
+                IReadOnlyList<HierarchicalVassalMapLabelCitySource> cities =
+                    _citySources;
+                if (_kind == HierarchicalVassalLabelDiscoveryKind.ActiveView &&
+                    HierarchicalVassalMapModeService.IsCityMemberLayer)
+                {
+                    var filtered = new List<
+                        HierarchicalVassalMapLabelCitySource>();
+                    foreach (HierarchicalVassalMapLabelCitySource source in
+                             _citySources)
+                        if (HierarchicalVassalMapModeService.
+                                IsCityInFocusedRegion(source?.City))
+                            filtered.Add(source);
+                    cities = filtered;
+                }
                 _result = new HierarchicalVassalLabelDiscoveryResult(_cities,
-                    null, _citySources, regions, _hierarchy, _kingdomById);
+                    null, cities, regions, _hierarchy, _kingdomById);
                 _status = HierarchicalVassalLabelDiscoveryStatus.Complete;
                 return;
             }

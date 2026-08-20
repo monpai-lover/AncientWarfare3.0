@@ -13,6 +13,9 @@ namespace AncientWarfare3.ui.items
         private readonly Button[] _rows = new Button[3];
         private readonly Button[] _focusButtons = new Button[3];
         private readonly Text[] _labels = new Text[3];
+        private readonly Text[] _focusLabels = new Text[3];
+        private readonly Image[] _focusImages = new Image[3];
+        private readonly long[] _focusShiIds = { -1L, -1L, -1L };
         private Text _dominant;
 
         public static ShiLineageCompositionElement Create(Transform pParent)
@@ -25,7 +28,7 @@ namespace AncientWarfare3.ui.items
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0f, 1f);
             rect.anchoredPosition = new Vector2(8f, -8f);
-            rect.sizeDelta = new Vector2(360f, 150f);
+            rect.sizeDelta = new Vector2(1080f, 90f);
             AW_UIStyle.ApplyPanel(obj.GetComponent<Image>(), .96f);
             var result = obj.AddComponent<ShiLineageCompositionElement>();
             result.Build();
@@ -61,19 +64,47 @@ namespace AncientWarfare3.ui.items
                 _focusButtons[i].onClick.RemoveAllListeners();
                 if (!valid)
                 {
+                    _focusShiIds[i] = -1L;
                     _labels[i].text = branch == null
                         ? AW_L10n.Text("aw_shi_map_none", "No Shi")
                         : AW_L10n.Text("aw_shi_map_unknown", "Unknown Shi");
                     continue;
                 }
                 long shiId = branch.ShiId;
+                _focusShiIds[i] = shiId;
                 _labels[i].text = branch.DisplayName + "  " +
                     pSnapshot.SharePercent(shiId) + "%";
                 _rows[i].onClick.AddListener(() => OpenTree(shiId));
                 _focusButtons[i].onClick.AddListener(() =>
-                    ShiLineageMapModeService.SetFocus(shiId));
+                    FocusBranch(shiId, pCity));
+                bool focused = ShiLineageMapModeService.FocusShiId == shiId;
+                _focusLabels[i].text = focused
+                    ? AW_L10n.Text("aw_shi_map_focused", "Focused")
+                    : AW_L10n.Text("aw_shi_map_focus", "Focus");
+                _focusImages[i].color = focused
+                    ? new Color(0.92f, 0.72f, 0.22f, 1f)
+                    : new Color(1f, 1f, 1f, 0.96f);
             }
             gameObject.SetActive(true);
+        }
+
+        private void FocusBranch(long pShiId, City pCity)
+        {
+            if (pShiId < 0L || pCity?.data == null) return;
+            long shiId = pShiId;
+            ShiLineageMapModeService.SetFocus(shiId, pCity);
+            for (int i = 0; i < _focusLabels.Length; i++)
+            {
+                bool focused = _focusShiIds[i] == shiId;
+                // Rebind supplies the authoritative branch-to-button mapping;
+                // this immediate refresh gives the clicked button instant feedback.
+                _focusLabels[i].text = focused
+                    ? AW_L10n.Text("aw_shi_map_focused", "Focused")
+                    : AW_L10n.Text("aw_shi_map_focus", "Focus");
+                _focusImages[i].color = focused
+                    ? new Color(0.92f, 0.72f, 0.22f, 1f)
+                    : new Color(1f, 1f, 1f, 0.96f);
+            }
         }
 
         private static void OpenTree(long shiId)
@@ -101,11 +132,12 @@ namespace AncientWarfare3.ui.items
                 rect.anchorMin = new Vector2(0f, 1f);
                 rect.anchorMax = new Vector2(0f, 1f);
                 rect.pivot = new Vector2(0f, 1f);
-                rect.anchoredPosition = new Vector2(8f, -52f - i * 30f);
+                rect.anchoredPosition = new Vector2(8f + i * 356f, -52f);
                 rect.sizeDelta = new Vector2(344f, 26f);
                 AW_UIStyle.ApplyButton(row.GetComponent<Image>(), .96f);
                 _rows[i] = row.GetComponent<Button>();
-                _focusButtons[i] = CreateFocusButton(row.transform);
+                _focusButtons[i] = CreateFocusButton(row.transform,
+                    out _focusLabels[i], out _focusImages[i]);
                 _labels[i] = AddText(row.transform, "Label", Vector2.zero,
                     Vector2.zero, 9, TextAnchor.MiddleLeft, true);
                 _labels[i].rectTransform.offsetMin = new Vector2(8f, 0f);
@@ -113,7 +145,8 @@ namespace AncientWarfare3.ui.items
             }
         }
 
-        private static Button CreateFocusButton(Transform pParent)
+        private static Button CreateFocusButton(Transform pParent,
+            out Text pLabel, out Image pImage)
         {
             var obj = new GameObject("Focus", typeof(RectTransform),
                 typeof(Image), typeof(Button));
@@ -124,10 +157,12 @@ namespace AncientWarfare3.ui.items
             rect.pivot = new Vector2(1f, .5f);
             rect.anchoredPosition = new Vector2(-4f, 0f);
             rect.sizeDelta = new Vector2(42f, 20f);
-            AW_UIStyle.ApplyButton(obj.GetComponent<Image>(), .96f);
+            pImage = obj.GetComponent<Image>();
+            AW_UIStyle.ApplyButton(pImage, .96f);
             Text text = AddText(obj.transform, "Label", Vector2.zero,
                 Vector2.zero, 7, TextAnchor.MiddleCenter, true);
             text.text = AW_L10n.Text("aw_shi_map_focus", "Focus");
+            pLabel = text;
             return obj.GetComponent<Button>();
         }
 

@@ -1,0 +1,47 @@
+using System;
+using System.IO;
+
+internal static class HierarchicalVassalCourtPresentationSourceGuardTests
+{
+    internal static void Run()
+    {
+        string service = Read("Code/core/policy/HierarchicalVassalMapModeService.cs");
+        string clickPatch = Read("Code/patch/AW_HierarchicalVassalMapClickPatch.cs");
+        string model = Read("Code/core/court/CourtReadModelService.cs");
+        string card = Read("Code/ui/components/CourtCityGovernmentCard.cs");
+        Contains(clickPatch, "clickedFinal", "hierarchy map must own large-map clicks");
+        Contains(clickPatch, "MapBox.isRenderMiniMap()", "minimap click routing must remain native");
+        Contains(clickPatch, "HandleZoneClick", "large-map clicks must use hierarchy state transitions");
+        Contains(clickPatch, "hierarchyActive", "blank clicks must still route while the hierarchy map is active");
+        Contains(service, "RegionColorHex", "commandery level needs a stable contrast palette");
+        Contains(service, "IsCityCountryLayer", "city mode must begin with country selection");
+        Contains(service, "PushKingdom", "city mode must enter a kingdom before commanderies");
+        Contains(service, "IsCityMemberLayer", "prefecture level must be a separate city state");
+        Contains(service, "CityAdministrationState.PopKingdom()",
+            "blank commandery clicks must return to country level");
+        string runtime = Read("Code/core/court/CustomCourtRuntime.cs");
+        Contains(runtime, "isCapital", "capital template resolution must be explicit");
+        Contains(runtime, "effectiveManual", "capital must not retain a manual military template");
+        Contains(model, "AddRegionalGovernmentNodes(seeds, pKingdom)",
+            "central court must render one regional governor per commandery");
+        Contains(card, "GovernorName", "state cards must expose the governor name without a portrait");
+        Contains(card, "_leader.gameObject.SetActive(false)",
+            "state cards must suppress duplicate governor portraits");
+        Contains(card, "pModel.RegionalSuperiorNode?.ActorName",
+            "state cards must display the regional governor name");
+        string window = Read("Code/ui/windows/CourtWindow.cs");
+        Contains(window, "RenderRegionalGovernmentLinks",
+            "regional governor must connect to managed prefecture cards");
+    }
+
+    private static string Read(string pRelative) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            pRelative.Replace('/', Path.DirectorySeparatorChar)))
+        .Replace("\r\n", "\n");
+
+    private static void Contains(string pText, string pNeedle, string pMessage)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage);
+    }
+}

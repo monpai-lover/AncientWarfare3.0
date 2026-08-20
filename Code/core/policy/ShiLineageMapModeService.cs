@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui;
+using UnityEngine;
 
 namespace AncientWarfare3.core.policy
 {
@@ -35,6 +36,18 @@ namespace AncientWarfare3.core.policy
         {
             FocusShiId = pShiId >= 0L ? pShiId : -1L;
             DirtyMap();
+        }
+
+        public static void SetFocus(long pShiId, City pOriginCity)
+        {
+            SetFocus(pShiId);
+            try
+            {
+                WorldTile tile = pOriginCity?.getTile();
+                if (tile != null)
+                    MoveCamera.instance?.focusOn(tile.posV3);
+            }
+            catch { }
         }
 
         public static string GetCityColorHex(City pCity)

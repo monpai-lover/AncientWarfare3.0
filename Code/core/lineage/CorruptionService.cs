@@ -236,10 +236,8 @@ namespace AncientWarfare3.core.lineage
 
             int slots = Math.Max(1, pBureau?.office_slots ?? 1);
             float efficiency = Clamp(pBureau?.efficiency ?? 25f, 0f, 100f);
-            float vacancyRatio = 1f - Math.Min(1f,
-                Math.Max(0, pOfficerCount) / (float)slots);
-            float official = Clamp((100f - efficiency) * 0.18f +
-                                   vacancyRatio * 10f, 0f, 28f);
+            float official = CorruptionRules.LocalOfficialPressure(
+                pBureau != null, pOfficerCount, slots, efficiency);
 
             float unrest = pEconomy?.has_record == true
                 ? Clamp(pEconomy.unrest_risk, 0f, 100f) : 10f;

@@ -12,11 +12,24 @@ internal static class RegionalGovernmentCourtRulesTests
             "court pyramid defines regional governor role");
         True(source.Contains("IsRegionalNode"),
             "court pyramid protects regional projections from actor merge");
+        string readModel = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "CourtReadModelService.cs"));
+        False(readModel.Contains("AddRegionalGovernmentNodes(seeds, pKingdom)"),
+            "central court must not project regional government nodes");
+        True(readModel.Contains("pCity.leader"),
+            "local court must use the city leader as the chief fallback");
+        True(readModel.Contains("RegionSeatCityId"),
+            "regional superior must resolve the region seat city");
     }
 
     private static void True(bool pActual, string pMessage)
     {
         if (!pActual) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pActual, string pMessage)
+    {
+        if (pActual) throw new InvalidOperationException(pMessage);
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pMessage)

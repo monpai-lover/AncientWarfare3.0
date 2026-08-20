@@ -15,13 +15,13 @@ internal static class RegionalGovernmentTemplateRulesTests
             out CustomCourtTemplate imported, out _), "old central imports");
         True(imported.RegionalGovernmentLayer != null,
             "old central receives dynamic layer");
-        Equal("郡", imported.RegionalGovernmentLayer.RegionTitle.Chinese,
+        Equal("州", imported.RegionalGovernmentLayer.RegionTitle.Chinese,
             "default region title");
-        Equal("郡守", imported.RegionalGovernmentLayer.GovernorTitle.Chinese,
+        Equal("州牧", imported.RegionalGovernmentLayer.GovernorTitle.Chinese,
             "default governor title");
-        Equal("州", imported.RegionalGovernmentLayer.LocalLevelTitle.Chinese,
+        Equal("郡", imported.RegionalGovernmentLayer.LocalLevelTitle.Chinese,
             "legacy central templates receive the default local level");
-        Equal("Prefecture",
+        Equal("Commandery",
             imported.RegionalGovernmentLayer.LocalLevelTitle.English,
             "legacy central templates receive the English local level");
 

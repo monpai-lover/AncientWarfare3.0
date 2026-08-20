@@ -26,6 +26,7 @@ aw_custom_local_court_replacement_desc,选择删除当前模板后城市改用�
 aw_custom_local_court_limit,地方官署模板已达到上限,The local template limit has been reached,地方官署模板已达到上限
 aw_custom_local_court_default_name,地方官署,Local Government,地方官署
 aw_court_governor,地方长官,Governor,地方長官
+aw_court_office_regional_superior,州牧,Prefectural Governor,州牧
 aw_custom_local_court_copy,副本,Copy,副本
 aw_custom_local_court_replacement_required,请先为正在使用此模板的城市选择替代模板,Choose a replacement for cities using this template,请先为正在使用此模板的城市选择替代模板
 aw_custom_court_whole_preset,整套官场预设,Whole-court preset,整套官場預設
@@ -47,11 +48,11 @@ aw_custom_local_court_workflow_title,自定义官府,Custom Local Government,自
 aw_custom_local_court_workflow_desc,编辑该城市当前采用的地方官署模板,Edit the local government template currently used by this city,編輯該城市目前採用的地方官署模板
 aw_local_court_minzhou,民州,Civil Prefecture,民州
 aw_local_court_junfu,军府,Military Government,軍府
-aw_local_office_zhoumu,州牧,Governor,州牧
+aw_local_office_zhoumu,郡守,Commandery Governor,郡守
 aw_local_office_changshi,长史,Chief Clerk,長史
 aw_local_office_sihu,司户,Household Officer,司戶
 aw_local_office_sicang,司仓,Granary Officer,司倉
-aw_court_office_minzhou_governor,州牧,Governor,州牧
+aw_court_office_minzhou_governor,郡守,Commandery Governor,郡守
 aw_court_office_minzhou_changshi,长史,Chief Clerk,長史
 aw_court_office_minzhou_sihu,司户,Household Officer,司戶
 aw_court_office_minzhou_sicang,司仓,Granary Officer,司倉
@@ -836,10 +837,10 @@ aw_court_history_end_death,卒于任上,Died in office,卒於任上
 aw_court_history_end_city_transferred,城池易主,City transferred,城池易主
 aw_court_history_end_city_destroyed,城池毁灭,City destroyed,城池毀滅
 aw_custom_court_region_title,区域称呼,Region title,區域稱呼
-aw_custom_court_region_title_placeholder,郡,Commandery,郡
+aw_custom_court_region_title_placeholder,州,Prefecture,州
 aw_custom_court_region_title_desc,相邻城市运行时聚合层的称呼,Name of the runtime grouping made from adjacent cities,相鄰城市執行時聚合層的稱呼
 aw_custom_court_governor_title,区域长官称呼,Governor title,區域長官稱呼
-aw_custom_court_governor_title_placeholder,郡守,Regional Governor,郡守
+aw_custom_court_governor_title_placeholder,州牧,Prefectural Governor,州牧
 aw_custom_court_governor_title_desc,首府州牧兼任区域长官时显示的官职称呼,Title shown for the seat city leader when acting as regional governor,首府州牧兼任區域長官時顯示的官職稱呼
 aw_custom_court_regional_dynamic,动态区域层,Dynamic regional layer,動態區域層
 aw_custom_court_regional_dynamic_desc,按相邻城市实时生成且不产生空缺或独立任命记录,Generated from adjacent cities at runtime without vacancies or separate appointments,按相鄰城市即時生成且不產生空缺或獨立任命記錄

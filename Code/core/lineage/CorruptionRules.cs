@@ -91,6 +91,20 @@ namespace AncientWarfare3.core.lineage
             return Math.Max(0, ClampScore(score) - Math.Max(0, reduction));
         }
 
+        public static float LocalOfficialPressure(bool hasBureau,
+            int officerCount, int slots, float efficiency)
+        {
+            if (!hasBureau) return 0f;
+            float boundedEfficiency = Math.Max(0f,
+                Math.Min(100f, float.IsNaN(efficiency) ? 0f : efficiency));
+            int safeSlots = Math.Max(1, slots);
+            float vacancyRatio = 1f - Math.Min(1f,
+                Math.Max(0, officerCount) / (float)safeSlots);
+            return Math.Max(0f, Math.Min(28f,
+                (100f - boundedEfficiency) * 0.18f +
+                vacancyRatio * 10f));
+        }
+
         private static void Mix(ref uint hash, ulong value)
         {
             unchecked

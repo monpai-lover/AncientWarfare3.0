@@ -28,12 +28,12 @@ internal static class RegionalGovernmentRulesTests
             "custom regional levels do not mutate the place name");
         Equal("即墨", RegionalGovernmentRules.CityName("即墨"),
             "the WorldBox city name is already the complete prefecture name");
-        Equal("临淄 · 郡", RegionalGovernmentRules.AdministrativeLabel(
+        Equal("临淄郡", RegionalGovernmentRules.AdministrativeLabel(
                 "临淄", "郡"),
-            "court labels visually separate place and administrative level");
-        Equal("即墨 · 州", RegionalGovernmentRules.AdministrativeLabel(
+            "court labels directly append the administrative level");
+        Equal("即墨州", RegionalGovernmentRules.AdministrativeLabel(
                 RegionalGovernmentRules.CityName("即墨"), "州"),
-            "city labels visually separate the unchanged city name and level");
+            "city labels directly append the unchanged city name and level");
 
         IReadOnlyList<RegionalGovernmentFact> tie =
             RegionalGovernmentRules.Build(new[]

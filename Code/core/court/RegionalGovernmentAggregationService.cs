@@ -74,7 +74,7 @@ namespace AncientWarfare3.core.court
                         ? RegionalGovernmentRules.DefaultRegionTitle
                         : pRegionTitle.Trim(),
                     GovernorTitle = string.IsNullOrWhiteSpace(pGovernorTitle)
-                        ? "郡守" : pGovernorTitle.Trim(),
+                        ? "州牧" : pGovernorTitle.Trim(),
                     LocalLevelTitle = configuredLocalLevelTitle,
                     RegionName = RegionalGovernmentRules.RegionName(
                         group.SeatCityName, pRegionTitle),

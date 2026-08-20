@@ -639,15 +639,15 @@ namespace AncientWarfare3.ui.windows
             _duplicateLocalTemplateButton?.gameObject.SetActive(localMode);
             _deleteLocalTemplateButton?.gameObject.SetActive(localMode);
             _wholePresetButton?.gameObject.SetActive(!localMode);
-            _regionTitleLabel?.gameObject.SetActive(!localMode);
-            _regionTitleChineseInput?.gameObject.SetActive(!localMode);
-            _regionTitleEnglishInput?.gameObject.SetActive(!localMode);
-            _governorTitleLabel?.gameObject.SetActive(!localMode);
-            _governorTitleChineseInput?.gameObject.SetActive(!localMode);
-            _governorTitleEnglishInput?.gameObject.SetActive(!localMode);
-            _localLevelTitleLabel?.gameObject.SetActive(!localMode);
-            _localLevelTitleChineseInput?.gameObject.SetActive(!localMode);
-            _localLevelTitleEnglishInput?.gameObject.SetActive(!localMode);
+            _regionTitleLabel?.gameObject.SetActive(true);
+            _regionTitleChineseInput?.gameObject.SetActive(true);
+            _regionTitleEnglishInput?.gameObject.SetActive(true);
+            _governorTitleLabel?.gameObject.SetActive(true);
+            _governorTitleChineseInput?.gameObject.SetActive(true);
+            _governorTitleEnglishInput?.gameObject.SetActive(true);
+            _localLevelTitleLabel?.gameObject.SetActive(true);
+            _localLevelTitleChineseInput?.gameObject.SetActive(true);
+            _localLevelTitleEnglishInput?.gameObject.SetActive(true);
             if (_nameLabel != null)
                 _nameLabel.text = localMode
                     ? AW_L10n.Text("aw_custom_local_court_name",
@@ -713,7 +713,7 @@ namespace AncientWarfare3.ui.windows
             if (_courtNameInput != null)
                 _courtNameInput.text = name?.Chinese ?? name?.English ??
                     string.Empty;
-            if (!_editingLocal && _template?.RegionalGovernmentLayer != null)
+            if (_template?.RegionalGovernmentLayer != null)
             {
                 CustomCourtRegionalGovernmentLayer layer =
                     _template.RegionalGovernmentLayer;
@@ -908,8 +908,11 @@ namespace AncientWarfare3.ui.windows
             canvas.Clear();
             var renderedOffices = new List<CustomCourtOffice>(ActiveOffices
                 .Where(office => office != null));
-            CustomCourtOffice regionalLayer = CreateRegionalLayerOffice();
-            if (regionalLayer != null) renderedOffices.Add(regionalLayer);
+            CustomCourtOffice regionalLayer = _editingLocal
+                ? CreateRegionalLayerOffice()
+                : null;
+            if (_editingLocal && regionalLayer != null)
+                renderedOffices.Add(regionalLayer);
             foreach (CustomCourtOffice office in renderedOffices)
             {
                 CourtWorkflowVacancyCard card = CourtWorkflowVacancyCard.Create(
@@ -959,8 +962,8 @@ namespace AncientWarfare3.ui.windows
                 Id = "regional_government_layer",
                 Name = layer.GovernorTitle ?? new CustomCourtLocalizedText
                 {
-                    Chinese = "郡守",
-                    English = "Regional Governor"
+                    Chinese = "州牧",
+                    English = "Prefectural Governor"
                 },
                 Layer = CourtOfficeLayer.Regional,
                 Grade = 1,
@@ -1040,30 +1043,34 @@ namespace AncientWarfare3.ui.windows
                 if (edge != null) yield return edge;
             if (_editingLocal)
             {
-                var managed = new HashSet<string>((ActiveEdges ??
-                        new List<CustomCourtEdge>())
-                    .Where(edge => edge != null && edge.Kind ==
-                        CustomCourtEdgeKind.Management)
-                    .Select(edge => edge.ToOfficeId), StringComparer.Ordinal);
-                foreach (CustomCourtOffice office in ActiveOffices ??
-                         new List<CustomCourtOffice>())
-                    if (office != null && !managed.Contains(office.Id))
-                        yield return new CustomCourtEdge
-                        {
-                            FromOfficeId = "regional_government_layer",
-                            ToOfficeId = office.Id,
-                            Kind = CustomCourtEdgeKind.Management
-                        };
+                CustomCourtEdge regionalRoot = EnsureRegionalLayerRootEdge();
+                if (regionalRoot != null) yield return regionalRoot;
                 yield break;
             }
-            foreach (string officeId in _template?.RegionalGovernmentLayer?
-                         .ManagementOfficeIds ?? new List<string>())
-                yield return new CustomCourtEdge
-                {
-                    FromOfficeId = officeId,
-                    ToOfficeId = "regional_government_layer",
-                    Kind = CustomCourtEdgeKind.Management
-                };
+        }
+
+        private CustomCourtEdge EnsureRegionalLayerRootEdge()
+        {
+            if (!_editingLocal) return null;
+            List<CustomCourtOffice> offices = (ActiveOffices ??
+                    new List<CustomCourtOffice>())
+                .Where(office => office != null &&
+                    office.Id != "regional_government_layer")
+                .ToList();
+            if (offices.Count == 0) return null;
+            var managedTargets = new HashSet<string>((ActiveEdges ??
+                    new List<CustomCourtEdge>())
+                .Where(edge => edge != null && edge.Kind ==
+                    CustomCourtEdgeKind.Management)
+                .Select(edge => edge.ToOfficeId), StringComparer.Ordinal);
+            CustomCourtOffice root = offices.FirstOrDefault(office =>
+                !managedTargets.Contains(office.Id)) ?? offices[0];
+            return new CustomCourtEdge
+            {
+                FromOfficeId = "regional_government_layer",
+                ToOfficeId = root.Id,
+                Kind = CustomCourtEdgeKind.Management
+            };
         }
 
         private static CourtWorkflowVacancyCard FindCard(
@@ -1279,7 +1286,7 @@ namespace AncientWarfare3.ui.windows
         private bool ApplyRegionalLocalizedTitle(string pValue,
             RegionalTitleTarget pTarget, bool pEnglish)
         {
-            if (_editingLocal || _template?.RegionalGovernmentLayer == null)
+            if (_template?.RegionalGovernmentLayer == null)
                 return false;
             string value = pValue?.Trim() ?? string.Empty;
             if (string.IsNullOrEmpty(value)) return false;

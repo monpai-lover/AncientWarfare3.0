@@ -216,6 +216,8 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(edge, "private void LateUpdate()");
         Contains(edge, "aw_custom_court_edge_management_short");
         Contains(edge, "aw_custom_court_edge_prerequisite_short");
+        Contains(edge, "DirectionArrow");
+        Contains(edge, "\"▶\"");
         Contains(stringDropdown, "class AWStringDropdownOption");
         Contains(stringDropdown, "class AWStringDropdown");
         Contains(stringDropdown, "SetOptions(");
@@ -254,6 +256,9 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(courtWindow, "BuildCustomManagementLinks(");
         Contains(courtWindow, "if (!customGraph)");
         Contains(courtWindow, "pContentWidth - 84f), 31f, 76f, 23f");
+        Contains(courtWindow, "KingdomColor(kingdom), local != null);");
+        Contains(courtWindow, "if (pLocalContext)");
+        Contains(courtWindow, "_localSectionDivider, false");
         Contains(kingdomWindow, "CustomCourtRuntime.DisplayName(pKingdom");
         Contains(institution, "CustomCourtRuntime.OfficeDisplayName(");
         Contains(store, "TryImport");
@@ -268,6 +273,11 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(modConfigPatch, "aw_settings_experimental_warning");
         DoesNotContain(officeSettings,
             "aw_settings_experimental_warning");
+        Contains(window, "if (_editingLocal && regionalLayer != null)");
+        Contains(window, "renderedOffices.Add(regionalLayer);");
+        Contains(window, "EnsureRegionalLayerRootEdge");
+        Contains(window, "_regionTitleLabel?.gameObject.SetActive(true)");
+        Contains(window, "if (_template?.RegionalGovernmentLayer != null)");
         RequiresFile(Path.Combine(root, "GameResources", "ui", "icons",
             "aw_bandit_amnesty.png"));
         HasLocalizationKey(localization, "aw_custom_court_workflow");
@@ -339,6 +349,8 @@ internal static class CustomCourtWorkflowSourceGuardTests
             "aw_custom_court_whole_preset_unavailable");
         HasLocalizationKey(localization,
             "aw_custom_court_whole_preset_empty");
+        HasLocalizationKey(localization,
+            "aw_court_office_regional_superior");
         HasLocalizationKey(configLocalization,
             "aw_settings_experimental_warning");
         CsvRowsHaveFourColumns(otherLocalization, "others.csv");

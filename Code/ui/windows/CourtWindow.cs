@@ -388,7 +388,8 @@ namespace AncientWarfare3.ui.windows
                     ? local.Edges : null;
                 BuildLinks(nodes, kingdom, KingdomColor(kingdom), nodeOffset,
                     bounds, localEdges, local != null);
-                LayoutSectionMarkers(nodes, bounds, nodeOffset, KingdomColor(kingdom));
+                LayoutSectionMarkers(nodes, bounds, nodeOffset,
+                    KingdomColor(kingdom), local != null);
                 if (local == null)
                     RenderCityGovernmentCards(cityGovernments, kingdom,
                         nodes, nodeOffset, bounds, canvasSize);
@@ -976,12 +977,38 @@ namespace AncientWarfare3.ui.windows
         }
 
         private void LayoutSectionMarkers(List<CourtPyramidNodeModel> pNodes,
-            CourtPyramidCanvasBounds pBounds, Vector2 pOffset, Color pColor)
+            CourtPyramidCanvasBounds pBounds, Vector2 pOffset, Color pColor,
+            bool pLocalContext)
         {
             bool hasCentral = pNodes.Any(p => !CourtPyramidRules.IsLocalNode(p) &&
                 !CourtPyramidRules.IsMilitaryNode(p));
             bool hasMilitary = pNodes.Any(CourtPyramidRules.IsMilitaryNode);
             bool hasLocal = pNodes.Any(CourtPyramidRules.IsLocalNode);
+
+            if (pLocalContext)
+            {
+                if (_centralSectionLabel != null)
+                {
+                    _centralSectionLabel.gameObject.SetActive(hasLocal);
+                    _centralSectionLabel.text = AW_L10n.Text(
+                        "aw_court_layer_city", "Local Bureaus");
+                    _centralSectionLabel.color = new Color(pColor.r,
+                        pColor.g, pColor.b, 0.9f);
+                    LayoutCanvasText(_centralSectionLabel, 8f, -4f,
+                        Mathf.Max(1f, pBounds.Width - 16f), 18f);
+                    _centralSectionLabel.transform.SetAsLastSibling();
+                }
+                if (_militarySectionLabel != null)
+                    _militarySectionLabel.gameObject.SetActive(false);
+                if (_militarySectionDivider != null)
+                    _militarySectionDivider.gameObject.SetActive(false);
+                if (_localSectionLabel != null)
+                    _localSectionLabel.gameObject.SetActive(false);
+                LayoutSectionDivider(_localSectionDivider, false, 0f,
+                    pBounds, pColor);
+                return;
+            }
+
             if (_centralSectionLabel != null)
             {
                 _centralSectionLabel.gameObject.SetActive(hasCentral);
