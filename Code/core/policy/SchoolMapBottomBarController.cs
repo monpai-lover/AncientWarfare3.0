@@ -50,8 +50,8 @@ namespace AncientWarfare3.core.policy
                 return;
             }
 
-            City city = SelectedMetas.selected_city;
-            if (!IsValidCity(city) || SelectedObjects.getSelectedNanoObject() != city)
+            City city = SchoolMapModeService.SelectedCity;
+            if (!IsValidCity(city))
             {
                 Hide();
                 return;
@@ -195,8 +195,7 @@ namespace AncientWarfare3.core.policy
 
         private static bool HasSelectedCity()
         {
-            City city = SelectedMetas.selected_city;
-            return IsValidCity(city) && SelectedObjects.getSelectedNanoObject() == city;
+            return IsValidCity(SchoolMapModeService.SelectedCity);
         }
 
         private static bool IsValidCity(City pCity)

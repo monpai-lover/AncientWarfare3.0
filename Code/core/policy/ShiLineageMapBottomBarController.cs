@@ -44,9 +44,8 @@ namespace AncientWarfare3.core.policy
                 if (_visibleOrPending) Hide();
                 return;
             }
-            City city = SelectedMetas.selected_city;
-            if (!IsValidCity(city) ||
-                SelectedObjects.getSelectedNanoObject() != city)
+            City city = ShiLineageMapModeService.SelectedCity;
+            if (!IsValidCity(city))
             {
                 Hide();
                 return;
@@ -167,8 +166,7 @@ namespace AncientWarfare3.core.policy
 
         private static bool HasSelectedCity()
         {
-            City city = SelectedMetas.selected_city;
-            return IsValidCity(city) && SelectedObjects.getSelectedNanoObject() == city;
+            return IsValidCity(ShiLineageMapModeService.SelectedCity);
         }
 
         private static bool IsValidCity(City pCity) =>

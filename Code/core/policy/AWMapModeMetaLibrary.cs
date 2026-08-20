@@ -123,28 +123,29 @@ namespace AncientWarfare3.core.policy
             pAsset.power_tab_id = SchoolMapBottomBarController.TabId;
             pAsset.get_list = () => World.world?.cities;
             pAsset.has_any = () => World.world?.cities != null && World.world.cities.hasAny();
-            pAsset.get_selected = () => SelectedMetas.selected_city;
+            pAsset.get_selected = () => SchoolMapModeService.SelectedCity;
             pAsset.set_selected = pElement =>
             {
-                if (pElement is City city) SelectedMetas.selected_city = city;
+                SchoolMapModeService.SetSelectedCity(pElement as City);
             };
             pAsset.get = pIdValue => World.world?.cities?.get(pIdValue);
-            pAsset.window_action_clear = () => SelectedMetas.selected_city = null;
+            pAsset.window_action_clear = SchoolMapModeService.ClearSelectedCity;
             pAsset.window_history_action_update = delegate(ref WindowHistoryData pHistoryData)
             {
-                pHistoryData.city = SelectedMetas.selected_city;
+                pHistoryData.city = SchoolMapModeService.SelectedCity;
             };
             pAsset.window_history_action_restore = delegate(ref WindowHistoryData pHistoryData)
             {
-                SelectedMetas.selected_city = pHistoryData.city;
+                SchoolMapModeService.SetSelectedCity(pHistoryData.city);
             };
             pAsset.selected_tab_action_meta = _ =>
             {
-                if (!SchoolMapModeService.SelectCity(SelectedMetas.selected_city))
+                if (!SchoolMapModeService.SelectCity(SchoolMapModeService.SelectedCity))
                     PowerTabController.showMainTab();
             };
             pAsset.check_unit_has_meta = pActor => pActor?.city?.data != null;
-            pAsset.set_unit_set_meta_for_meta_for_window = pActor => SelectedMetas.selected_city = pActor?.city;
+            pAsset.set_unit_set_meta_for_meta_for_window =
+                pActor => SchoolMapModeService.SetSelectedCity(pActor?.city);
         }
 
         private static void ConfigureShiLineageSelectionAsset(MetaTypeAsset pAsset)
@@ -153,11 +154,25 @@ namespace AncientWarfare3.core.policy
             if (pAsset == null) return;
             pAsset.icon_single_path = "ui/icons/iconClan";
             pAsset.power_tab_id = ShiLineageMapBottomBarController.TabId;
+            pAsset.get_selected = () => ShiLineageMapModeService.SelectedCity;
+            pAsset.set_selected = pElement =>
+                ShiLineageMapModeService.SetSelectedCity(pElement as City);
+            pAsset.window_action_clear = ShiLineageMapModeService.ClearSelectedCity;
+            pAsset.window_history_action_update = delegate(ref WindowHistoryData pHistoryData)
+            {
+                pHistoryData.city = ShiLineageMapModeService.SelectedCity;
+            };
+            pAsset.window_history_action_restore = delegate(ref WindowHistoryData pHistoryData)
+            {
+                ShiLineageMapModeService.SetSelectedCity(pHistoryData.city);
+            };
             pAsset.selected_tab_action_meta = _ =>
             {
-                if (!ShiLineageMapModeService.SelectCity(SelectedMetas.selected_city))
+                if (!ShiLineageMapModeService.SelectCity(ShiLineageMapModeService.SelectedCity))
                     PowerTabController.showMainTab();
             };
+            pAsset.set_unit_set_meta_for_meta_for_window =
+                pActor => ShiLineageMapModeService.SetSelectedCity(pActor?.city);
         }
 
         private static MetaTypeAsset AddOrGet(string pId, MetaType pType, string pPowerId, MetaZoneGetMetaSimple pGetter)
