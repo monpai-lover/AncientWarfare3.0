@@ -179,15 +179,14 @@ namespace AncientWarfare3.core.policy
             PowersTab nativeTab = PowerTabController.instance?.tab_selected_city;
             if (nativeTab == null || nativeTab == _tab) return;
             if (nativeTab.isCurrentPowerTabSelected()) nativeTab.hideTab();
+            nativeTab.gameObject.SetActive(false);
         }
 
         private static void RestoreNativeSelectedCityTab()
         {
             PowersTab nativeTab = PowerTabController.instance?.tab_selected_city;
-            if (nativeTab == null || !HasSelectedCity()) return;
-            if (!nativeTab.isCurrentPowerTabSelected() &&
-                PowersTab.getActiveTab() == null)
-                nativeTab.showTab(null);
+            if (nativeTab == null || SchoolMapModeService.IsActive()) return;
+            nativeTab.gameObject.SetActive(true);
         }
 
         private static void CancelPendingInitialization()

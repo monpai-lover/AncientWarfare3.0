@@ -131,8 +131,12 @@ internal static class ShiLineageMapModeSourceGuardTests
             "Shi bottom bar must preserve the previous tab during delayed Start");
         Contains(bottom, "HideNativeSelectedCityTab",
             "Shi bottom bar must isolate the vanilla selected-city tab");
+        Contains(bottom, "nativeTab.gameObject.SetActive(false)",
+            "Shi bottom bar must disable the vanilla selected-city button");
         Contains(schoolBottom, "HideNativeSelectedCityTab",
             "school bottom bar must isolate the vanilla selected-city tab");
+        Contains(schoolBottom, "nativeTab.gameObject.SetActive(false)",
+            "school bottom bar must disable the vanilla selected-city button");
         Contains(bottom, "ScrollWindow.getCurrentWindow()",
             "Shi bottom bar must hide while another window is open");
         NotContains(bottom, "SelectedObjects.getSelectedNanoObject()",
