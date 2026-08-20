@@ -225,6 +225,31 @@ The current country is the owner of an administrative projection, not the
 owner of the legal state record. A legal state with no cities controlled by a
 country does not appear in that country's court projection.
 
+### Shared state label and control tooltip
+
+The same legal state name is rendered for every controlled portion of the
+state. A city controlled by A and a city controlled by B both display the
+same `RegionName`; the label is never replaced with a country-specific name.
+
+The existing hierarchical-map tooltip is extended with control data without
+adding a new map screen or interaction:
+
+```text
+De jure state: Yongzhou
+Legal members: 6 counties
+A control: 3 counties (50%)
+B control: 3 counties (50%)
+Capital: controlled by A
+```
+
+The denominator is the total number of active legal members in the state. Each
+current controlling kingdom is listed with its count and percentage, ordered
+by count and then stable kingdom ID. When the map view is already scoped to a
+kingdom, that kingdom's line is emphasized while the other controlling
+kingdoms remain visible. Tooltip data is read from the saved legal membership
+and current `city.kingdom` values; it never changes state names, colors, or
+membership.
+
 ## Court Integration
 
 ### Read model
@@ -305,7 +330,10 @@ Acceptance examples:
 No map-mode UI or interaction is added. The existing hierarchy map continues to
 use its current navigation and rendering. Its data provider must resolve state
 membership through the saved de jure store so that occupation does not cause a
-new grouping, but the visible controls and screen layout remain unchanged.
+new grouping, but the visible controls and screen layout remain unchanged. The
+existing tooltip is the only presentation surface extended: it shows the
+shared legal state name plus controlled counts and percentages for all current
+kingdoms.
 
 ## History and Territory Separation
 
@@ -370,6 +398,9 @@ collisions. Repairs preserve history and never silently redraw a legal state.
 - the original country reports loss;
 - the occupying country reports foreign legal members;
 - occupation does not alter membership or capital.
+- both sides render the same legal state name;
+- the tooltip reports each controller's count and percentage against the full
+  legal membership.
 
 ### Save/load
 
