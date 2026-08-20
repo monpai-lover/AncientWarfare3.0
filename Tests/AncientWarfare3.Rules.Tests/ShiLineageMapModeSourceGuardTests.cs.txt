@@ -41,6 +41,12 @@ internal static class ShiLineageMapModeSourceGuardTests
             "internal city selection must suppress vanilla selected-meta tab activation");
         Contains(metaPatch, "PowerTabController.showTabSelectedMeta",
             "selected-meta tab suppression must cover the vanilla tab entry point");
+        Contains(metaPatch, "SelectedPowerTabTopContainer",
+            "map modes must suppress the vanilla selected-object top container");
+        Contains(metaPatch, "GetComponentsInChildren<SelectedPowerTabTopContainer>(true)",
+            "top-container suppression must include inactive vanilla panels");
+        Contains(metaPatch, "PowerTabController_Update_Postfix",
+            "vanilla selected-city tab must be suppressed after native toolbar updates");
         Before(coordinator, "ShiLineageMapModeService.POWER_ID",
             "FeudatoryMapModeService.POWER_ID",
             "coordinator must prioritize selected Shi before Feudatory");

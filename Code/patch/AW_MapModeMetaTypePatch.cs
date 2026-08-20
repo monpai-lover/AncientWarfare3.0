@@ -49,6 +49,27 @@ namespace AncientWarfare3.patch
                 ShiLineageMapModeService.IsActive();
         }
 
+        [HarmonyPostfix]
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyPatch(typeof(PowerTabController), "Update")]
+        public static void PowerTabController_Update_Postfix()
+        {
+            bool suppress = IsInternalCitySelectionMode();
+            PowersTab nativeTab = PowerTabController.instance?.tab_selected_city;
+            if (nativeTab != null)
+                nativeTab.gameObject.SetActive(!suppress);
+
+            PowerTabController controller = PowerTabController.instance;
+            if (controller == null) return;
+            SelectedPowerTabTopContainer[] containers =
+                controller.GetComponentsInChildren<SelectedPowerTabTopContainer>(true);
+            for (int i = 0; i < containers.Length; i++)
+            {
+                SelectedPowerTabTopContainer container = containers[i];
+                if (container != null) container.gameObject.SetActive(!suppress);
+            }
+        }
+
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(MetaTypeAsset), nameof(MetaTypeAsset.getZoneOptionState))]
