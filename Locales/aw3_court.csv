@@ -2,7 +2,9 @@ key,cz,en,ch
 aw_de_jure_region,州法理,De jure state,州法理
 aw_de_jure_region_description,使用神力创建或划分州法理,Create or assign de jure states with one divine power,使用神力建立或劃分州法理
 aw_de_jure_region_create,建立州法理,Create de jure state,建立州法理
+aw_de_jure_region_create_description,使用神力在选定城市建立新的州法理,Use divine power to create a new de jure state at the selected city,使用神力在選定城市建立新的州法理
 aw_de_jure_region_assign,划入州法理,Assign to de jure state,劃入州法理
+aw_de_jure_region_assign_description,使用神力先选择州法理首府，再将城市划入该州法理,Use divine power to select a de jure capital, then assign cities to that state,使用神力先選擇州法理首府，再將城市劃入該州法理
 aw_de_jure_region_invalid_city,请选择有效城市,Select a valid city,請選擇有效城市
 aw_de_jure_region_create_failed,州法理创建失败,Failed to create de jure state,州法理建立失敗
 aw_de_jure_region_created,已建立新的州法理,De jure state created,已建立新的州法理

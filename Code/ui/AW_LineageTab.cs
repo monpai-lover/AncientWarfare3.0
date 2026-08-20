@@ -19,7 +19,6 @@ namespace AncientWarfare3.ui
         {
             if (_inited) return;
             _inited = true;
-            AncientWarfare3.core.court.DeJureRegionLocalizationRepair.Ensure();
 
             PowersTab tab = TabManager.CreateTab(
                 TAB_ID,

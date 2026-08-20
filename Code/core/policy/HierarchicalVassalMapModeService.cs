@@ -178,6 +178,22 @@ namespace AncientWarfare3.core.policy
             }
         }
 
+        internal static void PrepareForDeJureInteraction(City pCity)
+        {
+            if (pCity?.data == null || pCity.isRekt() ||
+                pCity.kingdom?.data == null || pCity.kingdom.isRekt()) return;
+            _selectedLayer = HierarchicalVassalMapModeLayer.Cities;
+            EnsureHierarchyIndex();
+            long focusKingdomId = _hierarchyIndex?.ResolveRepresentative(
+                pCity.kingdom.id) ?? pCity.kingdom.id;
+            if (focusKingdomId < 0L) focusKingdomId = pCity.kingdom.id;
+            CityAdministrationState.Reset();
+            CityAdministrationState.PushKingdom(focusKingdomId);
+            InvalidateNativeLabelCache();
+            HierarchicalVassalMapModeLabelLayer.HideRuntimeLabelsExcept(null);
+            RequestNativeRedraw();
+        }
+
         public static bool IsCityLayer =>
             GetSelectedLayer() == HierarchicalVassalMapModeLayer.Cities;
 

@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.court
 {
@@ -23,15 +24,20 @@ namespace AncientWarfare3.core.court
 
             if (pMode == CreateMode)
             {
+                HierarchicalVassalMapModeService.PrepareForDeJureInteraction(
+                    city);
                 if (!DeJureRegionStore.CreateState(city, "power_create",
                         out DeJureRegion created, out _))
                     return "aw_de_jure_region_create_failed";
                 _targetRegionId = created.RegionId;
                 pSuccess = true;
+                HierarchicalVassalMapModeService.MarkHierarchyDirty(
+                    city.kingdom);
                 return "aw_de_jure_region_created";
             }
 
             if (pMode != AssignMode) return "aw_de_jure_region_invalid_mode";
+            HierarchicalVassalMapModeService.PrepareForDeJureInteraction(city);
             if (_targetRegionId < 0L)
             {
                 if (!DeJureRegionStore.TryGetForCity(city.data.id,
@@ -57,6 +63,8 @@ namespace AncientWarfare3.core.court
                     out _))
                 return "aw_de_jure_region_assign_failed";
             pSuccess = true;
+            HierarchicalVassalMapModeService.MarkHierarchyDirty(
+                city.kingdom);
             return "aw_de_jure_region_assigned";
         }
     }
