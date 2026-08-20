@@ -1,3 +1,5 @@
+using System;
+
 namespace AncientWarfare3.core.court
 {
     public static class CourtRules
@@ -23,6 +25,20 @@ namespace AncientWarfare3.core.court
             if (score >= 190) return 3;
             if (score >= 85) return 2;
             return 1;
+        }
+
+        public static int CustomCityOfficeSlots(
+            CustomLocalCourtTemplate pTemplate)
+        {
+            if (pTemplate?.Offices == null) return 0;
+            int result = 0;
+            foreach (CustomCourtOffice office in pTemplate.Offices)
+            {
+                if (office == null || office.Layer != CourtOfficeLayer.City)
+                    continue;
+                result += Math.Max(1, office.Slots);
+            }
+            return result;
         }
 
         public static bool ShouldRefreshCourt(int currentYear, int lastRefreshYear, int intervalYears)

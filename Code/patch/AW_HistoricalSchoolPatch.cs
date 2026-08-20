@@ -150,6 +150,8 @@ namespace AncientWarfare3.patch
                             error.Message);
                     }
                     SchoolMembershipService.OnDeath(__instance, pDestroy);
+                    CourtService.RequestLocalOfficerDeathReconcile(
+                        __instance);
                 }
             }
             catch (Exception error)

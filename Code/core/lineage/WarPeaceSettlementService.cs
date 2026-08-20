@@ -244,6 +244,69 @@ namespace AncientWarfare3.core.lineage
             return AcceptAndExecuteOrResume(prepared.ProposalId);
         }
 
+        internal WarPeaceExecutionResult ForceDeJureRegionSettlement(
+            WarPeaceSettlementDraft pDraft, long pWarGoalId)
+        {
+            if (AW3MultiplayerReplicaScope.IsReplicaSession)
+                return new WarPeaceExecutionResult(false, -1,
+                    "replica_read_only");
+            if (pDraft?.Terms == null || pDraft.Terms.Count == 0 ||
+                pWarGoalId < 0L)
+                return new WarPeaceExecutionResult(false, -1,
+                    "de_jure_goal_bundle_incomplete");
+            if (!_world.TryGetAuthoritativeSignedWarScore(pDraft,
+                    out int signedWarScore, out string scoreReason))
+                return new WarPeaceExecutionResult(false, -1,
+                    string.IsNullOrEmpty(scoreReason)
+                        ? "war_score_unavailable"
+                        : scoreReason);
+            pDraft.SignedWarScore = WarPeaceTermsRules.ClampSignedWarScore(
+                signedWarScore);
+            var database = LineageArchiveManager.Instance?.OperatingDB;
+            if (!WarGoalPersistence.TryReadOpenDeJureRegionGoal(database,
+                    pDraft.WarId, pWarGoalId, out long regionId) ||
+                !WarTerritoryService.TryGetDeJureRegion(regionId,
+                    out var region))
+                return new WarPeaceExecutionResult(false, -1,
+                    "invalid_de_jure_region_target");
+            var regionCities = new HashSet<long>(region.MemberCityIds ??
+                new List<long>());
+            int requested = 0;
+            var cities = new HashSet<long>();
+            for (int i = 0; i < pDraft.Terms.Count; i++)
+            {
+                WarPeaceSettlementTermDraft term = pDraft.Terms[i];
+                if (term == null || term.Kind != WarPeaceTermKind.CedeCity ||
+                    term.WarGoalId != pWarGoalId || term.CityId < 0L ||
+                    term.RequestedCost <= 0 || !cities.Add(term.CityId))
+                    return new WarPeaceExecutionResult(false, -1,
+                        "de_jure_goal_bundle_incomplete");
+                if (!regionCities.Contains(term.CityId))
+                    return new WarPeaceExecutionResult(false, -1,
+                        "city_outside_de_jure_region");
+                requested += term.RequestedCost;
+            }
+            if (requested > pDraft.SignedWarScore)
+                return new WarPeaceExecutionResult(false, -1,
+                    "war_goal_score_insufficient");
+            if (!TryClearPendingTerminalPredecessor(pDraft,
+                    "superseded_by_de_jure_goal_settlement",
+                    out WarPeaceExecutionResult predecessor))
+                return predecessor;
+            WarPeacePrepareResult prepared = Prepare(pDraft);
+            if (!prepared.Success || prepared.Proposal == null)
+                return new WarPeaceExecutionResult(false,
+                    prepared.ProposalId, prepared.Reason);
+            if (prepared.Proposal.TotalCost >
+                prepared.Proposal.SignedWarScore)
+            {
+                Cancel(prepared.DetailId, "war_goal_score_changed");
+                return new WarPeaceExecutionResult(false,
+                    prepared.ProposalId, "war_goal_score_changed");
+            }
+            return AcceptAndExecuteOrResume(prepared.ProposalId);
+        }
+
         private bool TryClearPendingTerminalPredecessor(
             WarPeaceSettlementDraft pDraft, string pCancelReason,
             out WarPeaceExecutionResult pResult)

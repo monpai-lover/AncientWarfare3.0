@@ -194,6 +194,15 @@ namespace AncientWarfare3.core.policy
             RequestNativeRedraw();
         }
 
+        internal static void RefreshAfterDeJureMutation()
+        {
+            RegionalGovernmentAggregationService.Clear();
+            InvalidateNativeLabelCache();
+            HierarchicalVassalMapModeLabelLayer.MarkDirty();
+            HierarchicalVassalMapModeLabelLayer.RequestRefresh();
+            RequestNativeRedraw();
+        }
+
         public static bool IsCityLayer =>
             GetSelectedLayer() == HierarchicalVassalMapModeLayer.Cities;
 

@@ -86,7 +86,11 @@ namespace AncientWarfare3.core.court
                     LocalLevelTitle = configuredLocalLevelTitle,
                     RegionName = RegionalGovernmentRules.RegionName(
                         group.SeatCityName, pRegionTitle),
-                    GovernorActorId = seat?.leader?.data?.id ?? -1L,
+                    GovernorActorId = LocalGovernorIdentityRules.ResolveRegionalGovernorActorId(
+                        seat?.kingdom == pKingdom,
+                        seat?.leader?.data?.id ?? -1L,
+                        seat?.leader != null && seat.leader.isAlive() &&
+                        !seat.leader.isRekt()),
                     MemberCityIds = group.MemberCityIds.ToList(),
                     LocalGovernmentCityIds = group.MemberCityIds.ToList()
                 });

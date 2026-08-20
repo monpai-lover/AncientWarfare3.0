@@ -25,6 +25,7 @@ namespace AncientWarfare3.core.db
         public long source_claim_id = -1;
         public long source_core_id = -1;
         public long source_project_id = -1;
+        [TableItemDef(pDefaultValue: "-1")] public long source_de_jure_region_id = -1;
         public long claimant_actor_id = -1;
         public string claimant_name = "";
         public double created_time = -1;

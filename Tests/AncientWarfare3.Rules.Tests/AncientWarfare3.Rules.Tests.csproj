@@ -27,6 +27,12 @@
     <Compile Include="CityAdministrationMapModeRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\policy\CityAdministrationMapModeRules.cs" Link="Production\CityAdministrationMapModeRules.cs" />
     <Compile Include="RegionalGovernmentNineRankRulesTests.cs.txt" />
+    <Compile Include="LocalGovernorIdentityRulesTests.cs.txt" />
+    <Compile Include="CityLeaderCandidateScoringRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\LocalGovernorIdentityRules.cs" Link="Production\LocalGovernorIdentityRules.cs" />
+    <Compile Include="..\..\Code\core\court\CityLeaderCandidateScoringRules.cs" Link="Production\CityLeaderCandidateScoringRules.cs" />
+    <Compile Include="MandateBorderTowerSpacingRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\MandateBorderTowerSpacingRules.cs" Link="Production\MandateBorderTowerSpacingRules.cs" />
     <Compile Include="OfficialCareerNobleIdentityRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\RegionalGovernmentRules.cs" Link="Production\RegionalGovernmentRules.cs" />
     <Compile Include="..\..\Code\core\court\RegionalGovernmentReadModel.cs" Link="Production\RegionalGovernmentReadModel.cs" />
@@ -35,6 +41,7 @@
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateModels.cs" Link="Production\CustomCourtTemplateModels.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateRules.cs" Link="Production\CustomCourtTemplateRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomLocalCourtTemplateRules.cs" Link="Production\CustomLocalCourtTemplateRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtRules.cs" Link="Production\CourtRules.cs" />
     <Compile Include="..\..\Code\core\court\LocalCourtOfficeRules.cs" Link="Production\LocalCourtOfficeRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateJsonCodec.cs" Link="Production\CustomCourtTemplateJsonCodec.cs" />
     <Compile Include="..\..\Code\core\court\CustomCourtTemplateStore.cs" Link="Production\CustomCourtTemplateStore.cs" />

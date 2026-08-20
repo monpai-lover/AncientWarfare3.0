@@ -17,6 +17,7 @@ namespace AncientWarfare3.core.lineage
         public string TargetCityName = "";
         public long SourceClaimId = -1L;
         public long SourceCoreId = -1L;
+        public long SourceDeJureRegionId = -1L;
         public long RestorationClaimId = -1L;
         public long ClaimantActorId = -1L;
         public string NoticeSignature = "";

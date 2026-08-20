@@ -1082,7 +1082,7 @@ namespace AncientWarfare3.content
             }
             existing.path_icon = "ui/Icons/aw_de_jure_region";
             existing.type = PowerActionType.PowerSpecial;
-            existing.force_map_mode = MetaType.City;
+            existing.force_map_mode = AWMapModePowerRules.ResolveForcedMapModeForPower(pPowerId);
             existing.unselect_when_window = false;
             existing.ignore_cursor_icon = true;
             existing.allow_unit_selection = false;

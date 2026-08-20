@@ -580,6 +580,7 @@ namespace AncientWarfare3.core.lineage
         public const string DIPLOMATIC_WAR_TARGET_CITY_NAME = "aw_diplomatic_war_target_city_name";
         public const string DIPLOMATIC_WAR_SOURCE_CLAIM_ID = "aw_diplomatic_war_source_claim_id";
         public const string DIPLOMATIC_WAR_SOURCE_CORE_ID = "aw_diplomatic_war_source_core_id";
+        public const string DIPLOMATIC_WAR_SOURCE_DE_JURE_REGION_ID = "aw_diplomatic_war_source_de_jure_region_id";
         public const string DIPLOMATIC_WAR_RESTORATION_CLAIM_ID = "aw_diplomatic_war_restoration_claim_id";
         public const string DIPLOMATIC_WAR_CLAIMANT_ACTOR_ID = "aw_diplomatic_war_claimant_actor_id";
         public const string DIPLOMATIC_WAR_NOTICE_SIGNATURE = "aw_diplomatic_war_notice_signature";

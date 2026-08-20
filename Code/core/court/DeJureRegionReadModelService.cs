@@ -30,10 +30,6 @@ namespace AncientWarfare3.core.court
                     .Where(p => p?.data != null && !p.isRekt()).ToList();
                 City seat = allMembers.FirstOrDefault(p =>
                     p.data.id == legal.SeatCityId);
-                City anchor = controlled.Values.OrderByDescending(
-                    DevelopmentMapModeService.GetCityScore)
-                    .ThenByDescending(SafePopulation).ThenBy(p => p.data.id)
-                    .FirstOrDefault(p => legal.MemberCityIds.Contains(p.data.id));
                 var counts = new Dictionary<long, int>();
                 foreach (City city in allMembers)
                 {
@@ -50,7 +46,11 @@ namespace AncientWarfare3.core.court
                     RegionTitle = pRegionTitle ?? string.Empty,
                     GovernorTitle = pGovernorTitle ?? string.Empty,
                     LocalLevelTitle = pLocalLevelTitle ?? string.Empty,
-                    GovernorActorId = anchor?.leader?.data?.id ?? -1L,
+                    GovernorActorId = LocalGovernorIdentityRules.ResolveRegionalGovernorActorId(
+                        seat?.kingdom == pKingdom,
+                        seat?.leader?.data?.id ?? -1L,
+                        seat?.leader != null && seat.leader.isAlive() &&
+                        !seat.leader.isRekt()),
                     MemberCityIds = members,
                     LocalGovernmentCityIds = members.ToList(),
                     TotalMemberCount = allMembers.Count,
@@ -66,10 +66,5 @@ namespace AncientWarfare3.core.court
             return result.OrderBy(p => p.SeatCityId).ToArray();
         }
 
-        private static int SafePopulation(City pCity)
-        {
-            try { return pCity?.getPopulationPeople() ?? 0; }
-            catch { return 0; }
-        }
     }
 }

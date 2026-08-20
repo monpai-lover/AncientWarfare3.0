@@ -1264,7 +1264,8 @@ namespace AncientWarfare3.core.lineage
             {
                 using var command = new SQLiteCommand(db);
                 command.CommandText = "SELECT WAR_GOAL_ID,GOAL_TYPE," +
-                    "TARGET_CITY_ID,ATTACKER_KINGDOM_ID " +
+                    "TARGET_CITY_ID,ATTACKER_KINGDOM_ID," +
+                    "SOURCE_DE_JURE_REGION_ID " +
                     "FROM " + WarGoalTableItem.GetTableName() +
                     " WHERE WAR_ID=@war AND RESOLVED=0 " +
                     "ORDER BY POSITION,WAR_GOAL_ID LIMIT 3";
@@ -1276,6 +1277,21 @@ namespace AncientWarfare3.core.lineage
                     string goal = reader.GetString(1);
                     long cityId = reader.GetInt64(2);
                     if (reader.GetInt64(3) != beneficiary.id) continue;
+                    if (goal == WarTerritoryService
+                            .GOAL_TAKE_DE_JURE_REGION)
+                    {
+                        if (DeJureWarGoalSettlementService.TryBuildDraft(war,
+                                out WarPeaceSettlementDraft regionDraft,
+                                out long regionGoalId) &&
+                            regionGoalId == goalId)
+                            for (int termIndex = 0;
+                                 termIndex < regionDraft.Terms.Count;
+                                 termIndex++)
+                                result.Add(new WarPeaceDefaultTermCandidate(
+                                    regionDraft.Terms[termIndex].Clone(),
+                                    true, 1000 - termIndex, true));
+                        continue;
+                    }
                     WarPeaceSettlementTermDraft term = null;
                     if (goal == WarTerritoryService.GOAL_FORCE_VASSAL &&
                         CanForceVassalTransfer(payer, beneficiary))

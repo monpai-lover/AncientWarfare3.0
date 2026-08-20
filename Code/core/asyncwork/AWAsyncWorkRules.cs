@@ -63,7 +63,12 @@ namespace AncientWarfare3.core.asyncwork
 
     internal static class AWAsyncWorkerRules
     {
-        internal const int MaximumWorkers = 4;
+        // The async pool runs beside the native simulation, actor path
+        // workers, and RTS route work. Four workers can saturate the physical
+        // cores on machines that expose many logical processors and make the
+        // main thread miss its frame budget. Keep this pool deliberately
+        // small; queue coalescing preserves throughput for latest-state work.
+        internal const int MaximumWorkers = 2;
 
         internal static int ResolveWorkerCount(int pProcessorCount)
         {

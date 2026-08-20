@@ -3,6 +3,7 @@ using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.schools;
 using ai;
 using ai.behaviours;
+using System;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -98,6 +99,8 @@ namespace AncientWarfare3.patch
                         CityLeaderCandidateRetryService.Clear(pCity, actor);
                         CityGovernorPlacementService.OnCommittedAssignment(
                             pCity, actor);
+                        CityBureauAnnualWorkService.RequestImmediateReconcile(
+                            kingdom, pCity.data.id);
                     }
                     else
                     {
@@ -137,6 +140,8 @@ namespace AncientWarfare3.patch
             {
                 pCity.setLeader(actor, pNew: true);
                 CityLeaderCandidateRetryService.Clear(pCity, actor);
+                CityBureauAnnualWorkService.RequestImmediateReconcile(
+                    kingdom, pCity.data.id);
             }
             return false;
         }
@@ -150,13 +155,7 @@ namespace AncientWarfare3.patch
                 pCity);
             if (string.IsNullOrEmpty(cityOffice)) return null;
 
-            Clan royalClan = null;
-            if (pKingdom.data.royal_clan_id.hasValue())
-                royalClan = World.world?.clans?.get(pKingdom.data.royal_clan_id);
-
-            using ListPool<Actor> royalCandidates = new ListPool<Actor>();
-            using ListPool<Actor> otherCandidates = new ListPool<Actor>();
-            using ListPool<Actor> commonCandidates = new ListPool<Actor>();
+            using ListPool<Actor> candidates = new ListPool<Actor>();
             foreach (City city in pKingdom.getCities())
             {
                 if (!IsValidSourceCity(city, pKingdom)) continue;
@@ -174,19 +173,12 @@ namespace AncientWarfare3.patch
                                 CourtOfficeLayer.City,
                                 cityOffice, pAllowVacancyPromotion)) continue;
                     if (pCirculating && !CanServeTarget(unit, pCity)) continue;
-                    if (unit.hasClan() && royalClan != null && unit.clan == royalClan)
-                        royalCandidates.Add(unit);
-                    else if (unit.hasClan())
-                        otherCandidates.Add(unit);
-                    else if (pCirculating && unit.is_profession_citizen)
-                        commonCandidates.Add(unit);
+                    if (CityLeaderCandidateScoringRules.CanEnterUnifiedPool(
+                            eligible: true, hasClan: unit.hasClan()))
+                        candidates.Add(unit);
                 }
             }
-
-            Actor royal = PickLeader(royalCandidates, pCity);
-            if (royal != null) return royal;
-            Actor other = PickLeader(otherCandidates, pCity);
-            return other ?? PickLeader(commonCandidates, pCity);
+            return PickLeader(candidates, pCity);
         }
 
         private static Actor TryGetActingLocalLeader(City pCity,
@@ -214,10 +206,38 @@ namespace AncientWarfare3.patch
         private static Actor PickLeader(ListPool<Actor> pCandidates, City pCity)
         {
             if (pCandidates == null || pCandidates.Count == 0) return null;
-            if (pCity.hasCulture())
-                return ListSorters.getUnitSortedByAgeAndTraits(pCandidates, pCity.culture);
-            pCandidates.Sort(ListSorters.sortUnitByAgeOldFirst);
-            return pCandidates[0];
+            var clanCounts = new System.Collections.Generic.Dictionary<long, int>();
+            try
+            {
+                foreach (City city in pCity?.kingdom?.getCities() ??
+                         System.Array.Empty<City>())
+                {
+                    Actor leader = city?.leader;
+                    long clanId = leader?.clan?.data?.id ?? -1L;
+                    if (clanId >= 0L)
+                        clanCounts[clanId] = clanCounts.TryGetValue(clanId,
+                            out int count) ? count + 1 : 1;
+                }
+            }
+            catch { }
+            Actor best = null;
+            int bestScore = int.MinValue;
+            for (int candidateIndex = 0; candidateIndex < pCandidates.Count;
+                 candidateIndex++)
+            {
+                Actor actor = pCandidates[candidateIndex];
+                if (actor?.data == null) continue;
+                int ability = 0;
+                try { ability = (int)Math.Max(Math.Max(actor.stats?["intelligence"] ?? 0f, actor.stats?["stewardship"] ?? 0f), Math.Max(actor.stats?["warfare"] ?? 0f, actor.stats?["diplomacy"] ?? 0f)); }
+                catch { }
+                actor.data.get(LineageKeys.OFFICER_MERIT, out float merit, 0f);
+                long clanId = actor.clan?.data?.id ?? -1L;
+                clanCounts.TryGetValue(clanId, out int concentration);
+                int score = CityLeaderCandidateScoringRules.Score(ability, (int)Math.Max(0f, merit), concentration, actor.city == pCity, clanId >= 0L, false);
+                if (best == null || score > bestScore || score == bestScore && actor.data.id < best.data.id)
+                { best = actor; bestScore = score; }
+            }
+            return best;
         }
 
         private static bool IsRealmLeaderCandidate(Actor pUnit, long pHeirId,

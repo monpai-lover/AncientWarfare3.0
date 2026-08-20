@@ -31,6 +31,14 @@ namespace AncientWarfare3.core.court
             return TryGetInstance(kingdom, out instance);
         }
 
+        public static bool HasCustomLocalTemplates(Kingdom pKingdom)
+        {
+            return TryGetSnapshot(pKingdom,
+                       out CustomCourtTemplate snapshot) &&
+                   snapshot.LocalTemplates != null &&
+                   snapshot.LocalTemplates.Count > 0;
+        }
+
         public static bool TryGetInstance(Kingdom kingdom,
             out CustomCourtInstance instance)
         {
@@ -126,6 +134,8 @@ namespace AncientWarfare3.core.court
                 pTemplateId);
             pCity.data.set(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_MANUAL,
                 pManual);
+            CityBureauAnnualWorkService.RequestImmediateReconcile(pKingdom,
+                pCity.data.id);
             return true;
         }
 
@@ -238,6 +248,17 @@ namespace AncientWarfare3.core.court
                     next.TemplateHash);
                 kingdom.data.set(LineageKeys.CUSTOM_COURT_INSTANCE_SNAPSHOT,
                     CustomCourtInstanceCodec.Export(next));
+                try
+                {
+                    foreach (City city in kingdom.getCities() ??
+                             Enumerable.Empty<City>())
+                        if (city?.data != null && !city.isRekt() &&
+                            city.kingdom == kingdom)
+                            CityBureauAnnualWorkService.
+                                RequestImmediateReconcile(kingdom,
+                                    city.data.id);
+                }
+                catch { }
                 return true;
             }
             catch

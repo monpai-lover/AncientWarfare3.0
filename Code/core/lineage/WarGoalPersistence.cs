@@ -24,13 +24,15 @@ namespace AncientWarfare3.core.lineage
         public long SourceClaimId { get; set; } = -1;
         public long SourceCoreId { get; set; } = -1;
         public long SourceProjectId { get; set; } = -1;
+        public long SourceDeJureRegionId { get; set; } = -1;
         public long ClaimantActorId { get; set; } = -1;
         public string ClaimantName { get; set; } = "";
         public double CreatedTime { get; set; } = -1d;
 
         public WarGoalIdentity Identity => new WarGoalIdentity(
             GoalType, TargetCityId, TargetKingdomId, SourceClaimId,
-            SourceCoreId, SourceProjectId, ClaimantActorId);
+            SourceCoreId, SourceProjectId, ClaimantActorId,
+            SourceDeJureRegionId);
     }
 
     internal readonly struct WarGoalCreateResult
@@ -60,6 +62,7 @@ namespace AncientWarfare3.core.lineage
         public long TargetCityId { get; set; } = -1;
         public long TargetKingdomId { get; set; } = -1;
         public long SourceClaimId { get; set; } = -1;
+        public long SourceDeJureRegionId { get; set; } = -1;
         public bool Completed { get; set; }
         public int CompletionScore { get; set; } = -101;
         public long CompletionRevision { get; set; } = -1;
@@ -188,8 +191,9 @@ namespace AncientWarfare3.core.lineage
                     CommandText = "SELECT WAR_GOAL_ID,POSITION," +
                         "ATTACKER_KINGDOM_ID,DEFENDER_KINGDOM_ID," +
                         "GOAL_TYPE,REQUIRED_WAR_SCORE,COMPLETION_KIND," +
-                        "TARGET_CITY_ID,TARGET_KINGDOM_ID,SOURCE_CLAIM_ID," +
-                        "COMPLETED," +
+                    "TARGET_CITY_ID,TARGET_KINGDOM_ID,SOURCE_CLAIM_ID," +
+                    "SOURCE_DE_JURE_REGION_ID," +
+                    "COMPLETED," +
                         "COMPLETION_SCORE,COMPLETION_REVISION FROM " +
                         TableName + " WHERE WAR_ID=@war AND RESOLVED=0 " +
                         "ORDER BY POSITION,WAR_GOAL_ID LIMIT 3"
@@ -218,16 +222,45 @@ namespace AncientWarfare3.core.lineage
                             reader.GetInt64(8),
                         SourceClaimId = reader.IsDBNull(9) ? -1L :
                             reader.GetInt64(9),
-                        Completed = !reader.IsDBNull(10) &&
-                            reader.GetInt32(10) != 0,
-                        CompletionScore = reader.IsDBNull(11) ? -101 :
-                            reader.GetInt32(11),
-                        CompletionRevision = reader.IsDBNull(12) ? -1L :
-                            reader.GetInt64(12)
+                        SourceDeJureRegionId = reader.IsDBNull(10) ? -1L :
+                            reader.GetInt64(10),
+                        Completed = !reader.IsDBNull(11) &&
+                            reader.GetInt32(11) != 0,
+                        CompletionScore = reader.IsDBNull(12) ? -101 :
+                            reader.GetInt32(12),
+                        CompletionRevision = reader.IsDBNull(13) ? -1L :
+                            reader.GetInt64(13)
                     });
             }
             catch { }
             return result;
+        }
+
+        public static bool TryReadOpenDeJureRegionGoal(SQLiteConnection pDb,
+            long pWarId, long pWarGoalId, out long pRegionId)
+        {
+            pRegionId = -1L;
+            if (pDb == null || pWarId < 0L || pWarGoalId < 0L)
+                return false;
+            try
+            {
+                using var command = new SQLiteCommand(pDb)
+                {
+                    CommandText = "SELECT SOURCE_DE_JURE_REGION_ID FROM " +
+                        TableName + " WHERE WAR_ID=@war AND " +
+                        "WAR_GOAL_ID=@goal AND RESOLVED=0 AND " +
+                        "GOAL_TYPE=@type LIMIT 1"
+                };
+                command.Parameters.AddWithValue("@war", pWarId);
+                command.Parameters.AddWithValue("@goal", pWarGoalId);
+                command.Parameters.AddWithValue("@type",
+                    WarGoalTypeIds.TakeDeJureRegion);
+                object value = command.ExecuteScalar();
+                if (value == null || value == DBNull.Value) return false;
+                pRegionId = Convert.ToInt64(value);
+                return pRegionId >= 0L;
+            }
+            catch { return false; }
         }
 
         private static List<WarGoalIdentity> ReadPersistedIdentities(
@@ -241,7 +274,8 @@ namespace AncientWarfare3.core.lineage
                 Transaction = pTransaction,
                 CommandText = "SELECT GOAL_TYPE,TARGET_CITY_ID," +
                     "TARGET_KINGDOM_ID,SOURCE_CLAIM_ID,SOURCE_CORE_ID," +
-                    "SOURCE_PROJECT_ID,CLAIMANT_ACTOR_ID FROM " + TableName +
+                    "SOURCE_PROJECT_ID,CLAIMANT_ACTOR_ID," +
+                    "SOURCE_DE_JURE_REGION_ID FROM " + TableName +
                     " WHERE WAR_ID=@war " +
                     "ORDER BY POSITION,WAR_GOAL_ID LIMIT 3"
             };
@@ -256,7 +290,8 @@ namespace AncientWarfare3.core.lineage
                     reader.IsDBNull(3) ? -1L : reader.GetInt64(3),
                     reader.IsDBNull(4) ? -1L : reader.GetInt64(4),
                     reader.IsDBNull(5) ? -1L : reader.GetInt64(5),
-                    reader.IsDBNull(6) ? -1L : reader.GetInt64(6)));
+                    reader.IsDBNull(6) ? -1L : reader.GetInt64(6),
+                    reader.IsDBNull(7) ? -1L : reader.GetInt64(7)));
             }
             return result;
         }
@@ -286,7 +321,8 @@ namespace AncientWarfare3.core.lineage
                     "DEFENDER_COLOR,WAR_TYPE,GOAL_TYPE,POSITION," +
                     "REQUIRED_WAR_SCORE,TARGET_CITY_ID,TARGET_CITY_NAME," +
                     "TARGET_KINGDOM_ID,TARGET_KINGDOM_NAME,SOURCE_CLAIM_ID," +
-                    "SOURCE_CORE_ID,SOURCE_PROJECT_ID,CLAIMANT_ACTOR_ID," +
+                    "SOURCE_CORE_ID,SOURCE_PROJECT_ID,SOURCE_DE_JURE_REGION_ID," +
+                    "CLAIMANT_ACTOR_ID," +
                     "CLAIMANT_NAME,CREATED_TIME,RESOLVED_TIME,RESOLVED," +
                     "RESULT,COMPLETION_KIND,COMPLETED,COMPLETED_TIME," +
                     "COMPLETION_SCORE,COMPLETION_REVISION) VALUES (" +
@@ -294,7 +330,7 @@ namespace AncientWarfare3.core.lineage
                     "@defender,@defenderName,@defenderColor,@warType," +
                     "@goalType,@position,@required,@city,@cityName," +
                     "@targetKingdom,@targetKingdomName,@claim,@core," +
-                    "@project,@claimant,@claimantName,@created,-1,0,''," +
+                    "@project,@region,@claimant,@claimantName,@created,-1,0,''," +
                     "@completionKind,0,-1,-101,-1)"
             };
             command.Parameters.AddWithValue("@id", pGoalId);
@@ -329,6 +365,8 @@ namespace AncientWarfare3.core.lineage
             command.Parameters.AddWithValue("@core", pSnapshot.SourceCoreId);
             command.Parameters.AddWithValue("@project",
                 pSnapshot.SourceProjectId);
+            command.Parameters.AddWithValue("@region",
+                pSnapshot.SourceDeJureRegionId);
             command.Parameters.AddWithValue("@claimant",
                 pSnapshot.ClaimantActorId);
             command.Parameters.AddWithValue("@claimantName",

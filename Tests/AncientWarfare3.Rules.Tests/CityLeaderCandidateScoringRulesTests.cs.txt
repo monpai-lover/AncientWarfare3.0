@@ -1,0 +1,15 @@
+using AncientWarfare3.core.court;
+
+internal static class CityLeaderCandidateScoringRulesTests
+{
+    public static void Run()
+    {
+        int royal = CityLeaderCandidateScoringRules.Score(100, 20, 1, false, true, true);
+        int other = CityLeaderCandidateScoringRules.Score(100, 20, 1, false, true, false);
+        Equal(other, royal, "royal clan receives no priority");
+        True(CityLeaderCandidateScoringRules.Score(100, 20, 0, false, true, false) > CityLeaderCandidateScoringRules.Score(100, 20, 3, false, true, false), "clan concentration applies an increasing soft penalty");
+        True(CityLeaderCandidateScoringRules.CanEnterUnifiedPool(true, false), "eligible clanless commoner can enter leader pool");
+    }
+    private static void True(bool value, string message) { if (!value) throw new System.InvalidOperationException(message); }
+    private static void Equal<T>(T expected, T actual, string message) { if (!Equals(expected, actual)) throw new System.InvalidOperationException(message); }
+}

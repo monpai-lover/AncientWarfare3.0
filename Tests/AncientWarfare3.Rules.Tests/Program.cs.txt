@@ -120,6 +120,21 @@ if (args.Length == 1 && args[0] == "--regional-government-nine-rank")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--mandate-tower-spacing")
+{
+    MandateBorderTowerSpacingRulesTests.Run();
+    Console.WriteLine("Mandate tower spacing rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--local-governor-identity")
+{
+    LocalGovernorIdentityRulesTests.Run();
+    CityLeaderCandidateScoringRulesTests.Run();
+    Console.WriteLine("Local governor identity rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--official-career-noble-identity")
 {
     OfficialCareerNobleIdentityRulesTests.Run();

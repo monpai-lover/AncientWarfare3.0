@@ -33,6 +33,7 @@ namespace AncientWarfare3.core.court
                 pSuccess = true;
                 HierarchicalVassalMapModeService.MarkHierarchyDirty(
                     city.kingdom);
+                HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
                 return "aw_de_jure_region_created";
             }
 
@@ -65,6 +66,7 @@ namespace AncientWarfare3.core.court
             pSuccess = true;
             HierarchicalVassalMapModeService.MarkHierarchyDirty(
                 city.kingdom);
+            HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
             return "aw_de_jure_region_assigned";
         }
     }

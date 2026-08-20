@@ -1,5 +1,6 @@
 using AncientWarfare3.core.performance;
 using AncientWarfare3.core.pathfinding;
+using AncientWarfare3.core.asyncwork;
 
 internal static class RuntimePerformanceBudgetRulesTests
 {
@@ -30,6 +31,10 @@ internal static class RuntimePerformanceBudgetRulesTests
             "path workers are capped at the Cultiway global maximum");
         Equal(8, AWPathfindingConfig.WorkerCount(64),
             "pathfinder runtime honors the Cultiway eight-worker ceiling");
+        Equal(2, AWAsyncWorkerRules.ResolveWorkerCount(32),
+            "async compute reserves CPU for the main thread and path workers");
+        Equal(2, AWAsyncWorkerRules.NormalizeWorkerCount(4, 32),
+            "explicit async worker requests cannot bypass the contention cap");
         AWPathWorkerAllocation allocation = AWFrameSchedulerRules.AllocateWorkers(12);
         Equal(4, allocation.ActorPathWorkers,
             "all allocated path workers belong to the shared finder");

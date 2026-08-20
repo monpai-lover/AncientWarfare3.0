@@ -45,8 +45,11 @@ namespace AncientWarfare3.core.lineage
                 ZhuluPeaceGuard.BlocksOrdinarySettlement(pWar) ||
                 RebellionDirectTerritoryTransferService
                     .BlocksOrdinarySettlement(pWar) ||
+                !DeJureWarGoalSettlementService.HasAffordableGoal(pWar) &&
                 !TryBuildPlan(pWar, out _, out var facts,
                     out int expectedGoalCount)) return false;
+            if (DeJureWarGoalSettlementService.HasAffordableGoal(pWar))
+                return true;
             return WarGoalSettlementRules.TryValidateForceBundle(
                 facts[0].AchievedScore, facts, expectedGoalCount, out _);
         }
@@ -56,6 +59,8 @@ namespace AncientWarfare3.core.lineage
         {
             pResult = new WarPeaceExecutionResult(false, -1,
                 "war_goal_bundle_incomplete");
+            if (DeJureWarGoalSettlementService.TryExecuteImmediate(pWar,
+                    out pResult)) return true;
             if (AW3MultiplayerReplicaScope.IsReplicaSession ||
                 pWar?.data == null || pWar.hasEnded() ||
                 !TryBuildPlan(pWar, out WarPeaceSettlementDraft draft,

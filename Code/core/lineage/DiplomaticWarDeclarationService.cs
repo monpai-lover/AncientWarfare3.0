@@ -47,11 +47,13 @@ namespace AncientWarfare3.core.lineage
             string pGoalType, City pTargetCity, string pWarType,
             string pReasonKey, string pReasonLabel, Actor pClaimant = null,
             long pSourceClaimId = -1L, long pSourceCoreId = -1L,
-            long pRestorationClaimId = -1L)
+            long pRestorationClaimId = -1L,
+            long pSourceDeJureRegionId = -1L)
         {
             return TryIssue(pAttacker, pDefender, pGoalType, pTargetCity,
                 pWarType, pReasonKey, pReasonLabel, out _, pClaimant,
-                pSourceClaimId, pSourceCoreId, pRestorationClaimId);
+                pSourceClaimId, pSourceCoreId, pRestorationClaimId,
+                pSourceDeJureRegionId);
         }
 
         public static bool TryIssue(Kingdom pAttacker, Kingdom pDefender,
@@ -59,7 +61,8 @@ namespace AncientWarfare3.core.lineage
             string pReasonKey, string pReasonLabel,
             out string pFailureReason, Actor pClaimant = null,
             long pSourceClaimId = -1L, long pSourceCoreId = -1L,
-            long pRestorationClaimId = -1L)
+            long pRestorationClaimId = -1L,
+            long pSourceDeJureRegionId = -1L)
         {
             pFailureReason = "";
             string goalType = pGoalType ?? "";
@@ -109,6 +112,7 @@ namespace AncientWarfare3.core.lineage
                 TargetCityName = displayCity?.data?.name ?? "",
                 SourceClaimId = pSourceClaimId,
                 SourceCoreId = pSourceCoreId,
+                SourceDeJureRegionId = pSourceDeJureRegionId,
                 RestorationClaimId = pRestorationClaimId,
                 ClaimantActorId = pClaimant?.data?.id ?? -1L,
                 NoticeSignature = requiresNotice ? signature : "",
@@ -161,7 +165,8 @@ namespace AncientWarfare3.core.lineage
                 ReasonKeyForGoal(pOption.goal_type), pOption.label,
                 out pFailureReason,
                 FindActor(pOption.claimant_actor_id), pOption.source_claim_id,
-                pOption.source_core_id, pOption.restoration_claim_id);
+                pOption.source_core_id, pOption.restoration_claim_id,
+                pOption.source_de_jure_region_id);
         }
 
         public static bool IssueZhulu(Kingdom pAttacker,
@@ -441,6 +446,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.DIPLOMATIC_WAR_TARGET_CITY_NAME, "");
             pKingdom.data.set(LineageKeys.DIPLOMATIC_WAR_SOURCE_CLAIM_ID, -1L);
             pKingdom.data.set(LineageKeys.DIPLOMATIC_WAR_SOURCE_CORE_ID, -1L);
+            pKingdom.data.set(LineageKeys.DIPLOMATIC_WAR_SOURCE_DE_JURE_REGION_ID, -1L);
             pKingdom.data.set(
                 LineageKeys.DIPLOMATIC_WAR_RESTORATION_CLAIM_ID, -1L);
             pKingdom.data.set(LineageKeys.DIPLOMATIC_WAR_CLAIMANT_ACTOR_ID,
@@ -549,6 +555,8 @@ namespace AncientWarfare3.core.lineage
             pAttacker.data.set(
                 LineageKeys.DIPLOMATIC_WAR_RESTORATION_CLAIM_ID,
                 pRecord.RestorationClaimId);
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_SOURCE_DE_JURE_REGION_ID,
+                pRecord.SourceDeJureRegionId);
             pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_CLAIMANT_ACTOR_ID,
                 pRecord.ClaimantActorId);
             pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_NOTICE_SIGNATURE,
@@ -632,6 +640,7 @@ namespace AncientWarfare3.core.lineage
             long sourceCoreId = pRecord.SourceCoreId;
             long sourceClaimId = pRecord.SourceClaimId;
             long restorationClaimId = pRecord.RestorationClaimId;
+            long sourceDeJureRegionId = pRecord.SourceDeJureRegionId;
             Actor claimant = FindActor(pRecord.ClaimantActorId);
 
             switch (goalType)
@@ -640,6 +649,7 @@ namespace AncientWarfare3.core.lineage
                 case WarTerritoryService.GOAL_MANDATE_CONQUEST:
                 case WarTerritoryService.GOAL_TAKE_CORE_CITY:
                 case WarTerritoryService.GOAL_PRESS_CLAIM_CITY:
+                case WarTerritoryService.GOAL_TAKE_DE_JURE_REGION:
                 case WarTerritoryService.GOAL_RESTORE_KINGDOM:
                 case WarTerritoryService.GOAL_FORCE_VASSAL:
                 case WarTerritoryService.GOAL_FORCE_TRIBUTARY:
@@ -667,6 +677,7 @@ namespace AncientWarfare3.core.lineage
                 target_city = city,
                 target_kingdom = pDefender,
                 source_core_id = sourceCoreId,
+                source_de_jure_region_id = sourceDeJureRegionId,
                 source_claim_id = goalType ==
                                   WarTerritoryService.GOAL_RESTORE_KINGDOM
                     ? restorationClaimId
@@ -738,6 +749,10 @@ namespace AncientWarfare3.core.lineage
                     hasClaimTarget = WarTerritoryService
                         .FindBestClaimTargetCityForDecision(pAttacker,
                             pDefender)?.data != null;
+                    break;
+                case WarTerritoryService.GOAL_TAKE_DE_JURE_REGION:
+                    hasCoreTarget = WarTerritoryService.HasDeJureRegionTarget(
+                        pAttacker, pDefender);
                     break;
                 case WarTerritoryService.GOAL_FORCE_VASSAL:
                     canForceVassal = WarDecisionService.CanForceVassal(
@@ -853,6 +868,9 @@ namespace AncientWarfare3.core.lineage
                 WarTerritoryService.GOAL_PRESS_CLAIM_CITY =>
                     WarTerritoryService.FindBestClaimTargetCityForDecision(
                         pAttacker, pDefender),
+                WarTerritoryService.GOAL_TAKE_DE_JURE_REGION =>
+                    WarTerritoryService.FindBestDeJureRegionTargetCity(
+                        pAttacker, pDefender),
                 WarTerritoryService.GOAL_RESTORE_KINGDOM =>
                     WarTerritoryService
                         .FindBestRestorationTargetCityForDecision(pAttacker,
@@ -876,6 +894,7 @@ namespace AncientWarfare3.core.lineage
                 WarTerritoryService.GOAL_TAKE_MANDATE =>
                     MandateService.WAR_TIANMING,
                 WarTerritoryService.GOAL_TAKE_CORE_CITY => "reclaim",
+                WarTerritoryService.GOAL_TAKE_DE_JURE_REGION => "de_jure_war",
                 WarTerritoryService.GOAL_FORCE_VASSAL => "vassal_war",
                 WarTerritoryService.GOAL_FORCE_TRIBUTARY =>
                     WarDecisionService.WAR_TRIBUTARY,
@@ -899,6 +918,7 @@ namespace AncientWarfare3.core.lineage
                     "mandate_conquest",
                 WarTerritoryService.GOAL_TAKE_CORE_CITY => "core_reclaim",
                 WarTerritoryService.GOAL_PRESS_CLAIM_CITY => "claim_war",
+                WarTerritoryService.GOAL_TAKE_DE_JURE_REGION => "de_jure_war",
                 WarTerritoryService.GOAL_FORCE_VASSAL => "force_vassal",
                 WarTerritoryService.GOAL_FORCE_TRIBUTARY => "tributary_war",
                 WarTerritoryService.GOAL_INDEPENDENCE => "independence_war",

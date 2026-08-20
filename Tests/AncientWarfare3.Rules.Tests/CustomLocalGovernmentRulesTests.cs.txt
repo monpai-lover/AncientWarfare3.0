@@ -52,6 +52,11 @@ internal static class CustomLocalGovernmentRulesTests
             "built-in civil government has all vacancies");
         Equal(4, Find(builtIns, "junfu").Offices.Count,
             "built-in military government has all vacancies");
+        Equal(4, CourtRules.CustomCityOfficeSlots(civil),
+            "a configured local template exposes every configured office");
+        civil.Offices[1].Slots = 2;
+        Equal(5, CourtRules.CustomCityOfficeSlots(civil),
+            "multi-slot configured offices contribute every seat");
         IReadOnlyList<CustomLocalCourtTemplate> freshBuiltIns =
             CustomLocalGovernmentPresetRules.CreateBuiltInCatalog();
         True(!ReferenceEquals(builtIns[0], freshBuiltIns[0]),
@@ -103,6 +108,32 @@ internal static class CustomLocalGovernmentRulesTests
             "duplicate office prerequisites follow rebased office ids");
 
         RuntimeUsesCityFacts();
+        ImmediateVacancyReconciliationIsWired();
+    }
+
+    private static void ImmediateVacancyReconciliationIsWired()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string annual = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "CityBureauAnnualWorkService.cs"));
+        string court = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "CourtService.cs"));
+        string leader = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_CityLeaderPatch.cs"));
+        string death = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_HistoricalSchoolPatch.cs"));
+        True(annual.Contains("RequestImmediateReconcile",
+                StringComparison.Ordinal),
+            "city bureau must expose an immediate vacancy reconciliation entry");
+        True(court.Contains("RequestImmediateReconcile",
+                StringComparison.Ordinal),
+            "court lifecycle must request local vacancy reconciliation");
+        True(leader.Contains("RequestImmediateReconcile",
+                StringComparison.Ordinal),
+            "new city leaders must trigger local vacancy reconciliation");
+        True(death.Contains("RequestLocalOfficerDeathReconcile",
+                StringComparison.Ordinal),
+            "dead local officials must trigger local vacancy reconciliation");
     }
 
     private static CustomCourtTemplate LegacyTemplate(bool includeMilitary)

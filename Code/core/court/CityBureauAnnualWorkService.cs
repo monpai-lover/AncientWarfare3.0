@@ -44,6 +44,36 @@ namespace AncientWarfare3.core.court
             Enqueue(pKingdom.id);
         }
 
+        internal static void RequestImmediateReconcile(Kingdom pKingdom,
+            long pCityId)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
+                pCityId < 0L || !CourtService.HasOfficialCourt(pKingdom))
+                return;
+            string key = "city-bureau-vacancy:" + pKingdom.id + ":" +
+                         pCityId;
+            DeferredRuntimeWorkService.EnqueueCoalesced(key,
+                DeferredWorkClass.Persistent,
+                () => ProcessImmediate(pKingdom.id, pCityId, 0));
+        }
+
+        private static void ProcessImmediate(long pKingdomId, long pCityId,
+            int pAttempt)
+        {
+            Kingdom kingdom = ResolveKingdom(pKingdomId);
+            City city = ResolveCity(pCityId);
+            if (kingdom?.data == null || city?.data == null ||
+                kingdom.isRekt() || city.isRekt() || city.kingdom != kingdom)
+                return;
+            if (ProcessCity(kingdom, city, 0f, Date.getCurrentYear())) return;
+            if (pAttempt + 1 >= MaximumWriteAttempts) return;
+            string key = "city-bureau-vacancy:" + pKingdomId + ":" +
+                         pCityId;
+            DeferredRuntimeWorkService.EnqueueCoalesced(key,
+                DeferredWorkClass.Persistent,
+                () => ProcessImmediate(pKingdomId, pCityId, pAttempt + 1));
+        }
+
         internal static void ClearRuntime()
         {
             foreach (PendingWork work in Pending.Values) Dispose(work);
@@ -140,9 +170,19 @@ namespace AncientWarfare3.core.court
         private static bool ProcessCity(Kingdom pKingdom, City pCity,
             float pCourtEfficiency, int pYear)
         {
-            int slots = CourtRules.CityOfficeSlots(
-                SafeCityPopulation(pCity), SafeZoneCount(pCity),
-                pKingdom.capital == pCity);
+            CustomLocalCourtTemplate localTemplate = null;
+            bool customTemplate = CustomCourtRuntime.
+                HasCustomLocalTemplates(pKingdom);
+            if (customTemplate)
+                CustomCourtRuntime.TryGetLocalTemplate(pKingdom, pCity,
+                    out localTemplate);
+            int slots = customTemplate && localTemplate != null
+                ? CourtRules.CustomCityOfficeSlots(localTemplate)
+                : CourtRules.CityOfficeSlots(SafeCityPopulation(pCity),
+                    SafeZoneCount(pCity), pKingdom.capital == pCity);
+            if (slots <= 0)
+                slots = CourtRules.CityOfficeSlots(SafeCityPopulation(pCity),
+                    SafeZoneCount(pCity), pKingdom.capital == pCity);
             CitySchoolSnapshot schoolSnapshot =
                 CitySchoolSnapshotService.GetSnapshot(pCity);
             string localSchool = schoolSnapshot?.DominantSchool ??
@@ -156,8 +196,9 @@ namespace AncientWarfare3.core.court
             float efficiency = CourtBureauRules.BureauEfficiency(slots,
                 filled);
 
-            CustomCourtRuntime.TryGetLocalTemplate(pKingdom, pCity,
-                out CustomLocalCourtTemplate localTemplate);
+            if (localTemplate == null)
+                CustomCourtRuntime.TryGetLocalTemplate(pKingdom, pCity,
+                    out localTemplate);
             pCity.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
                 out string localTemplateId, localTemplate?.Id ?? string.Empty);
             pCity.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_MANUAL,

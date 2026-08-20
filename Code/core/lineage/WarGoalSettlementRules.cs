@@ -9,6 +9,7 @@ namespace AncientWarfare3.core.lineage
         public const string MandateConquest = "mandate_conquest";
         public const string TakeCoreCity = "take_core_city";
         public const string PressClaimCity = "press_claim_city";
+        public const string TakeDeJureRegion = "take_de_jure_region";
         public const string ForceVassal = "force_vassal";
         public const string ForceTributary = "force_tributary";
         public const string Independence = "independence";
@@ -25,7 +26,7 @@ namespace AncientWarfare3.core.lineage
         public WarGoalIdentity(string pGoalType, long pTargetCityId,
             long pTargetKingdomId, long pSourceClaimId,
             long pSourceCoreId, long pSourceProjectId,
-            long pClaimantActorId)
+            long pClaimantActorId, long pSourceDeJureRegionId = -1L)
         {
             GoalType = pGoalType ?? "";
             TargetCityId = pTargetCityId;
@@ -34,6 +35,7 @@ namespace AncientWarfare3.core.lineage
             SourceCoreId = pSourceCoreId;
             SourceProjectId = pSourceProjectId;
             ClaimantActorId = pClaimantActorId;
+            SourceDeJureRegionId = pSourceDeJureRegionId;
         }
 
         public string GoalType { get; }
@@ -43,6 +45,7 @@ namespace AncientWarfare3.core.lineage
         public long SourceCoreId { get; }
         public long SourceProjectId { get; }
         public long ClaimantActorId { get; }
+        public long SourceDeJureRegionId { get; }
 
         public bool Equals(WarGoalIdentity other)
         {
@@ -53,7 +56,8 @@ namespace AncientWarfare3.core.lineage
                    SourceClaimId == other.SourceClaimId &&
                    SourceCoreId == other.SourceCoreId &&
                    SourceProjectId == other.SourceProjectId &&
-                   ClaimantActorId == other.ClaimantActorId;
+                   ClaimantActorId == other.ClaimantActorId &&
+                   SourceDeJureRegionId == other.SourceDeJureRegionId;
         }
 
         public override bool Equals(object obj)
@@ -72,7 +76,8 @@ namespace AncientWarfare3.core.lineage
                 hash = hash * 397 ^ SourceClaimId.GetHashCode();
                 hash = hash * 397 ^ SourceCoreId.GetHashCode();
                 hash = hash * 397 ^ SourceProjectId.GetHashCode();
-                return hash * 397 ^ ClaimantActorId.GetHashCode();
+                hash = hash * 397 ^ ClaimantActorId.GetHashCode();
+                return hash * 397 ^ SourceDeJureRegionId.GetHashCode();
             }
         }
     }
@@ -149,6 +154,7 @@ namespace AncientWarfare3.core.lineage
             {
                 case WarGoalTypeIds.TakeCoreCity:
                 case WarGoalTypeIds.PressClaimCity:
+                case WarGoalTypeIds.TakeDeJureRegion:
                 case WarGoalTypeIds.MandateConquest:
                     pProfile = new WarGoalAutomaticSettlementProfile(
                         WarGoalAutomaticSettlementEffect.CedeCity,

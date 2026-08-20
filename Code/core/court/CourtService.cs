@@ -1633,6 +1633,23 @@ namespace AncientWarfare3.core.court
             catch { }
         }
 
+        internal static void RequestLocalOfficerDeathReconcile(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.data.get(LineageKeys.COURT_KINGDOM_ID,
+                out long kingdomId, -1L);
+            pActor.data.get(LineageKeys.COURT_CITY_ID,
+                out long cityId, -1L);
+            pActor.data.get(LineageKeys.COURT_LAYER,
+                out string layer, "");
+            if (kingdomId < 0L || cityId < 0L ||
+                layer != CourtOfficeLayer.City) return;
+            Kingdom kingdom = World.world?.kingdoms?.get(kingdomId);
+            if (kingdom?.data != null)
+                CityBureauAnnualWorkService.RequestImmediateReconcile(
+                    kingdom, cityId);
+        }
+
         private static bool SetOfficer(Actor pActor, Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId, City pCity,
             bool pActing = false, bool pVacancyPromotion = false,
             bool pAllowLocalLowerQualification = false)
@@ -1933,6 +1950,8 @@ namespace AncientWarfare3.core.court
                 pActor.isRekt() || !pActor.isAlive()) return false;
             pActor.data.get(LineageKeys.COURT_KINGDOM_ID,
                 out long courtKingdomId, -1L);
+            pActor.data.get(LineageKeys.COURT_CITY_ID,
+                out long courtCityId, -1L);
             pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             if (courtKingdomId != pKingdom.id ||
@@ -1962,9 +1981,13 @@ namespace AncientWarfare3.core.court
                 out long remainingKingdomId, -1L);
             pActor.data.get(LineageKeys.COURT_OFFICE_ID,
                 out string remainingOffice, "");
-            return remainingKingdomId < 0 &&
+            bool result = remainingKingdomId < 0 &&
                    string.IsNullOrEmpty(remainingOffice) &&
                    (layer != CourtOfficeLayer.City || !pActor.isCityLeader());
+            if (result && layer == CourtOfficeLayer.City && courtCityId >= 0L)
+                CityBureauAnnualWorkService.RequestImmediateReconcile(
+                    pKingdom, courtCityId);
+            return result;
         }
 
         internal static bool ApplyCommittedOfficerProjection(Actor pActor, Kingdom pKingdom,
@@ -2093,6 +2116,7 @@ namespace AncientWarfare3.core.court
             if (pActor?.data == null) return;
 
             pActor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
+            pActor.data.get(LineageKeys.COURT_CITY_ID, out long courtCityId, -1L);
             pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             Kingdom courtKingdom = courtKingdomId >= 0 ? World.world?.kingdoms?.get(courtKingdomId) : null;
@@ -2126,6 +2150,10 @@ namespace AncientWarfare3.core.court
             if (courtKingdom?.data != null) CourtDirectionService.MarkDirty(courtKingdom);
             CitySchoolSnapshotService.MarkActorDirty(pActor);
             CityShiInfluenceSnapshotService.MarkActorDirty(pActor);
+            if (courtKingdom?.data != null && layer == CourtOfficeLayer.City &&
+                courtCityId >= 0L && pReason != "kingdom_fell")
+                CityBureauAnnualWorkService.RequestImmediateReconcile(
+                    courtKingdom, courtCityId);
             if (courtKingdom?.data != null && office == CourtOfficeId.ImperialPhysician)
                 RoyalMedicalCareService.ReconcileTargets(courtKingdom);
         }

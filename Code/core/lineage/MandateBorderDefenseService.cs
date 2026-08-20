@@ -15,8 +15,6 @@ namespace AncientWarfare3.core.lineage
     {
         private const int YEARLY_GUARD_CAP = 12;
         private const int WAR_GUARD_CAP = 20;
-        private const int YEARLY_TOWER_CAP = 1;
-        private const int WAR_TOWER_CAP = 2;
         private const int MAX_BORDER_ARMIES = 3;
         private const int MAX_BORDER_GUARDS_PER_CITY = 10;
         private const int BORDER_THREAT_RADIUS = 55;
@@ -64,7 +62,7 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             bool applied = ReinforceBorder(pMandate, YEARLY_GUARD_CAP,
-                    true, YEARLY_TOWER_CAP, "decision",
+                    true, 0, "decision",
                     MandateBorderWallRules.
                         ShouldUsePoorRelationTargetsForDecision(
                             usesBeforeDecision))
@@ -103,7 +101,7 @@ namespace AncientWarfare3.core.lineage
                 : MandateBorderDecisionUsageService.ReadUses(
                     report.period_id);
             ReinforceBorder(mandate, WAR_GUARD_CAP, true,
-                WAR_TOWER_CAP, "war",
+                0, "war",
                 MandateBorderWallRules.ShouldUsePoorRelationTargets(
                     completedUses));
         }
@@ -124,7 +122,7 @@ namespace AncientWarfare3.core.lineage
             {
                 if (result.guards < pGuardCap)
                     result.guards += AppointBorderGuards(city, pMandate, pGuardCap - result.guards);
-                if (result.towers < pTowerCap)
+                if (pTowerCap <= 0 || result.towers < pTowerCap)
                     result.towers += BuildBorderTowers(city, pMandate, pTowerCap - result.towers);
                 if (result.main_city == null &&
                     (result.guards > 0 || result.towers > 0))
@@ -449,24 +447,25 @@ namespace AncientWarfare3.core.lineage
 
         private static int BuildBorderTowers(City pCity, Kingdom pMandate, int pCap)
         {
-            if (pCity?.data == null || pCap <= 0) return 0;
-            if (pCity.countBuildingsType("type_watch_tower", pCountOnlyFinished: false) >= 3) return 0;
+            if (pCity?.data == null || pMandate?.data == null) return 0;
 
             BuildingAsset tower = GetWatchTowerAsset(pCity);
             if (tower == null) return 0;
 
+            List<WorldTile> candidates = GetBorderBuildCandidates(pCity, pMandate);
+            if (candidates.Count == 0) return 0;
+            var points = candidates.Select(tile => new CultiwayWallPoint(tile.x, tile.y));
+            var existing = CollectWatchTowerFootprint(pCity);
+            IReadOnlyList<CultiwayWallPoint> selected = MandateBorderTowerSpacingRules.SelectSpaced(points, existing, existing);
+            int budget = Math.Min(selected.Count, MandateBorderTowerSpacingRules.SafetyBudget(candidates.Count));
+            if (pCap > 0) budget = Math.Min(budget, pCap);
+            if (budget <= 0) return 0;
             int built = 0;
-            try
+            foreach (CultiwayWallPoint point in selected)
             {
-                Building building = CityBehBuild.tryToBuild(pCity, tower);
-                if (building != null) built++;
-            }
-            catch { }
-            if (built >= pCap) return built;
-
-            foreach (WorldTile tile in GetBorderBuildCandidates(pCity, pMandate))
-            {
-                if (built >= pCap) break;
+                if (built >= budget) break;
+                WorldTile tile = World.world?.GetTile(point.X, point.Y);
+                if (tile == null) continue;
                 try
                 {
                     if (!World.world.buildings.canBuildFrom(tile, tower, pCity)) continue;
@@ -481,6 +480,27 @@ namespace AncientWarfare3.core.lineage
                 }
             }
             return built;
+        }
+
+        private static HashSet<CultiwayWallPoint> CollectWatchTowerFootprint(City pCity)
+        {
+            var result = new HashSet<CultiwayWallPoint>();
+            if (pCity?.buildings == null) return result;
+            foreach (Building building in pCity.buildings)
+            {
+                if (building?.asset == null || building.asset.type != "type_watch_tower") continue;
+                bool added = false;
+                if (building.tiles != null)
+                    foreach (WorldTile tile in building.tiles)
+                    {
+                        if (tile == null) continue;
+                        result.Add(new CultiwayWallPoint(tile.x, tile.y));
+                        added = true;
+                    }
+                if (!added && building.current_tile != null)
+                    result.Add(new CultiwayWallPoint(building.current_tile.x, building.current_tile.y));
+            }
+            return result;
         }
 
         private static BuildingAsset GetWatchTowerAsset(City pCity)

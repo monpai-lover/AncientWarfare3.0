@@ -188,7 +188,8 @@ namespace AncientWarfare3.core.court
                     row.layer == CourtOfficeLayer.City &&
                     row.city_id == pCity.data.id).ToList();
             List<string> seats = BuildLocalSeats(pKingdom, pCity,
-                localTemplate, model.TotalSeats);
+                localTemplate, model.TotalSeats,
+                CustomCourtRuntime.HasCustomLocalTemplates(pKingdom));
             if (seats.Count > model.TotalSeats) model.TotalSeats = seats.Count;
             EnsurePersistedLocalLeader(pKingdom, pCity, seats, officers);
             if (seats.Count > 0 && !officers.Any(row =>
@@ -210,10 +211,7 @@ namespace AncientWarfare3.core.court
                 !node.IsVacancy && node.ActorId >= 0);
             model.LeaderNode = model.Nodes.FirstOrDefault(node =>
                 node?.OfficeLayer == CourtOfficeLayer.City &&
-                node.ActorId == pCity.leader?.data?.id) ??
-                model.Nodes.FirstOrDefault(node => node != null &&
-                    node.OfficeLayer == CourtOfficeLayer.City &&
-                    !node.IsVacancy);
+                node.ActorId == pCity.leader?.data?.id);
             return model;
         }
 
@@ -289,7 +287,8 @@ namespace AncientWarfare3.core.court
         }
 
         private static List<string> BuildLocalSeats(Kingdom pKingdom,
-            City pCity, CustomLocalCourtTemplate pTemplate, int pCapacity)
+            City pCity, CustomLocalCourtTemplate pTemplate, int pCapacity,
+            bool pTemplateControlsCapacity)
         {
             int capacity = Math.Max(1, pCapacity);
             var result = new List<string>();
@@ -308,7 +307,8 @@ namespace AncientWarfare3.core.court
                              .ThenBy(office => office.Grade)
                              .ThenBy(office => office.Id,
                                  StringComparer.Ordinal))
-                    for (int slot = 0; slot < Math.Max(1, office.Slots);
+                    for (int slot = 0; slot < Math.Max(1, office.Slots) &&
+                         (pTemplateControlsCapacity || result.Count < capacity);
                          slot++) result.Add(office.Id);
                 return result;
             }

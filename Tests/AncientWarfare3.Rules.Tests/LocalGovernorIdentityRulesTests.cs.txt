@@ -1,0 +1,16 @@
+using AncientWarfare3.core.court;
+
+internal static class LocalGovernorIdentityRulesTests
+{
+    public static void Run()
+    {
+        True(LocalGovernorIdentityRules.RootOfficeMatchesLeader(10, 10, true), "root office accepts the live city leader");
+        False(LocalGovernorIdentityRules.RootOfficeMatchesLeader(10, 11, true), "root office rejects another actor");
+        False(LocalGovernorIdentityRules.RootOfficeMatchesLeader(10, 10, false), "dead leader cannot own root office");
+        Equal(10L, LocalGovernorIdentityRules.ResolveRegionalGovernorActorId(true, 10, true), "controlled seat projects its leader as regional governor");
+        Equal(-1L, LocalGovernorIdentityRules.ResolveRegionalGovernorActorId(false, 10, true), "uncontrolled seat has no regional governor projection");
+    }
+    private static void True(bool value, string message) { if (!value) throw new System.InvalidOperationException(message); }
+    private static void False(bool value, string message) { if (value) throw new System.InvalidOperationException(message); }
+    private static void Equal<T>(T expected, T actual, string message) { if (!Equals(expected, actual)) throw new System.InvalidOperationException(message); }
+}

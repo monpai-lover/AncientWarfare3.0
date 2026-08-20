@@ -1,0 +1,17 @@
+using System;
+using System.Linq;
+using AncientWarfare3.core.lineage;
+internal static class MandateBorderTowerSpacingRulesTests
+{
+    public static void Run()
+    {
+        var points = Enumerable.Range(0, 31).Select(x => new CultiwayWallPoint(x, 0)).ToArray();
+        Equal(4, MandateBorderTowerSpacingRules.SelectSpaced(points, Array.Empty<CultiwayWallPoint>(), Array.Empty<CultiwayWallPoint>()).Count, "long wall selects about ten tile spacing");
+        Equal(3, MandateBorderTowerSpacingRules.SelectSpaced(points, new[] { new CultiwayWallPoint(0, 0) }, Array.Empty<CultiwayWallPoint>()).Count, "existing tower suppresses nearby candidate");
+        Equal(0, MandateBorderTowerSpacingRules.SelectSpaced(points, Array.Empty<CultiwayWallPoint>(), points).Count, "reserved tower footprint is never selected");
+        Equal(2, MandateBorderTowerSpacingRules.SelectSpaced(new[] { new CultiwayWallPoint(0, 0), new CultiwayWallPoint(1, 0), new CultiwayWallPoint(30, 0), new CultiwayWallPoint(31, 0) }, Array.Empty<CultiwayWallPoint>(), Array.Empty<CultiwayWallPoint>()).Count, "disconnected components each receive a tower");
+        Equal(4, MandateBorderTowerSpacingRules.SafetyBudget(31), "safety budget follows wall length");
+        Equal(0, MandateBorderTowerSpacingRules.SafetyBudget(0), "empty wall has no tower budget");
+    }
+    private static void Equal<T>(T expected, T actual, string message) { if (!Equals(expected, actual)) throw new InvalidOperationException(message); }
+}

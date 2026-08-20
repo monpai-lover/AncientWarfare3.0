@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.ui;
@@ -26,6 +27,8 @@ namespace AncientWarfare3.core.lineage
         public const string GOAL_TAKE_CORE_CITY = WarGoalTypeIds.TakeCoreCity;
         public const string GOAL_PRESS_CLAIM_CITY =
             WarGoalTypeIds.PressClaimCity;
+        public const string GOAL_TAKE_DE_JURE_REGION =
+            WarGoalTypeIds.TakeDeJureRegion;
         public const string GOAL_FORCE_VASSAL = WarGoalTypeIds.ForceVassal;
         public const string GOAL_FORCE_TRIBUTARY =
             WarGoalTypeIds.ForceTributary;
@@ -60,6 +63,7 @@ namespace AncientWarfare3.core.lineage
             public long source_claim_id = -1;
             public long source_core_id = -1;
             public long source_project_id = -1;
+            public long source_de_jure_region_id = -1;
             public Actor claimant = null;
         }
 
@@ -108,9 +112,41 @@ namespace AncientWarfare3.core.lineage
             public long source_core_id = -1;
             public long source_claim_id = -1;
             public long restoration_claim_id = -1;
+            public long source_de_jure_region_id = -1;
             public long claimant_actor_id = -1;
             public string claimant_name = "";
             public int score;
+        }
+
+        internal static bool TryGetDeJureRegion(long pRegionId,
+            out DeJureRegion pRegion)
+        {
+            pRegion = null;
+            if (pRegionId < 0L) return false;
+            foreach (DeJureRegion region in DeJureRegionStore.ActiveRegions())
+                if (region?.RegionId == pRegionId)
+                {
+                    pRegion = region;
+                    return true;
+                }
+            return false;
+        }
+
+        internal static List<City> GetDeJureRegionCities(
+            long pRegionId, Kingdom pDefender)
+        {
+            var result = new List<City>();
+            if (!TryGetDeJureRegion(pRegionId, out DeJureRegion region) ||
+                pDefender?.data == null) return result;
+            foreach (long cityId in region.MemberCityIds ??
+                     new List<long>())
+            {
+                City city = World.world?.cities?.get(cityId);
+                if (city?.data != null && !city.isRekt() &&
+                    city.kingdom == pDefender) result.Add(city);
+            }
+            result.Sort((a, b) => a.data.id.CompareTo(b.data.id));
+            return result;
         }
 
         public static void OnKingdomYear(Kingdom pKingdom)
@@ -692,6 +728,13 @@ namespace AncientWarfare3.core.lineage
             if (attacker?.data == null || defender?.data == null)
                 return new WarGoalCreateResult(false, -1L,
                     "invalid_war_goal_participants");
+            if (pGoal.goal_type == GOAL_TAKE_DE_JURE_REGION &&
+                (pGoal.source_de_jure_region_id < 0L ||
+                 !TryGetDeJureRegion(pGoal.source_de_jure_region_id,
+                     out DeJureRegion region) ||
+                 GetDeJureRegionCities(region.RegionId, defender).Count == 0))
+                return new WarGoalCreateResult(false, -1L,
+                    "invalid_de_jure_region_target");
             if (!TryGetGoalSettlementSnapshot(pGoal, attacker, defender,
                     out string completionKind, out int requiredWarScore,
                     out string snapshotFailure))
@@ -717,6 +760,7 @@ namespace AncientWarfare3.core.lineage
                 SourceClaimId = pGoal.source_claim_id,
                 SourceCoreId = pGoal.source_core_id,
                 SourceProjectId = pGoal.source_project_id,
+                SourceDeJureRegionId = pGoal.source_de_jure_region_id,
                 ClaimantActorId = pGoal.claimant?.data?.id ?? -1L,
                 ClaimantName = pGoal.claimant?.getName() ?? "",
                 CreatedTime = LineageService.CurTime()
@@ -754,14 +798,17 @@ namespace AncientWarfare3.core.lineage
                 pFailureReason = "unknown_war_goal_type";
                 return false;
             }
-            if (pGoal.target_city?.data == null)
+            if (pGoal.target_city?.data == null &&
+                pGoal.goal_type != GOAL_TAKE_DE_JURE_REGION)
             {
                 pFailureReason = "war_goal_target_city_unavailable";
                 return false;
             }
 
             pCompletionKind = profile.CompletionKind;
-            int actualCost = profile.UsesDynamicCityCost
+            int actualCost = pGoal.goal_type == GOAL_TAKE_DE_JURE_REGION
+                ? WarGoalSettlementRules.MinimumRequiredScore
+                : profile.UsesDynamicCityCost
                 ? WarPeaceTermsRules.CityCessionCost(
                     WarPeaceSettlementWorld.CityFacts(pGoal.target_city,
                         pAttacker.id, pDefender.id))
@@ -835,6 +882,12 @@ namespace AncientWarfare3.core.lineage
                 if (pGoal.target_city_id >= 0 &&
                     term.Kind == WarPeaceTermKind.CedeCity &&
                     term.CityId == pGoal.target_city_id) return true;
+                if (pGoal.goal_type == GOAL_TAKE_DE_JURE_REGION &&
+                    term.Kind == WarPeaceTermKind.CedeCity &&
+                    term.WarGoalId == pGoal.war_goal_id &&
+                    TryGetDeJureRegion(pGoal.source_de_jure_region_id,
+                        out DeJureRegion region) &&
+                    region.MemberCityIds.Contains(term.CityId)) return true;
                 if (term.WarGoalId != pGoal.war_goal_id ||
                     !WarGoalSettlementRules.TryGetAutomaticSettlementProfile(
                         pGoal.goal_type, out var profile))
@@ -1259,6 +1312,21 @@ namespace AncientWarfare3.core.lineage
                     restorationStrength: 0));
             }
 
+            foreach (DeJureRegion region in DeJureRegionStore.ActiveRegions())
+            {
+                List<City> regionCities = GetDeJureRegionCities(
+                    region?.RegionId ?? -1L, pTarget);
+                if (regionCities.Count == 0) continue;
+                City representative = regionCities[0];
+                result.Add(MakeOption(pTarget, representative,
+                    GOAL_TAKE_DE_JURE_REGION,
+                    GoalLabel(GOAL_TAKE_DE_JURE_REGION) + ": " +
+                    (region.RegionName ?? representative.data.name),
+                    -1, -1, -1, null, hasCore: false,
+                    hasStrongClaim: true, hasWeakClaim: false,
+                    restorationStrength: 0, pRegionId: region.RegionId));
+            }
+
             RoyalClaimService.RoyalClaimInfo restoration = FindBestRestorationClaim(pSource, pTarget, out City restorationCity);
             bool hasRestoration = restoration != null &&
                                   restoration.claim_id >= 0 &&
@@ -1319,7 +1387,8 @@ namespace AncientWarfare3.core.lineage
 
         private static WarTargetOption MakeOption(Kingdom pTarget, City pCity, string pGoalType, string pLabel,
             long pCoreId, long pClaimId, long pRestorationClaimId, Actor pClaimant, bool hasCore,
-            bool hasStrongClaim, bool hasWeakClaim, int restorationStrength)
+            bool hasStrongClaim, bool hasWeakClaim, int restorationStrength,
+            long pRegionId = -1L)
         {
             int population = 0;
             try { population = pCity?.getPopulationPeople() ?? 0; } catch { }
@@ -1332,11 +1401,38 @@ namespace AncientWarfare3.core.lineage
                 source_core_id = pCoreId,
                 source_claim_id = pClaimId,
                 restoration_claim_id = pRestorationClaimId,
+                source_de_jure_region_id = pRegionId,
                 claimant_actor_id = pClaimant?.data?.id ?? -1L,
                 claimant_name = pClaimant?.getName() ?? "",
                 score = WarTargetSelectionRules.ScoreTarget(pGoalType, hasCore, hasStrongClaim, hasWeakClaim,
                     restorationStrength, population)
             };
+        }
+
+        internal static bool HasDeJureRegionTarget(Kingdom pSource,
+            Kingdom pTarget)
+        {
+            if (IsVassalDecisionOnlyTarget(pSource, pTarget)) return false;
+            foreach (DeJureRegion region in DeJureRegionStore.ActiveRegions())
+                if (GetDeJureRegionCities(region?.RegionId ?? -1L,
+                    pTarget).Count > 0) return true;
+            return false;
+        }
+
+        internal static City FindBestDeJureRegionTargetCity(
+            Kingdom pSource, Kingdom pTarget)
+        {
+            City selected = null;
+            foreach (DeJureRegion region in DeJureRegionStore.ActiveRegions())
+            {
+                List<City> cities = GetDeJureRegionCities(
+                    region?.RegionId ?? -1L, pTarget);
+                if (cities.Count == 0) continue;
+                City candidate = cities[0];
+                if (selected == null || candidate.data.id < selected.data.id)
+                    selected = candidate;
+            }
+            return selected;
         }
 
         public static Kingdom FindBestClaimWarTarget(Kingdom pSource)
@@ -1963,6 +2059,7 @@ namespace AncientWarfare3.core.lineage
             {
                 case GOAL_TAKE_CORE_CITY: return T("aw_hist_goal_take_core_city");
                 case GOAL_PRESS_CLAIM_CITY: return T("aw_hist_goal_press_claim_city");
+                case GOAL_TAKE_DE_JURE_REGION: return T("aw_hist_goal_take_de_jure_region");
                 case GOAL_TAKE_MANDATE: return T("aw_hist_goal_take_mandate");
                 case GOAL_MANDATE_CONQUEST: return T("aw_hist_goal_mandate_conquest");
                 case GOAL_FORCE_VASSAL: return T("aw_hist_goal_force_vassal");
