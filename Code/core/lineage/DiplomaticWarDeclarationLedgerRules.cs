@@ -32,8 +32,24 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ShouldRetryExecutionFailure(string pReason)
         {
-            return !string.Equals(pReason, "invalid_participants",
-                StringComparison.Ordinal);
+            if (IsPermanentExecutionFailure(pReason)) return false;
+            // Eligibility and engine failures remain retryable because their
+            // treaty, CB, and world state can change on a later year.
+            return true;
+        }
+
+        public static bool IsPermanentExecutionFailure(string pReason)
+        {
+            return string.Equals(pReason, "missing_war_type",
+                       StringComparison.Ordinal) ||
+                   string.Equals(pReason, "unknown_goal",
+                       StringComparison.Ordinal) ||
+                   string.Equals(pReason, "missing_target_city",
+                       StringComparison.Ordinal) ||
+                   string.Equals(pReason, "missing_de_jure_region_target",
+                       StringComparison.Ordinal) ||
+                   string.Equals(pReason, "invalid_participants",
+                       StringComparison.Ordinal);
         }
 
         public static bool ShouldRevalidateMutableEligibility(
