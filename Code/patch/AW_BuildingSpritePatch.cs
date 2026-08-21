@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 
@@ -17,6 +19,62 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_BuildingSpritePatch
     {
+        private static readonly HashSet<string> LoggedInvalidSpriteLists =
+            new HashSet<string>();
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(BuildingAsset), nameof(BuildingAsset.loadBuildingSpriteList))]
+        private static void LoadBuildingSpriteList_Postfix(BuildingAsset __instance,
+            ref Sprite[] __result)
+        {
+            Sprite[] loaded = __result;
+            if (loaded == null || loaded.Length == 0)
+            {
+                if (loaded == null)
+                {
+                    LogInvalidSpriteList(__instance, "null result");
+                    __result = Array.Empty<Sprite>();
+                }
+                return;
+            }
+
+            List<Sprite> valid = null;
+            int invalidCount = 0;
+            foreach (Sprite sprite in loaded)
+            {
+                if (sprite == null || !HasIndexedBuildingSpriteName(sprite.name))
+                {
+                    invalidCount++;
+                    continue;
+                }
+                valid ??= new List<Sprite>();
+                valid.Add(sprite);
+            }
+            if (invalidCount == 0) return;
+            LogInvalidSpriteList(__instance, "filtered " + invalidCount);
+            __result = valid?.ToArray() ?? Array.Empty<Sprite>();
+        }
+
+        private static bool HasIndexedBuildingSpriteName(string pName)
+        {
+            if (string.IsNullOrWhiteSpace(pName)) return false;
+            string[] parts = pName.Split('_');
+            return parts.Length >= 2 && !string.IsNullOrWhiteSpace(parts[0]) &&
+                   int.TryParse(parts[1], out _);
+        }
+
+        private static void LogInvalidSpriteList(BuildingAsset pAsset, string pDetail)
+        {
+            string id = pAsset?.id ?? "<null>";
+            string path = pAsset == null ? "<null>" :
+                (string.IsNullOrEmpty(pAsset.sprite_path)
+                    ? (pAsset.main_path ?? string.Empty) + id
+                    : pAsset.sprite_path);
+            string key = id + "|" + path + "|" + pDetail;
+            if (!LoggedInvalidSpriteLists.Add(key)) return;
+            ModClass.LogError("Building sprite list repaired for " + id +
+                              " (" + path + ", " + pDetail + ").");
+        }
         // 跳过原方法的条件(避免 getRecoloredBuilding 对 null 解引用每帧崩):
         //   ① pMainSprite 为 null(主贴图没加载出来);
         //   ② asset.atlas_asset 为 null(mod 建筑漏绑 atlas → getRecoloredBuilding 内 pAtlasAsset.getSprite 崩,
