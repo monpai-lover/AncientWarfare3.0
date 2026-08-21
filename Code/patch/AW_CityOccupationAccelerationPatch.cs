@@ -183,7 +183,20 @@ namespace AncientWarfare3.patch
             PeasantRebelBanditStrongholdService.TryHandleCapture(
                 __instance, pNewKingdom, out bool strongholdHandled);
             if (strongholdHandled) return false;
-            if (!PeasantRebelRouteService.CanAcquireCity(
+            bool banditSuppressionCapture =
+                WarScoreService.IsActiveBanditSuppressionWar(
+                    __instance, pNewKingdom);
+            bool banditCaptureAllowed =
+                CityOccupationAccelerationRules.
+                    ShouldCommitBanditSuppressionCapture(
+                        banditSuppressionCapture,
+                        PeasantRebelRouteService.IsBanditOrEntering(
+                            pNewKingdom),
+                        pNewKingdom == __instance?.kingdom);
+            __state = new RebellionDirectCaptureState(oldOwner, pNewKingdom,
+                -1L, pDirect: false);
+            if (!banditCaptureAllowed &&
+                !PeasantRebelRouteService.CanAcquireCity(
                     pNewKingdom, __instance)) return false;
             if (ZhuluWarService.IsOpposingZhuluCapture(__instance,
                     pNewKingdom)) return true;
@@ -211,8 +224,20 @@ namespace AncientWarfare3.patch
             Kingdom hostileParticipant = pNewKingdom;
             pNewKingdom = VassalCaptureService.ResolveCaptureRecipient(
                 __instance, pNewKingdom);
-            if (!PeasantRebelRouteService.CanAcquireCity(
+            banditSuppressionCapture =
+                WarScoreService.IsActiveBanditSuppressionWar(
+                    __instance, pNewKingdom);
+            banditCaptureAllowed =
+                CityOccupationAccelerationRules.
+                    ShouldCommitBanditSuppressionCapture(
+                        banditSuppressionCapture,
+                        PeasantRebelRouteService.IsBanditOrEntering(
+                            pNewKingdom),
+                        pNewKingdom == __instance?.kingdom);
+            if (!banditCaptureAllowed &&
+                !PeasantRebelRouteService.CanAcquireCity(
                     pNewKingdom, __instance)) return false;
+            if (banditCaptureAllowed) return true;
             bool activeHostileWar = WarScoreService.HasActiveHostileWar(
                 __instance, pNewKingdom) ||
                 WarScoreService.HasActiveHostileWar(__instance,
@@ -284,8 +309,20 @@ namespace AncientWarfare3.patch
         public static bool JoinCapturedCity_Prefix(City __instance,
             ref Kingdom pNewSetKingdom, bool pCaptured)
         {
-            if (!PeasantRebelRouteService.CanAcquireCity(
+            bool banditSuppressionCapture =
+                WarScoreService.IsActiveBanditSuppressionWar(
+                    __instance, pNewSetKingdom);
+            bool banditCaptureAllowed =
+                CityOccupationAccelerationRules.
+                    ShouldCommitBanditSuppressionCapture(
+                        banditSuppressionCapture,
+                        PeasantRebelRouteService.IsBanditOrEntering(
+                            pNewSetKingdom),
+                        pNewSetKingdom == __instance?.kingdom);
+            if (!banditCaptureAllowed &&
+                !PeasantRebelRouteService.CanAcquireCity(
                     pNewSetKingdom, __instance)) return false;
+            if (banditCaptureAllowed) return true;
             if (!pCaptured) return true;
             if (ZhuluWarService.IsOpposingZhuluCapture(__instance,
                     pNewSetKingdom)) return true;

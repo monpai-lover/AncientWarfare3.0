@@ -22,6 +22,14 @@ namespace AncientWarfare3.core.lineage
             return pActiveHostileWar && !pPeaceExecution;
         }
 
+        public static bool ShouldCommitBanditSuppressionCapture(
+            bool pActiveSuppressionWar, bool pRecipientIsBandit,
+            bool pRecipientAlreadyOwnsCity)
+        {
+            return pActiveSuppressionWar && pRecipientIsBandit &&
+                   !pRecipientAlreadyOwnsCity;
+        }
+
         public static bool ShouldAttemptControlledSettlementImmediately(
             bool hasOpenNonTerritorialGoal, bool cityManagerLocked)
         {

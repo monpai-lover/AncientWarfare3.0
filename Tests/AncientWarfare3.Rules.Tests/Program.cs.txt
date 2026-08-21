@@ -4109,6 +4109,20 @@ True((bool)permanentTransferGate.Invoke(null,
 True((bool)permanentTransferGate.Invoke(null,
         new object[] { true, false, false }),
     "a failed occupation write still blocks permanent transfer");
+var banditSuppressionCaptureGate =
+    typeof(CityOccupationAccelerationRules).GetMethod(
+        "ShouldCommitBanditSuppressionCapture");
+True(banditSuppressionCaptureGate != null,
+    "bandit suppression captures expose a dedicated conversion gate");
+True((bool)banditSuppressionCaptureGate.Invoke(null,
+        new object[] { true, true, false }),
+    "a bandit counter-capture in suppression war commits immediately");
+Equal(false, (bool)banditSuppressionCaptureGate.Invoke(null,
+        new object[] { false, true, false }),
+    "ordinary bandit captures remain blocked outside suppression war");
+Equal(false, (bool)banditSuppressionCaptureGate.Invoke(null,
+        new object[] { true, false, false }),
+    "non-bandit suppression captures do not use the bandit conversion gate");
 Equal(false, (bool)permanentTransferGate.Invoke(null,
         new object[] { false, false, false }),
     "a capture outside hostile war may use vanilla transfer");

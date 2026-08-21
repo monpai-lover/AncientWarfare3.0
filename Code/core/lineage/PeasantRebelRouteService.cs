@@ -258,7 +258,7 @@ namespace AncientWarfare3.core.lineage
         }
 
         internal static bool ConvertBanditToFounding(Kingdom pKingdom,
-            Kingdom pOrigin)
+            Kingdom pOrigin, bool pPreserveActiveWar = false)
         {
             if (!IsBandit(pKingdom) ||
                 !PeasantRebelRouteRules.CanMutateAuthority(
@@ -289,7 +289,8 @@ namespace AncientWarfare3.core.lineage
             KingdomRenameProjectionService.Refresh(pKingdom);
             PeasantRebelFoundingRoute.RecordTransition(pKingdom, pOrigin);
             PeasantRebelAppearanceService.OnProjectionChanged(pKingdom);
-            if (pOrigin?.data != null && !pOrigin.isRekt())
+            if (!pPreserveActiveWar && pOrigin?.data != null &&
+                !pOrigin.isRekt())
                 MandateRebelService.StartExistingRebelWar(pOrigin,
                     pKingdom);
             return true;
@@ -406,6 +407,18 @@ namespace AncientWarfare3.core.lineage
                     CanAcquireCity(pRecipient, pCity);
             return PeasantRebelBanditTerritoryService.CanAcquire(
                 pRecipient, pCity, IsBanditOrEntering(pRecipient));
+        }
+
+        internal static void OnBanditSuppressionCityAcquired(
+            City pCity, Kingdom pOldOwner, Kingdom pNewOwner)
+        {
+            if (pCity?.data == null || pOldOwner?.data == null ||
+                pNewOwner?.data == null || pOldOwner == pNewOwner ||
+                !IsBanditOrEntering(pNewOwner) ||
+                !WarScoreService.IsActiveBanditSuppressionWar(
+                    pCity, pNewOwner, pOldOwner)) return;
+            ConvertBanditToFounding(pNewOwner, ResolveOrigin(pNewOwner),
+                pPreserveActiveWar: true);
         }
 
         internal static bool CanStartWar(Kingdom pAttacker,

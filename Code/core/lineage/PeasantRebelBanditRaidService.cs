@@ -228,7 +228,7 @@ namespace AncientWarfare3.core.lineage
             {
                 foreach (TileZone zone in pCity.zones)
                 foreach (WorldTile tile in zone?.tiles ??
-                         new List<WorldTile>())
+                         Array.Empty<WorldTile>())
                 foreach (WorldTile neighbour in tile?.neighboursAll ??
                          Array.Empty<WorldTile>())
                     if (neighbour?.data != null && !neighbour.Type.ground)

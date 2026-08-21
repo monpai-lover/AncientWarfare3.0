@@ -139,6 +139,8 @@ namespace AncientWarfare3.patch
             WartimeGarrisonService.OnCityOwnerChanged(__instance, __state);
             KingdomArchiveWriter.Upsert(__state);
             KingdomArchiveWriter.Upsert(__instance?.kingdom ?? pKingdom);
+            PeasantRebelRouteService.OnBanditSuppressionCityAcquired(
+                __instance, __state, __instance?.kingdom ?? pKingdom);
             CityTechService.OnCityChangedKingdom(__instance, __instance?.kingdom ?? pKingdom);
             ForeignOccupationService.OnCityTransferred(__instance, __state, __instance?.kingdom ?? pKingdom);
             GeneralService.OnCityTransferred(__instance, __state, __instance?.kingdom ?? pKingdom);

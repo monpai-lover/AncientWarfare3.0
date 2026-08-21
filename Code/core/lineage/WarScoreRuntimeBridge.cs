@@ -240,6 +240,54 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
+        public static bool IsActiveBanditSuppressionWar(City pCity,
+            Kingdom pOccupier)
+        {
+            if (pCity?.data == null || pCity.kingdom?.data == null ||
+                pOccupier?.data == null || pCity.kingdom == pOccupier ||
+                !PeasantRebelRouteService.IsBanditOrEntering(pOccupier))
+                return false;
+            try
+            {
+                foreach (War war in SnapshotWars(pOccupier))
+                {
+                    if (war?.data == null || war.hasEnded() ||
+                        !war.isDefender(pOccupier) ||
+                        !war.isAttacker(pCity.kingdom)) continue;
+                    string warType = war.getAsset()?.id ??
+                                     war.data.war_type ?? "";
+                    if (warType == WarDecisionService.WAR_BANDIT_SUPPRESSION)
+                        return true;
+                }
+            }
+            catch { return false; }
+            return false;
+        }
+
+        public static bool IsActiveBanditSuppressionWar(City pCity,
+            Kingdom pOccupier, Kingdom pFormerOwner)
+        {
+            if (pCity?.data == null || pOccupier?.data == null ||
+                pFormerOwner?.data == null || pFormerOwner == pOccupier ||
+                !PeasantRebelRouteService.IsBanditOrEntering(pOccupier))
+                return false;
+            try
+            {
+                foreach (War war in SnapshotWars(pOccupier))
+                {
+                    if (war?.data == null || war.hasEnded() ||
+                        !war.isDefender(pOccupier) ||
+                        !war.isAttacker(pFormerOwner)) continue;
+                    string warType = war.getAsset()?.id ??
+                                     war.data.war_type ?? "";
+                    if (warType == WarDecisionService.WAR_BANDIT_SUPPRESSION)
+                        return true;
+                }
+            }
+            catch { return false; }
+            return false;
+        }
+
         public static bool HoldPendingCityOccupation(City pCity,
             Kingdom pOccupier, Kingdom pHostileParticipant)
         {
