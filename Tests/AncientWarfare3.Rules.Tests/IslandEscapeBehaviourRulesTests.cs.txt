@@ -1,0 +1,36 @@
+using System;
+using System.Linq;
+using AncientWarfare3.core.lineage;
+
+internal static class IslandEscapeBehaviourRulesTests
+{
+    public static void Run()
+    {
+        var manifest = IslandEscapeBehaviourRules.BuildManifest(new[]
+        {
+            new IslandEscapeMemberFact(4, true, true, false),
+            new IslandEscapeMemberFact(2, true, true, false),
+            new IslandEscapeMemberFact(9, false, true, false),
+            new IslandEscapeMemberFact(7, true, false, false),
+            new IslandEscapeMemberFact(8, true, true, true)
+        });
+        if (!manifest.SequenceEqual(new long[] { 2, 4 }))
+            throw new InvalidOperationException("escape manifest failed");
+        if (!IslandEscapeBehaviourRules.CanStartBoarding(
+                IslandEscapeStage.Gathering, manifest.Count) ||
+            IslandEscapeBehaviourRules.CanStartBoarding(
+                IslandEscapeStage.Gathering, 0))
+            throw new InvalidOperationException("boarding rule failed");
+        if (!IslandEscapeBehaviourRules.AllMembersReadyForVoyage(
+                new[] { true, true }) ||
+            IslandEscapeBehaviourRules.AllMembersReadyForVoyage(
+                new[] { true, false }))
+            throw new InvalidOperationException("voyage rule failed");
+        if (!IslandEscapeBehaviourRules.CanTransition(
+                IslandEscapeStage.Boarding, IslandEscapeStage.Voyaging, 2) ||
+            IslandEscapeBehaviourRules.CanTransition(
+                IslandEscapeStage.Boarding, IslandEscapeStage.Completed, 2))
+            throw new InvalidOperationException("transition rule failed");
+        Console.WriteLine("Island escape behaviour rules passed.");
+    }
+}

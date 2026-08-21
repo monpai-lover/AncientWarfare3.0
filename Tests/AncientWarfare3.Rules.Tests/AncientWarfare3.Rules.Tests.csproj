@@ -8,7 +8,9 @@
     <DefineConstants>$(DefineConstants);AW3_RULES_TESTS</DefineConstants>
     <WorldBoxManaged Condition="'$(WorldBoxManaged)' == ''">D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed</WorldBoxManaged>
   </PropertyGroup>
-  <ItemGroup>
+	<ItemGroup>
+		<Compile Include="IslandEscapeBehaviourRulesTests.cs.txt" />
+		<Compile Include="..\..\Code\core\lineage\IslandEscapeBehaviourRules.cs" Link="Production\IslandEscapeBehaviourRules.cs" />
     <Reference Include="Newtonsoft.Json">
       <HintPath>$(WorldBoxManaged)\Newtonsoft.Json.dll</HintPath>
     </Reference>
@@ -129,6 +131,10 @@
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditPressureRules.cs" Link="Production\PeasantRebelBanditPressureRules.cs" />
     <Compile Include="PeasantRebelBanditZoneWallRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditRaidRulesTests.cs.txt" />
+    <Compile Include="PeasantRebelBanditIslandRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditIslandRules.cs" Link="Production\PeasantRebelBanditIslandRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditStrongholdState.cs" Link="Production\PeasantRebelBanditStrongholdState.cs" />
+    <Compile Include="PeasantRebelBanditIslandCandidateRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditAmnestyRulesTests.cs.txt" />
     <Compile Include="PeasantRebelGuiyiRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditStrongholdRules.cs" Link="Production\PeasantRebelBanditStrongholdRules.cs" />

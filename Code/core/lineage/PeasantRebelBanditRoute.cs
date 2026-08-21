@@ -80,9 +80,12 @@ namespace AncientWarfare3.core.lineage
             {
                 MandateRebelService.RunBanditRouteYear(pKingdom);
                 PeasantRebelBanditPressureService.OnKingdomYear(pKingdom);
+                PeasantRebelBanditIslandMigrationService.OnKingdomYear(
+                    pKingdom);
                 PeasantRebelBanditAmnestyService.ProcessAiDecision(pKingdom);
             }
-            PeasantRebelBanditRaidService.ScheduleYear(pKingdom);
+            if (!PeasantRebelBanditIslandMigrationService.IsActive(pKingdom))
+                PeasantRebelBanditRaidService.ScheduleYear(pKingdom);
             PeasantRebelBanditWallService.RepairYear(pKingdom,
                 IsOriginSuppressionActive(pKingdom));
         }
