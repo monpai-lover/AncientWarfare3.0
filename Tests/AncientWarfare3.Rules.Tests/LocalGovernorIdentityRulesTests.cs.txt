@@ -9,6 +9,11 @@ internal static class LocalGovernorIdentityRulesTests
         False(LocalGovernorIdentityRules.RootOfficeMatchesLeader(10, 10, false), "dead leader cannot own root office");
         Equal(10L, LocalGovernorIdentityRules.ResolveRegionalGovernorActorId(true, 10, true), "controlled seat projects its leader as regional governor");
         Equal(-1L, LocalGovernorIdentityRules.ResolveRegionalGovernorActorId(false, 10, true), "uncontrolled seat has no regional governor projection");
+        True(LocalGovernorIdentityRules.IsCurrentSeatLeader(true, true, true), "a live controlled seat leader can project as regional governor");
+        False(LocalGovernorIdentityRules.IsCurrentSeatLeader(true, true, false), "a non-leader actor cannot project as regional governor");
+        False(LocalGovernorIdentityRules.IsCurrentSeatLeader(false, true, true), "an uncontrolled seat cannot project as regional governor");
+        True(LocalGovernorIdentityRules.IsCurrentCityLeader(true, true), "a live controlled city leader can fill the root local office");
+        False(LocalGovernorIdentityRules.IsCurrentCityLeader(true, false), "a dead city leader cannot fill the root local office");
     }
     private static void True(bool value, string message) { if (!value) throw new System.InvalidOperationException(message); }
     private static void False(bool value, string message) { if (value) throw new System.InvalidOperationException(message); }

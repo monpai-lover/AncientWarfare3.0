@@ -11,5 +11,17 @@ namespace AncientWarfare3.core.court
         {
             return seatControlled && seatLeaderLive && seatLeaderId > 0 ? seatLeaderId : -1L;
         }
+
+        public static bool IsCurrentSeatLeader(bool seatControlled,
+            bool actorIsLeader, bool actorLive)
+        {
+            return seatControlled && actorIsLeader && actorLive;
+        }
+
+        public static bool IsCurrentCityLeader(bool cityControlled,
+            bool actorLive)
+        {
+            return cityControlled && actorLive;
+        }
     }
 }

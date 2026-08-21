@@ -103,7 +103,9 @@ namespace AncientWarfare3.core.court
             {
                 Actor governor = World.world?.units?.get(
                     region.GovernorActorId);
-                if (!IsValid(governor, pKingdom)) continue;
+                City seatCity = FindCity(pKingdom, region.SeatCityId);
+                if (!IsCurrentRegionalGovernor(governor, pKingdom, seatCity))
+                    continue;
                 string school = ActorSchool(governor, "");
                 pSeeds.Add(new CourtPyramidNodeModel(governor.data.id,
                     "regional_government_layer:" + region.SeatCityId,
@@ -244,11 +246,11 @@ namespace AncientWarfare3.core.court
             }
             catch { }
             Actor governor = seatCity?.leader;
-            if (!IsValid(governor, pKingdom) &&
+            if (!IsCurrentRegionalGovernor(governor, pKingdom, seatCity) &&
                 pModel.RegionalGovernorActorId >= 0L)
                 governor = World.world?.units?.get(
                     pModel.RegionalGovernorActorId);
-            if (!IsValid(governor, pKingdom)) return;
+            if (!IsCurrentRegionalGovernor(governor, pKingdom, seatCity)) return;
             string school = ActorSchool(governor, "");
             var node = new CourtPyramidNodeModel(governor.data.id,
                 "regional_superior:" + pModel.RegionSeatCityId,
@@ -344,8 +346,7 @@ namespace AncientWarfare3.core.court
                 if (officer != null) remaining.Remove(officer);
                 Actor actor = officer == null ? null :
                     World.world?.units?.get(officer.actor_id);
-                if (index == 0 && !IsValid(actor, pKingdom) &&
-                    IsValid(pCity.leader, pKingdom))
+                if (index == 0 && IsCurrentCityLeader(pCity, pKingdom))
                 {
                     officer = null;
                     actor = pCity.leader;
@@ -378,7 +379,7 @@ namespace AncientWarfare3.core.court
                 pModel.Nodes.Add(node);
             }
 
-            if (pSeats.Count == 0 && IsValid(pCity.leader, pKingdom))
+            if (pSeats.Count == 0 && IsCurrentCityLeader(pCity, pKingdom))
             {
                 string officeId = CourtService.ResolveCityOffice(pKingdom,
                     pCity);
@@ -727,6 +728,47 @@ namespace AncientWarfare3.core.court
             if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return false;
             pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
             return CourtAffiliationResolver.CanServe(pActor, pKingdom, layer);
+        }
+
+        private static bool IsCurrentRegionalGovernor(Actor pActor,
+            Kingdom pKingdom, City pSeatCity)
+        {
+            if (pActor?.data == null || pSeatCity?.data == null ||
+                pKingdom?.data == null || pSeatCity.kingdom != pKingdom ||
+                pActor.kingdom != pKingdom)
+                return false;
+            bool live;
+            try { live = pActor.isAlive() && !pActor.isRekt(); }
+            catch { live = false; }
+            return LocalGovernorIdentityRules.IsCurrentSeatLeader(
+                seatControlled: true, actorIsLeader: pSeatCity.leader == pActor,
+                actorLive: live);
+        }
+
+        private static bool IsCurrentCityLeader(City pCity,
+            Kingdom pKingdom)
+        {
+            if (pCity?.data == null || pKingdom?.data == null ||
+                pCity.kingdom != pKingdom || pCity.leader?.data == null ||
+                pCity.leader.kingdom != pKingdom)
+                return false;
+            bool live;
+            try { live = pCity.leader.isAlive() && !pCity.leader.isRekt(); }
+            catch { live = false; }
+            return LocalGovernorIdentityRules.IsCurrentCityLeader(
+                cityControlled: true, actorLive: live);
+        }
+
+        private static City FindCity(Kingdom pKingdom, long pCityId)
+        {
+            if (pKingdom?.data == null || pCityId < 0L) return null;
+            try
+            {
+                return pKingdom.getCities()?.FirstOrDefault(city =>
+                    city?.data?.id == pCityId && !city.isRekt() &&
+                    city.kingdom == pKingdom);
+            }
+            catch { return null; }
         }
 
         private static bool IsValidSubjectActor(Actor pActor,
