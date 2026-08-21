@@ -29,6 +29,7 @@ namespace AncientWarfare3.content.schools
             academy.kingdom = "nomads_" + XiaArchitecture.ID;
             academy.has_sprite_construction = true;
             academy.book_slots = source.book_slots;
+            academy.housing_slots = 4;
             academy.scale_base = new Vector3(0.07975f, 0.07975f, 0.25f);
             academy.fundament = new BuildingFundament(3, 3, 2, 0);
             academy.can_be_upgraded = false;
