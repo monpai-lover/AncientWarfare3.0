@@ -129,6 +129,8 @@
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditPressureRules.cs" Link="Production\PeasantRebelBanditPressureRules.cs" />
     <Compile Include="PeasantRebelBanditZoneWallRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditRaidRulesTests.cs.txt" />
+    <Compile Include="PeasantRebelBanditIslandRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditIslandRules.cs" Link="Production\PeasantRebelBanditIslandRules.cs" />
     <Compile Include="PeasantRebelBanditAmnestyRulesTests.cs.txt" />
     <Compile Include="PeasantRebelGuiyiRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditStrongholdRules.cs" Link="Production\PeasantRebelBanditStrongholdRules.cs" />

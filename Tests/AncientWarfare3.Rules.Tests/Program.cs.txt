@@ -349,6 +349,13 @@ if (args.Length == 1 && args[0] == "--bandit-stronghold")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--bandit-island-migration")
+{
+    PeasantRebelBanditIslandRulesTests.Run();
+    Console.WriteLine("Bandit island migration rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--bandit-city-mutation")
 {
     CityManagerMutationScopeTests.Run();

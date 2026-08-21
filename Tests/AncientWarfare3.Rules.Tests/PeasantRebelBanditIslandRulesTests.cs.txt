@@ -1,0 +1,49 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelBanditIslandRulesTests
+{
+    public static void Run()
+    {
+        True(PeasantRebelBanditIslandRules.ShouldStartEvacuation(
+                true, true, 50, 100, 8, 1),
+            "a two-cycle weak bandit under attack may evacuate");
+        False(PeasantRebelBanditIslandRules.ShouldStartEvacuation(
+                true, true, 61, 100, 8, 1),
+            "a bandit at or above sixty percent strength does not evacuate");
+        True(PeasantRebelBanditIslandRules.ShouldStartEvacuation(
+                true, false, 100, 100, 3, 1),
+            "a nearly empty stronghold may evacuate as a population fallback");
+        False(PeasantRebelBanditIslandRules.ShouldStartEvacuation(
+                true, true, 50, 100, 8, 0),
+            "one threat cycle is not enough to evacuate");
+        True(PeasantRebelBanditIslandRules.IsEligibleIsland(
+                false, false, 12, true, false),
+            "an empty buildable island with a coast is eligible");
+        False(PeasantRebelBanditIslandRules.IsEligibleIsland(
+                true, false, 12, true, false),
+            "an island with a city is not eligible");
+        True(PeasantRebelBanditIslandRules.IsEligiblePiracyTarget(
+                true, true, false, false, 10),
+            "a reachable coastal city with food is a piracy target");
+        False(PeasantRebelBanditIslandRules.IsEligiblePiracyTarget(
+                false, true, false, false, 10),
+            "an inland city is not an island piracy target");
+        True(PeasantRebelBanditIslandRules.NextThreatCycles(true, 0) == 1,
+            "the first persistent threat records one cycle");
+        True(PeasantRebelBanditIslandRules.NextThreatCycles(true, 1) == 2,
+            "the threat counter saturates at two cycles");
+        True(PeasantRebelBanditIslandRules.NextThreatCycles(false, 2) == 0,
+            "a cleared threat resets the counter");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+}
