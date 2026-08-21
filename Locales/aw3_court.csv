@@ -1,4 +1,22 @@
 key,cz,en,ch
+aw_court_statistics_button,Statistics,Statistics,统计
+aw_court_statistics_title,Population and Economy Statistics,Population and Economy Statistics,人口与经济统计
+aw_court_statistics_national,Nation,Nation,全国
+aw_court_statistics_region,State,State,州
+aw_court_statistics_city,Prefecture,Prefecture,郡
+aw_court_back_to_court,Back to Court,Back to Court,返回官场
+aw_court_statistics_population,Population,Population,人口
+aw_court_statistics_city_count,Cities,Cities,城市数
+aw_court_statistics_tax,Tax value,Tax value,税值
+aw_court_statistics_policy,Policy points,Policy points,政策点
+aw_court_statistics_technology,Technology points,Technology points,科技点
+aw_court_statistics_manpower,Manpower,Manpower,人力
+aw_court_statistics_food,Food stability,Food stability,粮食稳定
+aw_court_statistics_unrest,Unrest risk,Unrest risk,治安风险
+aw_court_statistics_unavailable,Statistics unavailable,Statistics unavailable,统计不可用
+aw_court_statistics_records,Economy records: {0}/{1},Economy records: {0}/{1},经济记录：{0}/{1}
+aw_court_statistics_no_record,No annual economy record is available,No annual economy record is available,暂无年度经济记录
+aw_court_statistics_fallback,Regional scope unavailable; showing the current prefecture.,Regional scope unavailable; showing the current prefecture.,州范围不可用，当前显示本郡
 aw_de_jure_region,州法理,De jure state,州法理
 aw_de_jure_region_description,使用神力创建或划分州法理,Create or assign de jure states with one divine power,使用神力建立或劃分州法理
 aw_de_jure_region_create,建立州法理,Create de jure state,建立州法理

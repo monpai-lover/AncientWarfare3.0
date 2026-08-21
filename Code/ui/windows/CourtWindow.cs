@@ -64,6 +64,8 @@ namespace AncientWarfare3.ui.windows
         private Button _householdButton;
         private Text _householdText;
         private TipButton _householdTip;
+        private Button _statisticsButton;
+        private Text _statisticsText;
         private Button _customCourtWorkflowButton;
         private AWStringDropdown _localTemplateDropdown;
         private Text _centralSectionLabel;
@@ -246,6 +248,10 @@ namespace AncientWarfare3.ui.windows
             _householdTip = _householdButton.GetComponent<TipButton>() ??
                 _householdButton.gameObject.AddComponent<TipButton>();
             _householdTip.type = AW_RawTooltip.TYPE;
+            _statisticsButton = EnsureButton(summary.transform,
+                "CourtStatistics", "", OpenStatistics);
+            _statisticsText = _statisticsButton.transform.Find("Text")
+                ?.GetComponent<Text>();
             _customCourtWorkflowButton = EnsureButton(summary.transform,
                 "CustomCourtWorkflow",
                 AW_L10n.Text("aw_custom_court_workflow", "Court Editor"),
@@ -310,6 +316,8 @@ namespace AncientWarfare3.ui.windows
                     Mathf.Max(44f, pContentWidth - 330f), 4f, 76f, 23f);
                 LayoutSummaryButton(_householdButton,
                     Mathf.Max(44f, pContentWidth - 248f), 4f, 76f, 23f);
+                LayoutSummaryButton(_statisticsButton,
+                    Mathf.Max(44f, pContentWidth - 412f), 4f, 76f, 23f);
                 LayoutSummaryButton(_customCourtWorkflowButton,
                     Mathf.Max(44f, pContentWidth - 84f), 31f, 76f, 23f);
                 if (_localTemplateDropdown != null)
@@ -373,6 +381,8 @@ namespace AncientWarfare3.ui.windows
                 {
                     _summaryPrimary.text = AW_L10n.Text("aw_policy_no_kingdom", "Kingdom missing");
                     _summarySecondary.text = "";
+                    if (_statisticsButton != null)
+                        _statisticsButton.gameObject.SetActive(false);
                     if (_summaryFlagBackground != null) _summaryFlagBackground.enabled = false;
                     if (_summaryFlagIcon != null) _summaryFlagIcon.enabled = false;
                     return;
@@ -468,6 +478,7 @@ namespace AncientWarfare3.ui.windows
                 _centralVacancyButton.gameObject.SetActive(false);
             if (_householdButton != null)
                 _householdButton.gameObject.SetActive(false);
+            UpdateStatisticsEntry(pKingdom);
             UpdateLocalTemplateOptions(pKingdom, pLocal);
         }
 
@@ -759,6 +770,22 @@ namespace AncientWarfare3.ui.windows
             UpdateCivilServiceExamEntry(pKingdom);
             UpdateCentralVacancyEntry(pKingdom);
             UpdateHouseholdEntry(pKingdom);
+            UpdateStatisticsEntry(pKingdom);
+        }
+
+        private void OpenStatistics()
+        {
+            CourtStatisticsWindow.OpenForCourt(_kingdomId, _cityId);
+        }
+
+        private void UpdateStatisticsEntry(Kingdom pKingdom)
+        {
+            if (_statisticsButton == null) return;
+            _statisticsButton.gameObject.SetActive(pKingdom?.data != null &&
+                !pKingdom.isRekt());
+            if (_statisticsText != null)
+                _statisticsText.text = AW_L10n.Text(
+                    "aw_court_statistics_button", "Statistics");
         }
 
         private void UpdateHouseholdEntry(Kingdom pKingdom)

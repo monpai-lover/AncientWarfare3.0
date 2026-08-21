@@ -149,6 +149,13 @@ if (args.Length == 1 && args[0] == "--de-jure-eligibility")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--court-statistics")
+{
+    CourtStatisticsRulesTests.Run();
+    Console.WriteLine("Court statistics rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--court-immediate-vacancies")
 {
     CourtImmediateVacancyModeRulesTests.Run();

@@ -1,0 +1,28 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class CourtStatisticsRulesTests
+{
+    public static void Run()
+    {
+        Equal(CourtStatisticsScope.National,
+            CourtStatisticsRules.ResolveScope(true, false, false),
+            "central court sees national statistics");
+        Equal(CourtStatisticsScope.Region,
+            CourtStatisticsRules.ResolveScope(false, true, true),
+            "regional seat sees region statistics");
+        Equal(CourtStatisticsScope.City,
+            CourtStatisticsRules.ResolveScope(false, false, true),
+            "non-seat local court sees city statistics");
+        Equal(CourtStatisticsScope.City,
+            CourtStatisticsRules.ResolveScope(false, true, false),
+            "missing region falls back to city statistics");
+    }
+
+    private static void Equal(CourtStatisticsScope pExpected,
+        CourtStatisticsScope pActual, string pMessage)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(pMessage);
+    }
+}
