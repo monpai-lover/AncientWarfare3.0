@@ -135,6 +135,8 @@ namespace AncientWarfare3.patch
             MilitaryEmergencyService.OnWarStarted(__result);
             WartimeGarrisonService.OnWarStarted(__result);
             TemporarySlaveVanguardService.OnWarStarted(__result);
+            TemporaryLevyService.OnWarStarted(__result,
+                WarNoticeService.FindSignatureForWar(__result));
             WarNoticeService.OnWarStarted(__result);
             DiplomaticCoalitionService.OnWarStarted(__result);
             CoalitionWarTaskService.OnWarStarted(__result);

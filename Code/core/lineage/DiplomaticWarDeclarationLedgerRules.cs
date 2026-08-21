@@ -32,8 +32,30 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ShouldRetryExecutionFailure(string pReason)
         {
-            return !string.Equals(pReason, "invalid_participants",
-                StringComparison.Ordinal);
+            if (IsPermanentExecutionFailure(pReason)) return false;
+            // Only engine-side transient failures are safe to retry. Schema,
+            // payload, and eligibility failures otherwise leave a permanent
+            // notice active and keep the whole kingdom in pre-war scheduling.
+            return string.Equals(pReason, "engine_rejected_start",
+                       StringComparison.Ordinal) ||
+                   string.Equals(pReason, "start_exception",
+                       StringComparison.Ordinal) ||
+                   string.Equals(pReason, "reunification_start_failed",
+                       StringComparison.Ordinal);
+        }
+
+        public static bool IsPermanentExecutionFailure(string pReason)
+        {
+            return string.Equals(pReason, "missing_war_type",
+                       StringComparison.Ordinal) ||
+                   string.Equals(pReason, "unknown_goal",
+                       StringComparison.Ordinal) ||
+                   string.Equals(pReason, "missing_target_city",
+                       StringComparison.Ordinal) ||
+                   string.Equals(pReason, "missing_de_jure_region_target",
+                       StringComparison.Ordinal) ||
+                   string.Equals(pReason, "invalid_participants",
+                       StringComparison.Ordinal);
         }
 
         public static bool ShouldRevalidateMutableEligibility(

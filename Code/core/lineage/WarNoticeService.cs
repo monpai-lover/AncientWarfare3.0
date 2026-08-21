@@ -118,8 +118,11 @@ namespace AncientWarfare3.core.lineage
                     .OnMilitaryEmergencyChanged(pAttacker);
                 StandingArmyPeacetimeService
                     .OnMilitaryEmergencyChanged(defender);
+                // Activation performs frontier discovery and schedules the
+                // deployment review. It must happen once per indexed notice,
+                // not on every annual declaration check.
+                ArmyDeploymentService.ActivateNotice(state);
             }
-            ArmyDeploymentService.ActivateNotice(state);
 
             pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_NOTICE_RECORDED,
                 out bool recorded, false);
