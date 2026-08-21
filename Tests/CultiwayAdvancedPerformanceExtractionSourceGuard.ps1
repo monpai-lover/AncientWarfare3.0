@@ -85,6 +85,26 @@ Forbid-Contains $describeRuntimeState 'OpenReadyCursor(' `
 Require-Contains $describeRuntimeState 'finder.ReadState(actorId)' `
     'DescribeRuntimeState must use a read-only finder snapshot.'
 
+$parallelPath = Get-MethodBlock $pathBridge `
+    'TryRunParallelSafePathMovement(Actor pActor,'
+Require-Contains $parallelPath 'if (HasArmyMarchState(pActor))' `
+    'RTS march paths must remain on the ordered serial commit path.'
+Require-Contains $parallelPath 'OpenReadyCursor(' `
+    'The b5 stage must open the ready cursor for AW custom paths.'
+Require-Contains $parallelPath 'CanRunPathStepInParallel(' `
+    'Ordinary AW path steps must retain Cultiway safe-step classification.'
+Require-Contains $parallelPath 'AWParallelPathMovementResult.Handled' `
+    'Parallel-safe AW path steps must complete in the b5 worker stage.'
+
+$parallelSmooth = Get-MethodBlock $pathBridge `
+    'TryRunParallelSafeSmoothMovement(Actor pActor, float pElapsed,'
+Require-Contains $parallelSmooth 'if (HasArmyMarchState(pActor))' `
+    'RTS smooth movement must remain on the ordered serial commit path.'
+Require-Contains $parallelSmooth 'TryContinueSmoothMovementInParallel(' `
+    'Ordinary smooth movement must retain Cultiway cursor continuation.'
+Require-Contains $pathBridge 'ConcurrentDictionary<long, RetryContext>' `
+    'Worker-visible path runtime state must be concurrency-safe.'
+
 Require-Contains $workerPool 'AWSimulationWorkerDispatchGate' `
     'Persistent workers must retain generation-gated dispatch.'
 Require-Contains $workerPool '_dispatchGate.Assign(' `
