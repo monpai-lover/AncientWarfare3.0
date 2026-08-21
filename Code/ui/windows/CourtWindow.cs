@@ -321,7 +321,7 @@ namespace AncientWarfare3.ui.windows
                     LayoutSummaryButton(_householdButton,
                         Mathf.Max(44f, pContentWidth - 248f), 4f, 76f, 23f);
                     LayoutSummaryButton(_statisticsButton,
-                        Mathf.Max(44f, pContentWidth - 412f), 4f, 76f, 23f);
+                        Mathf.Max(44f, pContentWidth - 84f), 58f, 76f, 23f);
                     LayoutSummaryButton(_customCourtWorkflowButton,
                         Mathf.Max(44f, pContentWidth - 84f), 31f, 76f, 23f);
                 }

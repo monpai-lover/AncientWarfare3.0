@@ -52,8 +52,8 @@ namespace AncientWarfare3.ui.windows
             _root = root.GetComponent<RectTransform>();
             _scope = CreateText(_root, "Scope", 11, TextAnchor.UpperLeft);
             _body = CreateText(_root, "Body", 10, TextAnchor.UpperLeft);
-            _back = CreateButton(_root, "Back", "aw_court_back_to_court",
-                "Back to Court", BackToCourt);
+            _back = CreateButton(_root, "Back", "aw_back_to_court",
+                "返回官场", BackToCourt);
         }
 
         private void Refresh()
@@ -66,39 +66,39 @@ namespace AncientWarfare3.ui.windows
             if (kingdom?.data == null || kingdom.isRekt())
             {
                 _scope.text = AW_L10n.Text("aw_court_statistics_title",
-                    "Population and Economy Statistics");
+                    "人口与经济统计");
                 _body.text = AW_L10n.Text("aw_court_statistics_unavailable",
-                    "Statistics unavailable");
+                    "统计不可用");
                 return;
             }
 
             _scope.text = kingdom.name + " | " + ScopeName(snapshot.Scope);
             string record = snapshot.HasEconomyRecord
                 ? string.Format(AW_L10n.Text("aw_court_statistics_records",
-                    "Economy records: {0}/{1}"),
+                    "经济记录：{0}/{1}"),
                     snapshot.EconomyRecordCityCount, snapshot.CityCount)
                 : AW_L10n.Text("aw_court_statistics_no_record",
-                    "No annual economy record is available");
+                    "暂无年度经济记录");
             string fallback = string.IsNullOrEmpty(snapshot.FallbackReason)
                 ? string.Empty
                 : "\n" + AW_L10n.Text("aw_court_statistics_fallback",
-                    "Regional scope unavailable; showing the current prefecture.");
+                    "州范围不可用，当前显示本郡");
             _body.text =
-                Metric("aw_court_statistics_population", "Population",
+                Metric("aw_court_statistics_population", "人口",
                     snapshot.Population.ToString()) + "\n" +
-                Metric("aw_court_statistics_city_count", "Cities",
+                Metric("aw_court_statistics_city_count", "城市数",
                     snapshot.CityCount.ToString()) + "\n" +
-                Metric("aw_court_statistics_tax", "Tax value",
+                Metric("aw_court_statistics_tax", "税值",
                     snapshot.TaxValue.ToString("0.0")) + "\n" +
-                Metric("aw_court_statistics_policy", "Policy points",
+                Metric("aw_court_statistics_policy", "政策点",
                     snapshot.PolicyPoints.ToString("0.0")) + "\n" +
-                Metric("aw_court_statistics_technology", "Technology points",
+                Metric("aw_court_statistics_technology", "科技点",
                     snapshot.TechnologyPoints.ToString("0.0")) + "\n" +
-                Metric("aw_court_statistics_manpower", "Manpower",
+                Metric("aw_court_statistics_manpower", "人力",
                     snapshot.Manpower.ToString("0.0")) + "\n" +
-                Metric("aw_court_statistics_food", "Food stability",
+                Metric("aw_court_statistics_food", "粮食稳定",
                     snapshot.FoodStability.ToString("0.0")) + "\n" +
-                Metric("aw_court_statistics_unrest", "Unrest risk",
+                Metric("aw_court_statistics_unrest", "治安风险",
                     snapshot.UnrestRisk.ToString("0.0")) + "\n\n" + record +
                 fallback;
         }
@@ -125,7 +125,7 @@ namespace AncientWarfare3.ui.windows
             {
                 window.titleText.text = AW_L10n.Text(
                     "aw_court_statistics_title",
-                    "Population and Economy Statistics");
+                    "人口与经济统计");
                 window.titleText.transform.localPosition = new Vector3(0f,
                     _windowSize.y * 0.5f - 16f, 0f);
                 window.titleText.raycastTarget = false;

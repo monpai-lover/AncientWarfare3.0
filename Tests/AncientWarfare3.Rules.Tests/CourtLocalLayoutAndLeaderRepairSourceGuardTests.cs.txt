@@ -6,6 +6,7 @@ internal static class CourtLocalLayoutAndLeaderRepairSourceGuardTests
     internal static void Run()
     {
         string window = Read("Code/ui/windows/CourtWindow.cs");
+        string statistics = Read("Code/ui/windows/CourtStatisticsWindow.cs");
         string leader = Read("Code/patch/AW_CityLeaderPatch.cs");
         string promotion = Read("Code/patch/AW_PromotionPatch.cs");
         string vacancy = Read("Code/core/court/CityLeaderVacancyRepairService.cs");
@@ -35,6 +36,14 @@ internal static class CourtLocalLayoutAndLeaderRepairSourceGuardTests
         Contains(csv, "aw_back_to_kingdom,");
         Contains(csv, "aw_court_fill_vacancies,");
         Contains(csv, "aw_court_statistics_button,");
+        Contains(window, "LayoutSummaryButton(_statisticsButton",
+            "central statistics entry must be below the custom court button");
+        Contains(window, "pContentWidth - 84f), 58f, 76f, 23f",
+            "central statistics entry must be below the custom court button");
+        Contains(statistics, "_back = CreateButton(_root, \"Back\", \"aw_back_to_court\"",
+            "statistics window must use the shared localized back key");
+        Contains(csv, "aw_court_statistics Title,");
+        Contains(csv, "aw_back_to_court,");
     }
 
     private static string Read(string relative) => File.ReadAllText(

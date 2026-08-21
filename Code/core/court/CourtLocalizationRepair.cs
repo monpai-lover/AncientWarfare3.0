@@ -10,6 +10,8 @@ namespace AncientWarfare3.core.court
             new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["aw_court_statistics_button"] = "\u7edf\u8ba1",
+                ["aw_court_statistics"] = "\u7edf\u8ba1",
+                ["aw_court_statistics Title"] = "\u7edf\u8ba1",
                 ["aw_court_statistics_title"] = "\u4eba\u53e3\u4e0e\u7ecf\u6d4e\u7edf\u8ba1",
                 ["aw_court_statistics_national"] = "\u5168\u56fd",
                 ["aw_court_statistics_region"] = "\u5dde",
@@ -23,6 +25,10 @@ namespace AncientWarfare3.core.court
                 ["aw_court_statistics_manpower"] = "\u4eba\u529b",
                 ["aw_court_statistics_food"] = "\u7cae\u98df\u7a33\u5b9a",
                 ["aw_court_statistics_unrest"] = "\u6cbb\u5b89\u98ce\u9669",
+                ["aw_court_statistics_unavailable"] = "\u7edf\u8ba1\u4e0d\u53ef\u7528",
+                ["aw_court_statistics_records"] = "\u7ecf\u6d4e\u8bb0\u5f55\uff1a{0}/{1}",
+                ["aw_court_statistics_no_record"] = "\u6682\u65e0\u5e74\u5ea6\u7ecf\u6d4e\u8bb0\u5f55",
+                ["aw_court_statistics_fallback"] = "\u5dde\u8303\u56f4\u4e0d\u53ef\u7528\uff0c\u5f53\u524d\u663e\u793a\u672c\u90e1",
                 ["aw_court_vacancy"] = "空缺",
                 ["aw_court_history_end_missing"] = "原因不明",
                 ["aw_court_history_end_invalid"] = "任职失效",
@@ -65,6 +71,8 @@ namespace AncientWarfare3.core.court
                 ["aw_court_command"] = "Command",
                 ["aw_court_regional_governor"] = "Regional Governor",
                 ["aw_court_statistics_button"] = "Statistics",
+                ["aw_court_statistics"] = "Statistics",
+                ["aw_court_statistics Title"] = "Statistics",
                 ["aw_court_statistics_title"] = "Population and Economy Statistics",
                 ["aw_court_statistics_national"] = "Nation",
                 ["aw_court_statistics_region"] = "State",
@@ -77,7 +85,11 @@ namespace AncientWarfare3.core.court
                 ["aw_court_statistics_technology"] = "Technology points",
                 ["aw_court_statistics_manpower"] = "Manpower",
                 ["aw_court_statistics_food"] = "Food stability",
-                ["aw_court_statistics_unrest"] = "Unrest risk"
+                ["aw_court_statistics_unrest"] = "Unrest risk",
+                ["aw_court_statistics_unavailable"] = "Statistics unavailable",
+                ["aw_court_statistics_records"] = "Economy records: {0}/{1}",
+                ["aw_court_statistics_no_record"] = "No annual economy record is available",
+                ["aw_court_statistics_fallback"] = "Regional scope unavailable; showing the current prefecture."
                 , ["aw_bandit_amnesty_settlement_title"] = "Bandit Amnesty Terms"
                 , ["aw_bandit_amnesty_reward"] = "Promised reward"
                 , ["aw_bandit_amnesty_reward_none"] = "No reward"

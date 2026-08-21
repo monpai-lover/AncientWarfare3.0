@@ -1,29 +1,32 @@
 key,cz,en,ch
-aw_court_statistics_button,Statistics,Statistics,统计
-aw_back_to_kingdom,Back to Kingdom,Back to Kingdom,返回国家
-aw_court_fill_vacancies,Fill vacancies,Fill vacancies,自动补缺
-aw_court_fill_vacancies_desc,Vacancies are repaired automatically when offices become empty.,Vacancies are repaired automatically when offices become empty.,官职空缺后会自动补缺。
-aw_court_fill_vacancies_success,Court vacancy repair completed,Court vacancy repair completed,官场补缺完成
-aw_court_fill_vacancies_queued,Vacancy repair queued,Vacancy repair queued,空缺已加入补缺队列
-aw_court_fill_vacancies_no_change,No court vacancies require repair,No court vacancies require repair,暂无需要补缺的官职
-aw_court_fill_vacancies_invalid,The kingdom is missing or extinct,The kingdom is missing or extinct,国家不存在或已灭亡
-aw_court_fill_vacancies_unavailable,Court vacancy repair is unavailable,Court vacancy repair is unavailable,官场补缺当前不可用
-aw_court_statistics_title,Population and Economy Statistics,Population and Economy Statistics,人口与经济统计
-aw_court_statistics_national,Nation,Nation,全国
-aw_court_statistics_region,State,State,州
-aw_court_statistics_city,Prefecture,Prefecture,郡
-aw_court_statistics_population,Population,Population,人口
-aw_court_statistics_city_count,Cities,Cities,城市数
-aw_court_statistics_tax,Tax value,Tax value,税值
-aw_court_statistics_policy,Policy points,Policy points,政策点
-aw_court_statistics_technology,Technology points,Technology points,科技点
-aw_court_statistics_manpower,Manpower,Manpower,人力
-aw_court_statistics_food,Food stability,Food stability,粮食稳定
-aw_court_statistics_unrest,Unrest risk,Unrest risk,治安风险
-aw_court_statistics_unavailable,Statistics unavailable,Statistics unavailable,统计不可用
-aw_court_statistics_records,Economy records: {0}/{1},Economy records: {0}/{1},经济记录：{0}/{1}
-aw_court_statistics_no_record,No annual economy record is available,No annual economy record is available,暂无年度经济记录
-aw_court_statistics_fallback,Regional scope unavailable; showing the current prefecture.,Regional scope unavailable; showing the current prefecture.,州范围不可用，当前显示本郡
+aw_court_statistics,统计,Statistics,統計
+aw_court_statistics Title,统计,Statistics,統計
+aw_court_statistics_button,统计,Statistics,統計
+aw_back_to_court,返回官场,Back to Court,返回官場
+aw_back_to_kingdom,返回国家,Back to Kingdom,返回國家
+aw_court_fill_vacancies,自动补缺,Fill vacancies,自動補缺
+aw_court_fill_vacancies_desc,官职空缺后会自动补缺。,Vacancies are repaired automatically when offices become empty.,官職空缺後會自動補缺。
+aw_court_fill_vacancies_success,官场补缺完成,Court vacancy repair completed,官場補缺完成
+aw_court_fill_vacancies_queued,空缺已加入补缺队列,Vacancy repair queued,空缺已加入補缺隊列
+aw_court_fill_vacancies_no_change,暂无需要补缺的官职,No court vacancies require repair,暫無需要補缺的官職
+aw_court_fill_vacancies_invalid,国家不存在或已灭亡,The kingdom is missing or extinct,國家不存在或已滅亡
+aw_court_fill_vacancies_unavailable,官场补缺当前不可用,Court vacancy repair is unavailable,官場補缺當前不可用
+aw_court_statistics_title,人口与经济统计,Population and Economy Statistics,人口與經濟統計
+aw_court_statistics_national,全国,Nation,全國
+aw_court_statistics_region,州,State,州
+aw_court_statistics_city,郡,Prefecture,郡
+aw_court_statistics_population,人口,Population,人口
+aw_court_statistics_city_count,城市数,Cities,城市數
+aw_court_statistics_tax,税值,Tax value,稅值
+aw_court_statistics_policy,政策点,Policy points,政策點
+aw_court_statistics_technology,科技点,Technology points,科技點
+aw_court_statistics_manpower,人力,Manpower,人力
+aw_court_statistics_food,粮食稳定,Food stability,糧食穩定
+aw_court_statistics_unrest,治安风险,Unrest risk,治安風險
+aw_court_statistics_unavailable,统计不可用,Statistics unavailable,統計不可用
+aw_court_statistics_records,经济记录：{0}/{1},Economy records: {0}/{1},經濟記錄：{0}/{1}
+aw_court_statistics_no_record,暂无年度经济记录,No annual economy record is available,暫無年度經濟記錄
+aw_court_statistics_fallback,州范围不可用，当前显示本郡,Regional scope unavailable; showing the current prefecture.,州範圍不可用，目前顯示本郡
 aw_de_jure_region,州法理,De jure state,州法理
 aw_de_jure_region_description,使用神力创建或划分州法理,Create or assign de jure states with one divine power,使用神力建立或劃分州法理
 aw_de_jure_region_create,建立州法理,Create de jure state,建立州法理
