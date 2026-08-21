@@ -28,7 +28,12 @@ namespace AncientWarfare3.core.court
             if (PeasantRebelBanditStrongholdService.IsStrongholdCity(pCity))
                 return false;
             Kingdom kingdom = pCity.kingdom;
-            if (kingdom?.data == null || kingdom.isRekt() || kingdom.isNeutral())
+            if (kingdom?.data == null)
+            {
+                QueueRetry(pCity, allowRetry);
+                return false;
+            }
+            if (kingdom.isRekt() || kingdom.isNeutral())
                 return false;
             if (kingdom.capital == pCity)
             {
@@ -44,11 +49,33 @@ namespace AncientWarfare3.core.court
             }
 
             long targetId = SelectRegion(pCity, kingdom);
-            if (targetId < 0L) return false;
+            if (targetId < 0L)
+            {
+                if (!DeJureRegionStore.CreateState(pCity,
+                    "city_created_auto_create", out _, out string createError))
+                {
+                    if (createError == "invalid_city")
+                    {
+                        QueueRetry(pCity, allowRetry);
+                        return false;
+                    }
+                    QueueRetry(pCity, allowRetry);
+                    return false;
+                }
+                RetryIds.Remove(pCity.data.id);
+                HierarchicalVassalMapModeService.MarkHierarchyDirty(kingdom);
+                HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
+                return true;
+            }
             if (!DeJureRegionStore.AssignCityAutomatically(targetId, pCity,
                     "city_created_auto_assign", out string error))
             {
-                if (error == "invalid_city" || error == "already_assigned") return false;
+                if (error == "already_assigned") return false;
+                if (error == "invalid_city")
+                {
+                    QueueRetry(pCity, allowRetry);
+                    return false;
+                }
                 QueueRetry(pCity, allowRetry);
                 return false;
             }
@@ -76,27 +103,19 @@ namespace AncientWarfare3.core.court
             if (cityTile == null) return -1L;
             var adjacent = new HashSet<long>((pCity.neighbours_cities ??
                 new HashSet<City>()).Where(p => p?.data != null &&
-                p.kingdom == pKingdom).Select(p => p.data.id));
+                !p.isRekt() && DeJureRegionStore.IsEligibleCityId(
+                    p.data.id)).Select(p => p.data.id));
             var facts = new List<DeJureNewCityRegionCandidate>();
             foreach (DeJureRegion region in DeJureRegionStore.ActiveRegions())
             {
-                var members = (region.MemberCityIds ?? new List<long>())
-                    .Select(id => World.world?.cities?.get(id))
-                    .Where(city => city?.data != null && !city.isRekt() &&
-                        city.kingdom == pKingdom &&
-                        DeJureRegionStore.IsEligibleCityId(city.data.id))
-                    .ToList();
-                if (members.Count == 0) continue;
-                int adjacentCount = members.Count(city =>
-                    adjacent.Contains(city.data.id));
-                long nearest = members.Select(city => Distance(cityTile,
-                    city.getTile())).DefaultIfEmpty(long.MaxValue).Min();
-                City seat = members.FirstOrDefault(city =>
-                    city.data.id == region.SeatCityId);
+                City seat = World.world?.cities?.get(region.SeatCityId);
+                if (seat?.data == null || seat.isRekt() ||
+                    !DeJureRegionStore.IsEligibleCityId(seat.data.id)) continue;
+                bool adjacentSeat = adjacent.Contains(seat.data.id);
                 long seatDistance = Distance(cityTile, seat?.getTile());
                 facts.Add(new DeJureNewCityRegionCandidate(region.RegionId,
-                    adjacentCount > 0, adjacentCount, nearest, seatDistance,
-                    true));
+                    adjacentSeat, adjacentSeat ? 1 : 0, seatDistance,
+                    seatDistance, true));
             }
             return DeJureNewCityAssignmentRules.Select(facts);
         }

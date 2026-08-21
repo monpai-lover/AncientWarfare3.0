@@ -7,41 +7,41 @@ internal static class DeJureNewCityAssignmentRulesTests
     {
         long adjacent = DeJureNewCityAssignmentRules.Select(new[]
         {
-            new DeJureNewCityRegionCandidate(2L, true, 1, 900, 1000, true),
-            new DeJureNewCityRegionCandidate(1L, true, 2, 1200, 900, true)
+            new DeJureNewCityRegionCandidate(2L, true, 1, 900, 900, true),
+            new DeJureNewCityRegionCandidate(1L, true, 2, 1200, 1200, true)
         });
-        Equal(1L, adjacent,
-            "the state sharing more adjacent members wins");
+        Equal(2L, adjacent,
+            "the nearest adjacent de jure seat wins");
 
-        long nearest = DeJureNewCityAssignmentRules.Select(new[]
+        long noAdjacentSeat = DeJureNewCityAssignmentRules.Select(new[]
         {
             new DeJureNewCityRegionCandidate(2L, false, 0, 400, 300, true),
             new DeJureNewCityRegionCandidate(1L, false, 0, 200, 500, true)
         });
-        Equal(1L, nearest,
-            "nearest member distance wins when no state is adjacent");
+        Equal(-1L, noAdjacentSeat,
+            "a city without an adjacent de jure seat starts a new state");
 
         long seatTie = DeJureNewCityAssignmentRules.Select(new[]
         {
-            new DeJureNewCityRegionCandidate(9L, false, 0, 100, 400, true),
-            new DeJureNewCityRegionCandidate(4L, false, 0, 100, 200, true)
+            new DeJureNewCityRegionCandidate(9L, true, 1, 100, 400, true),
+            new DeJureNewCityRegionCandidate(4L, true, 1, 100, 200, true)
         });
         Equal(4L, seatTie,
-            "seat distance breaks nearest-member ties");
+            "seat distance breaks adjacent-seat ties");
 
         long idTie = DeJureNewCityAssignmentRules.Select(new[]
         {
-            new DeJureNewCityRegionCandidate(9L, false, 0, 100, 200, true),
-            new DeJureNewCityRegionCandidate(4L, false, 0, 100, 200, true)
+            new DeJureNewCityRegionCandidate(9L, true, 1, 100, 200, true),
+            new DeJureNewCityRegionCandidate(4L, true, 1, 100, 200, true)
         });
         Equal(4L, idTie, "region ID makes ties deterministic");
 
         long excluded = DeJureNewCityAssignmentRules.Select(new[]
         {
-            new DeJureNewCityRegionCandidate(2L, true, 4, 1, 1, false),
+            new DeJureNewCityRegionCandidate(2L, true, 1, 1, 1, false),
             new DeJureNewCityRegionCandidate(1L, false, 0, 1, 1, true)
         });
-        Equal(1L, excluded,
+        Equal(-1L, excluded,
             "foreign, retired, empty, or ineligible candidates are excluded");
 
         Equal(-1L, DeJureNewCityAssignmentRules.Select(
