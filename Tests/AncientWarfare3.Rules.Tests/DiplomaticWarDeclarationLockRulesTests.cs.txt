@@ -13,6 +13,12 @@ internal static class DiplomaticWarDeclarationLockRulesTests
         True(DiplomaticWarDeclarationLedgerRules.ShouldExecute(
                 139, 137, 139, noticeReady: false),
             "the forced year overrides an unready notice projection");
+        True(DiplomaticWarDeclarationLedgerRules
+                .ShouldRetryExecutionFailure("engine_rejected_start"),
+            "a transient engine rejection keeps the declaration pending");
+        False(DiplomaticWarDeclarationLedgerRules
+                .ShouldRetryExecutionFailure("invalid_participants"),
+            "invalid participants still terminate a declaration");
         False(DiplomaticWarDeclarationLedgerRules
                 .ShouldRevalidateMutableEligibility(
                     declarationLocked: true),

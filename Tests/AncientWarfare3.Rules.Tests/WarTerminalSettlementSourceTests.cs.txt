@@ -36,6 +36,17 @@ internal static class WarTerminalSettlementSourceTests
              coordinator.Contains("TryReadDecision(war") &&
              coordinator.Contains("ModClass.LogError("),
             "execution is authoritative, revalidated, and error-visible");
+        int scoreRead = coordinator.IndexOf(
+            "WarScoreService.TryGetSnapshot(pWar, attacker",
+            StringComparison.Ordinal);
+        int potentialRead = coordinator.IndexOf(
+            "WarForceEliminationSettlementService.TryReadPotentials(",
+            StringComparison.Ordinal);
+        True(scoreRead >= 0 && potentialRead > scoreRead &&
+             coordinator.Contains(
+                 "WarTerminalSettlementRules.IsDecisiveScore(") &&
+             coordinator.Contains("snapshot.Score"),
+            "decisive score is recognized before optional potential reads");
         True(bridge.Contains(
                 "WarTerminalSettlementCoordinator.NotifyWarChanged(pWar)") &&
              !bridge.Contains(

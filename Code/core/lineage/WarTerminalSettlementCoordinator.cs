@@ -132,8 +132,22 @@ namespace AncientWarfare3.core.lineage
             Kingdom attacker = MainAttacker(pWar);
             if (attacker?.data == null ||
                 !WarScoreService.TryGetSnapshot(pWar, attacker,
-                    out WarScoreSnapshot snapshot) ||
-                !WarForceEliminationSettlementService.TryReadPotentials(
+                    out WarScoreSnapshot snapshot)) return false;
+
+            // A decisive score is already an authoritative terminal state.
+            // Do not gate its forced maximum-benefit peace on the separate
+            // military-potential probe, which can be temporarily unavailable
+            // while armies are being rebuilt or a war participant is changing.
+            if (!guarded && WarTerminalSettlementRules.IsDecisiveScore(
+                    snapshot.Score))
+            {
+                pDecision = WarTerminalSettlementRules.Resolve(
+                    new WarTerminalSettlementFacts(false, snapshot.Score,
+                        1, 1, false));
+                return true;
+            }
+
+            if (!WarForceEliminationSettlementService.TryReadPotentials(
                     pWar, out int attackers, out int defenders)) return false;
             bool affordableGoal = !guarded &&
                 WarGoalSettlementRuntimeService.HasAffordableGoal(pWar);

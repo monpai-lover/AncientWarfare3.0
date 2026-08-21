@@ -52,6 +52,12 @@ namespace AncientWarfare3.core.lineage
 
     public static class WarTerminalSettlementRules
     {
+        public static bool IsDecisiveScore(int pAttackerSignedScore)
+        {
+            return pAttackerSignedScore == WarScoreRules.MaximumScore ||
+                   pAttackerSignedScore == -WarScoreRules.MaximumScore;
+        }
+
         public static WarTerminalSettlementDecision Resolve(
             WarTerminalSettlementFacts pFacts)
         {

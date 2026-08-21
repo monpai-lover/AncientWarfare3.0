@@ -5,6 +5,7 @@ internal static class WarTerminalSettlementRulesTests
     internal static void Run()
     {
         DecisiveScoreHasPriority();
+        DecisiveScoreIsRecognizedWithoutPotentialFacts();
         OneSidedEliminationHasFullBudget();
         AffordableGoalFollowsForceElimination();
         MutualEliminationUsesScoreOrWhitePeace();
@@ -22,6 +23,16 @@ internal static class WarTerminalSettlementRulesTests
             "positive decisive score benefits attackers");
         Equal(100, decision.Budget,
             "decisive settlement receives the treaty cap");
+    }
+
+    private static void DecisiveScoreIsRecognizedWithoutPotentialFacts()
+    {
+        Equal(true, WarTerminalSettlementRules.IsDecisiveScore(100),
+            "positive decisive score is terminal before potential reads");
+        Equal(true, WarTerminalSettlementRules.IsDecisiveScore(-100),
+            "negative decisive score is terminal before potential reads");
+        Equal(false, WarTerminalSettlementRules.IsDecisiveScore(99),
+            "sub-decisive score still needs normal terminal facts");
     }
 
     private static void OneSidedEliminationHasFullBudget()

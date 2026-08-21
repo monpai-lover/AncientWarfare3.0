@@ -30,6 +30,12 @@ namespace AncientWarfare3.core.lineage
                    currentYear >= forcedWarYear;
         }
 
+        public static bool ShouldRetryExecutionFailure(string pReason)
+        {
+            return !string.Equals(pReason, "invalid_participants",
+                StringComparison.Ordinal);
+        }
+
         public static bool ShouldRevalidateMutableEligibility(
             bool declarationLocked)
         {

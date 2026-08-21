@@ -315,6 +315,16 @@ namespace AncientWarfare3.core.lineage
             ExecutionResult result = Execute(pAttacker, defender, pRecord);
             if (result.Started)
                 TerminateRecord(pAttacker, pRecord, "started", "");
+            else if (DiplomaticWarDeclarationLedgerRules
+                         .ShouldRetryExecutionFailure(result.FailureReason))
+            {
+                // A declaration is a durable order. Keep it pending when the
+                // engine or a mutable target temporarily rejects startWar;
+                // the next authoritative kingdom update retries it.
+                ModClass.LogWarning("War declaration retry pending: attacker=" +
+                    pAttacker.id + " defender=" + defender.id +
+                    " reason=" + (result.FailureReason ?? "unknown"));
+            }
             else
                 TerminateRecord(pAttacker, pRecord, "cancelled",
                     result.FailureReason);

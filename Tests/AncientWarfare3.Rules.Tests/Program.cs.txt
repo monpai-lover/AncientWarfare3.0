@@ -86,6 +86,21 @@ if (args.Length == 1 && args[0] == "--historical-school-xia-access")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--war-terminal-settlement")
+{
+    WarTerminalSettlementRulesTests.Run();
+    WarTerminalSettlementSourceTests.Run();
+    Console.WriteLine("War terminal settlement rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--war-declaration-lock")
+{
+    DiplomaticWarDeclarationLockRulesTests.Run();
+    Console.WriteLine("War declaration lock rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--frame-priority-confirmation")
 {
     FramePrioritySchedulerConfirmationRulesTests.Run();
