@@ -17,6 +17,9 @@ namespace AncientWarfare3.patch
             int liveCityCount;
             try { liveCityCount = __instance.countCities(); }
             catch { liveCityCount = __instance.hasCities() ? 1 : 0; }
+            if (KingdomExtinctionQueue.IsVerifiedForVanillaRemoval(
+                    __instance, liveCityCount))
+                return true;
             if (!cityIndexStable)
             {
                 if (KingdomExtinctionRules.ShouldQueueVerification(

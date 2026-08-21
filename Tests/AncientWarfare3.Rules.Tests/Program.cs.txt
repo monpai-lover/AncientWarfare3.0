@@ -3947,10 +3947,10 @@ True(KingdomExtinctionRules.ShouldDeferRemovalVerification(
         cityIndexStable: false,
         actorKingdomIndexStable: true),
     "zero-city removal waits for the city index");
-Equal(false, KingdomExtinctionRules.ShouldDeferRemovalVerification(
+True(KingdomExtinctionRules.ShouldDeferRemovalVerification(
         cityIndexStable: true,
         actorKingdomIndexStable: false),
-    "zero-city removal ignores the actor kingdom index");
+    "zero-city removal waits for a dirty actor kingdom index");
 Equal(false, KingdomExtinctionRules.ShouldDeferRemovalVerification(
         cityIndexStable: true,
         actorKingdomIndexStable: true),

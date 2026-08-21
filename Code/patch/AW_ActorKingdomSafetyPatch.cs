@@ -148,6 +148,7 @@ namespace AncientWarfare3.patch
         private static void ClearActorKingdomRepairs_Prefix()
         {
             ActorKingdomSafetyService.ClearRuntime();
+            KingdomExtinctionQueue.ClearRuntime();
             KingdomFounderSpeciesSafetyService.ClearRuntime();
         }
 

@@ -11,7 +11,7 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldDeferRemovalVerification(
             bool cityIndexStable, bool actorKingdomIndexStable)
         {
-            return !cityIndexStable;
+            return !cityIndexStable || !actorKingdomIndexStable;
         }
 
         public static bool ShouldDisbandSurvivors(
