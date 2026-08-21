@@ -35,6 +35,32 @@ internal static class PeasantRebelBanditIslandRulesTests
             "the threat counter saturates at two cycles");
         True(PeasantRebelBanditIslandRules.NextThreatCycles(false, 2) == 0,
             "a cleared threat resets the counter");
+        StateDefaultsAndTransitionsAreSafe();
+    }
+
+    private static void StateDefaultsAndTransitionsAreSafe()
+    {
+        var state = new PeasantRebelBanditStrongholdState();
+        True(state.StrongholdKind == BanditStrongholdKind.Land,
+            "legacy state defaults to a land stronghold");
+        True(state.Migration.Stage == BanditMigrationStage.None,
+            "legacy state defaults to no migration");
+        True(PeasantRebelBanditIslandRules.CanTransition(
+                BanditMigrationStage.None,
+                BanditMigrationStage.Evaluating, manifestCount: 0),
+            "evaluation can begin without a manifest");
+        False(PeasantRebelBanditIslandRules.CanTransition(
+                BanditMigrationStage.Evaluating,
+                BanditMigrationStage.Boarding, manifestCount: 0),
+            "boarding requires a non-empty manifest");
+        True(PeasantRebelBanditIslandRules.CanTransition(
+                BanditMigrationStage.Evaluating,
+                BanditMigrationStage.Boarding, manifestCount: 2),
+            "a locked manifest may begin boarding");
+        False(PeasantRebelBanditIslandRules.CanTransition(
+                BanditMigrationStage.Boarding,
+                BanditMigrationStage.Founding, manifestCount: 2),
+            "migration cannot skip the voyage stage");
     }
 
     private static void True(bool value, string message)

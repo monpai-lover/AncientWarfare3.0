@@ -2,6 +2,23 @@ using System;
 
 namespace AncientWarfare3.core.lineage
 {
+    public enum BanditStrongholdKind
+    {
+        Land,
+        Island
+    }
+
+    public enum BanditMigrationStage
+    {
+        None,
+        Evaluating,
+        Boarding,
+        Voyaging,
+        Founding,
+        Completed,
+        Failed
+    }
+
     public static class PeasantRebelBanditIslandRules
     {
         public static bool ShouldStartEvacuation(bool suppressionWar,
@@ -35,6 +52,34 @@ namespace AncientWarfare3.core.lineage
         {
             return coastal && reachable && !allied && !stronghold &&
                 stealableFood > 0;
+        }
+
+        public static bool CanTransition(BanditMigrationStage current,
+            BanditMigrationStage next, int manifestCount)
+        {
+            if (next == BanditMigrationStage.Failed)
+                return current != BanditMigrationStage.None &&
+                    current != BanditMigrationStage.Completed;
+            if (next == BanditMigrationStage.None)
+                return current == BanditMigrationStage.Failed ||
+                    current == BanditMigrationStage.Completed;
+            if (next >= BanditMigrationStage.Boarding &&
+                next <= BanditMigrationStage.Founding && manifestCount <= 0)
+                return false;
+            return current switch
+            {
+                BanditMigrationStage.None =>
+                    next == BanditMigrationStage.Evaluating,
+                BanditMigrationStage.Evaluating =>
+                    next == BanditMigrationStage.Boarding,
+                BanditMigrationStage.Boarding =>
+                    next == BanditMigrationStage.Voyaging,
+                BanditMigrationStage.Voyaging =>
+                    next == BanditMigrationStage.Founding,
+                BanditMigrationStage.Founding =>
+                    next == BanditMigrationStage.Completed,
+                _ => false
+            };
         }
     }
 }

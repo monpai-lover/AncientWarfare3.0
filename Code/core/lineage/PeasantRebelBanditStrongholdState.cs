@@ -58,10 +58,14 @@ namespace AncientWarfare3.core.lineage
 
     internal sealed class PeasantRebelBanditStrongholdState
     {
-        public const int CurrentSchemaVersion = 6;
+        public const int CurrentSchemaVersion = 7;
 
         public int SchemaVersion = CurrentSchemaVersion;
         public BanditStrongholdPhase Phase = BanditStrongholdPhase.None;
+        public BanditStrongholdKind StrongholdKind =
+            BanditStrongholdKind.Land;
+        public BanditIslandMigrationState Migration =
+            new BanditIslandMigrationState();
         public long StrongholdCityId = -1L;
         public long MotherCityId = -1L;
         public long OriginKingdomId = -1L;
@@ -86,5 +90,19 @@ namespace AncientWarfare3.core.lineage
         public long GuiyiRestorationClaimId = -1L;
         public int GuiyiCreatedYear = -1;
         public string GuiyiStage = "";
+    }
+
+    internal sealed class BanditIslandMigrationState
+    {
+        public BanditMigrationStage Stage = BanditMigrationStage.None;
+        public long OldStrongholdCityId = -1L;
+        public long TargetIslandId = -1L;
+        public int TargetLandingTileId = -1;
+        public int StartedYear = -1;
+        public int ThreatCycles = 0;
+        public List<long> MemberActorIds = new List<long>();
+        public long TransportRequestId = -1L;
+        public long TransportBoatId = -1L;
+        public int FailureCount = 0;
     }
 }

@@ -76,6 +76,18 @@ namespace AncientWarfare3.core.lineage
                    pState.FixedZoneKeys.Count > 0;
         }
 
+        internal static bool TryResolveOperational(Kingdom pKingdom,
+            out PeasantRebelBanditStrongholdState pState)
+        {
+            return TryRead(pKingdom, out pState) &&
+                   pState.Phase == BanditStrongholdPhase.Active &&
+                   pState.StrongholdCityId > 0 &&
+                   pState.MotherCityId > 0 &&
+                   pState.OriginKingdomId > 0 &&
+                   pState.FixedZoneKeys.Count > 0 &&
+                   pState.Migration != null;
+        }
+
         private static bool IsReadable(
             PeasantRebelBanditStrongholdState pState)
         {
@@ -98,6 +110,13 @@ namespace AncientWarfare3.core.lineage
             foreach (BanditStrongholdTower tower in pState.Towers)
                 if (tower != null) tower.AssetId ??= "";
             pState.Raid ??= new BanditRaidMissionState();
+            pState.Migration ??= new BanditIslandMigrationState();
+            pState.Migration.MemberActorIds ??=
+                new System.Collections.Generic.List<long>();
+            pState.Migration.ThreatCycles = System.Math.Max(0,
+                System.Math.Min(2, pState.Migration.ThreatCycles));
+            pState.Migration.FailureCount = System.Math.Max(0,
+                pState.Migration.FailureCount);
             pState.Raid.MemberActorIds ??=
                 new System.Collections.Generic.List<long>();
             pState.Raid.CarriedFoodByResourceId ??=
