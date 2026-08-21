@@ -152,6 +152,8 @@ namespace AncientWarfare3.core.multiplayer
                     MandateService.ResumePendingProjections(2)),
                 new AW3RestoreStage("bandit_strongholds",
                     PeasantRebelBanditStrongholdService.RestoreRuntime),
+                new AW3RestoreStage("mandate_island_exile",
+                    MandateIslandExileService.RestoreRuntime),
                 new AW3RestoreStage("peasant_rebel_routes",
                     PeasantRebelRouteService.RebuildRuntime),
                 new AW3RestoreStage("bandit_great_uprising",

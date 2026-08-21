@@ -325,6 +325,7 @@ namespace AncientWarfare3.patch
             WarTerritoryService.OnWarEnded(pWar, pWinner);
             AutonomousRestorationService.OnWarEnded(pWar);
             ApplyDiplomacyWarResult(pWar, pWinner);
+            MandateIslandExileService.OnWarEnded(pWar, pWinner);
             MandateService.OnWarEnded(pWar, pWinner);
             MandateRebelService.OnWarEnded(pWar, pWinner);
             FeudatoryJingnanService.OnWarEnded(pWar, pWinner);

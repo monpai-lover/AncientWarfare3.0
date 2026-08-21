@@ -1,0 +1,31 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class MandateIslandExileRulesTests
+{
+    public static void Run()
+    {
+        True(MandateIslandExileRules.CanStart(true, true, true, false),
+            "a one-city mandate with a port may start exile");
+        False(MandateIslandExileRules.CanStart(true, false, true, false),
+            "multiple cities cannot start exile");
+        False(MandateIslandExileRules.CanStart(true, true, false, false),
+            "a city without a port cannot start exile");
+        True(MandateIslandExileRules.IsActive(
+                MandateIslandExileStage.Voyaging),
+            "voyaging is active");
+        False(MandateIslandExileRules.IsActive(
+                MandateIslandExileStage.Completed),
+            "completed is terminal");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+}

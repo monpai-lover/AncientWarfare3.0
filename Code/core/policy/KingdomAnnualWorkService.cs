@@ -337,6 +337,7 @@ namespace AncientWarfare3.core.policy
                 () =>
                 {
                     MandateService.OnKingdomYear(pKingdom);
+                    MandateIslandExileService.OnKingdomYear(pKingdom);
                     RitualDiplomacyOpinionService.OnKingdomYear(pKingdom);
                 });
 

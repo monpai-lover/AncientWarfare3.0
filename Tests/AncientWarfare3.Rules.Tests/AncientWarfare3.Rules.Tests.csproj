@@ -11,6 +11,8 @@
 	<ItemGroup>
 		<Compile Include="IslandEscapeBehaviourRulesTests.cs.txt" />
 		<Compile Include="..\..\Code\core\lineage\IslandEscapeBehaviourRules.cs" Link="Production\IslandEscapeBehaviourRules.cs" />
+    <Compile Include="MandateIslandExileRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\MandateIslandExileRules.cs" Link="Production\MandateIslandExileRules.cs" />
     <Reference Include="Newtonsoft.Json">
       <HintPath>$(WorldBoxManaged)\Newtonsoft.Json.dll</HintPath>
     </Reference>

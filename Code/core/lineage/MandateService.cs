@@ -1517,6 +1517,7 @@ namespace AncientWarfare3.core.lineage
                     AW3MultiplayerReplicaScope.IsReplicaSession))
                 return;
             if (pKingdom?.data == null) return;
+            if (MandateIslandExileService.IsActive(pKingdom)) return;
             MandateReport report = ReadReport();
             if (MandateDeclarationRules.ShouldEndDestroyedMandate(
                     report.active, report.kingdom_id, pKingdom.id))

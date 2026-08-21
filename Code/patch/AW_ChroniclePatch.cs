@@ -48,9 +48,16 @@ namespace AncientWarfare3.patch
         // 亡国(removeObject 是 KingdomManager 自身的 public override,typeof(KingdomManager) 正确)
         [HarmonyPrefix]
         [HarmonyPatch(typeof(KingdomManager), nameof(KingdomManager.removeObject))]
-        internal static void RemoveKingdom_Prefix(Kingdom pKingdom,
+        internal static bool RemoveKingdom_Prefix(Kingdom pKingdom,
             out VassalService.KingdomDestroyWarCleanupState __state)
         {
+            if (MandateIslandExileService.IsActive(pKingdom))
+            {
+                __state = default;
+                ModClass.LogError("Deferred destruction of mandate kingdom during island exile: " +
+                    (pKingdom?.id ?? -1L));
+                return false;
+            }
             // UI and map-mode references are local state and must be cleared
             // even when the destruction is being applied on a replica.
             KingdomSelectionLifecycleService.OnKingdomDestroying(pKingdom);
@@ -64,7 +71,7 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying)
             {
                 __state = default;
-                return;
+                return true;
             }
             __state = VassalService.CaptureKingdomDestroyWarCleanup(pKingdom);
             KingdomArchiveWriter.EnsureRow(pKingdom);
@@ -100,14 +107,16 @@ namespace AncientWarfare3.patch
             CourtService.OnKingdomDestroying(pKingdom);
             FormerHeirService.ArchiveAndClear(pKingdom);
             ChronicleEvents.OnKingdomDestroyed(pKingdom);
+            return true;
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(KingdomManager), nameof(KingdomManager.removeObject))]
         internal static void RemoveKingdom_Postfix(Kingdom pKingdom,
-            VassalService.KingdomDestroyWarCleanupState __state)
+            VassalService.KingdomDestroyWarCleanupState __state,
+            bool __runOriginal)
         {
-            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            if (!__runOriginal || AW3MultiplayerReplicaScope.IsApplying) return;
             VassalService.CleanupWarsAfterKingdomDestroyed(__state);
         }
 
@@ -148,6 +157,8 @@ namespace AncientWarfare3.patch
             AutonomousRestorationService.OnCityTransferred(
                 __instance, __state, __instance?.kingdom ?? pKingdom);
             MandateService.OnCityTransferred(
+                __instance, __state, __instance?.kingdom ?? pKingdom);
+            MandateIslandExileService.OnCityTransferred(
                 __instance, __state, __instance?.kingdom ?? pKingdom);
             FeudatoryService.OnCityTransferred(
                 __instance, __state, __instance?.kingdom ?? pKingdom);

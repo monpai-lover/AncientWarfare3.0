@@ -78,6 +78,15 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_AUTHORITY = "aw_mandate_authority";
         public const string MANDATE_PRESTIGE = "aw_mandate_prestige";
         public const string MANDATE_LAST_YEAR = "aw_mandate_last_year";
+        public const string MANDATE_ISLAND_EXILE_STATE = "aw_mandate_island_exile_state";
+        public const string MANDATE_ISLAND_EXILE_ORIGIN_CITY_ID = "aw_mandate_island_exile_origin_city_id";
+        public const string MANDATE_ISLAND_EXILE_TARGET_ISLAND_ID = "aw_mandate_island_exile_target_island_id";
+        public const string MANDATE_ISLAND_EXILE_TARGET_TILE_ID = "aw_mandate_island_exile_target_tile_id";
+        public const string MANDATE_ISLAND_EXILE_TARGET_KINGDOM_ID = "aw_mandate_island_exile_target_kingdom_id";
+        public const string MANDATE_ISLAND_EXILE_STARTED_YEAR = "aw_mandate_island_exile_started_year";
+        public const string MANDATE_ISLAND_EXILE_MEMBER_IDS = "aw_mandate_island_exile_member_ids";
+        public const string MANDATE_ISLAND_EXILE_LEADER_ID = "aw_mandate_island_exile_leader_id";
+        public const string MANDATE_ISLAND_EXILE_WAR_ID = "aw_mandate_island_exile_war_id";
         public const string MANDATE_CITY_LOSS_YEAR =
             "aw_mandate_city_loss_year";
         public const string MANDATE_CITY_LOSS_ACCUMULATED =

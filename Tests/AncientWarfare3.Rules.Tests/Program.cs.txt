@@ -15,6 +15,13 @@ if (args.Length == 1 && args[0] == "--island-escape-behaviour")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--mandate-island-exile")
+{
+    MandateIslandExileRulesTests.Run();
+    Console.WriteLine("Mandate island exile rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--reverse-xiaization")
 {
     ReverseXiaizationRulesTests.Run();
