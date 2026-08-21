@@ -285,6 +285,53 @@ namespace AncientWarfare3.core.court
             }
         }
 
+        internal static bool UnassignCity(City pCity, out string pError)
+        {
+            pError = string.Empty;
+            if (!IsDeJureEligibleCity(pCity))
+            {
+                pError = "invalid_city";
+                return false;
+            }
+            EnsureInitialized();
+            lock (Gate)
+            {
+                DeJureAdministrationStore snapshot = CloneStore(_store);
+                try
+                {
+                    DeJureRegion region = _store.Regions.FirstOrDefault(p =>
+                        p != null && p.Active && p.MemberCityIds != null &&
+                        p.MemberCityIds.Contains(pCity.data.id));
+                    if (region == null)
+                    {
+                        pError = "region_missing";
+                        return false;
+                    }
+                    if (region.SeatCityId == pCity.data.id)
+                    {
+                        pError = "region_capital";
+                        return false;
+                    }
+                    region.MemberCityIds.Remove(pCity.data.id);
+                    region.Version++;
+                    AddChange(region.RegionId, pCity.data.id,
+                        region.RegionId, -1L, "DeJureCityUnassigned");
+                    _store.StoreRevision++;
+                    RegionalGovernmentAggregationService.Clear();
+                    return true;
+                }
+                catch (Exception error)
+                {
+                    _store = snapshot;
+                    pError = error.Message;
+                    ModClass.LogError(
+                        "De jure city unassignment failed: " +
+                        error.Message);
+                    return false;
+                }
+            }
+        }
+
         internal static bool RetireState(City pSelectedCity,
             out string pError)
         {
@@ -308,18 +355,18 @@ namespace AncientWarfare3.core.court
                         pError = "region_missing";
                         return false;
                     }
+                    if (region.SeatCityId != pSelectedCity.data.id)
+                    {
+                        pError = "region_capital_required";
+                        return false;
+                    }
                     List<long> members = region.MemberCityIds.Distinct().ToList();
-                    bool capitalSelected = pSelectedCity.kingdom?.capital != null &&
-                        members.Contains(pSelectedCity.kingdom.capital.data.id);
                     region.MemberCityIds.Clear();
                     region.Active = false;
                     region.Version++;
                     foreach (long cityId in members)
                         AddChange(region.RegionId, cityId, region.RegionId, -1L,
                             "DeJureRegionRetired");
-                    if (capitalSelected)
-                        EnsureKingdomCapitalSeatLocked(pSelectedCity.kingdom,
-                            "capital_region_recreated");
                     _store.StoreRevision++;
                     RegionalGovernmentAggregationService.Clear();
                     WarGoalPersistence.InvalidateOpenDeJureRegionGoals(
@@ -407,6 +454,10 @@ namespace AncientWarfare3.core.court
                 }
                 return;
             }
+            bool explicitlyRemoved = HasExplicitDeJureRemovalLocked(
+                capital.data.id);
+            if (!DeJureRegionRetirementRules.ShouldAutoCreateCapitalSeat(
+                    hasCurrentRegion: false, explicitlyRemoved)) return;
             long id = Math.Max(1L, _store.NextRegionId++);
             var region = new DeJureRegion
             {
@@ -423,6 +474,15 @@ namespace AncientWarfare3.core.court
             AddChange(id, capital.data.id, -1L, id,
                 pReason ?? "capital_region_repaired");
             _store.StoreRevision++;
+        }
+
+        private static bool HasExplicitDeJureRemovalLocked(long pCityId)
+        {
+            DeJureRegionChange latest = _store?.ChangeHistory?
+                .LastOrDefault(p => p != null && p.CityId == pCityId);
+            if (latest == null || latest.ToRegionId >= 0L) return false;
+            return latest.Reason == "DeJureCityUnassigned" ||
+                   latest.Reason == "DeJureRegionRetired";
         }
 
         private static void EnsureInitialized()

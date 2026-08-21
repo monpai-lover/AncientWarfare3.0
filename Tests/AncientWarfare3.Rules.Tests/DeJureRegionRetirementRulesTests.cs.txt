@@ -14,16 +14,37 @@ internal static class DeJureRegionRetirementRulesTests
             "non-member city cannot retire a region");
         False(DeJureRegionRetirementRules.CanRetire(true, true, true, true),
             "bandit stronghold cannot retire a region");
-        True(DeJureRegionRetirementRules.RequiresCapitalReplacement(true, true),
-            "capital region retirement requires a replacement seat");
-        False(DeJureRegionRetirementRules.RequiresCapitalReplacement(false, true),
-            "ordinary member does not require capital replacement");
+        Equal(DeJureRegionRemovalAction.RetireRegion,
+            DeJureRegionRetirementRules.ResolveRemovalAction(
+                true, true, true, true, false),
+            "regional capital retires the entire region");
+        Equal(DeJureRegionRemovalAction.UnassignCity,
+            DeJureRegionRetirementRules.ResolveRemovalAction(
+                true, true, true, false, false),
+            "ordinary member only loses its assignment");
+        Equal(DeJureRegionRemovalAction.None,
+            DeJureRegionRetirementRules.ResolveRemovalAction(
+                true, false, false, false, false),
+            "unassigned city is unchanged");
+        Equal(DeJureRegionRemovalAction.None,
+            DeJureRegionRetirementRules.ResolveRemovalAction(
+                true, true, true, false, true),
+            "bandit stronghold is unchanged");
         True(DeJureRegionRetirementRules.ShouldRepairEmptyRegion(true, false),
             "active old region without live members is repaired");
         False(DeJureRegionRetirementRules.ShouldRepairEmptyRegion(true, true),
             "non-empty player planned region is preserved");
         False(DeJureRegionRetirementRules.ShouldRepairEmptyRegion(false, false),
             "retired empty region is not processed twice");
+        True(DeJureRegionRetirementRules.ShouldAutoCreateCapitalSeat(
+                false, false),
+            "legacy unassigned capital receives a repaired state");
+        False(DeJureRegionRetirementRules.ShouldAutoCreateCapitalSeat(
+                false, true),
+            "explicitly removed capital stays unassigned");
+        False(DeJureRegionRetirementRules.ShouldAutoCreateCapitalSeat(
+                true, false),
+            "assigned capital does not receive a duplicate state");
 
         string power = Read("Code/content/GodPowerLibrary.cs");
         string service = Read("Code/core/court/DeJureRegionPowerService.cs");
@@ -34,13 +55,23 @@ internal static class DeJureRegionRetirementRulesTests
         Contains(power, "DE_JURE_REGION_RETIRE");
         Contains(service, "RetireMode");
         Contains(store, "RetireState");
+        Contains(store, "UnassignCity");
+        Contains(store, "DeJureCityUnassigned");
         Contains(store, "DeJureRegionRetired");
-        Contains(store, "capital_region_recreated");
+        Contains(store, "HasExplicitDeJureRemovalLocked");
         Contains(store, "RepairEmptyRegionsLocked");
         Contains(store, "DeJureEmptyRegionRepaired");
         Contains(tab, "DE_JURE_REGION_RETIRE");
         Contains(mapRules, "aw_de_jure_region_retire");
         Contains(csv, "aw_de_jure_region_retire,");
+        Contains(csv, "aw_de_jure_region_city_unassigned,");
+        Contains(csv, "aw_de_jure_region_no_assignment,");
+        Contains(csv, "aw_de_jure_region_stronghold_ineligible,");
+        Contains(service, "DeJureRegionRemovalAction.RetireRegion");
+        Contains(service, "DeJureRegionRemovalAction.UnassignCity");
+        DoesNotContain(service, "aw_de_jure_region_retire_selected");
+        DoesNotContain(service,
+            "aw_de_jure_region_retire_target_mismatch");
     }
 
     private static string Read(string relative) => File.ReadAllText(
@@ -54,6 +85,13 @@ internal static class DeJureRegionRetirementRulesTests
             throw new InvalidOperationException("source guard failed: " + needle);
     }
 
+    private static void DoesNotContain(string text, string needle)
+    {
+        if (text.Contains(needle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "source guard found obsolete text: " + needle);
+    }
+
     private static void True(bool value, string message)
     {
         if (!value) throw new InvalidOperationException(message);
@@ -62,5 +100,12 @@ internal static class DeJureRegionRetirementRulesTests
     private static void False(bool value, string message)
     {
         if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                                                expected + ", got " + actual);
     }
 }

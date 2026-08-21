@@ -32,10 +32,11 @@ aw_de_jure_region_description,使用神力创建或划分州法理,Create or ass
 aw_de_jure_region_create,建立州法理,Create de jure state,建立州法理
 aw_de_jure_region_assign,划入州法理,Assign to de jure state,劃入州法理
 aw_de_jure_region_retire,撤销州法理,Retire de jure state,撤銷州法理
-aw_de_jure_region_retire_selected,已选择要撤销的州法理,De jure state selected for retirement,已選擇要撤銷的州法理
 aw_de_jure_region_retired,州法理已撤销,De jure state retired,州法理已撤銷
+aw_de_jure_region_city_unassigned,已移除该郡的州法理归属,City removed from de jure state,已移除該郡的州法理歸屬
+aw_de_jure_region_no_assignment,该郡没有州法理归属,This city has no de jure assignment,該郡沒有州法理歸屬
+aw_de_jure_region_stronghold_ineligible,土匪寨不参与州法理,Bandit strongholds cannot have de jure assignments,土匪寨不參與州法理
 aw_de_jure_region_retire_invalid,请选择活动州法理成员城市,Select an active de jure member city,請選擇有效州法理成員城市
-aw_de_jure_region_retire_target_mismatch,请再次点击同一州法理成员,Click a member of the same de jure state again,請再次點擊同一州法理成員
 aw_de_jure_region_retire_failed,州法理撤销失败,Failed to retire de jure state,州法理撤銷失敗
 aw_de_jure_region_invalid_city,请选择有效城市,Select a valid city,請選擇有效城市
 aw_de_jure_region_create_failed,州法理创建失败,Failed to create de jure state,州法理建立失敗

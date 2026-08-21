@@ -21,13 +21,16 @@ namespace AncientWarfare3.core.court
         {
             pSuccess = false;
             City city = pTile?.zone?.city;
-            if (city?.data == null || city.isRekt() ||
-                !DeJureRegionEligibilityRules.CanParticipate(
-                    liveCity: true,
-                    banditStronghold:
-                    PeasantRebelBanditStrongholdService.IsStrongholdCity(
-                        city)))
+            if (city?.data == null || city.isRekt())
                 return "aw_de_jure_region_invalid_city";
+            bool banditStronghold =
+                PeasantRebelBanditStrongholdService.IsStrongholdCity(city);
+            if (!DeJureRegionEligibilityRules.CanParticipate(
+                    liveCity: true,
+                    banditStronghold: banditStronghold))
+                return pMode == RetireMode
+                    ? "aw_de_jure_region_stronghold_ineligible"
+                    : "aw_de_jure_region_invalid_city";
 
             if (pMode == CreateMode)
             {
@@ -46,29 +49,46 @@ namespace AncientWarfare3.core.court
 
             if (pMode == RetireMode)
             {
-                if (_targetRegionId < 0L)
-                {
-                    if (!DeJureRegionStore.TryGetForCity(city.data.id,
-                            out DeJureRegion selected))
-                        return "aw_de_jure_region_retire_invalid";
-                    _targetRegionId = selected.RegionId;
-                    pSuccess = true;
-                    return "aw_de_jure_region_retire_selected";
-                }
+                HierarchicalVassalMapModeService.PrepareForDeJureInteraction(
+                    city);
                 if (!DeJureRegionStore.TryGetForCity(city.data.id,
-                        out DeJureRegion target) ||
-                    target.RegionId != _targetRegionId)
-                    return "aw_de_jure_region_retire_target_mismatch";
-                if (!DeJureRegionStore.RetireState(city, out string error))
+                        out DeJureRegion region))
+                    return "aw_de_jure_region_no_assignment";
+                DeJureRegionRemovalAction action =
+                    DeJureRegionRetirementRules.ResolveRemovalAction(
+                        liveCity: true,
+                        activeRegion: region.Active,
+                        memberCity: region.MemberCityIds != null &&
+                                    region.MemberCityIds.Contains(city.data.id),
+                        isRegionCapital:
+                        region.SeatCityId == city.data.id,
+                        banditStronghold: false);
+                string error;
+                bool changed;
+                if (action == DeJureRegionRemovalAction.RetireRegion)
+                {
+                    changed = DeJureRegionStore.RetireState(city, out error);
+                }
+                else if (action == DeJureRegionRemovalAction.UnassignCity)
+                {
+                    changed = DeJureRegionStore.UnassignCity(city, out error);
+                }
+                else
+                {
+                    return "aw_de_jure_region_no_assignment";
+                }
+                if (!changed)
                     return error == "region_missing"
-                        ? "aw_de_jure_region_retire_invalid"
+                        ? "aw_de_jure_region_no_assignment"
                         : "aw_de_jure_region_retire_failed";
                 _targetRegionId = -1L;
                 pSuccess = true;
                 HierarchicalVassalMapModeService.MarkHierarchyDirty(
                     city.kingdom);
                 HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
-                return "aw_de_jure_region_retired";
+                return action == DeJureRegionRemovalAction.RetireRegion
+                    ? "aw_de_jure_region_retired"
+                    : "aw_de_jure_region_city_unassigned";
             }
 
             if (pMode != AssignMode) return "aw_de_jure_region_invalid_mode";
