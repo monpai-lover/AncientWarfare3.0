@@ -20,6 +20,7 @@ namespace AncientWarfare3.ui.windows
         private static bool _selectionHereditary = true;
         private static string _selectionTitle = "";
         private static Action<string, bool> _selectionCallback;
+        private static Action _selectionCancelCallback;
         private Vector2 _windowSize = DefaultSize;
         private WideWindowChrome _chrome;
         private RectTransform _root;
@@ -40,19 +41,22 @@ namespace AncientWarfare3.ui.windows
             _actorId = pActorId;
             _selectionMode = false;
             _selectionCallback = null;
+            _selectionCancelCallback = null;
             if (Instance == null) CreateAndInit(GrantWindowId);
             AW_LineageWindowIds.SafeShow(GrantWindowId,
                 () => Instance?.Refresh());
         }
 
         internal static void OpenForSelection(string pInitialTitle,
-            bool pHereditary, Action<string, bool> pCallback)
+            bool pHereditary, Action<string, bool> pCallback,
+            Action pCancelCallback = null)
         {
             _actorId = -1L;
             _selectionMode = true;
             _selectionTitle = pInitialTitle ?? "";
             _selectionHereditary = pHereditary;
             _selectionCallback = pCallback;
+            _selectionCancelCallback = pCancelCallback;
             if (Instance == null) CreateAndInit(GrantWindowId);
             AW_LineageWindowIds.SafeShow(GrantWindowId,
                 () => Instance?.Refresh());
@@ -161,6 +165,7 @@ namespace AncientWarfare3.ui.windows
                 bool hereditary = _isHereditary;
                 _selectionMode = false;
                 _selectionCallback = null;
+                _selectionCancelCallback = null;
                 _selectionTitle = "";
                 GetComponent<ScrollWindow>()?.clickHide();
                 callback?.Invoke(title, hereditary);
@@ -191,7 +196,16 @@ namespace AncientWarfare3.ui.windows
 
         private void Cancel()
         {
-            if (!_pending) GetComponent<ScrollWindow>()?.clickHide();
+            if (_pending) return;
+            Action cancelCallback = _selectionMode
+                ? _selectionCancelCallback
+                : null;
+            _selectionMode = false;
+            _selectionCallback = null;
+            _selectionCancelCallback = null;
+            _selectionTitle = "";
+            GetComponent<ScrollWindow>()?.clickHide();
+            cancelCallback?.Invoke();
         }
 
         private void CycleHereditary()

@@ -182,6 +182,20 @@ namespace AncientWarfare3.core.lineage
                    !heir;
         }
 
+        public static bool ShouldPreferOrdinaryRuler(
+            bool ordinaryResidentAvailable)
+        {
+            return ordinaryResidentAvailable;
+        }
+
+        public static bool CanUseCityLeaderAsRuler(
+            bool cityLeaderAlive, bool cityLeaderAdult,
+            bool cityLeaderBelongsToMotherCity)
+        {
+            return cityLeaderAlive && cityLeaderAdult &&
+                   cityLeaderBelongsToMotherCity;
+        }
+
         public static bool ShouldTransferFallenSurvivor(
             bool actorAlive, bool actorBelongsToBanditKingdom,
             bool destinationKingdomValid, bool destinationIsBanditKingdom)

@@ -21,6 +21,8 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         CountsOnlyLivingStrongholdResidents();
         QueuesEveryTrulyEmptyActiveStronghold();
         RelocatesOnlyOrdinaryResidents();
+        PrefersOrdinaryResidentsForRuler();
+        AllowsEligibleCityLeaderFallbackRuler();
         TransfersFallenSurvivorsToTheMotherRealm();
         ComposesStrongholdNamesAndTitles();
     }
@@ -188,6 +190,36 @@ internal static class PeasantRebelBanditStrongholdRulesTests
                 CanRelocateOrdinaryResident(false, true, false, false,
                     false),
             "a child cannot found or populate the new stronghold");
+    }
+
+    private static void PrefersOrdinaryResidentsForRuler()
+    {
+        True(PeasantRebelBanditStrongholdRules.
+                ShouldPreferOrdinaryRuler(true),
+            "an eligible ordinary resident takes precedence over the city leader");
+        False(PeasantRebelBanditStrongholdRules.
+                ShouldPreferOrdinaryRuler(false),
+            "the city leader fallback is only considered when no ordinary resident exists");
+    }
+
+    private static void AllowsEligibleCityLeaderFallbackRuler()
+    {
+        True(PeasantRebelBanditStrongholdRules.CanUseCityLeaderAsRuler(
+                cityLeaderAlive: true, cityLeaderAdult: true,
+                cityLeaderBelongsToMotherCity: true),
+            "a living adult leader of the mother city may found the bandit realm");
+        False(PeasantRebelBanditStrongholdRules.CanUseCityLeaderAsRuler(
+                cityLeaderAlive: false, cityLeaderAdult: true,
+                cityLeaderBelongsToMotherCity: true),
+            "a dead city leader cannot found the bandit realm");
+        False(PeasantRebelBanditStrongholdRules.CanUseCityLeaderAsRuler(
+                cityLeaderAlive: true, cityLeaderAdult: false,
+                cityLeaderBelongsToMotherCity: true),
+            "a child city leader cannot found the bandit realm");
+        False(PeasantRebelBanditStrongholdRules.CanUseCityLeaderAsRuler(
+                cityLeaderAlive: true, cityLeaderAdult: true,
+                cityLeaderBelongsToMotherCity: false),
+            "an unrelated city leader cannot be used as the fallback ruler");
     }
 
     private static void AllowsStrongholdCreationWhenGateTowersCannotBePlaced()

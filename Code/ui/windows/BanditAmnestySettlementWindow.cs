@@ -111,7 +111,15 @@ namespace AncientWarfare3.ui.windows
         {
             _rewardKind = BanditAmnestyRewardKind.VirtualTitle;
             VirtualNobleTitleGrantWindow.OpenForSelection(
-                _titleInput?.text ?? "", _hereditary, OnTitleSelected);
+                _titleInput?.text ?? "", _hereditary, OnTitleSelected,
+                OnTitleSelectionCancelled);
+        }
+
+        private void OnTitleSelectionCancelled()
+        {
+            AW_LineageWindowIds.SafeShow(
+                AW_LineageWindowIds.BANDIT_AMNESTY_SETTLEMENT,
+                () => Refresh());
         }
 
         private void OnTitleSelected(string pTitle, bool pHereditary)

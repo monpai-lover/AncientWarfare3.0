@@ -385,6 +385,10 @@ namespace AncientWarfare3.core.lineage
                     out pFailureKey))
                 return false;
 
+            bool rulerWasMotherCityLeader = pMother.leader == ruler;
+            if (rulerWasMotherCityLeader)
+                pMother.removeLeader();
+
             try
             {
                 Kingdom bandit = World.world.kingdoms.makeNewCivKingdom(
@@ -430,6 +434,9 @@ namespace AncientWarfare3.core.lineage
                     if (bandit?.data != null && !bandit.isRekt())
                     {
                         ruler.joinCity(pMother);
+                        if (rulerWasMotherCityLeader &&
+                            pMother.leader != ruler)
+                            pMother.setLeader(ruler, pNew: true);
                         PrepareBanditKingdomRemoval(
                             bandit, origin, pMother, null, ruler);
                         World.world.kingdoms.removeObject(bandit);
@@ -446,6 +453,9 @@ namespace AncientWarfare3.core.lineage
                 if (pBandit?.data != null && !pBandit.isRekt())
                 {
                     ruler.joinCity(pMother);
+                    if (rulerWasMotherCityLeader &&
+                        pMother.leader != ruler)
+                        pMother.setLeader(ruler, pNew: true);
                     PrepareBanditKingdomRemoval(
                         pBandit, origin, pMother, null, ruler);
                     World.world.kingdoms.removeObject(pBandit);
@@ -519,9 +529,27 @@ namespace AncientWarfare3.core.lineage
         private static Actor SelectDirectRuler(City pMother)
         {
             Kingdom origin = pMother?.kingdom;
-            return pMother?.units?.Where(actor =>
+            Actor ordinary = pMother?.units?.Where(actor =>
                     IsOrdinaryResident(actor, origin))
                 .OrderBy(actor => actor.getID()).FirstOrDefault();
+            if (PeasantRebelBanditStrongholdRules.ShouldPreferOrdinaryRuler(
+                    ordinary != null))
+                return ordinary;
+
+            Actor cityLeader = pMother?.leader;
+            bool alive = false;
+            bool adult = false;
+            try
+            {
+                alive = cityLeader != null && cityLeader.isAlive() &&
+                    !cityLeader.isRekt();
+                adult = alive && cityLeader.isAdult();
+            }
+            catch { }
+            return PeasantRebelBanditStrongholdRules.CanUseCityLeaderAsRuler(
+                    alive, adult, cityLeader?.city == pMother)
+                ? cityLeader
+                : null;
         }
 
         internal static City ResolveStronghold(Kingdom pKingdom)
