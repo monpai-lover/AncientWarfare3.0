@@ -140,6 +140,7 @@ namespace AncientWarfare3.patch
             CoalitionWarTaskService.OnWarStarted(__result);
             DiplomacyConversationService.RecordWarStarted(__result);
             VassalMapModeService.DirtyMapIfActive();
+            HierarchicalVassalMapModeService.MarkHierarchyDirty();
             ArmyRtsPlanSnapshotService.OnWarStarted(__result);
 
             Kingdom atk = __result.getMainAttacker();
@@ -336,6 +337,7 @@ namespace AncientWarfare3.patch
                 ModClass.LogWarning("Coalition truce registration failed for war " +
                                     pWar.data.id + ".");
             VassalMapModeService.DirtyMapIfActive();
+            HierarchicalVassalMapModeService.MarkHierarchyDirty();
             ArmyRtsPlanSnapshotService.OnWarEnded(pWar);
 
             Kingdom atk = pWar.getMainAttacker();
@@ -369,6 +371,7 @@ namespace AncientWarfare3.patch
             WartimeGarrisonService.OnKingdomWarStateChanged(pKingdom);
             TemporarySlaveVanguardService.OnEmergencyChanged(pKingdom);
             VassalMapModeService.DirtyMapIfActive();
+            HierarchicalVassalMapModeService.MarkHierarchyDirty();
         }
 
         private static void RecordNativeZhuluStart(War pWar)
@@ -460,6 +463,7 @@ namespace AncientWarfare3.patch
             WartimeGarrisonService.OnKingdomWarStateChanged(pKingdom);
             TemporarySlaveVanguardService.OnEmergencyChanged(pKingdom);
             VassalMapModeService.DirtyMapIfActive();
+            HierarchicalVassalMapModeService.MarkHierarchyDirty();
         }
 
         private static bool CanJoin(War pWar, Kingdom pKingdom,

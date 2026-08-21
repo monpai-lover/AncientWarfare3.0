@@ -134,10 +134,23 @@ namespace AncientWarfare3.ui.windows
             AddPlain(
                 AW_L10n.Text("aw_mandate_kingdom", "\u5929\u547D\u56FD") + ": " + RichName(pReport.kingdom_name, color) +
                 "  " + AW_L10n.Text("aw_mandate_emperor", "\u5929\u547D\u7687\u5E1D") + ": " + pReport.emperor_name);
-            AddPlain(
-                AW_L10n.Text("aw_mandate_value", "\u5929\u547D\u503C") + ": " + pReport.mandate_value +
-                "  " + AW_L10n.Text("aw_mandate_authority", "\u7687\u6743") + ": " + pReport.imperial_authority +
-                "  " + AW_L10n.Text("aw_mandate_crisis", "\u5929\u547D\u72B6\u6001") + ": " + CrisisText(pReport.crisis_level));
+            string mandateTitle = AW_L10n.Text("aw_mandate_value",
+                "\u5929\u547D\u503C");
+            AddItemToList(new HistoryRow
+            {
+                width = ROW_WIDTH,
+                dynasty_index = -1,
+                reign_index = -1,
+                text = mandateTitle + ": " + pReport.mandate_value +
+                       "  " + AW_L10n.Text("aw_mandate_authority",
+                           "\u7687\u6743") + ": " +
+                       pReport.imperial_authority + "  " +
+                       AW_L10n.Text("aw_mandate_crisis",
+                           "\u5929\u547D\u72B6\u6001") + ": " +
+                       CrisisText(pReport.crisis_level),
+                tooltip_title = mandateTitle,
+                tooltip_desc = BuildAnnualMandateTooltip(pReport)
+            });
             AddPlain(
                 AW_L10n.Text("aw_mandate_core_control", "\u6CD5\u7406\u63A7\u5236") + ": " +
                 pReport.controlled_core_count + "/" + pReport.core_count + " " +
@@ -374,6 +387,69 @@ namespace AncientWarfare3.ui.windows
                    "\n" + AW_L10n.Text("aw_mandate_claimant", "\u5BA3\u79F0") + ": " + ClaimantText(pReport.claimant_kind) +
                    "\n" + phaseSummary +
                    "\n" + BuildSacrificeSummary("\n");
+        }
+
+        private static string BuildAnnualMandateTooltip(
+            MandateReport pReport)
+        {
+            MandateAnnualDeltaBreakdown breakdown =
+                MandateService.ReadYearlyDeltaBreakdown(
+                    MandateService.GetCurrentMandateKingdom(), pReport);
+            var lines = new List<string>
+            {
+                AW_L10n.Text("aw_mandate_annual_current",
+                    "\u5F53\u524D\u5929\u547D\u503C") + ": " +
+                pReport.mandate_value
+            };
+            foreach (MandateAnnualDeltaEntry entry in breakdown.Entries)
+                lines.Add(AnnualSourceText(entry.SourceId) + ": " +
+                          Signed(entry.Delta));
+            lines.Add(AW_L10n.Text("aw_mandate_annual_net",
+                          "\u9884\u8BA1\u5E74\u5EA6\u53D8\u5316") + ": " +
+                      Signed(breakdown.Total));
+            lines.Add(AW_L10n.Text("aw_mandate_annual_forecast_note",
+                "\u4E0B\u4E00\u5E74\u5EA6\u7ED3\u7B97\u65F6\u751F\u6548\uFF0C\u671F\u95F4\u5C40\u52BF\u53D8\u5316\u4F1A\u540C\u6B65\u66F4\u65B0\u9884\u6D4B\u3002"));
+            return string.Join("\n", lines);
+        }
+
+        private static string AnnualSourceText(string pSourceId)
+        {
+            switch (pSourceId)
+            {
+                case "war": return AW_L10n.Text(
+                    "aw_mandate_annual_source_war", "\u5904\u4E8E\u6218\u4E89");
+                case "peace": return AW_L10n.Text(
+                    "aw_mandate_annual_source_peace", "\u5929\u4E0B\u65E0\u4E8B");
+                case "strongest_power": return AW_L10n.Text(
+                    "aw_mandate_annual_source_power", "\u5F3A\u56FD\u5A01\u80C1");
+                case "core_control_high": return AW_L10n.Text(
+                    "aw_mandate_annual_source_core_high", "\u6CD5\u7406\u638C\u63A7\u7A33\u56FA");
+                case "core_control_low": return AW_L10n.Text(
+                    "aw_mandate_annual_source_core_low", "\u6CD5\u7406\u638C\u63A7\u4E0D\u8DB3");
+                case "vassal_loyalty_high": return AW_L10n.Text(
+                    "aw_mandate_annual_source_vassal_high", "\u8BF8\u4FAF\u5F52\u5FC3");
+                case "vassal_loyalty_low": return AW_L10n.Text(
+                    "aw_mandate_annual_source_vassal_low", "\u8BF8\u4FAF\u79BB\u5FC3");
+                case "heir_scarcity": return AW_L10n.Text(
+                    "aw_mandate_annual_source_heir", "\u7687\u55E3\u7A00\u8584");
+                case "sacrifice": return AW_L10n.Text(
+                    "aw_mandate_annual_source_sacrifice", "\u5927\u7940\u5E74\u6548");
+                case "historical_emperor": return AW_L10n.Text(
+                    "aw_mandate_annual_source_figure", "\u82F1\u4E3B\u5728\u4F4D");
+                case "young_emperor": return AW_L10n.Text(
+                    "aw_mandate_annual_source_young", "\u5929\u5B50\u5E74\u5E7C");
+                case "low_intelligence": return AW_L10n.Text(
+                    "aw_mandate_annual_source_intelligence", "\u5929\u5B50\u667A\u7565\u4E0D\u8DB3");
+                case "high_diplomacy": return AW_L10n.Text(
+                    "aw_mandate_annual_source_diplomacy", "\u5929\u5B50\u5916\u4EA4\u51FA\u4F17");
+                case "high_stewardship": return AW_L10n.Text(
+                    "aw_mandate_annual_source_stewardship", "\u5929\u5B50\u6CBB\u653F\u51FA\u4F17");
+                case "prosperous_era": return AW_L10n.Text(
+                    "aw_mandate_annual_source_era_good", "\u76DB\u4E16\u5929\u65F6");
+                case "dark_era": return AW_L10n.Text(
+                    "aw_mandate_annual_source_era_bad", "\u4E71\u4E16\u5929\u65F6");
+                default: return pSourceId ?? "";
+            }
         }
 
         private static string BuildPhaseSummary(string pSeparator)

@@ -234,3 +234,22 @@ aw_hist_jingnan_victory_mid,靖难得胜，入主, won the Jingnan campaign and 
 aw_hist_jingnan_victory_suffix,，本朝易主而国统不绝,; the dynasty changed ruler without breaking state continuity,，本朝易主而國統不絕
 aw_hist_jingnan_stalemate_mid,靖难未决，仍据地自立为, ended the Jingnan without decision and retained the claimant realm of ,靖難未決，仍據地自立為
 aw_hist_jingnan_stalemate_suffix,，天下遂入乱世,; the realm entered an age of disorder,，天下遂入亂世
+aw_mandate_annual_current,当前天命值,Current Mandate,當前天命值
+aw_mandate_annual_net,预计年度变化,Estimated Annual Change,預計年度變化
+aw_mandate_annual_forecast_note,下一年度结算时生效；期间局势变化会同步更新预测。,Applied at the next annual settlement; changes during the year update this forecast.,下一年度結算時生效；期間局勢變化會同步更新預測。
+aw_mandate_annual_source_war,处于战争,At War,處於戰爭
+aw_mandate_annual_source_peace,天下无事,Realm at Peace,天下無事
+aw_mandate_annual_source_power,强国威胁,Great Power Pressure,強國威脅
+aw_mandate_annual_source_core_high,法理掌控稳固,Strong Legal Core Control,法理掌控穩固
+aw_mandate_annual_source_core_low,法理掌控不足,Weak Legal Core Control,法理掌控不足
+aw_mandate_annual_source_vassal_high,诸侯归心,Loyal Vassals,諸侯歸心
+aw_mandate_annual_source_vassal_low,诸侯离心,Disloyal Vassals,諸侯離心
+aw_mandate_annual_source_heir,皇嗣稀薄,Heir Scarcity,皇嗣稀薄
+aw_mandate_annual_source_sacrifice,大祀年效,Grand Sacrifice,大祀年效
+aw_mandate_annual_source_figure,英主在位,Illustrious Emperor,英主在位
+aw_mandate_annual_source_young,天子年幼,Young Emperor,天子年幼
+aw_mandate_annual_source_intelligence,天子智略不足,Low Imperial Intelligence,天子智略不足
+aw_mandate_annual_source_diplomacy,天子外交出众,High Imperial Diplomacy,天子外交出眾
+aw_mandate_annual_source_stewardship,天子治政出众,High Imperial Stewardship,天子治政出眾
+aw_mandate_annual_source_era_good,盛世天时,Prosperous World Era,盛世天時
+aw_mandate_annual_source_era_bad,乱世天时,Calamitous World Era,亂世天時

@@ -1966,42 +1966,64 @@ namespace AncientWarfare3.core.lineage
 
         private static int CalculateYearlyDelta(Kingdom pKingdom, MandateReport pReport)
         {
-            int delta = 0;
-            try { delta += pKingdom.hasEnemies() ? -2 : 1; } catch { delta += 1; }
-            delta += CalculateStrongestPowerPenalty(pKingdom);
-            if (pReport.core_control >= 0.85f) delta += 2;
-            else if (pReport.core_control < 0.5f) delta -= 4;
-            if (pReport.vassal_loyalty >= 0.7f) delta += 1;
-            else if (pReport.vassal_loyalty < 0.35f) delta -= 2;
-            delta += HeirService.GetMandateChildScarcityPenalty(pKingdom);
+            return ReadYearlyDeltaBreakdown(pKingdom, pReport).Total;
+        }
+
+        internal static MandateAnnualDeltaBreakdown ReadYearlyDeltaBreakdown(
+            Kingdom pKingdom, MandateReport pReport)
+        {
+            pReport ??= ReadReport();
+            if (pKingdom?.data == null)
+                return new MandateAnnualDeltaBreakdown(
+                    Array.Empty<MandateAnnualDeltaEntry>(), 0);
+            var facts = new MandateAnnualDeltaFacts
+            {
+                CoreControl = pReport.core_control,
+                VassalLoyalty = pReport.vassal_loyalty,
+                StrongestPowerPenalty =
+                    CalculateStrongestPowerPenalty(pKingdom),
+                ChildScarcityPenalty =
+                    HeirService.GetMandateChildScarcityPenalty(pKingdom)
+            };
+            try { facts.AtWar = pKingdom.hasEnemies(); }
+            catch { facts.AtWar = false; }
             pKingdom.data.get(LineageKeys.MANDATE_SACRIFICE_BUFF_UNTIL,
                 out int sacrificeBuffUntil, int.MinValue);
             pKingdom.data.get(LineageKeys.MANDATE_SACRIFICE_BUFF_DELTA,
                 out int sacrificeBuffDelta, 0);
-            delta += MandateSacrificeRules.ActiveAnnualDelta(
+            facts.SacrificeAnnualDelta = MandateSacrificeRules.ActiveAnnualDelta(
                 Date.getCurrentYear(), sacrificeBuffUntil, sacrificeBuffDelta);
 
             Actor king = pKingdom.king;
             if (king?.data != null)
             {
-                if (king.hasTrait("first") || king.hasTrait("figure")) delta += 5;
-                try { if (king.getAge() <= 24) delta -= 1; } catch { }
-                try { if (king.stats["intelligence"] <= 5f) delta -= 1; } catch { }
-                try { if (king.stats["diplomacy"] >= 12f) delta += 1; } catch { }
-                try { if (king.stats["stewardship"] >= 12f) delta += 1; } catch { }
+                facts.KingIsHistoricalFigure =
+                    king.hasTrait("first") || king.hasTrait("figure");
+                try { facts.KingIsYoung = king.getAge() <= 24; }
+                catch { }
+                try
+                {
+                    facts.KingHasLowIntelligence =
+                        king.stats["intelligence"] <= 5f;
+                }
+                catch { }
+                try
+                {
+                    facts.KingHasHighDiplomacy =
+                        king.stats["diplomacy"] >= 12f;
+                }
+                catch { }
+                try
+                {
+                    facts.KingHasHighStewardship =
+                        king.stats["stewardship"] >= 12f;
+                }
+                catch { }
             }
 
-            try
-            {
-                string eraId = World.world_era?.id ?? "";
-                if (eraId == "age_hope" || eraId == "age_wonders")
-                    delta += 2;
-                if (eraId == "age_despair" || eraId == "age_ash" || eraId == "age_chaos")
-                    delta -= 12;
-            }
+            try { facts.EraId = World.world_era?.id ?? ""; }
             catch { }
-
-            return delta;
+            return MandateAnnualDeltaRules.Calculate(facts);
         }
 
         private static int CalculateAuthority(Kingdom pKingdom, int pMandate, float pCoreControl, float pVassalLoyalty)
