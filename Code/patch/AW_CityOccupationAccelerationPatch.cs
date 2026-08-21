@@ -256,6 +256,8 @@ namespace AncientWarfare3.patch
                     __state.OldOwner);
                 KingdomWarDirectorService.OnCityControlChanged(__instance,
                     __instance.kingdom, __state.OldOwner);
+                ZhuluCapitalBreakthroughService.TryApplyAfterCapture(
+                    __instance, __instance?.kingdom);
                 if (__state.Direct && __instance?.kingdom ==
                     __state.Capturer)
                 {

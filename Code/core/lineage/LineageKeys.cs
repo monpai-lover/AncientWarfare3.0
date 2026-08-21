@@ -933,6 +933,8 @@ namespace AncientWarfare3.core.lineage
             "aw_zhulu_declared_defender_name";
         public const string ZHULU_DECLARED_DEFENDER_COLOR =
             "aw_zhulu_declared_defender_color";
+        public const string ZHULU_CAPITAL_BREAKTHROUGH_KEYS =
+            "aw_zhulu_capital_breakthrough_keys";
     }
 
     internal static class SuccessionMode
