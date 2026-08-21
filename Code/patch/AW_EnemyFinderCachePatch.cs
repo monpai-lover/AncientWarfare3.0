@@ -28,7 +28,7 @@ internal static class AW_EnemyFinderCachePatch
         int pRange,
         ref EnemyFinderData __result)
     {
-        if (__instance == null || pChunk == null ||
+        if (__instance == null || pChunk == null || pChunk.objects == null ||
             __instance.dict_data == null)
         {
             __result = AWEnemyPresenceCache.SharedEmptyResult;
@@ -69,8 +69,14 @@ internal static class AW_EnemyFinderCachePatch
             return false;
         }
 
+        if (kingdom == null || kingdom.asset == null)
+        {
+            __result = AWEnemyPresenceCache.SharedEmptyResult;
+            RecordRecoveredNullReference();
+            return false;
+        }
+
         if (!AWEnemyPresenceCache.IsPreparationActive ||
-            kingdom == null ||
             AWEnemyPresenceCache.HasPopulatedEnemy(kingdom))
         {
             return true;
@@ -81,6 +87,21 @@ internal static class AW_EnemyFinderCachePatch
             key,
             pRange);
         __result = AWEnemyPresenceCache.SharedEmptyResult;
+        return false;
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(EnemiesFinder), "findEnemiesFrom")]
+    private static bool FindEnemiesFromPrefix(
+        WorldTile pTile,
+        Kingdom pKingdom,
+        ref EnemyFinderData __result)
+    {
+        if (pTile != null && pKingdom != null && pKingdom.asset != null)
+            return true;
+
+        __result = AWEnemyPresenceCache.SharedEmptyResult;
+        RecordRecoveredNullReference();
         return false;
     }
 
@@ -117,9 +138,23 @@ internal static class AW_EnemyFinderCachePatch
     private static void clearContainer(
         EnemyFinderContainer __instance)
     {
+        if (__instance == null)
+            return;
+
+        Kingdom kingdom;
+        try
+        {
+            kingdom = KingdomField(__instance);
+        }
+        catch (NullReferenceException)
+        {
+            return;
+        }
+        if (kingdom == null)
+            return;
         AWEnemyPresenceCache
             .ClearNegativeKeys(
-                KingdomField(__instance));
+                kingdom);
     }
 
     [HarmonyPostfix]

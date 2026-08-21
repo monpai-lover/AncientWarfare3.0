@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.content;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.presentation;
 using HarmonyLib;
@@ -15,6 +16,11 @@ namespace AncientWarfare3.patch
         public static bool GetUnitTexturePathPrefix(Actor __instance,
             ref string __result)
         {
+            if (TryGetBanditKingTexturePath(__instance, out __result))
+                return false;
+            if (TryGetBanditCivilianTexturePath(__instance, out __result))
+                return false;
+
             ActorVisualRole role = ActorVisualRoleResolver.Resolve(__instance);
             if (role == ActorVisualRole.Default ||
                 !TryGetRoleTexturePath(__instance, role, out __result))
@@ -27,6 +33,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), "checkSpriteHead")]
         public static bool CheckSpriteHeadPrefix(Actor __instance)
         {
+            if (ShouldUseBanditKingHead(__instance))
+                return ApplyBanditKingHead(__instance);
             if (ShouldUseBanditHead(__instance))
                 return ApplyBanditHead(__instance);
             ActorVisualRole role = ActorVisualRoleResolver.Resolve(__instance);
@@ -191,6 +199,64 @@ namespace AncientWarfare3.patch
                 : pTextureAsset.texture_path_base_male;
         }
 
+        private static bool TryGetBanditCivilianTexturePath(Actor pActor,
+            out string pPath)
+        {
+            pPath = null;
+            if (pActor?.asset == null || pActor.isEgg() || pActor.isBaby() ||
+                pActor.isWarrior() || pActor.isKing() ||
+                pActor.isCityLeader() ||
+                !string.Equals(pActor.asset.id, XiaRace.ID,
+                    System.StringComparison.Ordinal))
+                return false;
+
+            bool bandit;
+            try
+            {
+                bandit = PeasantRebelRouteService.IsBandit(pActor.kingdom);
+            }
+            catch
+            {
+                return false;
+            }
+            if (!bandit) return false;
+
+            ActorTextureSubAsset textureAsset = pActor.getTextureAsset();
+            if (textureAsset == null || !textureAsset.has_advanced_textures)
+                return false;
+
+            pPath = textureAsset.texture_path_base +
+                (pActor.isSexFemale() ? "bandit_female" : "bandit_male");
+            return true;
+        }
+
+        private static bool TryGetBanditKingTexturePath(Actor pActor,
+            out string pPath)
+        {
+            pPath = null;
+            if (pActor?.asset == null || pActor.isEgg() || pActor.isBaby() ||
+                !pActor.isKing() ||
+                !string.Equals(pActor.asset.id, XiaRace.ID,
+                    System.StringComparison.Ordinal))
+                return false;
+
+            try
+            {
+                if (!PeasantRebelRouteService.IsBandit(pActor.kingdom))
+                    return false;
+            }
+            catch
+            {
+                return false;
+            }
+
+            ActorTextureSubAsset textureAsset = pActor.getTextureAsset();
+            if (textureAsset == null || !textureAsset.has_advanced_textures)
+                return false;
+            pPath = textureAsset.texture_path_base + "bandit_general";
+            return true;
+        }
+
         private static void ApplyHeadId(Actor pActor, Sprite[] pHeads)
         {
             if (pActor?.data == null || pHeads == null || pHeads.Length == 0)
@@ -221,6 +287,42 @@ namespace AncientWarfare3.patch
                 textureAsset.texture_path_base +
                 XiaBanditHeadRules.ResolveHeadPath(pActor.data.id));
             return false;
+        }
+
+        private static bool ApplyBanditKingHead(Actor pActor)
+        {
+            if (pActor?.data == null || !pActor.dirty_sprite_head)
+                return false;
+            pActor.dirty_sprite_head = false;
+            AnimationContainerUnit container = pActor.animation_container;
+            if (pActor.frame_data == null || !pActor.frame_data.show_head ||
+                container == null || container.heads == null ||
+                container.heads.Length == 0 || pActor.isEgg() ||
+                (pActor.isBaby() && !container.render_heads_for_children))
+                return false;
+            ActorTextureSubAsset textureAsset = pActor.getTextureAsset();
+            if (textureAsset == null) return false;
+
+            pActor.cached_sprite_head = ActorAnimationLoader.getHeadSpecial(
+                textureAsset.texture_path_base +
+                "heads_special/head_bandit_general");
+            return false;
+        }
+
+        private static bool ShouldUseBanditKingHead(Actor pActor)
+        {
+            if (pActor?.asset == null || !pActor.isKing() ||
+                !string.Equals(pActor.asset.id, XiaRace.ID,
+                    System.StringComparison.Ordinal))
+                return false;
+            try
+            {
+                return PeasantRebelRouteService.IsBandit(pActor.kingdom);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static bool ShouldUseBanditHead(Actor pActor)

@@ -38,6 +38,15 @@ namespace AncientWarfare3.patch
             catch { }
             try { synthetic = SyntheticLevyService.IsSynthetic(actor); }
             catch { }
+            bool banditKing = actor != null && actor.isKing() && bandit;
+            if (banditKing)
+            {
+                Sprite banditKingHead = ActorAnimationLoader.getHeadSpecial(
+                    tex.texture_path_base +
+                    "heads_special/head_bandit_general");
+                if (banditKingHead != null) __result = banditKingHead;
+                return;
+            }
             if (XiaBanditHeadRules.ShouldUse(pAsset.id, bandit, synthetic))
             {
                 string banditHeadPath = tex.texture_path_base +
