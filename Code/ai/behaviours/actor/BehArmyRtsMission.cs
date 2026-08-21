@@ -37,7 +37,8 @@ namespace AncientWarfare3.ai.behaviours.actor
                 pActor?.makeWait(0.1f);
                 return BehResult.RepeatStep;
             }
-            if (target == pActor?.current_tile)
+            if (target?.data != null &&
+                target.data.tile_id == pActor?.current_tile?.data?.tile_id)
             {
                 pActor.makeWait(0.1f);
                 return BehResult.RepeatStep;

@@ -94,9 +94,20 @@ namespace AncientWarfare3.ai.behaviours.actor
                 pActor?.makeWait(0.15f);
                 return BehResult.RepeatStep;
             }
-            if (target == pActor.current_tile)
+            if (target?.data == null ||
+                pActor?.current_tile?.data == null ||
+                target.data.tile_id == pActor.current_tile.data.tile_id)
             {
                 pActor.makeWait(0.15f);
+                return BehResult.RepeatStep;
+            }
+            if (ArmyRtsControllerService.ShouldHandleCaptainTransport(
+                    pActor) &&
+                ArmyRtsTransportService.TryHandleActor(
+                    pActor, target, pMayBegin: true,
+                    pForceTransport: true))
+            {
+                pActor.makeWait(0.2f);
                 return BehResult.RepeatStep;
             }
             pActor.beh_tile_target = target;

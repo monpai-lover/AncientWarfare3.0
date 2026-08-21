@@ -35,6 +35,11 @@ namespace AncientWarfare3.patch
             ref ExecuteEvent __result)
         {
             if (!PathfindingOwnershipService.ShouldIntercept) return true;
+            // Temporary RTS transports use the native boat path cursor. The
+            // voyage state still owns the boat, but the custom actor bridge
+            // must not consume or replace its native water path.
+            if (ArmyRtsTransportService.OwnsTransportBoat(__instance))
+                return true;
             if (ArmyRtsControllerService.
                     ShouldUseNativeMilitaryPath(__instance))
             {
@@ -122,6 +127,8 @@ namespace AncientWarfare3.patch
         private static bool UpdatePathMovement_Prefix(Actor __instance)
         {
             if (!PathfindingOwnershipService.ShouldIntercept) return true;
+            if (ArmyRtsTransportService.OwnsTransportBoat(__instance))
+                return true;
             if (__instance != null &&
                 (__instance.isFollowingLocalPath() || __instance.current_path_global != null)) return true;
             if (!AWPathMovementBridge.HasOwnership(__instance)) return true;

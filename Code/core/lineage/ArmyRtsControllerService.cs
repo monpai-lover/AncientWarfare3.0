@@ -2193,9 +2193,11 @@ namespace AncientWarfare3.core.lineage
             Army army = pActor.army;
             if (!Controllers.TryGet(army.id,
                     out ArmyRtsControllerRecord record)) return false;
+            if (!RuntimeByArmy.TryGetValue(army.id,
+                    out RuntimeState runtime)) return false;
             City targetCity = FindCity(record?.Mission?.TargetCityId ?? -1L);
-            try { pTarget = targetCity?.getTile(); }
-            catch { pTarget = null; }
+            pTarget = ResolveStableStrategicEndpoint(army, targetCity,
+                runtime);
             return pTarget?.data != null;
         }
 
@@ -2209,10 +2211,7 @@ namespace AncientWarfare3.core.lineage
                 !Controllers.TryGet(army.id,
                     out ArmyRtsControllerRecord record)) return false;
             City targetCity = FindCity(record?.Mission?.TargetCityId ?? -1L);
-            City currentCity = null;
-            try { currentCity = pCaptain.current_tile?.zone?.city; }
-            catch { }
-            return currentCity == targetCity &&
+            return targetCity?.data != null &&
                    FindCaptainCombatTarget(pCaptain) == null;
         }
 

@@ -663,7 +663,10 @@ namespace AncientWarfare3.core.lineage
             pSubmitResult = ExecuteEvent.False;
             if (pActor?.data == null || pTarget?.data == null) return;
             bool exactTarget = SameTile(pActor.tile_target, pTarget);
-            if (exactTarget && AWPathMovementBridge.HasOwnership(pActor))
+            // Native boat paths are not represented by AW ownership. Once the
+            // original boat path has accepted this target, keep it alive
+            // instead of submitting goTo again every P0 frame.
+            if (exactTarget && pActor.asset?.is_boat == true)
             {
                 pSubmitResult = ExecuteEvent.True;
                 return;
@@ -685,6 +688,23 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 pActor.updateParallelChecks(pCycleElapsed);
+                if (pActor.asset?.is_boat == true &&
+                    OwnsTransportBoat(pActor))
+                {
+                    // Keep the original boat task/path lifecycle alive. The
+                    // AW bridge is intentionally bypassed for these boats;
+                    // b5 advances the native water path and u10 performs the
+                    // native smooth movement for the current step.
+                    pActor.b4_checkTaskVerifier(pCycleElapsed);
+                    pActor.b5_checkPathMovement(pCycleElapsed);
+                    pActor.b6_updateAI(pCycleElapsed);
+                    pActor.b5_checkPathMovement(pCycleElapsed);
+                    pActor.u10_checkSmoothMovement(pCycleElapsed);
+                    pActor.skipBehaviour();
+                    ArmyMilitaryMovementPriorityIndex.MarkProcessed(
+                        pActor.data.id);
+                    return;
+                }
                 bool captureDiagnostic =
                     CaptureTransportPathDiagnostic(pState, pActor);
                 string pre = captureDiagnostic
