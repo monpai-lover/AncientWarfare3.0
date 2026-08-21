@@ -898,6 +898,7 @@ namespace AncientWarfare3.core.lineage
                     QueueFall(stronghold.getID(),
                         state.SuppressorKingdomId);
             }
+            PeasantRebelBanditIslandMigrationService.RestoreRuntime();
         }
 
         private static void QueueFall(long pStrongholdCityId,

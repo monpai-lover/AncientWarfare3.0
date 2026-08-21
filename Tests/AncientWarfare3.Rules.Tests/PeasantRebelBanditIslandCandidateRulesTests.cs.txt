@@ -1,0 +1,23 @@
+using System;
+using System.Linq;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelBanditIslandCandidateRulesTests
+{
+    public static void Run()
+    {
+        var facts = new[]
+        {
+            new BanditIslandCandidateFact(5, true, 80, 10, 20),
+            new BanditIslandCandidateFact(3, true, 80, 10, 40),
+            new BanditIslandCandidateFact(8, true, 90, 30, 100),
+            new BanditIslandCandidateFact(1, false, 100, 1, 999)
+        };
+        long[] ranked = PeasantRebelBanditIslandRules.RankIslands(facts)
+            .Select(fact => fact.IslandId).ToArray();
+        if (!ranked.SequenceEqual(new long[] { 8, 3, 5 }))
+            throw new InvalidOperationException(
+                "island candidates must use stable safety/cost/area ordering");
+        Console.WriteLine("Bandit island candidate rules passed.");
+    }
+}

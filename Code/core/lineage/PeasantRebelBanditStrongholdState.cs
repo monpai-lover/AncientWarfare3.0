@@ -100,6 +100,7 @@ namespace AncientWarfare3.core.lineage
         public int TargetLandingTileId = -1;
         public int StartedYear = -1;
         public int ThreatCycles = 0;
+        public long LeaderActorId = -1L;
         public List<long> MemberActorIds = new List<long>();
         public long TransportRequestId = -1L;
         public long TransportBoatId = -1L;

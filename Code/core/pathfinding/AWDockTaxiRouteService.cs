@@ -66,6 +66,34 @@ namespace AncientWarfare3.core.pathfinding
             return true;
         }
 
+        internal static bool TryCreateOrJoinRequest(Actor pActor,
+            WorldTile pTarget, out TaxiRequest pRequest)
+        {
+            pRequest = null;
+            return TryCreateOrJoinRequest(pActor, pActor?.current_tile,
+                pTarget, out pRequest);
+        }
+
+        internal static bool TryCreateOrJoinRequest(Actor pActor,
+            WorldTile pEntryTile, WorldTile pTarget,
+            out TaxiRequest pRequest)
+        {
+            pRequest = null;
+            if (pActor?.data == null || pEntryTile?.data == null ||
+                pTarget?.data == null || pActor.is_inside_boat)
+                return false;
+            if (!AWDockTransportService.TryResolveRoute(pEntryTile,
+                    pTarget, out AWDockRouteCandidate route)) return false;
+            var step = new AWPathStep(pTarget.data.tile_id,
+                AWMovementMethod.Transport,
+                new AWTraversalEstimate(route.EstimatedRouteTiles, 0f, 0f,
+                    0f, AWHazardFlags.Ocean), -1L,
+                AWPathTileFlags.None, route.Entry.Id, route.Exit.Id,
+                route.Entry.LandTileId, route.Entry.OceanTileId,
+                route.Exit.OceanTileId, route.Exit.LandTileId);
+            return TryCreateOrJoinRequest(pActor, step, out pRequest);
+        }
+
         internal static bool TryGetBinding(TaxiRequest pRequest,
             out AWDockTaxiRouteBinding pBinding)
         {

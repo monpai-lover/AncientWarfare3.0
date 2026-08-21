@@ -4,7 +4,7 @@
 
 **Goal:** Preserve an established bandit kingdom while evacuating a weak stronghold to an unoccupied island and raiding coastal cities by temporary boat.
 
-**Architecture:** Add pure migration/target rules, versioned migration state, a bounded island candidate scanner, and a bandit transport adapter. Integrate one migration or raid step into the existing authority cycle; reuse the existing dock route registry, temporary boat production, P0 lifecycle, cargo accounting, and history helpers.
+**Architecture:** Add pure migration/target rules, versioned migration state, a bounded island candidate scanner, and a generic island-escape Beh/service. Bandits provide the group manifest and founding callback; the same behavior can later serve rebels or refugees. Integrate one migration or raid step into the existing authority cycle; reuse the existing dock route registry, temporary boat production, P0 lifecycle, cargo accounting, and history helpers.
 
 **Tech Stack:** C#/.NET Framework 4.8, Unity/WorldBox APIs, Harmony, Newtonsoft.Json, AW3 rules executable.
 
@@ -47,16 +47,18 @@
 - [ ] Cache by simulation generation and dock topology revision; never scan from actor ticks.
 - [ ] Run candidate tests and commit `feat: discover safe unoccupied bandit islands`.
 
-### Task 4: Bandit transport adapter
+### Task 4: Generic island-escape transport Beh
 
 **Files:**
-- Create `Code/core/lineage/PeasantRebelBanditTransportService.cs`.
-- Create `Code/core/lineage/PeasantRebelBanditTransportState.cs`.
-- Modify `AWDockTaxiRouteService`, `ArmyRtsTransportProductionService`, and the boat lifecycle patch only where needed for external request callbacks.
-- Add transport tests.
+- Create `Code/core/lineage/IslandEscapeService.cs`.
+- Create `Code/core/lineage/IslandEscapeBehaviourRules.cs`.
+- Create `Code/ai/behaviours/actor/BehIslandEscapeTransport.cs` and register `aw_island_escape_transport`.
+- Extend `AWDockTaxiRouteService` with a tile-target overload for non-Army groups.
+- Modify boat lifecycle only where needed for external request callbacks.
+- Add transport/Beh tests.
 
-- [ ] Add failing tests for manifest filtering, one request per kingdom, boarding/landing completion, timeout rollback, and temporary-boat cleanup.
-- [ ] Implement route resolution through `AWDockTransportService`, a registered external `TaxiRequest`, temporary boat provisioning through `TryProvisionAtRoute`, existing boat task IDs, and explicit abort cleanup.
+- [ ] Add failing tests for all-living-resident manifests, one request per kingdom, boarding/landing completion, timeout rollback, and temporary-boat cleanup.
+- [ ] Implement route resolution through `AWDockTransportService`, a registered external `TaxiRequest`, the existing temporary boat/P0 lifecycle, and explicit group completion/failure callbacks. The manifest includes every living resident in the old stronghold, not only warriors.
 - [ ] Do not create an Army object and do not fake movement with `spawnOn`.
 - [ ] Run adapter tests plus existing RTS transport tests and commit `feat: add bandit external transport adapter`.
 

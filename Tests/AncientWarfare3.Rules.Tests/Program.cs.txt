@@ -9,6 +9,12 @@ using AncientWarfare3.core.presentation;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--island-escape-behaviour")
+{
+    IslandEscapeBehaviourRulesTests.Run();
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--reverse-xiaization")
 {
     ReverseXiaizationRulesTests.Run();
@@ -353,6 +359,12 @@ if (args.Length == 1 && args[0] == "--bandit-island-migration")
 {
     PeasantRebelBanditIslandRulesTests.Run();
     Console.WriteLine("Bandit island migration rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--bandit-island-candidates")
+{
+    PeasantRebelBanditIslandCandidateRulesTests.Run();
     return;
 }
 

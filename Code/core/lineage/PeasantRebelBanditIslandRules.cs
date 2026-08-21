@@ -1,7 +1,28 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace AncientWarfare3.core.lineage
 {
+    public sealed class BanditIslandCandidateFact
+    {
+        public BanditIslandCandidateFact(long islandId, bool eligible,
+            int safetyScore, int routeCost, int buildableArea)
+        {
+            IslandId = islandId;
+            Eligible = eligible;
+            SafetyScore = safetyScore;
+            RouteCost = routeCost;
+            BuildableArea = buildableArea;
+        }
+
+        public long IslandId { get; }
+        public bool Eligible { get; }
+        public int SafetyScore { get; }
+        public int RouteCost { get; }
+        public int BuildableArea { get; }
+    }
+
     public enum BanditStrongholdKind
     {
         Land,
@@ -80,6 +101,19 @@ namespace AncientWarfare3.core.lineage
                     next == BanditMigrationStage.Completed,
                 _ => false
             };
+        }
+
+        public static IReadOnlyList<BanditIslandCandidateFact> RankIslands(
+            IEnumerable<BanditIslandCandidateFact> candidates)
+        {
+            return (candidates ?? Enumerable.Empty<
+                    BanditIslandCandidateFact>())
+                .Where(candidate => candidate != null && candidate.Eligible)
+                .OrderByDescending(candidate => candidate.SafetyScore)
+                .ThenBy(candidate => candidate.RouteCost)
+                .ThenByDescending(candidate => candidate.BuildableArea)
+                .ThenBy(candidate => candidate.IslandId)
+                .ToList();
         }
     }
 }

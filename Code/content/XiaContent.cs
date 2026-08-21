@@ -36,6 +36,7 @@ namespace AncientWarfare3.content
             RoyalAsylumContent.Init();
             FeudatoryContent.Init();
             WarMobilizationContent.Init();
+            IslandEscapeContent.Init();
             WartimeGarrisonContent.Init();
             StandingArmyPeacetimeContent.Init();
             XiaReproductionDecisionContent.Init();

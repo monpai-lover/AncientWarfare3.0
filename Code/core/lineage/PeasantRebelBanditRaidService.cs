@@ -197,6 +197,10 @@ namespace AncientWarfare3.core.lineage
                 if (city?.data == null || city.isRekt() ||
                     city == pStronghold || city.kingdom?.data == null ||
                     city.kingdom == pBandit) continue;
+                bool islandBandit = PeasantRebelBanditStateStore.TryRead(
+                    pBandit, out PeasantRebelBanditStrongholdState banditState) &&
+                    banditState.StrongholdKind == BanditStrongholdKind.Island;
+                bool coastal = !islandBandit || IsCoastalCity(city);
                 bool reachable = false;
                 try { reachable = city.reachableFrom(pStronghold); }
                 catch { }
@@ -208,10 +212,30 @@ namespace AncientWarfare3.core.lineage
                 int distance = TileDistance(origin, city.getTile());
                 var candidate = new BanditRaidCandidate(city.getID(),
                     distance, stealable, reachable, allied, stronghold);
+                if (!PeasantRebelBanditIslandRules.IsEligiblePiracyTarget(
+                        coastal, reachable, allied, stronghold, stealable))
+                    continue;
                 pCandidates.Add(candidate);
                 targets[city.getID()] = city;
             }
             return targets;
+        }
+
+        private static bool IsCoastalCity(City pCity)
+        {
+            if (pCity?.data == null) return false;
+            try
+            {
+                foreach (TileZone zone in pCity.zones)
+                foreach (WorldTile tile in zone?.tiles ??
+                         new List<WorldTile>())
+                foreach (WorldTile neighbour in tile?.neighboursAll ??
+                         Array.Empty<WorldTile>())
+                    if (neighbour?.data != null && !neighbour.Type.ground)
+                        return true;
+            }
+            catch { }
+            return false;
         }
 
         private static List<Actor> SelectParty(Kingdom pKingdom,

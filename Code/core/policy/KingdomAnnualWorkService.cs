@@ -58,6 +58,7 @@ namespace AncientWarfare3.core.policy
             AsyncKingdomStrategyService.ClearRuntime();
             CityBureauAnnualWorkService.ClearRuntime();
             BanditGreatUprisingService.ClearRuntime();
+            PeasantRebelBanditIslandMigrationService.ClearRuntime();
         }
 
         private static void Enqueue(long pKingdomId)

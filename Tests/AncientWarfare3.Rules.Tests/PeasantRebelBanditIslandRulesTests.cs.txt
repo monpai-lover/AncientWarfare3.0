@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AncientWarfare3.core.lineage;
 
 internal static class PeasantRebelBanditIslandRulesTests
@@ -36,6 +37,22 @@ internal static class PeasantRebelBanditIslandRulesTests
         True(PeasantRebelBanditIslandRules.NextThreatCycles(false, 2) == 0,
             "a cleared threat resets the counter");
         StateDefaultsAndTransitionsAreSafe();
+        IslandCandidatesRankBySafetyAndCapacity();
+    }
+
+    private static void IslandCandidatesRankBySafetyAndCapacity()
+    {
+        var facts = new[]
+        {
+            new BanditIslandCandidateFact(5, true, 80, 10, 20),
+            new BanditIslandCandidateFact(3, true, 80, 10, 40),
+            new BanditIslandCandidateFact(8, true, 90, 30, 100),
+            new BanditIslandCandidateFact(1, false, 100, 1, 999)
+        };
+        long[] ranked = PeasantRebelBanditIslandRules.RankIslands(facts)
+            .Select(fact => fact.IslandId).ToArray();
+        True(ranked.SequenceEqual(new long[] { 8, 3, 5 }),
+            "eligible islands rank by safety, area, distance, then stable ID");
     }
 
     private static void StateDefaultsAndTransitionsAreSafe()
