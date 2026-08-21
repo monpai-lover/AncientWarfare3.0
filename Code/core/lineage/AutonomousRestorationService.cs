@@ -946,11 +946,10 @@ namespace AncientWarfare3.core.lineage
             int bestDefenders = 0;
             RestorationSeedScore bestScore = default;
             bool hasBest = false;
-            int remainingResidentInspections =
-                RoyalRestorationRules.MaxSeedResidentsInspected;
             foreach (long cityId in pCoreIds)
             {
-                if (remainingResidentInspections <= 0) break;
+                int candidateInspectionBudget =
+                    RoyalRestorationRules.MaxSeedResidentsInspected;
                 City city = FindCity(cityId);
                 Kingdom owner = city?.kingdom;
                 bool valid = city?.data != null && !city.isRekt();
@@ -966,16 +965,13 @@ namespace AncientWarfare3.core.lineage
                     activeOrFrozenCapture ||
                     population < RoyalRestorationRules.MinimumSeedPopulation ||
                     RoyalRestorationRules.MinimumPreflightSupporters(defenders) >
-                    remainingResidentInspections) continue;
+                    candidateInspectionBudget) continue;
                 List<long> supporters =
                     RestorationUprisingMobilizationService
                         .CollectInitialSupporterIds(city,
-                            remainingResidentInspections,
+                            candidateInspectionBudget,
                             pClaimant?.data?.id ?? -1L,
                             out int inspectedResidents);
-                remainingResidentInspections = RoyalRestorationRules
-                    .RemainingSeedResidentInspectionBudget(
-                        remainingResidentInspections, inspectedResidents);
                 if (!RoyalRestorationRules.CanUseSeedCity(valid,
                         oldCore: pSeedAllowed, peacefulHostCity, ownerValid,
                         activeOrFrozenCapture,

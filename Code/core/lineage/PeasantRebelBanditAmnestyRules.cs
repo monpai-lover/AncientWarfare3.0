@@ -1,7 +1,26 @@
+using System;
+
 namespace AncientWarfare3.core.lineage
 {
+    internal enum BanditAmnestyAiDecision
+    {
+        Suppression = 0,
+        Amnesty = 1
+    }
+
     public static class PeasantRebelBanditAmnestyRules
     {
+        internal static BanditAmnestyAiDecision ResolveAiDecision(
+            int banditStrength, int originStrength)
+        {
+            long bandit = Math.Max(0, banditStrength);
+            long origin = Math.Max(0, originStrength);
+            if (bandit <= 0) return BanditAmnestyAiDecision.Suppression;
+            if (origin <= 0 || bandit * 2L > origin * 3L)
+                return BanditAmnestyAiDecision.Amnesty;
+            return BanditAmnestyAiDecision.Suppression;
+        }
+
         public static bool CanAccept(bool bandit, bool strongholdActive,
             bool originValid, bool offeringIsOrigin, bool authoritative,
             bool applying)

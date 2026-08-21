@@ -178,6 +178,31 @@ namespace AncientWarfare3.core.lineage
             catch { return false; }
         }
 
+        internal static int InvalidateOpenDeJureRegionGoals(
+            SQLiteConnection pDb, long pRegionId)
+        {
+            if (pDb == null || pRegionId < 0L) return 0;
+            try
+            {
+                using var command = new SQLiteCommand(pDb)
+                {
+                    CommandText = "UPDATE " + TableName + " SET " +
+                        "RESOLVED=1,RESOLVED_TIME=@time,RESULT=@result " +
+                        "WHERE RESOLVED=0 AND GOAL_TYPE=@type AND " +
+                        "SOURCE_DE_JURE_REGION_ID=@region"
+                };
+                command.Parameters.AddWithValue("@time",
+                    LineageService.CurTime());
+                command.Parameters.AddWithValue("@result",
+                    "de_jure_region_retired");
+                command.Parameters.AddWithValue("@type",
+                    WarGoalTypeIds.TakeDeJureRegion);
+                command.Parameters.AddWithValue("@region", pRegionId);
+                return command.ExecuteNonQuery();
+            }
+            catch { return 0; }
+        }
+
         public static IReadOnlyList<WarGoalSettlementSnapshot>
             ReadOpenSettlementGoals(SQLiteConnection pDb, long pWarId)
         {

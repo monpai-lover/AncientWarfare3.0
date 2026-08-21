@@ -173,12 +173,63 @@ namespace AncientWarfare3.core.lineage
                     PeasantRebelGuiyiRules.ResolveObjective(
                         original?.data != null && !original.isRekt(),
                         state.GuiyiOriginalKingdomId > 0L);
-                if (!PeasantRebelGuiyiRules.ShouldBeginRestoration(
+                bool strongEnough = PeasantRebelGuiyiRules.ShouldBeginRestoration(
                         PeasantRebelRouteService.RealmStrength(guiYi),
                         PeasantRebelRouteService.RealmStrength(occupier),
-                        objective)) continue;
-                BeginRestoration(guiYi, state, objective);
+                        objective);
+                if (strongEnough)
+                {
+                    if (TryOfferAmnesty(guiYi, occupier)) continue;
+                    BeginRestoration(guiYi, state, objective);
+                    continue;
+                }
+                else
+                {
+                    TrySuppressWeakGuiyi(guiYi, occupier);
+                    continue;
+                }
             }
+        }
+
+        private static bool TryOfferAmnesty(Kingdom pGuiYi,
+            Kingdom pOccupier)
+        {
+            return PeasantRebelBanditAmnestyService.TryAmnesty(
+                pGuiYi, pOccupier,
+                new PeasantRebelBanditAmnestyOffer(), out _);
+        }
+
+        private static void TrySuppressWeakGuiyi(Kingdom pGuiYi,
+            Kingdom pOccupier)
+        {
+            if (pGuiYi?.data == null || pOccupier?.data == null ||
+                !PeasantRebelRouteService.IsOriginSuppressionPair(
+                    pOccupier, pGuiYi) || HasActiveWarPair(pGuiYi, pOccupier))
+                return;
+            DiplomaticWarDeclarationService.Issue(pOccupier, pGuiYi,
+                WarTerritoryService.GOAL_BANDIT_SUPPRESSION, null,
+                WarDecisionService.WAR_BANDIT_SUPPRESSION,
+                "bandit_suppression",
+                HistoryLocalizationRules.Text("aw_war_goal_bandit_suppression"));
+        }
+
+        private static bool HasActiveWarPair(Kingdom pLeft,
+            Kingdom pRight)
+        {
+            try
+            {
+                foreach (War war in pLeft.getWars())
+                {
+                    if (war?.data == null || war.hasEnded()) continue;
+                    Kingdom attacker = war.getMainAttacker();
+                    Kingdom defender = war.getMainDefender();
+                    if (attacker == pLeft && defender == pRight ||
+                        attacker == pRight && defender == pLeft)
+                        return true;
+                }
+            }
+            catch { return true; }
+            return false;
         }
 
         private static void BeginRestoration(Kingdom pGuiyi,

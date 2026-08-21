@@ -44,6 +44,22 @@ namespace AncientWarfare3.core.schools
                    Payload == pOther.Payload && Importance == pOther.Importance &&
                    WorldTime.Equals(pOther.WorldTime);
         }
+
+        public bool MatchesStableReplay(HistoricalSchoolTeachingEventRow pOther,
+            bool pRequireEventId)
+        {
+            return pOther != null &&
+                   (!pRequireEventId || EventId == pOther.EventId) &&
+                   OperationKey == pOther.OperationKey &&
+                   EventType == pOther.EventType &&
+                   ActorId == pOther.ActorId &&
+                   TargetActorId == pOther.TargetActorId &&
+                   SchoolId == pOther.SchoolId &&
+                   CityId == pOther.CityId &&
+                   KingdomId == pOther.KingdomId &&
+                   EventYear == pOther.EventYear &&
+                   Importance == pOther.Importance;
+        }
     }
 
     internal sealed class HistoricalSchoolTeachingLedgerRow

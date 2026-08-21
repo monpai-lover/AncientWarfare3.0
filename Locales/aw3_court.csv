@@ -1,10 +1,17 @@
 key,cz,en,ch
 aw_court_statistics_button,Statistics,Statistics,统计
+aw_back_to_kingdom,Back to Kingdom,Back to Kingdom,返回国家
+aw_court_fill_vacancies,Fill vacancies,Fill vacancies,自动补缺
+aw_court_fill_vacancies_desc,Vacancies are repaired automatically when offices become empty.,Vacancies are repaired automatically when offices become empty.,官职空缺后会自动补缺。
+aw_court_fill_vacancies_success,Court vacancy repair completed,Court vacancy repair completed,官场补缺完成
+aw_court_fill_vacancies_queued,Vacancy repair queued,Vacancy repair queued,空缺已加入补缺队列
+aw_court_fill_vacancies_no_change,No court vacancies require repair,No court vacancies require repair,暂无需要补缺的官职
+aw_court_fill_vacancies_invalid,The kingdom is missing or extinct,The kingdom is missing or extinct,国家不存在或已灭亡
+aw_court_fill_vacancies_unavailable,Court vacancy repair is unavailable,Court vacancy repair is unavailable,官场补缺当前不可用
 aw_court_statistics_title,Population and Economy Statistics,Population and Economy Statistics,人口与经济统计
 aw_court_statistics_national,Nation,Nation,全国
 aw_court_statistics_region,State,State,州
 aw_court_statistics_city,Prefecture,Prefecture,郡
-aw_court_back_to_court,Back to Court,Back to Court,返回官场
 aw_court_statistics_population,Population,Population,人口
 aw_court_statistics_city_count,Cities,Cities,城市数
 aw_court_statistics_tax,Tax value,Tax value,税值
@@ -21,6 +28,12 @@ aw_de_jure_region,州法理,De jure state,州法理
 aw_de_jure_region_description,使用神力创建或划分州法理,Create or assign de jure states with one divine power,使用神力建立或劃分州法理
 aw_de_jure_region_create,建立州法理,Create de jure state,建立州法理
 aw_de_jure_region_assign,划入州法理,Assign to de jure state,劃入州法理
+aw_de_jure_region_retire,撤销州法理,Retire de jure state,撤銷州法理
+aw_de_jure_region_retire_selected,已选择要撤销的州法理,De jure state selected for retirement,已選擇要撤銷的州法理
+aw_de_jure_region_retired,州法理已撤销,De jure state retired,州法理已撤銷
+aw_de_jure_region_retire_invalid,请选择活动州法理成员城市,Select an active de jure member city,請選擇有效州法理成員城市
+aw_de_jure_region_retire_target_mismatch,请再次点击同一州法理成员,Click a member of the same de jure state again,請再次點擊同一州法理成員
+aw_de_jure_region_retire_failed,州法理撤销失败,Failed to retire de jure state,州法理撤銷失敗
 aw_de_jure_region_invalid_city,请选择有效城市,Select a valid city,請選擇有效城市
 aw_de_jure_region_create_failed,州法理创建失败,Failed to create de jure state,州法理建立失敗
 aw_de_jure_region_created,已建立新的州法理,De jure state created,已建立新的州法理

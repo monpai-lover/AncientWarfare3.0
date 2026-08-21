@@ -308,18 +308,23 @@ namespace AncientWarfare3.ui.windows
                     Mathf.Max(1f, pContentWidth - 294f), 25f);
                 LayoutSummaryText(_summarySecondary, 44f, 29f,
                     Mathf.Max(1f, pContentWidth - 136f), 79f);
-                LayoutSummaryButton(_kingdomBack,
-                    Mathf.Max(44f, pContentWidth - 84f), 4f, 76f, 23f);
-                LayoutSummaryButton(_civilServiceExamButton,
-                    Mathf.Max(44f, pContentWidth - 166f), 4f, 76f, 23f);
-                LayoutSummaryButton(_centralVacancyButton,
-                    Mathf.Max(44f, pContentWidth - 330f), 4f, 76f, 23f);
-                LayoutSummaryButton(_householdButton,
-                    Mathf.Max(44f, pContentWidth - 248f), 4f, 76f, 23f);
-                LayoutSummaryButton(_statisticsButton,
-                    Mathf.Max(44f, pContentWidth - 412f), 4f, 76f, 23f);
-                LayoutSummaryButton(_customCourtWorkflowButton,
-                    Mathf.Max(44f, pContentWidth - 84f), 31f, 76f, 23f);
+                if (_cityId >= 0L)
+                    LayoutLocalSummaryButtons();
+                else
+                {
+                    LayoutSummaryButton(_kingdomBack,
+                        Mathf.Max(44f, pContentWidth - 84f), 4f, 76f, 23f);
+                    LayoutSummaryButton(_civilServiceExamButton,
+                        Mathf.Max(44f, pContentWidth - 166f), 4f, 76f, 23f);
+                    LayoutSummaryButton(_centralVacancyButton,
+                        Mathf.Max(44f, pContentWidth - 330f), 4f, 76f, 23f);
+                    LayoutSummaryButton(_householdButton,
+                        Mathf.Max(44f, pContentWidth - 248f), 4f, 76f, 23f);
+                    LayoutSummaryButton(_statisticsButton,
+                        Mathf.Max(44f, pContentWidth - 412f), 4f, 76f, 23f);
+                    LayoutSummaryButton(_customCourtWorkflowButton,
+                        Mathf.Max(44f, pContentWidth - 84f), 31f, 76f, 23f);
+                }
                 if (_localTemplateDropdown != null)
                 {
                     RectTransform dropdown =
@@ -480,6 +485,33 @@ namespace AncientWarfare3.ui.windows
                 _householdButton.gameObject.SetActive(false);
             UpdateStatisticsEntry(pKingdom);
             UpdateLocalTemplateOptions(pKingdom, pLocal);
+            LayoutLocalSummaryButtons();
+        }
+
+        private void LayoutLocalSummaryButtons()
+        {
+            if (_summaryRect == null) return;
+            float width = _summaryRect.sizeDelta.x;
+            float backX = Mathf.Max(44f, width - 84f);
+            if (_civilServiceExamButton != null)
+                _civilServiceExamButton.gameObject.SetActive(false);
+            if (_centralVacancyButton != null)
+                _centralVacancyButton.gameObject.SetActive(false);
+            if (_householdButton != null)
+                _householdButton.gameObject.SetActive(false);
+            LayoutSummaryButton(_kingdomBack, backX, 4f, 76f, 23f);
+            LayoutSummaryButton(_statisticsButton,
+                Mathf.Max(44f, backX - 82f), 4f, 76f, 23f);
+            LayoutSummaryButton(_customCourtWorkflowButton, backX, 31f,
+                76f, 23f);
+            if (_localTemplateDropdown != null)
+            {
+                RectTransform dropdown = _localTemplateDropdown.RectTransform;
+                dropdown.anchorMin = dropdown.anchorMax = new Vector2(0f, 1f);
+                dropdown.pivot = new Vector2(0f, 1f);
+                dropdown.anchoredPosition = new Vector2(
+                    Mathf.Max(44f, backX - 82f), -58f);
+            }
         }
 
         private void UpdateLocalTemplateOptions(Kingdom pKingdom,
@@ -850,26 +882,7 @@ namespace AncientWarfare3.ui.windows
         private void UpdateCentralVacancyEntry(Kingdom pKingdom)
         {
             if (_centralVacancyButton == null) return;
-            _centralVacancyButton.gameObject.SetActive(
-                CourtImmediateVacancyModeRules.IsCentralEntry(_cityId));
-            if (!CourtImmediateVacancyModeRules.IsCentralEntry(_cityId)) return;
-            string label = AW_L10n.Text("aw_court_fill_vacancies",
-                "Fill vacancies");
-            if (_centralVacancyText != null) _centralVacancyText.text = label;
-            _centralVacancyButton.interactable = pKingdom?.data != null &&
-                !pKingdom.isRekt();
-            AW_UIStyle.ApplyButton(_centralVacancyButton.GetComponent<Image>(),
-                _centralVacancyButton.interactable ? .96f : .48f);
-            _centralVacancyTip.enabled = true;
-            _centralVacancyTip.hoverAction = () => Tooltip.show(
-                _centralVacancyButton.gameObject, AW_RawTooltip.TYPE,
-                new TooltipData
-                {
-                    tip_name = label,
-                    tip_description = AW_L10n.Text(
-                        "aw_court_fill_vacancies_desc",
-                        "Validate central officers and immediately fill vacancies; western institutions enter the election queue.")
-                });
+            _centralVacancyButton.gameObject.SetActive(false);
         }
 
         private static string AristocraticGroupSummary(Kingdom pKingdom)

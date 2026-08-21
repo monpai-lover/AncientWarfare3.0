@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
+using System.Diagnostics;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.db;
 
@@ -26,6 +27,8 @@ namespace AncientWarfare3.core.schools
         private static readonly Queue<string> ProjectionRetries =
             new Queue<string>();
         private static long _frame;
+        private const int MaxSaveDrainPasses =
+            HistoricalSchoolWriteBuffer.MaxCapacity;
 
         public static int Count => Buffer.Count + PendingAsync.Count;
 
@@ -100,6 +103,17 @@ namespace AncientWarfare3.core.schools
                     writerError);
                 return false;
             }
+
+            long deadline = Stopwatch.GetTimestamp() +
+                Stopwatch.Frequency * 5L;
+            return HistoricalSchoolSavePreparation.DrainUntilQuiescent(
+                () => FlushOneSavePass(deadline),
+                () => Count,
+                MaxSaveDrainPasses);
+        }
+
+        private static bool FlushOneSavePass(long pDeadline)
+        {
             bool buffered = true;
             if (Buffer.Count > 0)
             {
@@ -107,11 +121,14 @@ namespace AncientWarfare3.core.schools
                 buffered = Buffer.FlushForSave(
                     new HistoricalSchoolSqlWriteBatchExecutor(db));
             }
+            long remainingTicks = pDeadline - Stopwatch.GetTimestamp();
+            if (remainingTicks <= 0L) return false;
             bool asynchronous = HistoricalWriteService.FlushForSave(
-                TimeSpan.FromSeconds(5), out _);
+                TimeSpan.FromSeconds((double)remainingTicks /
+                    Stopwatch.Frequency), out _);
             bool projections = asynchronous && FlushProjectionRetries();
             return buffered && asynchronous && projections &&
-                   PendingAsync.Count == 0;
+                   Buffer.Count == 0 && PendingAsync.Count == 0;
         }
 
         public static void Clear()

@@ -108,11 +108,12 @@ namespace AncientWarfare3.core.schools
                     persuasion = row;
                 else return Result(HistoricalSchoolTeachingPersistenceOutcome.Unknown);
             }
-            if (lecture == null || !lecture.Exact(pRequest.Lecture,
+            if (lecture == null || !lecture.MatchesStableReplay(
+                    pRequest.Lecture,
                     pRequireEventId: pRequest.IdsFrozen)) return Result(
                 HistoricalSchoolTeachingPersistenceOutcome.Unknown);
             if (pRequest.Plan.IncludePersuasion && (persuasion == null ||
-                !persuasion.Exact(pRequest.Persuasion,
+                !persuasion.MatchesStableReplay(pRequest.Persuasion,
                     pRequireEventId: pRequest.IdsFrozen))) return Result(
                 HistoricalSchoolTeachingPersistenceOutcome.Unknown);
             if (!pRequest.IdsFrozen)

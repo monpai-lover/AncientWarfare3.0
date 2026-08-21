@@ -1,0 +1,58 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class DeJureNewCityAssignmentRulesTests
+{
+    internal static void Run()
+    {
+        long adjacent = DeJureNewCityAssignmentRules.Select(new[]
+        {
+            new DeJureNewCityRegionCandidate(2L, true, 1, 900, 1000, true),
+            new DeJureNewCityRegionCandidate(1L, true, 2, 1200, 900, true)
+        });
+        Equal(1L, adjacent,
+            "the state sharing more adjacent members wins");
+
+        long nearest = DeJureNewCityAssignmentRules.Select(new[]
+        {
+            new DeJureNewCityRegionCandidate(2L, false, 0, 400, 300, true),
+            new DeJureNewCityRegionCandidate(1L, false, 0, 200, 500, true)
+        });
+        Equal(1L, nearest,
+            "nearest member distance wins when no state is adjacent");
+
+        long seatTie = DeJureNewCityAssignmentRules.Select(new[]
+        {
+            new DeJureNewCityRegionCandidate(9L, false, 0, 100, 400, true),
+            new DeJureNewCityRegionCandidate(4L, false, 0, 100, 200, true)
+        });
+        Equal(4L, seatTie,
+            "seat distance breaks nearest-member ties");
+
+        long idTie = DeJureNewCityAssignmentRules.Select(new[]
+        {
+            new DeJureNewCityRegionCandidate(9L, false, 0, 100, 200, true),
+            new DeJureNewCityRegionCandidate(4L, false, 0, 100, 200, true)
+        });
+        Equal(4L, idTie, "region ID makes ties deterministic");
+
+        long excluded = DeJureNewCityAssignmentRules.Select(new[]
+        {
+            new DeJureNewCityRegionCandidate(2L, true, 4, 1, 1, false),
+            new DeJureNewCityRegionCandidate(1L, false, 0, 1, 1, true)
+        });
+        Equal(1L, excluded,
+            "foreign, retired, empty, or ineligible candidates are excluded");
+
+        Equal(-1L, DeJureNewCityAssignmentRules.Select(
+            Array.Empty<DeJureNewCityRegionCandidate>()),
+            "no candidate leaves a city unassigned");
+    }
+
+    private static void Equal(long expected, long actual, string message)
+    {
+        if (expected != actual)
+            throw new InvalidOperationException(message +
+                $": expected {expected}, got {actual}");
+    }
+}

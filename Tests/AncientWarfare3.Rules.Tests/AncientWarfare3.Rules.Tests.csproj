@@ -107,6 +107,11 @@
     <Compile Include="CourtHistoryLocalizationRegressionTests.cs.txt" />
     <Compile Include="CourtImmediateVacancyModeRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CourtImmediateVacancyModeRules.cs" Link="Production\CourtImmediateVacancyModeRules.cs" />
+    <Compile Include="DeJureNewCityAssignmentRulesTests.cs.txt" />
+    <Compile Include="CourtLocalLayoutAndLeaderRepairSourceGuardTests.cs.txt" />
+    <Compile Include="DeJureRegionRetirementRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\DeJureRegionRetirementRules.cs" Link="Production\DeJureRegionRetirementRules.cs" />
+    <Compile Include="..\..\Code\core\court\DeJureNewCityAssignmentRules.cs" Link="Production\DeJureNewCityAssignmentRules.cs" />
     <Compile Include="MassUprisingClusterRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\MassUprisingClusterRules.cs" Link="Production\MassUprisingClusterRules.cs" />
     <Compile Include="LocalCorruptionLoyaltySourceGuardTests.cs.txt" />
@@ -449,6 +454,9 @@
     <Compile Include="ConsistencyRegressionRulesTests.cs.txt" />
     <Compile Include="WesternChronicleRulerRulesTests.cs.txt" />
     <Compile Include="MandateSuccessionRegressionRulesTests.cs.txt" />
+    <Compile Include="MandateAnnualDeltaRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalRelationRefreshSourceGuardTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\MandateAnnualDeltaRules.cs" Link="Production\MandateAnnualDeltaRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandatePowerRules.cs" Link="Production\MandatePowerRules.cs" />
     <Compile Include="Regression20260721Tests.cs.txt" />
     <Compile Include="ArmyMapInformationRulesTests.cs.txt" />
@@ -874,6 +882,7 @@
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolRecruitCandidateRules.cs" Link="Production\HistoricalSchoolRecruitCandidateRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolRecoveryRules.cs" Link="Production\HistoricalSchoolRecoveryRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolTeachingPersistenceOutcome.cs" Link="Production\HistoricalSchoolTeachingPersistenceOutcome.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolTeachingPersistenceDbModels.cs" Link="Production\HistoricalSchoolTeachingPersistenceDbModels.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolVenueRules.cs" Link="Production\HistoricalSchoolVenueRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolActiveMasterSlots.cs" Link="Production\HistoricalSchoolActiveMasterSlots.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolSchedulerRules.cs" Link="Production\HistoricalSchoolSchedulerRules.cs" />

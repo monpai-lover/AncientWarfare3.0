@@ -46,10 +46,11 @@ namespace AncientWarfare3.core.lineage
             out string pFailureKey)
         {
             pFailureKey = "aw_bandit_amnesty_unavailable";
-            bool bandit = PeasantRebelRouteService.IsBandit(pBandit);
+            bool bandit = PeasantRebelRouteService.IsBandit(pBandit) ||
+                          PeasantRebelGuiyiService.IsGuiyi(pBandit);
             bool stronghold = PeasantRebelBanditStrongholdService.
                 HasActiveStronghold(pBandit);
-            Kingdom origin = PeasantRebelRouteService.ResolveOrigin(pBandit);
+            Kingdom origin = ResolveAmnestyOfferingKingdom(pBandit);
             bool originValid = IsLiveOrigin(origin);
             bool offeringIsOrigin = originValid && origin == pOfferingKingdom;
             bool authoritative = PeasantRebelRouteRules.CanMutateAuthority(
@@ -142,6 +143,37 @@ namespace AncientWarfare3.core.lineage
                 UpdatePhase(settlement.Id,
                     BanditAmnestySettlementPhase.Completed, "");
             }
+        }
+
+        internal static void ProcessAiDecision(Kingdom pBandit)
+        {
+            if (!Ready || !PeasantRebelRouteRules.CanMutateAuthority(
+                    AW3MultiplayerReplicaScope.IsReplicaSession) ||
+                AW3MultiplayerReplicaScope.IsApplying ||
+                !PeasantRebelRouteService.IsBandit(pBandit) ||
+                !PeasantRebelBanditStrongholdService.HasActiveStronghold(
+                    pBandit)) return;
+
+            Kingdom origin = PeasantRebelRouteService.ResolveOrigin(pBandit);
+            if (!IsLiveOrigin(origin)) return;
+
+            BanditAmnestyAiDecision decision =
+                PeasantRebelBanditAmnestyRules.ResolveAiDecision(
+                    PeasantRebelRouteService.RealmStrength(pBandit),
+                    PeasantRebelRouteService.RealmStrength(origin));
+            if (decision == BanditAmnestyAiDecision.Amnesty)
+            {
+                TryAmnesty(pBandit, origin,
+                    new PeasantRebelBanditAmnestyOffer(), out _);
+                return;
+            }
+
+            if (HasActiveWarPair(pBandit, origin)) return;
+            DiplomaticWarDeclarationService.Issue(origin, pBandit,
+                WarTerritoryService.GOAL_BANDIT_SUPPRESSION, null,
+                WarDecisionService.WAR_BANDIT_SUPPRESSION,
+                "bandit_suppression",
+                HistoryLocalizationRules.Text("aw_war_goal_bandit_suppression"));
         }
 
         private static bool TryResumeTerritorialSettlement(
@@ -534,6 +566,39 @@ namespace AncientWarfare3.core.lineage
                        pOrigin.isCiv();
             }
             catch { return false; }
+        }
+
+        private static Kingdom ResolveAmnestyOfferingKingdom(Kingdom pBandit)
+        {
+            Kingdom origin = PeasantRebelRouteService.ResolveOrigin(pBandit);
+            if (origin?.data != null) return origin;
+            if (!PeasantRebelBanditStateStore.TryRead(pBandit,
+                    out PeasantRebelBanditStrongholdState state) ||
+                !string.Equals(state.RouteSubtype,
+                    PeasantRebelGuiyiRules.RouteSubtype,
+                    StringComparison.Ordinal) ||
+                state.GuiyiOccupierKingdomId <= 0L) return null;
+            return ResolveKingdom(state.GuiyiOccupierKingdomId);
+        }
+
+        private static bool HasActiveWarPair(Kingdom pLeft,
+            Kingdom pRight)
+        {
+            if (pLeft?.data == null || pRight?.data == null) return false;
+            try
+            {
+                foreach (War war in pLeft.getWars())
+                {
+                    if (war?.data == null || war.hasEnded()) continue;
+                    Kingdom attacker = war.getMainAttacker();
+                    Kingdom defender = war.getMainDefender();
+                    if (attacker == pLeft && defender == pRight ||
+                        attacker == pRight && defender == pLeft)
+                        return true;
+                }
+            }
+            catch { return true; }
+            return false;
         }
     }
 }

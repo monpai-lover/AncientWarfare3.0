@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using AncientWarfare3.core.court;
 
 internal static class CourtHistoryLocalizationRegressionTests
 {
@@ -9,6 +10,10 @@ internal static class CourtHistoryLocalizationRegressionTests
 
     public static void Run()
     {
+        if (CourtInstitutionRules.DisplayOfficeId("city_leader:10") !=
+            CourtOfficeId.Governor)
+            throw new InvalidOperationException(
+                "city leader appointment ids must display as governor offices");
         string modClass = Read(Path.Combine("Code", "ModClass.cs"));
         string history = Read(Path.Combine("Code", "ui", "windows",
             "CourtOfficeHistoryWindow.cs"));

@@ -1,0 +1,54 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.court;
+
+internal static class DeJureRegionRetirementRulesTests
+{
+    internal static void Run()
+    {
+        True(DeJureRegionRetirementRules.CanRetire(true, true, true, false),
+            "active member city can retire its region");
+        False(DeJureRegionRetirementRules.CanRetire(true, false, true, false),
+            "retired region cannot be retired again");
+        False(DeJureRegionRetirementRules.CanRetire(true, true, false, false),
+            "non-member city cannot retire a region");
+        False(DeJureRegionRetirementRules.CanRetire(true, true, true, true),
+            "bandit stronghold cannot retire a region");
+        True(DeJureRegionRetirementRules.RequiresCapitalReplacement(true, true),
+            "capital region retirement requires a replacement seat");
+        False(DeJureRegionRetirementRules.RequiresCapitalReplacement(false, true),
+            "ordinary member does not require capital replacement");
+
+        string power = Read("Code/content/GodPowerLibrary.cs");
+        string service = Read("Code/core/court/DeJureRegionPowerService.cs");
+        string store = Read("Code/core/court/DeJureRegionStore.cs");
+        string csv = Read("Locales/aw3_court.csv");
+        Contains(power, "DE_JURE_REGION_RETIRE");
+        Contains(service, "RetireMode");
+        Contains(store, "RetireState");
+        Contains(store, "DeJureRegionRetired");
+        Contains(store, "capital_region_recreated");
+        Contains(csv, "aw_de_jure_region_retire,");
+    }
+
+    private static string Read(string relative) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            relative.Replace('/', Path.DirectorySeparatorChar)))
+        .Replace("\r\n", "\n");
+
+    private static void Contains(string text, string needle)
+    {
+        if (!text.Contains(needle, StringComparison.Ordinal))
+            throw new InvalidOperationException("source guard failed: " + needle);
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+}

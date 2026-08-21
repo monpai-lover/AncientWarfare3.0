@@ -1,0 +1,95 @@
+using AncientWarfare3.core.lineage;
+
+internal static class MandateAnnualDeltaRulesTests
+{
+    internal static void Run()
+    {
+        BreakdownKeepsEverySourceAndExactTotal();
+        ThresholdsMatchAnnualSettlementRules();
+    }
+
+    private static void BreakdownKeepsEverySourceAndExactTotal()
+    {
+        var facts = new MandateAnnualDeltaFacts
+        {
+            AtWar = true,
+            StrongestPowerPenalty = -3,
+            CoreControl = 0.9f,
+            VassalLoyalty = 0.8f,
+            ChildScarcityPenalty = -4,
+            SacrificeAnnualDelta = 3,
+            KingIsHistoricalFigure = true,
+            KingIsYoung = true,
+            KingHasLowIntelligence = true,
+            KingHasHighDiplomacy = true,
+            KingHasHighStewardship = true,
+            EraId = "age_hope"
+        };
+
+        MandateAnnualDeltaBreakdown result =
+            MandateAnnualDeltaRules.Calculate(facts);
+
+        Equal(4, result.Total, "the displayed total matches settlement");
+        Equal(-2, Find(result, "war"), "war source is retained");
+        Equal(-3, Find(result, "strongest_power"),
+            "power penalty is retained");
+        Equal(2, Find(result, "core_control_high"),
+            "legal core bonus is retained");
+        Equal(1, Find(result, "vassal_loyalty_high"),
+            "vassal loyalty bonus is retained");
+        Equal(-4, Find(result, "heir_scarcity"),
+            "heir scarcity penalty is retained");
+        Equal(3, Find(result, "sacrifice"),
+            "sacrifice effect is retained");
+        Equal(5, Find(result, "historical_emperor"),
+            "historical emperor bonus is retained");
+        Equal(-1, Find(result, "young_emperor"),
+            "young emperor penalty is retained");
+        Equal(-1, Find(result, "low_intelligence"),
+            "intelligence penalty is retained");
+        Equal(1, Find(result, "high_diplomacy"),
+            "diplomacy bonus is retained");
+        Equal(1, Find(result, "high_stewardship"),
+            "stewardship bonus is retained");
+        Equal(2, Find(result, "prosperous_era"),
+            "world era bonus is retained");
+    }
+
+    private static void ThresholdsMatchAnnualSettlementRules()
+    {
+        var neutral = new MandateAnnualDeltaFacts
+        {
+            CoreControl = 0.5f,
+            VassalLoyalty = 0.35f
+        };
+        MandateAnnualDeltaBreakdown result =
+            MandateAnnualDeltaRules.Calculate(neutral);
+        Equal(1, result.Total,
+            "peace remains the only change at neutral thresholds");
+        Equal(0, Find(result, "core_control_high"),
+            "fifty percent core control has no bonus");
+        Equal(0, Find(result, "vassal_loyalty_low"),
+            "thirty-five percent loyalty has no penalty");
+
+        neutral.CoreControl = 0.85f;
+        neutral.VassalLoyalty = 0.7f;
+        result = MandateAnnualDeltaRules.Calculate(neutral);
+        Equal(4, result.Total,
+            "inclusive upper thresholds grant both bonuses");
+    }
+
+    private static int Find(MandateAnnualDeltaBreakdown pBreakdown,
+        string pSourceId)
+    {
+        foreach (MandateAnnualDeltaEntry entry in pBreakdown.Entries)
+            if (entry.SourceId == pSourceId) return entry.Delta;
+        return 0;
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

@@ -27,6 +27,8 @@ namespace AncientWarfare3.content
             "aw_de_jure_region_create";
         public const string DE_JURE_REGION_ASSIGN =
             "aw_de_jure_region_assign";
+        public const string DE_JURE_REGION_RETIRE =
+            "aw_de_jure_region_retire";
         public const string BanditAmnestyIconPath =
             "ui/icons/aw_bandit_amnesty";
 
@@ -79,6 +81,8 @@ namespace AncientWarfare3.content
                 DeJureRegionPowerService.CreateMode);
             RegisterDeJureRegionPower(DE_JURE_REGION_ASSIGN,
                 DeJureRegionPowerService.AssignMode);
+            RegisterDeJureRegionPower(DE_JURE_REGION_RETIRE,
+                DeJureRegionPowerService.RetireMode);
         }
 
         public static void ClearRuntime()

@@ -141,7 +141,7 @@ namespace AncientWarfare3.core.court
         public static string OfficeLocalizationKey(string pInstitution,
             string pOfficeId)
         {
-            string office = pOfficeId ?? "";
+            string office = DisplayOfficeId(pOfficeId);
             if (string.IsNullOrEmpty(office)) return "aw_court_office_";
             if (office.StartsWith("west_", StringComparison.Ordinal))
                 return "aw_court_office_" + office;
@@ -151,6 +151,15 @@ namespace AncientWarfare3.core.court
             return HasInstitutionOfficeName(institution, office)
                 ? "aw_court_office_" + institution + "_" + office
                 : "aw_court_office_" + office;
+        }
+
+        public static string DisplayOfficeId(string pOfficeId)
+        {
+            string office = pOfficeId ?? string.Empty;
+            return office.StartsWith("city_leader:",
+                StringComparison.Ordinal)
+                ? CourtOfficeId.Governor
+                : office;
         }
 
         public static bool IsCanonicalWestern(string pInstitution)

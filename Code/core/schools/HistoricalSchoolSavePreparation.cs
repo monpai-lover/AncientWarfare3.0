@@ -24,6 +24,22 @@ namespace AncientWarfare3.core.schools
 
     public static class HistoricalSchoolSavePreparation
     {
+        public static bool DrainUntilQuiescent(Func<bool> pFlushPass,
+            Func<int> pPendingCount, int pMaxPasses)
+        {
+            if (pFlushPass == null || pPendingCount == null ||
+                pMaxPasses <= 0) return false;
+            for (int pass = 0; pass < pMaxPasses; pass++)
+            {
+                bool resolved = Invoke(pFlushPass);
+                int pending;
+                try { pending = Math.Max(0, pPendingCount()); }
+                catch { return false; }
+                if (pending == 0) return resolved;
+            }
+            return false;
+        }
+
         public static HistoricalSchoolSavePreparationResult Run(
             Func<bool> pFlushDescents,
             Func<bool> pFlushDeaths,

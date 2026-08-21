@@ -1,0 +1,51 @@
+using System;
+using System.IO;
+
+internal static class CourtLocalLayoutAndLeaderRepairSourceGuardTests
+{
+    internal static void Run()
+    {
+        string window = Read("Code/ui/windows/CourtWindow.cs");
+        string leader = Read("Code/patch/AW_CityLeaderPatch.cs");
+        string promotion = Read("Code/patch/AW_PromotionPatch.cs");
+        string vacancy = Read("Code/core/court/CityLeaderVacancyRepairService.cs");
+        string csv = Read("Locales/aw3_court.csv");
+        string chronicle = Read("Code/patch/AW_ChroniclePatch.cs");
+
+        Contains(window, "UpdateLocalSummary",
+            "local court summary must have an explicit presentation path");
+        Contains(window, "_cityId >= 0L",
+            "button layout must distinguish local court context");
+        Contains(leader, "CourtOfficeLayer.City",
+            "city leader repair must inspect local-layer officers");
+        Contains(leader, "pCity.getUnits()",
+            "local leader repair must prioritize current-city officers");
+        Contains(promotion, "RemoveLeader_Postfix",
+            "leader removal must trigger immediate vacancy repair");
+        Contains(promotion, "CityLeaderVacancyRepairService.Request",
+            "leader removal must enqueue the immediate repair service");
+        Contains(vacancy, "CourtOfficeLayer.City",
+            "vacancy repair must inspect local court officers");
+        Contains(vacancy, "PickLocalOfficer",
+            "vacancy repair must prioritize local officers");
+        Contains(vacancy, "AW_CityLeaderPatch.CheckFindLeader_Prefix",
+            "vacancy repair must retain the existing national fallback");
+        Contains(chronicle, "DeJureNewCityAssignmentService",
+            "new city foundation must notify de jure assignment");
+        Contains(csv, "aw_back_to_kingdom,");
+        Contains(csv, "aw_court_fill_vacancies,");
+        Contains(csv, "aw_court_statistics_button,");
+    }
+
+    private static string Read(string relative) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            relative.Replace('/', Path.DirectorySeparatorChar)))
+        .Replace("\r\n", "\n");
+
+    private static void Contains(string text, string needle,
+        string message = "source guard failed")
+    {
+        if (!text.Contains(needle, StringComparison.Ordinal))
+            throw new InvalidOperationException(message + ": " + needle);
+    }
+}

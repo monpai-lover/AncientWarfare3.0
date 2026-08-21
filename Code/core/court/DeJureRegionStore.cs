@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
+using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 
@@ -34,6 +35,7 @@ namespace AncientWarfare3.core.court
                 _readAttempted = true;
                 _migrationCompleted = _store.Regions.Count > 0;
                 _nextChangeId = 1L;
+                EnsureAllKingdomCapitalSeatsLocked();
             }
         }
 
@@ -68,6 +70,7 @@ namespace AncientWarfare3.core.court
                 _nextChangeId = 1L;
             }
             RegionalGovernmentAggregationService.Clear();
+            DeJureNewCityAssignmentService.ClearRuntime();
         }
 
         internal static void ClearRuntime()
@@ -80,6 +83,7 @@ namespace AncientWarfare3.core.court
                 _migrationCompleted = false;
                 _nextChangeId = 1L;
             }
+            DeJureNewCityAssignmentService.ClearRuntime();
         }
 
         internal static IReadOnlyList<DeJureRegion> ActiveRegions()
@@ -205,6 +209,8 @@ namespace AncientWarfare3.core.court
                         out long fromRegionId);
                     target.MemberCityIds.Add(pCity.data.id);
                     target.MemberCityIds = target.MemberCityIds.Distinct().ToList();
+                    if (pCity.kingdom?.capital == pCity)
+                        target.SeatCityId = pCity.data.id;
                     AddChange(target.RegionId, pCity.data.id, fromRegionId,
                         target.RegionId, "DeJureCityTransferred");
                     _store.StoreRevision++;
@@ -220,6 +226,172 @@ namespace AncientWarfare3.core.court
                     return false;
                 }
             }
+        }
+
+        internal static bool AssignCityAutomatically(long pTargetRegionId,
+            City pCity, string pReason, out string pError)
+        {
+            pError = string.Empty;
+            if (!IsDeJureEligibleCity(pCity))
+            {
+                pError = "invalid_city";
+                return false;
+            }
+            EnsureInitialized();
+            lock (Gate)
+            {
+                DeJureAdministrationStore snapshot = CloneStore(_store);
+                try
+                {
+                    DeJureRegion target = _store.Regions.FirstOrDefault(p =>
+                        p != null && p.Active && p.RegionId == pTargetRegionId);
+                    if (target == null)
+                    {
+                        pError = "invalid_target";
+                        return false;
+                    }
+                    if (target.MemberCityIds.Contains(pCity.data.id)) return true;
+                    if (_store.Regions.Any(p => p != null && p.Active &&
+                        p.MemberCityIds != null &&
+                        p.MemberCityIds.Contains(pCity.data.id)))
+                    {
+                        pError = "already_assigned";
+                        return false;
+                    }
+                    target.MemberCityIds.Add(pCity.data.id);
+                    target.MemberCityIds = target.MemberCityIds.Distinct().ToList();
+                    if (pCity.kingdom?.capital == pCity)
+                        target.SeatCityId = pCity.data.id;
+                    target.Version++;
+                    AddChange(target.RegionId, pCity.data.id, -1L,
+                        target.RegionId, pReason ?? "city_created_auto_assign");
+                    _store.StoreRevision++;
+                    RegionalGovernmentAggregationService.Clear();
+                    return true;
+                }
+                catch (Exception error)
+                {
+                    _store = snapshot;
+                    pError = error.Message;
+                    ModClass.LogError("Automatic de jure city assignment failed: " +
+                                      error.Message);
+                    return false;
+                }
+            }
+        }
+
+        internal static bool RetireState(City pSelectedCity,
+            out string pError)
+        {
+            pError = string.Empty;
+            if (!IsDeJureEligibleCity(pSelectedCity))
+            {
+                pError = "invalid_city";
+                return false;
+            }
+            EnsureInitialized();
+            lock (Gate)
+            {
+                DeJureAdministrationStore snapshot = CloneStore(_store);
+                try
+                {
+                    DeJureRegion region = _store.Regions.FirstOrDefault(p =>
+                        p != null && p.Active && p.MemberCityIds != null &&
+                        p.MemberCityIds.Contains(pSelectedCity.data.id));
+                    if (region == null)
+                    {
+                        pError = "region_missing";
+                        return false;
+                    }
+                    List<long> members = region.MemberCityIds.Distinct().ToList();
+                    bool capitalSelected = pSelectedCity.kingdom?.capital != null &&
+                        members.Contains(pSelectedCity.kingdom.capital.data.id);
+                    region.MemberCityIds.Clear();
+                    region.Active = false;
+                    region.Version++;
+                    foreach (long cityId in members)
+                        AddChange(region.RegionId, cityId, region.RegionId, -1L,
+                            "DeJureRegionRetired");
+                    if (capitalSelected)
+                        EnsureKingdomCapitalSeatLocked(pSelectedCity.kingdom,
+                            "capital_region_recreated");
+                    _store.StoreRevision++;
+                    RegionalGovernmentAggregationService.Clear();
+                    WarGoalPersistence.InvalidateOpenDeJureRegionGoals(
+                        LineageArchiveManager.Instance?.OperatingDB,
+                        region.RegionId);
+                    return true;
+                }
+                catch (Exception error)
+                {
+                    _store = snapshot;
+                    pError = error.Message;
+                    ModClass.LogError("De jure state retirement failed: " +
+                                      error.Message);
+                    return false;
+                }
+            }
+        }
+
+        internal static void EnsureKingdomCapitalSeat(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return;
+            EnsureInitialized();
+            lock (Gate) EnsureKingdomCapitalSeatLocked(pKingdom,
+                "capital_region_repaired");
+            RegionalGovernmentAggregationService.Clear();
+        }
+
+        private static void EnsureAllKingdomCapitalSeatsLocked()
+        {
+            try
+            {
+                List<Kingdom> kingdoms = World.world?.kingdoms?.list;
+                if (kingdoms == null) return;
+                foreach (Kingdom kingdom in kingdoms)
+                    EnsureKingdomCapitalSeatLocked(kingdom,
+                        "capital_region_repaired");
+            }
+            catch { }
+        }
+
+        private static void EnsureKingdomCapitalSeatLocked(Kingdom pKingdom,
+            string pReason)
+        {
+            City capital = pKingdom?.capital;
+            if (!IsDeJureEligibleCity(capital)) return;
+            DeJureRegion current = _store.Regions.FirstOrDefault(p =>
+                p != null && p.Active && p.MemberCityIds != null &&
+                p.MemberCityIds.Contains(capital.data.id));
+            if (current != null)
+            {
+                if (current.SeatCityId != capital.data.id)
+                {
+                    current.SeatCityId = capital.data.id;
+                    current.Version++;
+                    AddChange(current.RegionId, capital.data.id,
+                        current.RegionId, current.RegionId,
+                        "DeJureSeatChanged");
+                    _store.StoreRevision++;
+                }
+                return;
+            }
+            long id = Math.Max(1L, _store.NextRegionId++);
+            var region = new DeJureRegion
+            {
+                RegionId = id,
+                RegionName = RegionalGovernmentRules.RegionName(
+                    capital.data.name ?? string.Empty, "州"),
+                SeatCityId = capital.data.id,
+                CreatedYear = SafeYear(),
+                CreatedByKind = pReason ?? "capital_region_repaired",
+                CreatedByKingdomId = pKingdom.id,
+                MemberCityIds = new List<long> { capital.data.id }
+            };
+            _store.Regions.Add(region);
+            AddChange(id, capital.data.id, -1L, id,
+                pReason ?? "capital_region_repaired");
+            _store.StoreRevision++;
         }
 
         private static void EnsureInitialized()
@@ -241,6 +413,9 @@ namespace AncientWarfare3.core.court
                     Migrate(_store);
                     _migrationCompleted = true;
                 }
+                if (_store != null && HasLiveWorld() && Config.game_loaded &&
+                    !SmoothLoader.isLoading())
+                    EnsureAllKingdomCapitalSeatsLocked();
             }
         }
 

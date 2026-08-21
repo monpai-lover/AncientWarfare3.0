@@ -15,8 +15,10 @@ namespace AncientWarfare3.patch
             GodPower selected = pPower ?? World.world?.selected_buttons?.
                 selectedButton?.godPower;
             bool hierarchyActive = HierarchicalVassalMapModeService.IsActive();
-            if ((selected?.id != HierarchicalVassalMapModeService.POWER_ID &&
-                 !hierarchyActive) || MapBox.isRenderMiniMap()) return true;
+            if (MapBox.isRenderMiniMap() ||
+                !HierarchicalVassalMapClickRules.ShouldIntercept(
+                    hierarchyActive, selected?.id,
+                    HierarchicalVassalMapModeService.POWER_ID)) return true;
             WorldTile tile = World.world?.GetTile(pPos.x, pPos.y);
             HierarchicalVassalMapModeService.HandleZoneClick(tile,
                 HierarchicalVassalMapModeService.POWER_ID);

@@ -70,6 +70,7 @@ namespace AncientWarfare3.ui.windows
         public override void OnNormalEnable()
         {
             Refresh();
+            ApplyLayout();
         }
 
         private void Refresh()
@@ -109,7 +110,18 @@ namespace AncientWarfare3.ui.windows
         private void SelectTitle()
         {
             _rewardKind = BanditAmnestyRewardKind.VirtualTitle;
-            RefreshControls();
+            VirtualNobleTitleGrantWindow.OpenForSelection(
+                _titleInput?.text ?? "", _hereditary, OnTitleSelected);
+        }
+
+        private void OnTitleSelected(string pTitle, bool pHereditary)
+        {
+            _rewardKind = BanditAmnestyRewardKind.VirtualTitle;
+            if (_titleInput != null) _titleInput.text = pTitle ?? "";
+            _hereditary = pHereditary;
+            AW_LineageWindowIds.SafeShow(
+                AW_LineageWindowIds.BANDIT_AMNESTY_SETTLEMENT,
+                () => Refresh());
         }
 
         private void CycleOffice()
@@ -262,11 +274,31 @@ namespace AncientWarfare3.ui.windows
             if (background != null) background.sizeDelta = _windowSize;
             float width = Mathf.Max(1f, _windowSize.x - 42f);
             float height = Mathf.Max(1f, _windowSize.y - 58f);
+            Transform close = BackgroundTransform?.parent?.Find(
+                "CloseBackground");
+            if (close != null)
+                close.localPosition = new Vector3(_windowSize.x * 0.5f - 20f,
+                    _windowSize.y * 0.5f - 12f);
+            Transform titleBackground = BackgroundTransform?.Find(
+                "TitleBackground");
+            RectTransform titleRect = titleBackground?.GetComponent<RectTransform>();
+            if (titleRect != null)
+            {
+                titleRect.sizeDelta = new Vector2(_windowSize.x * 0.56f, 30f);
+                titleRect.localPosition = new Vector3(0f,
+                    _windowSize.y * 0.5f - 16f, 0f);
+            }
             ScrollWindow window = GetComponent<ScrollWindow>();
             if (window?.titleText != null)
+            {
                 window.titleText.text = AW_L10n.Text(
                     "aw_bandit_amnesty_settlement_title",
                     "Bandit Amnesty Settlement");
+                window.titleText.transform.localPosition = new Vector3(0f,
+                    _windowSize.y * 0.5f - 16f, 0f);
+                window.titleText.raycastTarget = false;
+            }
+            DisableNativeScroll(width, height);
             _root.anchorMin = _root.anchorMax = new Vector2(0f, 1f);
             _root.pivot = new Vector2(0f, 1f);
             _root.anchoredPosition = Vector2.zero;
@@ -287,6 +319,27 @@ namespace AncientWarfare3.ui.windows
             SetRect(_confirmButton, width - 252f, height - 34f, 116f, 30f);
             SetRect(_cancelButton, width - 126f, height - 34f, 116f, 30f);
             _chrome?.RepositionResizeHandle();
+        }
+
+        private void DisableNativeScroll(float pWidth, float pHeight)
+        {
+            Transform scroll = BackgroundTransform?.Find("Scroll View");
+            RectTransform scrollRect = scroll?.GetComponent<RectTransform>();
+            if (scrollRect != null)
+            {
+                scrollRect.sizeDelta = new Vector2(pWidth, pHeight);
+                scrollRect.localPosition = new Vector3(0f, -20f, 0f);
+            }
+            ScrollRect native = scroll?.GetComponent<ScrollRect>();
+            if (native != null)
+            {
+                native.horizontal = false;
+                native.vertical = false;
+            }
+            Transform nativeBar = scroll?.Find("Scrollbar Vertical");
+            if (nativeBar != null) nativeBar.gameObject.SetActive(false);
+            RectTransform content = ContentTransform?.GetComponent<RectTransform>();
+            if (content != null) content.sizeDelta = new Vector2(pWidth, pHeight);
         }
 
         private static Button CreateButton(Transform pParent, string pName,

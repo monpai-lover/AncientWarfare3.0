@@ -109,7 +109,7 @@ namespace AncientWarfare3.core.court
 
         public static string OfficeName(Kingdom pKingdom, string pOfficeId)
         {
-            string office = pOfficeId ?? "";
+            string office = CourtInstitutionRules.DisplayOfficeId(pOfficeId);
             string customName = CustomCourtRuntime.OfficeDisplayName(
                 pKingdom, office);
             if (!string.IsNullOrWhiteSpace(customName)) return customName;

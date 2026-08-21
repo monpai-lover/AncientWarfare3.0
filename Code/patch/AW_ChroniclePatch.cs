@@ -247,6 +247,7 @@ namespace AncientWarfare3.patch
             CityTechService.OnCityFounded(__instance);
             HierarchicalVassalMapModeService.MarkCityOwnershipChanged(
                 __instance, null, __instance?.kingdom);
+            DeJureNewCityAssignmentService.OnCityFounded(__instance);
         }
 
         [HarmonyPrefix]

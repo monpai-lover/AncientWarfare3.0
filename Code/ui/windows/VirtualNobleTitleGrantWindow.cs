@@ -16,6 +16,10 @@ namespace AncientWarfare3.ui.windows
         private static readonly Vector2 MinimumSize = new Vector2(440f, 280f);
         private static readonly Vector2 MaximumSize = new Vector2(760f, 520f);
         private static long _actorId = -1L;
+        private static bool _selectionMode;
+        private static bool _selectionHereditary = true;
+        private static string _selectionTitle = "";
+        private static Action<string, bool> _selectionCallback;
         private Vector2 _windowSize = DefaultSize;
         private WideWindowChrome _chrome;
         private RectTransform _root;
@@ -34,6 +38,21 @@ namespace AncientWarfare3.ui.windows
         internal static void Open(long pActorId)
         {
             _actorId = pActorId;
+            _selectionMode = false;
+            _selectionCallback = null;
+            if (Instance == null) CreateAndInit(GrantWindowId);
+            AW_LineageWindowIds.SafeShow(GrantWindowId,
+                () => Instance?.Refresh());
+        }
+
+        internal static void OpenForSelection(string pInitialTitle,
+            bool pHereditary, Action<string, bool> pCallback)
+        {
+            _actorId = -1L;
+            _selectionMode = true;
+            _selectionTitle = pInitialTitle ?? "";
+            _selectionHereditary = pHereditary;
+            _selectionCallback = pCallback;
             if (Instance == null) CreateAndInit(GrantWindowId);
             AW_LineageWindowIds.SafeShow(GrantWindowId,
                 () => Instance?.Refresh());
@@ -92,14 +111,32 @@ namespace AncientWarfare3.ui.windows
         {
             Actor actor = World.world?.units?.get(_actorId);
             Kingdom kingdom = actor?.kingdom;
-            if (_identity != null)
+            if (_selectionMode)
+            {
+                if (_identity != null)
+                    _identity.text = AW_L10n.Text(
+                        "aw_bandit_amnesty_reward_title",
+                        "Promised noble title");
+                if (_input != null)
+                {
+                    _input.text = _selectionTitle;
+                    _input.interactable = !_pending;
+                }
+                _isHereditary = _selectionHereditary;
+                if (_grant != null) _grant.interactable = !_pending;
+            }
+            else if (_identity != null)
                 _identity.text = actor?.data != null
                     ? actor.getName() + "  [" + (kingdom?.name ?? "") + "]"
                     : AW_L10n.Text("aw_unknown_actor", "Unknown actor");
             if (_feedback != null) _feedback.text = "";
-            if (_input != null) _input.text = "";
-            if (_grant != null) _grant.interactable = !_pending &&
-                actor?.data != null && actor.isAlive() && kingdom?.data != null;
+            if (!_selectionMode)
+            {
+                if (_input != null) _input.text = "";
+                if (_grant != null) _grant.interactable = !_pending &&
+                    actor?.data != null && actor.isAlive() &&
+                    kingdom?.data != null;
+            }
             if (_grantText != null)
                 _grantText.text = AW_L10n.Text("aw_virtual_title_grant_action", "Grant");
             if (_hereditaryText != null)
@@ -108,6 +145,27 @@ namespace AncientWarfare3.ui.windows
 
         private void Confirm()
         {
+            if (_selectionMode)
+            {
+                string title = (_input?.text ?? "").Trim();
+                if (title.Length == 0 ||
+                    title.Length > VirtualNobleTitleRules.MaximumTitleLength)
+                {
+                    if (_feedback != null)
+                        _feedback.text = AW_L10n.Text(
+                            "aw_virtual_title_error_invalid_title",
+                            "Enter a valid title");
+                    return;
+                }
+                Action<string, bool> callback = _selectionCallback;
+                bool hereditary = _isHereditary;
+                _selectionMode = false;
+                _selectionCallback = null;
+                _selectionTitle = "";
+                GetComponent<ScrollWindow>()?.clickHide();
+                callback?.Invoke(title, hereditary);
+                return;
+            }
             if (_pending || _input == null) return;
             Actor actor = World.world?.units?.get(_actorId);
             Kingdom kingdom = actor?.kingdom;

@@ -8,6 +8,63 @@ internal static class HistoricalSchoolSavePreparationTests
     {
         RuntimeStateCommitsAfterEveryDatabaseWriter();
         FailedWriterPreventsRuntimeCommit();
+        StableTeachingReplayIgnoresVolatilePresentationFields();
+        SaveDrainReachesQuiescenceAfterChainedWrites();
+    }
+
+    private static void StableTeachingReplayIgnoresVolatilePresentationFields()
+    {
+        var persisted = TeachingRow(worldTime: 10d, payload: "Old Name");
+        var retried = TeachingRow(worldTime: 12d, payload: "New Name");
+
+        True(persisted.MatchesStableReplay(retried,
+                pRequireEventId: false),
+            "a stable teaching operation replays despite changed time/name");
+
+        retried.TargetActorId = 99L;
+        False(persisted.MatchesStableReplay(retried,
+                pRequireEventId: false),
+            "a structurally different teaching event is not a replay");
+    }
+
+    private static void SaveDrainReachesQuiescenceAfterChainedWrites()
+    {
+        int pending = 3;
+        int passes = 0;
+        bool resolved = HistoricalSchoolSavePreparation.DrainUntilQuiescent(
+            () =>
+            {
+                passes++;
+                pending--;
+                return pending == 0;
+            },
+            () => pending,
+            pMaxPasses: 8);
+
+        True(resolved,
+            "save drain continues through callback-created chained writes");
+        Equal(3, passes,
+            "save drain stops immediately after the persistence graph is quiet");
+    }
+
+    private static HistoricalSchoolTeachingEventRow TeachingRow(
+        double worldTime, string payload)
+    {
+        return new HistoricalSchoolTeachingEventRow
+        {
+            EventId = 7L,
+            OperationKey = "school-teaching:v1|actor=42|year=100|school=ru|city=3|event=lecture",
+            EventType = "lecture",
+            ActorId = 42L,
+            TargetActorId = -1L,
+            SchoolId = "ru",
+            CityId = 3L,
+            KingdomId = 5L,
+            EventYear = 100,
+            Payload = payload,
+            Importance = 1,
+            WorldTime = worldTime
+        };
     }
 
     private static void RuntimeStateCommitsAfterEveryDatabaseWriter()

@@ -87,6 +87,24 @@ namespace AncientWarfare3.patch
 
                 AWCooperativeActorParallelJobRunner.RefreshFrameVisibility();
 
+                // Actor post jobs queue validated goTo requests until the next
+                // main-thread frame boundary. Flush them before simulation
+                // admission so the native actor path state can advance.
+                if (Config.game_loaded && !SmoothLoader.isLoading() &&
+                    !replicaSession)
+                {
+                    try
+                    {
+                        AWDeferredPathRequestBatch.FlushAtFrameStart();
+                    }
+                    catch (System.Exception error)
+                    {
+                        ModClass.LogError(
+                            "AW deferred path request flush failed: " +
+                            error);
+                    }
+                }
+
                 AWPresentationCommandQueue.DrainMainThread();
                 __state = new MapBoxUpdateScope();
                 ArmyRtsTransportService.ObserveFrameClock(

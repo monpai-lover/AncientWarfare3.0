@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using AncientWarfare3.core.lineage;
 
 internal static class PeasantRebelBanditAmnestyRulesTests
@@ -28,8 +29,21 @@ internal static class PeasantRebelBanditAmnestyRulesTests
                 true, false, true),
             "an occupied office cannot be promised");
         Assert(!PeasantRebelBanditAmnestyRules.CanSelectOffice(
-                true, true, false),
+            true, true, false),
             "an ineligible leader cannot receive an office promise");
+        Assert(PeasantRebelBanditAmnestyRules.ResolveAiDecision(
+                banditStrength: 151, originStrength: 100) ==
+                BanditAmnestyAiDecision.Amnesty,
+            "a materially stronger bandit force should prefer amnesty");
+        Assert(PeasantRebelBanditAmnestyRules.ResolveAiDecision(
+                banditStrength: 100, originStrength: 151) ==
+                BanditAmnestyAiDecision.Suppression,
+            "a weaker bandit force should be suppressed");
+        Assert(PeasantRebelBanditAmnestyRules.ResolveAiDecision(
+                banditStrength: 1, originStrength: 0) ==
+                BanditAmnestyAiDecision.Amnesty,
+            "a live bandit with no measurable origin strength is not " +
+            "forced into a pointless suppression war");
         Assert(PeasantRebelBanditAmnestyRules.CanAdvance(
                 BanditAmnestySettlementPhase.Prepared,
                 BanditAmnestySettlementPhase.TerritorialSettlement),
@@ -39,9 +53,14 @@ internal static class PeasantRebelBanditAmnestyRulesTests
                 BanditAmnestySettlementPhase.Completed),
             "fulfilled reward completes settlement");
         Assert(!PeasantRebelBanditAmnestyRules.CanAdvance(
-                BanditAmnestySettlementPhase.Completed,
-                BanditAmnestySettlementPhase.RewardPending),
+            BanditAmnestySettlementPhase.Completed,
+            BanditAmnestySettlementPhase.RewardPending),
             "completed settlement never moves backwards");
+
+        string locales = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Locales", "others.csv"));
+        Assert(locales.Contains("aw_bandit_amnesty_unavailable,"),
+            "the amnesty god-power failure message has a localized key");
     }
 
     private static void Assert(bool condition, string message)

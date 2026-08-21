@@ -8,6 +8,7 @@ namespace AncientWarfare3.core.court
     {
         internal const int CreateMode = 0;
         internal const int AssignMode = 1;
+        internal const int RetireMode = 2;
         private static long _targetRegionId = -1L;
 
         internal static void ClearRuntime()
@@ -41,6 +42,33 @@ namespace AncientWarfare3.core.court
                     city.kingdom);
                 HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
                 return "aw_de_jure_region_created";
+            }
+
+            if (pMode == RetireMode)
+            {
+                if (_targetRegionId < 0L)
+                {
+                    if (!DeJureRegionStore.TryGetForCity(city.data.id,
+                            out DeJureRegion selected))
+                        return "aw_de_jure_region_retire_invalid";
+                    _targetRegionId = selected.RegionId;
+                    pSuccess = true;
+                    return "aw_de_jure_region_retire_selected";
+                }
+                if (!DeJureRegionStore.TryGetForCity(city.data.id,
+                        out DeJureRegion target) ||
+                    target.RegionId != _targetRegionId)
+                    return "aw_de_jure_region_retire_target_mismatch";
+                if (!DeJureRegionStore.RetireState(city, out string error))
+                    return error == "region_missing"
+                        ? "aw_de_jure_region_retire_invalid"
+                        : "aw_de_jure_region_retire_failed";
+                _targetRegionId = -1L;
+                pSuccess = true;
+                HierarchicalVassalMapModeService.MarkHierarchyDirty(
+                    city.kingdom);
+                HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
+                return "aw_de_jure_region_retired";
             }
 
             if (pMode != AssignMode) return "aw_de_jure_region_invalid_mode";

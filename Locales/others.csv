@@ -380,6 +380,7 @@ aw_bandit_amnesty_only_origin_may_amnesty,只有母国可以招安该土匪,Only
 aw_bandit_amnesty_amnesty_unavailable,当前无法招安该土匪,This bandit amnesty is currently unavailable,當前無法招安該土匪
 aw_bandit_amnesty_war_failed,无法结束土匪的战争,The bandit's wars could not be ended,無法結束土匪的戰爭
 aw_bandit_amnesty_settlement_failed,招安结算失败,The amnesty settlement failed,招安結算失敗
+aw_bandit_amnesty_unavailable,当前无法招安该土匪,This bandit amnesty is currently unavailable,當前無法招安該土匪
 aw_bandit_amnesty_settlement_title,土匪招安条件,Bandit Amnesty Terms,土匪招安條件
 aw_bandit_amnesty_reward,许诺赏格,Promised reward,許諾賞格
 aw_bandit_amnesty_reward_none,不许赏格,No reward,不許賞格

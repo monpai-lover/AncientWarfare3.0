@@ -151,6 +151,7 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             AccessionIdentityService.FinalizeDeferredFounding(__instance);
+            DeJureRegionStore.EnsureKingdomCapitalSeat(__instance);
         }
 
         private static AccessionCompletionContext CreateCompletionContext(

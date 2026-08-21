@@ -135,7 +135,7 @@ namespace AncientWarfare3.core.lineage
 
         public static int MinimumPreflightSupporters(int defenders)
         {
-            return MinimumRequiredSupporters(defenders) + 1;
+            return MinimumRequiredSupporters(defenders);
         }
 
         public static bool HasRequiredSupporters(int supporters, int defenders)

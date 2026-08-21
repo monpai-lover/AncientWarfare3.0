@@ -16,6 +16,20 @@ if (args.Length == 1 && args[0] == "--reverse-xiaization")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--court-history-localization")
+{
+    CourtHistoryLocalizationRegressionTests.Run();
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--mandate-map-refresh")
+{
+    MandateAnnualDeltaRulesTests.Run();
+    HierarchicalVassalRelationRefreshSourceGuardTests.Run();
+    Console.WriteLine("Mandate annual delta and hierarchy refresh rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--shi-lineage-mapmode")
 {
     CityShiInfluenceRulesTests.Run();
@@ -163,6 +177,15 @@ if (args.Length == 1 && args[0] == "--court-immediate-vacancies")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--court-de-jure-city")
+{
+    DeJureNewCityAssignmentRulesTests.Run();
+    CourtLocalLayoutAndLeaderRepairSourceGuardTests.Run();
+    DeJureRegionRetirementRulesTests.Run();
+    Console.WriteLine("Court and de jure city rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--official-career-noble-identity")
 {
     OfficialCareerNobleIdentityRulesTests.Run();
@@ -241,15 +264,12 @@ if (args.Length == 1 && args[0] == "--restoration-protection")
 
 if (args.Length == 1 && args[0] == "--restoration-atomic-launch")
 {
-    Equal(7, RoyalRestorationRules.MinimumPreflightSupporters(
+    Equal(6, RoyalRestorationRules.MinimumPreflightSupporters(
             defenders: 0),
-        "preflight reserves one candidate beyond the six-person minimum");
-    Equal(false, RoyalRestorationRules.HasRequiredPreflightSupporters(
-            supporters: 6, defenders: 0),
-        "an exact normal cohort lacks the future-heir reserve");
+        "preflight uses the same viable cohort minimum");
     True(RoyalRestorationRules.HasRequiredPreflightSupporters(
-            supporters: 7, defenders: 0),
-        "one reserved candidate makes preflight safe");
+            supporters: 6, defenders: 0),
+        "an exact viable cohort is sufficient for preflight");
     Equal(false, RestorationUprisingRules.ShouldCountInitialSupporter(
             candidateActorId: 42, claimantActorId: 42),
         "the restoration claimant is never counted as a levy candidate");
@@ -8910,6 +8930,8 @@ SuccessionDisputePersistenceSqlTests.Run();
 CivilServiceRulerDeathPersistenceSqlTests.Run();
 ConsistencyRegressionRulesTests.Run();
 MandateSuccessionRegressionRulesTests.Run();
+MandateAnnualDeltaRulesTests.Run();
+HierarchicalVassalRelationRefreshSourceGuardTests.Run();
 CityArmyReinforcementRulesTests.Run();
 RebellionForceCollapseRulesTests.Run();
 WarForceEliminationRulesTests.Run();

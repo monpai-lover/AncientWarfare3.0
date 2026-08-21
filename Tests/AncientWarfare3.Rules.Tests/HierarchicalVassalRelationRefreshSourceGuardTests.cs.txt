@@ -1,0 +1,84 @@
+using System;
+using System.IO;
+
+internal static class HierarchicalVassalRelationRefreshSourceGuardTests
+{
+    internal static void Run()
+    {
+        string hierarchy = Read(
+            "Code/core/policy/HierarchicalVassalMapModeService.cs");
+        string vassals = Read("Code/core/lineage/VassalService.cs");
+        string wars = Read("Code/patch/AW_WarPatch.cs");
+        string mandate = Read("Code/core/lineage/MandateService.cs");
+        string window = Read("Code/ui/windows/MandateDynastyWindow.cs");
+
+        Contains(hierarchy, "public static void MarkHierarchyDirty",
+            "hierarchy map needs one relation invalidation entry point");
+        Contains(hierarchy, "_hierarchyIndex = null;",
+            "relation invalidation must discard the hierarchy index");
+        Contains(hierarchy, "InvalidateNativeLabelCache();",
+            "relation invalidation must discard native map caches");
+        Contains(hierarchy,
+            "HierarchicalVassalMapModeLabelLayer.MarkHierarchyDirty();",
+            "relation invalidation must dirty the label layer");
+        Contains(hierarchy, "RequestNativeRedraw();",
+            "relation invalidation must request a native redraw");
+
+        string dirtyVassalMap = Slice(vassals,
+            "private static void DirtyVassalMap()", 500);
+        Contains(dirtyVassalMap,
+            "HierarchicalVassalMapModeService.MarkHierarchyDirty();",
+            "all vassal relation mutations must dirty the hierarchy map");
+        AtLeast(4, Count(wars,
+                "HierarchicalVassalMapModeService.MarkHierarchyDirty();"),
+            "war start, end, join and leave must refresh the hierarchy map");
+
+        Contains(mandate, "ReadYearlyDeltaBreakdown",
+            "the UI needs a read-only annual Mandate breakdown");
+        Contains(mandate,
+            "ReadYearlyDeltaBreakdown(pKingdom, pReport).Total",
+            "annual settlement and the tooltip must share one total");
+        Contains(window, "BuildAnnualMandateTooltip",
+            "the Mandate value row must expose the annual breakdown");
+    }
+
+    private static string Read(string pRelative) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            pRelative.Replace('/', Path.DirectorySeparatorChar)))
+        .Replace("\r\n", "\n");
+
+    private static string Slice(string pText, string pStart, int pLength)
+    {
+        int start = pText.IndexOf(pStart, StringComparison.Ordinal);
+        if (start < 0) return "";
+        return pText.Substring(start, Math.Min(pLength, pText.Length - start));
+    }
+
+    private static int Count(string pText, string pNeedle)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = pText.IndexOf(pNeedle, index,
+                   StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += pNeedle.Length;
+        }
+        return count;
+    }
+
+    private static void Contains(string pText, string pNeedle,
+        string pMessage)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage);
+    }
+
+    private static void AtLeast(int pExpected, int pActual,
+        string pMessage)
+    {
+        if (pActual < pExpected)
+            throw new InvalidOperationException(
+                $"{pMessage}: expected at least {pExpected}, got {pActual}");
+    }
+}

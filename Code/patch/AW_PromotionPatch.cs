@@ -170,6 +170,9 @@ namespace AncientWarfare3.patch
             if (GovernorRotationRuntimeScope.IsActive) return;
             if (__state?.data != null) EndLeaderCareer(__state, "removed");
             CourtDirectionService.MarkDirty(__state?.kingdom);
+            if (__instance?.data != null && __instance.kingdom?.data != null &&
+                !__instance.isRekt() && !__instance.isGettingCaptured())
+                CityLeaderVacancyRepairService.Request(__instance);
         }
 
         private static void InvalidateRegionalGovernmentCache(City pCity,
