@@ -161,6 +161,15 @@ namespace AncientWarfare3.ui
             Register(groups, AWLineageTabLayoutRules.Administration,
                 deJureRegionAssignButton);
 
+            PowerButton deJureRegionRetireButton =
+                PowerButtonCreator.CreateGodPowerButton(
+                content.GodPowerLibrary.DE_JURE_REGION_RETIRE,
+                SpriteTextureLoader.getSprite("ui/icons/iconDeleteWorld")
+                ?? SpriteTextureLoader.getSprite("ui/Icons/aw_de_jure_region")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconMap"));
+            Register(groups, AWLineageTabLayoutRules.Administration,
+                deJureRegionRetireButton);
+
             PowerButton mandateCoreMapButton = CreateMapModeToggleButton(
                 MandateCoreMapModeService.POWER_ID,
                 SpriteTextureLoader.getSprite("ui/icons/iconMap")

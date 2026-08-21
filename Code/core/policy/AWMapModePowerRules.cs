@@ -14,7 +14,9 @@ namespace AncientWarfare3.core.policy
 
         public static MetaType ResolveForcedMapModeForPower(string pPowerId)
         {
-            return pPowerId == "aw_de_jure_region_create" || pPowerId == "aw_de_jure_region_assign"
+            return pPowerId == "aw_de_jure_region_create" ||
+                   pPowerId == "aw_de_jure_region_assign" ||
+                   pPowerId == "aw_de_jure_region_retire"
                 ? AWMapModeMetaTypes.HierarchicalVassal
                 : ResolveForcedMapModeForLayerPower();
         }

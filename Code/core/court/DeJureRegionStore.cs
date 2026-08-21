@@ -17,6 +17,7 @@ namespace AncientWarfare3.core.court
         private static string _directory;
         private static bool _readAttempted;
         private static bool _migrationCompleted;
+        private static bool _emptyRegionRepairCompleted;
         private static long _nextChangeId = 1L;
 
         internal static long Revision
@@ -34,7 +35,9 @@ namespace AncientWarfare3.core.court
                 Normalize(_store);
                 _readAttempted = true;
                 _migrationCompleted = _store.Regions.Count > 0;
+                _emptyRegionRepairCompleted = false;
                 _nextChangeId = 1L;
+                RepairEmptyRegionsLocked();
                 EnsureAllKingdomCapitalSeatsLocked();
             }
         }
@@ -67,6 +70,7 @@ namespace AncientWarfare3.core.court
                 _store = new DeJureAdministrationStore();
                 _readAttempted = true;
                 _migrationCompleted = false;
+                _emptyRegionRepairCompleted = false;
                 _nextChangeId = 1L;
             }
             RegionalGovernmentAggregationService.Clear();
@@ -81,6 +85,7 @@ namespace AncientWarfare3.core.court
                 _directory = null;
                 _readAttempted = false;
                 _migrationCompleted = false;
+                _emptyRegionRepairCompleted = false;
                 _nextChangeId = 1L;
             }
             DeJureNewCityAssignmentService.ClearRuntime();
@@ -355,6 +360,32 @@ namespace AncientWarfare3.core.court
             catch { }
         }
 
+        // Old saves can contain active region shells without any live member.
+        // Non-empty player-planned regions are deliberately preserved.
+        private static void RepairEmptyRegionsLocked()
+        {
+            if (_emptyRegionRepairCompleted || _store?.Regions == null ||
+                !HasLiveWorld()) return;
+            _emptyRegionRepairCompleted = true;
+            bool changed = false;
+            foreach (DeJureRegion region in _store.Regions)
+            {
+                if (region == null || region.MemberCityIds == null) continue;
+                bool hasLiveMember = region.MemberCityIds.Any(id =>
+                    IsDeJureEligibleCity(World.world?.cities?.get(id)));
+                if (!DeJureRegionRetirementRules.ShouldRepairEmptyRegion(
+                        region.Active, hasLiveMember)) continue;
+                region.Active = false;
+                region.Version++;
+                AddChange(region.RegionId, -1L, region.RegionId, -1L,
+                    "DeJureEmptyRegionRepaired");
+                changed = true;
+            }
+            if (!changed) return;
+            _store.StoreRevision++;
+            RegionalGovernmentAggregationService.Clear();
+        }
+
         private static void EnsureKingdomCapitalSeatLocked(Kingdom pKingdom,
             string pReason)
         {
@@ -405,6 +436,8 @@ namespace AncientWarfare3.core.court
                              new DeJureAdministrationStore();
                     Normalize(_store);
                     _migrationCompleted = _store.Regions.Count > 0;
+                    _emptyRegionRepairCompleted = false;
+                    RepairEmptyRegionsLocked();
                 }
                 if (_store != null && !_migrationCompleted &&
                     _store.Regions.Count == 0 && HasLiveWorld() &&
@@ -415,7 +448,10 @@ namespace AncientWarfare3.core.court
                 }
                 if (_store != null && HasLiveWorld() && Config.game_loaded &&
                     !SmoothLoader.isLoading())
+                {
+                    RepairEmptyRegionsLocked();
                     EnsureAllKingdomCapitalSeatsLocked();
+                }
             }
         }
 

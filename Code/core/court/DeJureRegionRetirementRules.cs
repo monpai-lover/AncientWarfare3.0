@@ -14,5 +14,11 @@ namespace AncientWarfare3.core.court
         {
             return isCapital && regionWillBeRetired;
         }
+
+        internal static bool ShouldRepairEmptyRegion(bool activeRegion,
+            bool hasLiveMember)
+        {
+            return activeRegion && !hasLiveMember;
+        }
     }
 }

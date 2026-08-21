@@ -18,16 +18,28 @@ internal static class DeJureRegionRetirementRulesTests
             "capital region retirement requires a replacement seat");
         False(DeJureRegionRetirementRules.RequiresCapitalReplacement(false, true),
             "ordinary member does not require capital replacement");
+        True(DeJureRegionRetirementRules.ShouldRepairEmptyRegion(true, false),
+            "active old region without live members is repaired");
+        False(DeJureRegionRetirementRules.ShouldRepairEmptyRegion(true, true),
+            "non-empty player planned region is preserved");
+        False(DeJureRegionRetirementRules.ShouldRepairEmptyRegion(false, false),
+            "retired empty region is not processed twice");
 
         string power = Read("Code/content/GodPowerLibrary.cs");
         string service = Read("Code/core/court/DeJureRegionPowerService.cs");
         string store = Read("Code/core/court/DeJureRegionStore.cs");
+        string tab = Read("Code/ui/AW_LineageTab.cs");
+        string mapRules = Read("Code/core/policy/AWMapModePowerRules.cs");
         string csv = Read("Locales/aw3_court.csv");
         Contains(power, "DE_JURE_REGION_RETIRE");
         Contains(service, "RetireMode");
         Contains(store, "RetireState");
         Contains(store, "DeJureRegionRetired");
         Contains(store, "capital_region_recreated");
+        Contains(store, "RepairEmptyRegionsLocked");
+        Contains(store, "DeJureEmptyRegionRepaired");
+        Contains(tab, "DE_JURE_REGION_RETIRE");
+        Contains(mapRules, "aw_de_jure_region_retire");
         Contains(csv, "aw_de_jure_region_retire,");
     }
 
