@@ -83,4 +83,4 @@
 - ZIP 单根目录、版本号、源码和运行时资源完整性检查。
 - GitHub Release 资产 SHA-256 与本地发布包核对。
 
-完整内容说明见 [《四日大型内容更新导览》](NEW_CONTENT_2026-08-21.md)。
+完整内容说明见 [《四日大型内容更新导览》](https://github.com/monpai-lover/AncientWarfare3.0/blob/v1.2.7/NEW_CONTENT_2026-08-21.md)。
