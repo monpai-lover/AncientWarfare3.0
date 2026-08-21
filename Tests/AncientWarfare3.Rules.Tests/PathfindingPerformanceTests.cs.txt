@@ -8,7 +8,7 @@ internal static class PathfindingPerformanceTests
     public static void Run()
     {
         SchedulerStageDiagnosticsAccumulateStableSnapshots();
-        ActorTimerWorkUsesBoundedRanges();
+        ActorTimerWorkPreservesBatchContainerOwnership();
         ActorPostEnemyCacheKeepsPreparationAndCommitBoundaries();
         SpatialMembershipKeepsRepairAndVanillaFallbacks();
         PathRuntimeDiagnosticsAreReadOnly();
@@ -80,16 +80,16 @@ internal static class PathfindingPerformanceTests
             "taking a scheduler snapshot consumes the current frame buckets");
     }
 
-    private static void ActorTimerWorkUsesBoundedRanges()
+    private static void ActorTimerWorkPreservesBatchContainerOwnership()
     {
         string runner = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "performance",
             "AWCooperativeActorParallelJobRunner.cs"));
-        Assert(runner.Contains("private const int TimerRangeSize = 128;",
-                StringComparison.Ordinal) &&
-               runner.Contains("start += TimerRangeSize",
+        Assert(!runner.Contains("start += TimerRangeSize",
+                   StringComparison.Ordinal) &&
+               runner.Contains("new TimerRange(actors, 0, count)",
                    StringComparison.Ordinal),
-            "actor timer workers partition batches into bounded 128-actor ranges");
+            "actor timer workers keep each batch on one worker so its mutable containers are not written concurrently");
     }
 
     private static void ActorPostEnemyCacheKeepsPreparationAndCommitBoundaries()

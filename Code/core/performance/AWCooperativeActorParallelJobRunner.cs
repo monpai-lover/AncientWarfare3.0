@@ -11,8 +11,6 @@ namespace AncientWarfare3.core.performance
         private const string PrepareJobId = "prepare";
         private const string UpdateTimersJobId = "update_timers";
         private const string UpdateVisibilityJobId = "update_visibility";
-        private const int TimerRangeSize = 128;
-
         private TimerRange[] _timerRanges = Array.Empty<TimerRange>();
         private float _activeElapsed;
         private bool _activePaused;
@@ -82,17 +80,13 @@ namespace AncientWarfare3.core.performance
                 batch._array = actors;
                 batch._count = count;
                 actorCount += count;
-                int requiredRanges = count <= 0
-                    ? 0
-                    : (count + TimerRangeSize - 1) / TimerRangeSize;
-                EnsureTimerRangeCapacity(rangeCount + requiredRanges);
-                for (int start = 0; start < count;
-                     start += TimerRangeSize)
-                {
+                // A BatchActors owns mutable ObjectContainer instances such as
+                // c_action_landed. Keep the whole batch on one worker: splitting
+                // one batch into ranges lets updateFall concurrently mutate the
+                // same HashSet and corrupt ObjectContainer.checkAddRemove().
+                if (count > 0)
                     _timerRanges[rangeCount++] = new TimerRange(
-                        actors, start,
-                        Math.Min(count, start + TimerRangeSize));
-                }
+                        actors, 0, count);
             }
 
             _activeElapsed = pElapsed;
