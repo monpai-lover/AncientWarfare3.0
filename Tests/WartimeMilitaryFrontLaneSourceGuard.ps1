@@ -45,6 +45,9 @@ Require ($scheduler.Contains('AWMilitaryFrontLaneRules.FixedStepSeconds')) `
     'front lane must use the fixed military step'
 Require ($patch.Contains('AWMilitaryFrontLaneScheduler.ProcessFrame();')) `
     'MapBox frame boundary must run the front lane'
+Require ($patch.IndexOf('AWFramePriorityGovernor.BeginFrame();') -lt
+         $patch.IndexOf('AWMilitaryFrontLaneScheduler.ProcessFrame();')) `
+    'the render deadline must include front-lane CPU time'
 Require ($governor.Contains('EffectiveTargetRenderFps')) `
     'governor must expose a dynamic target without mutating config'
 Require ($governor.Contains('AWWartimeFrameBudgetRules.Advance(')) `
