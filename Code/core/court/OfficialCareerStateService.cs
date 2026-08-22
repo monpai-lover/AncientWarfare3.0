@@ -661,7 +661,15 @@ namespace AncientWarfare3.core.court
                                        state.OfficeId == CourtOfficeId.WestMayor;
                 if (termDue && localOffice)
                 {
-                    // Leader rotation or city-slice subordinate refill owns it.
+                    // The city bureau still owns rotation/refill, but the
+                    // outgoing official must receive the same performance
+                    // review as central officials before that handoff.
+                    if (nineRankSystem &&
+                        mutation.Rank > OfficialCareerRankRules.Unranked)
+                        EvaluateDueOfficial(mutation, economy, year, pKingdom,
+                            pPreserveTerm: true);
+                    else
+                        RenewDueOfficial(mutation, year, pKingdom);
                 }
                 else if (westernMayorDue && realmCityCount <= 1)
                     mutation.TermEndYear =
@@ -725,7 +733,8 @@ namespace AncientWarfare3.core.court
         }
 
         private static void EvaluateDueOfficial(AnnualMutation pMutation,
-            EconomyView pEconomy, int pYear, Kingdom pKingdom)
+            EconomyView pEconomy, int pYear, Kingdom pKingdom,
+            bool pPreserveTerm = false)
         {
             Actor actor = pMutation.Actor;
             OfficialCareerStateView state = pMutation.State;
@@ -748,9 +757,10 @@ namespace AncientWarfare3.core.court
             pMutation.LastEvaluation = grade;
             pMutation.EvaluationModifierUntil = pYear + 4;
             pMutation.Seniority = state.Seniority + Math.Max(0, 5 - grade);
-            pMutation.TermEndYear =
-                CourtAuxiliaryLawService.ResolveTermEndYear(pKingdom,
-                    SafeAge(actor), grade, state.ActorId, pYear);
+            if (!pPreserveTerm)
+                pMutation.TermEndYear =
+                    CourtAuxiliaryLawService.ResolveTermEndYear(pKingdom,
+                        SafeAge(actor), grade, state.ActorId, pYear);
             pMutation.Evaluated = true;
         }
 

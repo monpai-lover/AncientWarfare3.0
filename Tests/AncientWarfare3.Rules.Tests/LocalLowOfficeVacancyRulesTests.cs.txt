@@ -34,6 +34,17 @@ internal static class LocalLowOfficeVacancyRulesTests
         Equal(7, LocalLowOfficeVacancyRules.ResolveEntryRank(
                 currentRank: 7, officeGrade: 30),
             "an existing rank is never lowered by the local floor");
+        True(OfficialCareerRankRules.AutomaticRankCeiling >= 10,
+            "automatic promotion does not stop before rank ten");
+        int promotedRank = 1;
+        for (int targetRank = 2; targetRank <= 10; targetRank++)
+        {
+            promotedRank = OfficialCareerRankRules.ApplyAutomaticRankChange(
+                promotedRank, delta: 1);
+            Equal(targetRank, promotedRank,
+                "good annual evaluations can advance through rank " +
+                targetRank);
+        }
     }
 
     private static void True(bool pActual, string pMessage)
