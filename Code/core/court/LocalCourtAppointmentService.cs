@@ -54,13 +54,6 @@ namespace AncientWarfare3.core.court
                 StringComparer.Ordinal);
             foreach (ActiveLocalOfficer row in active)
             {
-                if (IsFixedOffice(pKingdom, pCity, row.OfficeId))
-                {
-                    retainedCounts.TryGetValue(row.OfficeId,
-                        out int fixedCount);
-                    retainedCounts[row.OfficeId] = fixedCount + 1;
-                    continue;
-                }
                 Actor actor = FindActor(row.ActorId);
                 bool live = actor?.data != null && actor.isAlive() &&
                             !actor.isRekt() &&
@@ -132,14 +125,11 @@ namespace AncientWarfare3.core.court
             {
                 List<CustomCourtOffice> offices = (local.Offices ??
                     new List<CustomCourtOffice>()).Where(office =>
-                    office != null && office.Layer == CourtOfficeLayer.City &&
-                    !CustomCourtTemplateRules.IsFixedChiefOffice(office))
+                    office != null && office.Layer == CourtOfficeLayer.City)
                     .ToList();
                 IReadOnlyDictionary<string, int> ranks =
                     CustomCourtHierarchyLayoutRules.BuildRanks(offices,
                         local.Edges);
-                bool templateControlsCapacity = CustomCourtRuntime.
-                    HasCustomLocalTemplates(pKingdom);
                 foreach (CustomCourtOffice office in offices.OrderBy(office =>
                              ranks.TryGetValue(office.Id, out int rank)
                                  ? rank
@@ -148,8 +138,7 @@ namespace AncientWarfare3.core.court
                              .ThenBy(office => office.Id,
                                  StringComparer.Ordinal))
                     for (int slot = 0;
-                         slot < Math.Max(1, office.Slots) &&
-                         (templateControlsCapacity || result.Count < pCapacity);
+                         slot < Math.Max(1, office.Slots);
                          slot++)
                         result.Add(office.Id);
                 return result;
@@ -164,16 +153,6 @@ namespace AncientWarfare3.core.court
                 if (!string.IsNullOrEmpty(office)) result.Add(office);
             }
             return result;
-        }
-
-        private static bool IsFixedOffice(Kingdom pKingdom, City pCity,
-            string pOfficeId)
-        {
-            return CustomCourtRuntime.TryGetLocalTemplate(pKingdom, pCity,
-                    out CustomLocalCourtTemplate template) &&
-                (template.Offices ?? new List<CustomCourtOffice>()).Any(
-                    office => office != null && office.Id == pOfficeId &&
-                        CustomCourtTemplateRules.IsFixedChiefOffice(office));
         }
 
         private static bool TryLoadActive(long pKingdomId, long pCityId,

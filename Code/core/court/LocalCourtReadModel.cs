@@ -19,8 +19,6 @@ namespace AncientWarfare3.core.court
         public int RegionMemberCount { get; set; }
         public long RegionalGovernorActorId { get; set; } = -1L;
         public CourtPyramidNodeModel RegionalSuperiorNode { get; set; }
-        public CourtPyramidNodeModel RegionalChiefNode { get; set; }
-        public CourtPyramidNodeModel CommanderyChiefNode { get; set; }
         public CourtPyramidNodeModel LeaderNode { get; set; }
         public int ActiveSeats { get; set; }
         public int TotalSeats { get; set; }

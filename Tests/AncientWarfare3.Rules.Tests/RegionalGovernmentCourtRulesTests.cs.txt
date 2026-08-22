@@ -16,6 +16,18 @@ internal static class RegionalGovernmentCourtRulesTests
             "court", "CourtReadModelService.cs"));
         False(readModel.Contains("AddRegionalGovernmentNodes(seeds, pKingdom)"),
             "central court must not project regional government nodes");
+        False(readModel.Contains("CommanderyChiefNode"),
+            "local court must not project a duplicate commandery chief card");
+        False(readModel.Contains("commandery-chief:"),
+            "local court must not create a commandery chief node id");
+        False(readModel.Contains("pTemplateControlsCapacity"),
+            "configured local templates must expose all configured offices");
+        string appointment = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "LocalCourtAppointmentService.cs"));
+        False(appointment.Contains("IsFixedOffice"),
+            "local appointment must not preserve synthetic fixed chief roles");
+        False(appointment.Contains("IsFixedChiefOffice"),
+            "local appointment must use the ordinary template root office");
         True(readModel.Contains("pCity.leader"),
             "local court must use the city leader as the chief fallback");
         True(readModel.Contains("RegionSeatCityId"),

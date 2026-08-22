@@ -130,32 +130,8 @@ namespace AncientWarfare3.core.court
                     Influence = liveGovernor ? SafeStat(governor, "stewardship") : 0f
                 };
                 node.IsFixedRole = true;
-                region.CommanderyChiefActorId = seatCity?.leader?.data?.id ?? -1L;
                 pSeeds.Add(node);
             }
-        }
-
-        private static CourtPyramidNodeModel BuildCommanderyChiefNode(
-            Kingdom pKingdom, RegionalGovernmentReadModel pRegion,
-            City pSeatCity)
-        {
-            Actor leader = pSeatCity?.leader;
-            bool live = IsCurrentCityLeader(pSeatCity, pKingdom) &&
-                leader?.data != null;
-            var node = new CourtPyramidNodeModel(live ? leader.data.id : -1L,
-                "commandery-chief:" + pKingdom.id + ":" + pRegion.RegionId,
-                CourtPyramidRoleId.Governor, CourtPyramidRules.GovernorRank,
-                0, !live)
-            {
-                OfficeLayer = CourtOfficeLayer.City,
-                ActorName = live ? SafeActorName(leader) : "",
-                CityId = pRegion.EffectiveSeatCityId,
-                CityName = FindCityName(pKingdom, pRegion.EffectiveSeatCityId),
-                DisplayTitle = pRegion.LocalLevelTitle,
-                CommandName = pRegion.RegionName ?? string.Empty
-            };
-            node.IsFixedRole = true;
-            return node;
         }
 
         private static LocalCourtReadModel BuildLocal(Kingdom pKingdom,
@@ -191,9 +167,6 @@ namespace AncientWarfare3.core.court
                 model.LocalLevelTitle = region.LocalLevelTitle;
                 model.RegionMemberCount = region.MemberCount;
                 model.RegionalGovernorActorId = region.GovernorActorId;
-                model.CommanderyChiefNode = BuildCommanderyChiefNode(
-                    pKingdom, region,
-                    FindCity(pKingdom, region.EffectiveSeatCityId));
             }
 
             CustomLocalCourtTemplate localTemplate;
@@ -222,8 +195,7 @@ namespace AncientWarfare3.core.court
                     row.layer == CourtOfficeLayer.City &&
                     row.city_id == pCity.data.id).ToList();
             List<string> seats = BuildLocalSeats(pKingdom, pCity,
-                localTemplate, model.TotalSeats,
-                CustomCourtRuntime.HasCustomLocalTemplates(pKingdom));
+                localTemplate, model.TotalSeats);
             if (seats.Count > model.TotalSeats) model.TotalSeats = seats.Count;
             EnsurePersistedLocalLeader(pKingdom, pCity, seats, officers);
             if (seats.Count > 0 && !officers.Any(row =>
@@ -235,11 +207,6 @@ namespace AncientWarfare3.core.court
             AddLocalNodes(model, pKingdom, pCity, seats, officers,
                 localTemplate, pCareerStates);
             AddRegionalSuperiorNode(model, pKingdom, pCity);
-            if (model.CommanderyChiefNode != null &&
-                model.CommanderyChiefNode.CityId == pCity.data.id &&
-                !model.Nodes.Any(node => node != null &&
-                    node.OfficeId == model.CommanderyChiefNode.OfficeId))
-                model.Nodes.Insert(1, model.CommanderyChiefNode);
             // The regional superior is part of the local court graph and must
             // participate in the same layout pass as the city officials.
             // Otherwise it keeps the default (0, 0) position and can be
@@ -345,8 +312,7 @@ namespace AncientWarfare3.core.court
         }
 
         private static List<string> BuildLocalSeats(Kingdom pKingdom,
-            City pCity, CustomLocalCourtTemplate pTemplate, int pCapacity,
-            bool pTemplateControlsCapacity)
+            City pCity, CustomLocalCourtTemplate pTemplate, int pCapacity)
         {
             int capacity = Math.Max(1, pCapacity);
             var result = new List<string>();
@@ -365,8 +331,7 @@ namespace AncientWarfare3.core.court
                              .ThenBy(office => office.Grade)
                              .ThenBy(office => office.Id,
                                  StringComparer.Ordinal))
-                    for (int slot = 0; slot < Math.Max(1, office.Slots) &&
-                         (pTemplateControlsCapacity || result.Count < capacity);
+                    for (int slot = 0; slot < Math.Max(1, office.Slots);
                          slot++) result.Add(office.Id);
                 return result;
             }
