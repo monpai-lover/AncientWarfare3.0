@@ -23,6 +23,12 @@ internal static class HereditaryTitleSuccessionRulesTests
             "a female holder never transfers a male-line title");
         False(HereditaryTitleSuccessionRules.CanTransfer(true, true, false),
             "female-style identities never enter succession");
+        True(DynasticMaleLineContinuityRules.ShouldRequestHeir(true, false),
+            "a hereditary holder without a legal successor requests continuity");
+        False(DynasticMaleLineContinuityRules.ShouldRequestHeir(true, true),
+            "continuity stops after a legal successor exists");
+        False(DynasticMaleLineContinuityRules.ShouldRequestHeir(false, false),
+            "non-hereditary identities never receive forced reproduction");
 
         string noble = Read("Code/core/lineage/NobleRankService.cs");
         Contains(noble, "NobleTitleStyle.Princess");
@@ -31,6 +37,17 @@ internal static class HereditaryTitleSuccessionRulesTests
         string virtualService = Read(
             "Code/core/lineage/VirtualNobleTitleService.cs");
         Contains(virtualService, "pHolder.isSexMale()");
+        string feudatory = Read("Code/core/lineage/FeudatoryService.cs");
+        Contains(feudatory, "DynasticMaleLineContinuityService.RequestContinuation");
+        string pregnancy = Read(
+            "Code/core/lineage/NobleHeirPregnancyService.cs");
+        Contains(pregnancy, "RequestForHolder");
+        string remarriage = Read(
+            "Code/core/lineage/NobleRemarriageService.cs");
+        Contains(remarriage, "DynasticMaleLineContinuityService.RequestContinuation");
+        string annual = Read(
+            "Code/core/policy/KingdomAnnualWorkService.cs");
+        Contains(annual, "DynasticMaleLineContinuityService.OnKingdomYear");
     }
 
     private static long Select(params HereditaryTitleSuccessionCandidate[] p)
@@ -66,6 +83,11 @@ internal static class HereditaryTitleSuccessionRulesTests
     private static void False(bool pValue, string pMessage)
     {
         if (pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pMessage)

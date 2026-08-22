@@ -264,6 +264,7 @@ namespace AncientWarfare3.core.lineage
             SlaveService.ReleaseForFeudatoryAppointment(pPrince);
             AssignPrinceIdentity(pPrince, pCities[0]);
             MarkPrinceChildren(pPrince, snapshot.FeudatoryId);
+            DynasticMaleLineContinuityService.RequestContinuation(pPrince);
             RefreshSuccessor(snapshot.FeudatoryId);
             FeudatoryMapModeService.DirtyMapIfActive();
             for (int i = 0; i < pCities.Count; i++)
@@ -610,6 +611,7 @@ namespace AncientWarfare3.core.lineage
                 City seat = FindCity(snapshot.SeatCityId);
                 if (seat?.data != null) AssignPrinceIdentity(prince, seat);
                 MarkPrinceChildren(prince, snapshot.FeudatoryId);
+                DynasticMaleLineContinuityService.RequestContinuation(prince);
             }
             FeudatoryMapModeService.DirtyMapIfActive();
         }
@@ -1925,6 +1927,7 @@ namespace AncientWarfare3.core.lineage
             PublishReplaced(snapshot.WithPrince(snapshot.PrinceActorId,
                 snapshot.PrinceName, snapshot.ShiBranchId,
                 snapshot.PrinceShiLabel, successorId, successorName));
+            DynasticMaleLineContinuityService.RequestContinuation(prince);
             return true;
         }
 

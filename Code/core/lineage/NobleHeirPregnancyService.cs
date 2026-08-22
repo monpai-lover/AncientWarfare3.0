@@ -261,6 +261,44 @@ namespace AncientWarfare3.core.lineage
             if (pending || loverPending) Enqueue(pActor.data.id);
         }
 
+        public static bool RequestForHolder(Actor pHolder)
+        {
+            if (AW3MultiplayerReplicaScope.IsReplicaSession ||
+                pHolder?.data == null || !pHolder.isSexMale() ||
+                !DynasticMaleLineContinuityService.NeedsContinuation(
+                    pHolder)) return false;
+            Actor mother = pHolder.lover;
+            if (mother?.data == null || !mother.isSexFemale() ||
+                mother.lover != pHolder || !mother.isAlive() ||
+                mother.isRekt() || !pHolder.isAlive() || pHolder.isRekt() ||
+                mother.hasStatus("pregnant")) return false;
+            mother.data.set(LineageKeys.DYNASTIC_HEIR_RETRY_PENDING, true);
+            mother.data.set(LineageKeys.DYNASTIC_HEIR_RETRY_FATHER_ID,
+                pHolder.data.id);
+            mother.data.set(LineageKeys.DYNASTIC_HEIR_RETRY_REQUEST_TIME,
+                CurrentWorldTime());
+            Enqueue(mother.data.id);
+            return true;
+        }
+
+        public static void CancelPendingForHolder(Actor pHolder)
+        {
+            if (pHolder?.data == null || !pHolder.isSexMale()) return;
+            Actor mother = pHolder.lover;
+            if (mother?.data == null) return;
+            mother.data.get(LineageKeys.DYNASTIC_HEIR_RETRY_FATHER_ID,
+                out long fatherId, -1L);
+            if (fatherId != pHolder.data.id) return;
+            mother.data.get(LineageKeys.DYNASTIC_HEIR_RETRY_PENDING,
+                out bool pending, false);
+            if (!pending || mother.hasStatus("pregnant")) return;
+            mother.data.removeBool(LineageKeys.DYNASTIC_HEIR_RETRY_PENDING);
+            mother.data.removeLong(LineageKeys.DYNASTIC_HEIR_RETRY_FATHER_ID);
+            mother.data.removeFloat(
+                LineageKeys.DYNASTIC_HEIR_RETRY_REQUEST_TIME);
+            EnqueuedMothers.Remove(mother.data.id);
+        }
+
         public static void ProcessAuthorityCycle()
         {
             if (AW3MultiplayerReplicaScope.IsReplicaSession ||
@@ -538,7 +576,8 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            if (currentPartner.data.id != storedFatherId)
+            if (currentPartner?.data != null &&
+                currentPartner.data.id != storedFatherId)
                 pMother.data.set(LineageKeys.DYNASTIC_HEIR_RETRY_FATHER_ID,
                     currentPartner.data.id);
 

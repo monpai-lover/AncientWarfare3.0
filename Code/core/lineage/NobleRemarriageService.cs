@@ -144,6 +144,8 @@ namespace AncientWarfare3.core.lineage
                     RestoreCity(spouse, previousCity, pKingdom);
                     return false;
                 }
+                DynasticMaleLineContinuityService.RequestContinuation(
+                    pSubject.isSexMale() ? pSubject : spouse);
                 LineageService.ArchiveActor(pSubject, pAlive: true);
                 LineageService.ArchiveActor(spouse, pAlive: true);
                 ChronicleEvents.OnNobleRemarried(pKingdom, pSubject,
