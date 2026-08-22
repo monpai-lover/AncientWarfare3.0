@@ -225,6 +225,13 @@ namespace AncientWarfare3.core.lineage
                     ScheduleActiveParticipantControlRevaluation(war);
                     QueueSettlementChecks(war);
                 }
+                else
+                {
+                    // A loaded or already-calibrated snapshot can still be
+                    // exhausted; do not require a new score mutation to wake
+                    // the automatic settlement path.
+                    WarExhaustionSettlementRuntimeService.QueueIfReady(war);
+                }
                 return changed;
             }
             catch { return false; }
