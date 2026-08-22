@@ -9,10 +9,11 @@ namespace AncientWarfare3.core.pathfinding
     {
         private readonly ConcurrentQueue<AWPathStep> _steps = new ConcurrentQueue<AWPathStep>();
         private int _status;
+        private int _pendingCount;
         private AWPathFailureReason _failureReason;
         private Exception _error;
 
-        public int Count => _steps.Count;
+        public int Count => Volatile.Read(ref _pendingCount);
         public bool HasPendingSteps => !_steps.IsEmpty;
         public bool IsFinalized => Volatile.Read(ref _status) != 0;
         public bool IsFinished => IsFinalized && !HasPendingSteps;
@@ -41,6 +42,7 @@ namespace AncientWarfare3.core.pathfinding
         public bool AddStep(AWPathStep pStep)
         {
             if (pStep.TileId < 0 || IsFinalized) return false;
+            Interlocked.Increment(ref _pendingCount);
             _steps.Enqueue(pStep);
             return true;
         }
@@ -52,7 +54,9 @@ namespace AncientWarfare3.core.pathfinding
 
         public bool TryTake(out AWPathStep pStep)
         {
-            return _steps.TryDequeue(out pStep);
+            if (!_steps.TryDequeue(out pStep)) return false;
+            Interlocked.Decrement(ref _pendingCount);
+            return true;
         }
 
         public void Complete()

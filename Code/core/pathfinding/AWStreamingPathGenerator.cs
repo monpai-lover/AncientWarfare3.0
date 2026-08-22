@@ -10,10 +10,12 @@ namespace AncientWarfare3.core.pathfinding
         private const float Epsilon = 0.001f;
         [ThreadStatic] private static SearchWorkspace _threadWorkspace;
         private readonly AWPathfindingConfig _config;
+        private readonly AWRegionRouteCache _regionRouteCache;
 
         public AWStreamingPathGenerator(AWPathfindingConfig pConfig = null)
         {
             _config = pConfig ?? AWPathfindingConfig.Default;
+            _regionRouteCache = new AWRegionRouteCache(_config.RegionRouteCacheSize);
         }
 
         public void Generate(AWPathRequest pRequest, CancellationToken pCancellation)
@@ -79,15 +81,67 @@ namespace AncientWarfare3.core.pathfinding
                     return AWPathGenerationResult.Failure(
                         AWPathFailureReason.Unreachable);
 
+                // A physical boat is an explicit movement mode. Decide this
+                // before land A* so a cross-island request cannot spend its
+                // entire node budget searching disconnected terrain.
+                if (pRequest.PhysicalTransportAvailable &&
+                    CanUseVanillaTransport(start, target, pRequest.Profile) &&
+                    !AWNarrowWaterRecoveryRules.ShouldTryBoundedCrossingBeforeTransport(
+                        pRequest.Profile.IsMilitary, pRequest.Options.BoundedMilitaryWater))
+                {
+                    var transportEstimate = new AWTraversalEstimate(0f, 0f, 0f, 0f,
+                        AWHazardFlags.Transport);
+                    return AWPathGenerationResult.Success(target.Id, true,
+                        new[] { new AWPathStep(target.Id, AWMovementMethod.Transport,
+                            transportEstimate) });
+                }
+
                 float direct = AWTraversalRules.Distance(start.X, start.Y, target.X, target.Y);
                 bool longRange = direct > _config.ShortRangeTiles;
                 int primaryLimit = longRange ? _config.MaxNodesLong : _config.MaxNodesShort;
-                SearchResult result = Search(pRequest, start, target,
+                int searchTargetId = target.Id;
+                AWRegionCorridor corridor = null;
+                // ArmyRouteProvider marks RTS/P0 routes as bounded military
+                // water. Keep those requests on their established A* and
+                // boarding path so actor-path optimizations cannot alter RTS
+                // movement, landing, or return-home behavior.
+                bool useCultiwayActorRouting =
+                    !pRequest.Options.BoundedMilitaryWater;
+                if (longRange && useCultiwayActorRouting)
+                    ResolveLongRangeSearch(pRequest, start, target, out searchTargetId,
+                        out corridor);
+                if (useCultiwayActorRouting &&
+                    TryBuildStraightSegment(pRequest, start, target,
+                        Math.Min(Math.Max(1, pMaximumSteps),
+                            _config.SegmentTargetSteps), _config,
+                        out AWPathStep[] straightSteps,
+                        out int straightEnd))
+                {
+                    bool straightReachedTarget = straightEnd == target.Id;
+                    return AWPathGenerationResult.Success(straightEnd, straightReachedTarget,
+                        straightSteps);
+                }
+                float heuristicWeight = longRange
+                    ? Math.Max(1f, _config.LongRangeHeuristicWeight)
+                    : 1f;
+                SearchResult result = Search(pRequest, start, target, searchTargetId,
                     Math.Max(1, primaryLimit), float.PositiveInfinity,
+                    corridor, heuristicWeight,
                     pCancellation, workspace);
 #if !AW3_RULES_TESTS
                 AWPathfindingBootstrap.PathDiagnostics.AddExpandedNodes(result.ExpandedNodes);
 #endif
+                if (!result.Success && corridor != null)
+                {
+                    AWRegionCorridor widened = corridor.Expand();
+                    result = Search(pRequest, start, target, searchTargetId,
+                        Math.Max(1, primaryLimit), float.PositiveInfinity,
+                        widened, heuristicWeight, pCancellation, workspace);
+#if !AW3_RULES_TESTS
+                    AWPathfindingBootstrap.PathDiagnostics.AddExpandedNodes(result.ExpandedNodes);
+#endif
+                    if (result.Success) corridor = widened;
+                }
                 if (!result.Success && result.HitNodeLimit && longRange)
                 {
 #if !AW3_RULES_TESTS
@@ -95,9 +149,10 @@ namespace AncientWarfare3.core.pathfinding
 #endif
                     float detour = Math.Max(_config.FallbackCorridorMinDetour,
                         direct * _config.FallbackCorridorDetourScale);
-                    result = Search(pRequest, start, target,
+                    result = Search(pRequest, start, target, searchTargetId,
                         Math.Max(_config.MaxNodesLongFallback, _config.MaxNodesLong),
-                        direct + detour, pCancellation, workspace);
+                        direct + detour, corridor, heuristicWeight,
+                        pCancellation, workspace);
 #if !AW3_RULES_TESTS
                     AWPathfindingBootstrap.PathDiagnostics.AddExpandedNodes(result.ExpandedNodes);
 #endif
@@ -105,20 +160,6 @@ namespace AncientWarfare3.core.pathfinding
 
                 if (!result.Success)
                 {
-                    if (pRequest.PhysicalTransportAvailable &&
-                        CanUseVanillaTransport(start, target,
-                            pRequest.Profile) &&
-                        !AWNarrowWaterRecoveryRules
-                            .ShouldTryBoundedCrossingBeforeTransport(
-                                pRequest.Profile.IsMilitary,
-                                pRequest.Options.BoundedMilitaryWater))
-                    {
-                        var transportEstimate = new AWTraversalEstimate(0f, 0f, 0f, 0f,
-                            AWHazardFlags.Transport);
-                        return AWPathGenerationResult.Success(target.Id, true,
-                            new[] { new AWPathStep(target.Id,
-                                AWMovementMethod.Transport, transportEstimate) });
-                    }
                     return AWPathGenerationResult.Failure(result.HitNodeLimit
                         ? AWPathFailureReason.SearchLimitExceeded
                         : AWPathFailureReason.Unreachable);
@@ -136,12 +177,15 @@ namespace AncientWarfare3.core.pathfinding
                     pCancellation.ThrowIfCancellationRequested();
                     steps[i] = fullRoute[i];
                 }
-                if (outputCount < stepCount)
+                // A region lookahead is an intermediate objective. Its cached
+                // route must never be reported as completion of the request's
+                // actual target.
+                if (outputCount < stepCount && searchTargetId == target.Id)
                     pRequest.CacheRoute(fullRoute, outputCount);
                 int endTileId = outputCount > 0
                     ? steps[outputCount - 1].TileId
                     : pRequest.StartTileId;
-                bool reachedTarget = result.ReachedTarget &&
+                bool reachedTarget = result.ReachedTarget && searchTargetId == target.Id &&
                     outputCount == stepCount;
                 return AWPathGenerationResult.Success(endTileId,
                     reachedTarget, steps);
@@ -162,16 +206,232 @@ namespace AncientWarfare3.core.pathfinding
             AWTileTraversalSnapshot pTarget, AWActorTraversalProfile pProfile)
         {
             return !pProfile.CanFly && !pProfile.IsBoat && !pProfile.IsWaterCreature &&
+                   !pStart.Liquid && !pStart.Ocean &&
+                   !pTarget.Liquid && !pTarget.Ocean && pTarget.Ground &&
                    pStart.IslandId >= 0 && pTarget.IslandId >= 0 &&
                    pStart.IslandId != pTarget.IslandId;
         }
 
+        private void ResolveLongRangeSearch(AWPathRequest pRequest,
+            AWTileTraversalSnapshot pStart, AWTileTraversalSnapshot pTarget,
+            out int pSearchTargetId, out AWRegionCorridor pCorridor)
+        {
+            pSearchTargetId = ResolveGeometricWaypoint(pRequest.Generation,
+                pStart, pTarget, _config.RegionCorridorLookaheadTiles);
+            pCorridor = null;
+            AWRegionTopologySnapshot topology = pRequest.Generation.RegionTopology;
+            if (topology == null || pStart.RegionId < 0 || pTarget.RegionId < 0)
+                return;
+            int[] route = _regionRouteCache.GetOrBuild(pRequest.Generation,
+                pStart.Id, pTarget.Id, ResolveTraversalClass(pRequest));
+            if (route == null || route.Length == 0) return;
+            int lookahead = ResolveRegionLookahead(pRequest, pStart, route,
+                _config.RegionCorridorLookaheadTiles);
+            if (lookahead >= 0 && lookahead != pStart.Id)
+                pSearchTargetId = lookahead;
+            pCorridor = AWRegionCorridor.Create(topology, route);
+        }
+
+        private static int ResolveGeometricWaypoint(
+            AWTraversalGeneration pGeneration,
+            AWTileTraversalSnapshot pStart,
+            AWTileTraversalSnapshot pTarget, int pLookaheadTiles)
+        {
+            int distance = Math.Abs(pTarget.X - pStart.X) +
+                           Math.Abs(pTarget.Y - pStart.Y);
+            int lookahead = Math.Max(1, pLookaheadTiles);
+            if (distance <= lookahead) return pTarget.Id;
+
+            float ratio = lookahead / (float)distance;
+            int x = (int)Math.Round(pStart.X +
+                (pTarget.X - pStart.X) * ratio);
+            int y = (int)Math.Round(pStart.Y +
+                (pTarget.Y - pStart.Y) * ratio);
+            if (TryGetAt(pGeneration, x, y,
+                    out AWTileTraversalSnapshot waypoint))
+                return waypoint.Id;
+
+            for (int radius = 1; radius <= 3; radius++)
+            for (int dy = -radius; dy <= radius; dy++)
+            for (int dx = -radius; dx <= radius; dx++)
+            {
+                if (Math.Abs(dx) != radius && Math.Abs(dy) != radius)
+                    continue;
+                if (TryGetAt(pGeneration, x + dx, y + dy, out waypoint))
+                    return waypoint.Id;
+            }
+            return pTarget.Id;
+        }
+
+        private static int ResolveRegionLookahead(AWPathRequest pRequest,
+            AWTileTraversalSnapshot pStart, int[] pRoute, int pLookaheadTiles)
+        {
+            int selected = -1;
+            AWRegionTopologySnapshot topology = pRequest.Generation.RegionTopology;
+            for (int i = 1; i < pRoute.Length; i++)
+            {
+                if (!topology.TryGetRegion(pRoute[i], out AWRegionNode region)) continue;
+                int candidate = pRequest.Profile.IsBoat
+                    ? region.CenterTileId
+                    : region.LandTileId >= 0 ? region.LandTileId : region.CenterTileId;
+                if (candidate < 0 ||
+                    !pRequest.Generation.TryGet(candidate, out AWTileTraversalSnapshot tile) ||
+                    !AWTraversalRules.CanEnter(tile, pRequest.Profile, pRequest.Options))
+                    continue;
+                selected = candidate;
+                if (AWTraversalRules.Distance(pStart.X, pStart.Y, tile.X, tile.Y) >=
+                    Math.Max(1, pLookaheadTiles)) break;
+            }
+            return selected;
+        }
+
+        private static int ResolveTraversalClass(AWPathRequest pRequest)
+        {
+            int result = 0;
+            if (pRequest.Profile.IsBoat) result |= 1;
+            if (pRequest.Profile.IsWaterCreature) result |= 1 << 1;
+            if (pRequest.Profile.CanFly) result |= 1 << 2;
+            if (pRequest.Options.WalkOnBlocks) result |= 1 << 3;
+            if (pRequest.Options.PathOnWater) result |= 1 << 4;
+            if (pRequest.Options.WalkOnLava) result |= 1 << 5;
+            return result;
+        }
+
+        private static bool TryBuildStraightSegment(AWPathRequest pRequest,
+            AWTileTraversalSnapshot pStart, AWTileTraversalSnapshot pTarget,
+            int pMaximumSteps, AWPathfindingConfig pConfig,
+            out AWPathStep[] pSteps, out int pEndTileId)
+        {
+            pMaximumSteps = Math.Max(1, pMaximumSteps);
+            var buffer = new AWPathStep[pMaximumSteps];
+            int count = 0;
+            int x = pStart.X, y = pStart.Y;
+            int targetX = pTarget.X, targetY = pTarget.Y;
+            int dx = Math.Abs(targetX - x), dy = Math.Abs(targetY - y);
+            int sx = x < targetX ? 1 : -1, sy = y < targetY ? 1 : -1;
+            int error = dx - dy, currentId = pStart.Id;
+            while ((x != targetX || y != targetY) && count < pMaximumSteps)
+            {
+                int previousX = x, previousY = y, doubled = error * 2;
+                if (doubled > -dy) { error -= dy; x += sx; }
+                if (doubled < dx) { error += dx; y += sy; }
+                if (!TryGetAt(pRequest.Generation, x, y, out AWTileTraversalSnapshot next) ||
+                    !IsFastTileSafe(next, pRequest.Profile, pRequest.Options))
+                { pSteps = null; pEndTileId = pStart.Id; return false; }
+                bool diagonal = previousX != x && previousY != y;
+                if (diagonal && (!TryGetAt(pRequest.Generation, x, previousY, out AWTileTraversalSnapshot sideX) ||
+                    !TryGetAt(pRequest.Generation, previousX, y, out AWTileTraversalSnapshot sideY) ||
+                    !IsFastTileSafe(sideX, pRequest.Profile, pRequest.Options) ||
+                    !IsFastTileSafe(sideY, pRequest.Profile, pRequest.Options)))
+                { pSteps = null; pEndTileId = pStart.Id; return false; }
+                pRequest.Generation.TryGet(currentId, out AWTileTraversalSnapshot current);
+                AWTraversalEstimate estimate = AWTraversalRules.Estimate(current, next,
+                    pRequest.Profile, pRequest.Options, pConfig);
+                AWMovementMethod method = pRequest.Profile.IsBoat
+                    ? AWMovementMethod.Sail
+                    : next.Liquid || next.Ocean
+                        ? AWMovementMethod.Swim
+                        : AWMovementMethod.Walk;
+                buffer[count++] = new AWPathStep(next.Id, method,
+                    estimate, pPlannedTileFlags: AWPathTileFlagsExtensions.FromSnapshot(next));
+                currentId = next.Id;
+            }
+            pEndTileId = currentId;
+            pSteps = new AWPathStep[count];
+            Array.Copy(buffer, pSteps, count);
+            return count > 0 || pStart.Id == pTarget.Id;
+        }
+
+        private static bool TryGetAt(AWTraversalGeneration pGeneration, int pX, int pY,
+            out AWTileTraversalSnapshot pTile)
+        {
+            pTile = default;
+            if (pGeneration == null || pX < 0 || pY < 0 || pX >= pGeneration.Width || pY >= pGeneration.Height)
+                return false;
+            return pGeneration.TryGet(pY * pGeneration.Width + pX, out pTile);
+        }
+
+        private static bool IsFastTileSafe(AWTileTraversalSnapshot pTile,
+            AWActorTraversalProfile pProfile, AWPathRequestOptions pOptions)
+        {
+            if (!AWTraversalRules.CanEnter(pTile, pProfile, pOptions) || !pTile.HasType || pTile.DamageUnits)
+                return false;
+            if (pProfile.IsBoat)
+                return (pTile.Ocean || pTile.GoodForBoat) && !pTile.Lava && !pTile.Block;
+            if (pTile.Block && !pOptions.WalkOnBlocks && !pProfile.CanFly) return false;
+            if (pTile.Lava && pProfile.DiesInLava && !pOptions.WalkOnLava) return false;
+            if (pTile.Fire && !pProfile.ImmuneToFire && !pProfile.Burning) return false;
+            // The fast segment does not carry the A* water-run and drowning
+            // state. Land actors therefore keep using the full search for any
+            // liquid traversal, including bounded military crossings.
+            if ((pTile.Liquid || pTile.Ocean) && !pProfile.CanFly &&
+                !pProfile.IsWaterCreature) return false;
+            return true;
+        }
+
+        private sealed class AWRegionCorridor
+        {
+            private readonly HashSet<int> _regionIds;
+            private readonly AWRegionTopologySnapshot _topology;
+            private readonly int _expansionDepth;
+
+            private AWRegionCorridor(HashSet<int> pRegionIds,
+                AWRegionTopologySnapshot pTopology, int pExpansionDepth)
+            {
+                _regionIds = pRegionIds;
+                _topology = pTopology;
+                _expansionDepth = pExpansionDepth;
+            }
+
+            internal bool Contains(int pRegionId)
+            {
+                // Unclassified tiles are deliberately left unrestricted; this
+                // preserves legacy maps whose region snapshot is incomplete.
+                return pRegionId < 0 || _regionIds.Contains(pRegionId);
+            }
+
+            internal static AWRegionCorridor Create(
+                AWRegionTopologySnapshot pTopology, int[] pRoute)
+            {
+                var ids = new HashSet<int>(pRoute ?? Array.Empty<int>());
+                AddNeighbourRing(pTopology, ids);
+                return new AWRegionCorridor(ids, pTopology, 1);
+            }
+
+            internal AWRegionCorridor Expand()
+            {
+                if (_expansionDepth >= 2) return this;
+                var ids = new HashSet<int>(_regionIds);
+                AddNeighbourRing(_topology, ids);
+                return new AWRegionCorridor(ids, _topology, _expansionDepth + 1);
+            }
+
+            private static void AddNeighbourRing(AWRegionTopologySnapshot pTopology,
+                HashSet<int> pIds)
+            {
+                if (pTopology == null || pIds == null) return;
+                int[] source = new int[pIds.Count];
+                pIds.CopyTo(source);
+                for (int i = 0; i < source.Length; i++)
+                {
+                    if (!pTopology.TryGetRegion(source[i], out AWRegionNode region)) continue;
+                    for (int n = 0; n < region.Neighbours.Length; n++)
+                        pIds.Add(region.Neighbours[n]);
+                }
+            }
+        }
+
         private SearchResult Search(AWPathRequest pRequest, AWTileTraversalSnapshot pStart,
-            AWTileTraversalSnapshot pTarget, int pMaxNodes, float pCorridorLimit,
+            AWTileTraversalSnapshot pFinalTarget, int pSearchTargetId,
+            int pMaxNodes, float pCorridorLimit,
+            AWRegionCorridor pRegionCorridor, float pHeuristicWeight,
             CancellationToken pCancellation, SearchWorkspace pWorkspace)
         {
+            if (!pRequest.Generation.TryGet(pSearchTargetId, out AWTileTraversalSnapshot searchTarget))
+                return SearchResult.Failure(false, 0);
             pWorkspace.Reset(pMaxNodes, _config.MaxLabelsPerTile);
-            float startHeuristic = Heuristic(pStart, pTarget, pRequest.Profile);
+            float startHeuristic = Heuristic(pStart, searchTarget,
+                pRequest.Profile) * Math.Max(1f, pHeuristicWeight);
             int startIndex = pWorkspace.AddStart(SearchNode.Start(pStart.Id,
                 startHeuristic, pStart.Liquid || pStart.Ocean ? 1 : 0));
             pWorkspace.Open.Enqueue(new OpenEntry(startIndex, startHeuristic,
@@ -186,7 +446,7 @@ namespace AncientWarfare3.core.pathfinding
                 SearchNode current = pWorkspace.Node(entry.NodeIndex);
                 if (!pWorkspace.IsActive(current.TileId, entry.NodeIndex)) continue;
                 expanded++;
-                if (current.TileId == pTarget.Id)
+                if (current.TileId == searchTarget.Id)
                     return SearchResult.SuccessResult(entry.NodeIndex,
                         pReachedTarget: true, expanded);
                 if (pRequest.Options.LimitPathfindingRegions > 0 &&
@@ -208,10 +468,13 @@ namespace AncientWarfare3.core.pathfinding
                     if (!pRequest.Generation.TryGet(neighborId, out AWTileTraversalSnapshot neighbor))
                         continue;
                     if (!AWTraversalRules.CanEnter(neighbor, pRequest.Profile, pRequest.Options)) continue;
+                    if (pRegionCorridor != null && neighbor.Id != pRequest.TargetTileId &&
+                        !pRegionCorridor.Contains(neighbor.RegionId)) continue;
                     if (!float.IsPositiveInfinity(pCorridorLimit) &&
                         !AWTraversalRules.IsInsideFallbackCorridor(neighbor.X, neighbor.Y,
-                            pStart.X, pStart.Y, pTarget.X, pTarget.Y, pCorridorLimit -
-                            AWTraversalRules.Distance(pStart.X, pStart.Y, pTarget.X, pTarget.Y)))
+                            pStart.X, pStart.Y, pFinalTarget.X, pFinalTarget.Y,
+                            pCorridorLimit - AWTraversalRules.Distance(pStart.X,
+                                pStart.Y, pFinalTarget.X, pFinalTarget.Y)))
                         continue;
 
                     AWTraversalEstimate estimate = AWTraversalRules.Estimate(currentTile, neighbor,
@@ -233,7 +496,8 @@ namespace AncientWarfare3.core.pathfinding
                     float health = current.HealthCost + estimate.HealthCost;
                     float risk = current.Risk + estimate.RiskCost;
                     float g = time + risk;
-                    float h = Heuristic(neighbor, pTarget, pRequest.Profile);
+                    float h = Heuristic(neighbor, searchTarget,
+                        pRequest.Profile) * Math.Max(1f, pHeuristicWeight);
                     AWMovementMethod method = pRequest.Profile.IsBoat
                         ? AWMovementMethod.Sail
                         : neighbor.Liquid || neighbor.Ocean
