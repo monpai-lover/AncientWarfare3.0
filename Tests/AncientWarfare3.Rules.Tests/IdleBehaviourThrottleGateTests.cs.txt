@@ -36,6 +36,7 @@ internal static class IdleBehaviourThrottleGateTests
         ClearReleasesEveryActor();
         RuntimeWiringGuardsTheBehaviourBoundary();
         ProtectedMovementSourcesStayThrottleFree();
+        CosmeticBudgetsAreBoundedAndIndependent();
     }
 
     private static void TaskIdsMapOnlyCoveredCosmeticBehaviours()
@@ -45,7 +46,7 @@ internal static class IdleBehaviourThrottleGateTests
         Maps("socialize_try_to_start_immediate",
             AWIdleBehaviourKind.Socialize);
         Maps("happy_laughing", AWIdleBehaviourKind.EmoteSearch);
-        Maps("singing", AWIdleBehaviourKind.EmoteSearch);
+        Maps("singing", AWIdleBehaviourKind.Singing);
         Maps("decide_where_to_sleep", AWIdleBehaviourKind.Sleep);
 
         False(AWIdleBehaviourThrottleRules.TryGetKind("sleep_inside", out _),
@@ -299,6 +300,8 @@ internal static class IdleBehaviourThrottleGateTests
             "eligible attempts feed cumulative diagnostics");
         Contains(service, "AWIdleBehaviourThrottleDiagnostics.Reset",
             "world clear resets cumulative diagnostics");
+        Contains(patch, "Prefix(AiSystemActor __instance, string __0)",
+            "task switch binding uses the positional vanilla task argument");
         string diagnostics = Read("Code", "core", "policy",
             "RuntimePerformanceDiagnostic.cs");
         Contains(diagnostics, " idle_social_allowed=",
@@ -313,6 +316,8 @@ internal static class IdleBehaviourThrottleGateTests
             "PERF output reports allowed sleep attempts");
         Contains(diagnostics, " idle_sleep_deferred=",
             "PERF output reports deferred sleep attempts");
+        Contains(diagnostics, " idle_budget_rejected=",
+            "PERF output reports rejected cosmetic budget attempts");
         False(patch.Contains("Actor.goTo") ||
               patch.Contains("AWPathMovementBridge") ||
               service.Contains("Actor.goTo") ||
@@ -337,6 +342,39 @@ internal static class IdleBehaviourThrottleGateTests
         False(rtsController.Contains("AWIdleBehaviourThrottle",
                   StringComparison.Ordinal),
             "military route submission is independent of cosmetic throttling");
+    }
+
+    private static void CosmeticBudgetsAreBoundedAndIndependent()
+    {
+        var budget = new AWIdleBehaviourBudget();
+        Equal(32, AWIdleBehaviourBudget.Limit(
+                AWIdleBehaviourKind.Socialize),
+            "social budget is 32");
+        Equal(16, AWIdleBehaviourBudget.Limit(
+                AWIdleBehaviourKind.EmoteSearch),
+            "emotion budget is 16");
+        Equal(16, AWIdleBehaviourBudget.Limit(
+                AWIdleBehaviourKind.Singing),
+            "singing budget is 16");
+        True(budget.TryAcquire(1L, AWIdleBehaviourKind.Socialize),
+            "first social reservation is accepted");
+        True(budget.TryAcquire(1L, AWIdleBehaviourKind.Socialize),
+            "same actor reservation is idempotent");
+        for (long id = 2L; id <= 32L; id++)
+            True(budget.TryAcquire(id, AWIdleBehaviourKind.Socialize),
+                "social reservation " + id + " is accepted");
+        True(!budget.TryAcquire(33L, AWIdleBehaviourKind.Socialize),
+            "social budget rejects the 33rd actor");
+        True(budget.TryAcquire(33L, AWIdleBehaviourKind.EmoteSearch),
+            "emotion budget is independent of social budget");
+        True(budget.TryAcquire(34L, AWIdleBehaviourKind.Singing),
+            "singing budget is independent of emotion budget");
+        budget.Release(1L, AWIdleBehaviourKind.Socialize);
+        True(budget.TryAcquire(33L, AWIdleBehaviourKind.Socialize),
+            "released social reservation is reusable");
+        budget.Clear();
+        True(budget.TryAcquire(1L, AWIdleBehaviourKind.Socialize),
+            "clear releases all cosmetic reservations");
     }
 
     private static void Maps(string taskId, AWIdleBehaviourKind expected)

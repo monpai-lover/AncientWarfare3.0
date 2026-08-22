@@ -211,6 +211,8 @@
     <Compile Include="ActorPresentationDirtyRulesTests.cs.txt" />
     <Compile Include="AWPathRequestReuseRulesTests.cs.txt" />
     <Compile Include="IdleBehaviourThrottleGateTests.cs.txt" />
+    <Compile Include="..\..\Code\core\performance\AWIdleBehaviourBudget.cs" Link="Production\AWIdleBehaviourBudget.cs" />
+    <Compile Include="VanillaLookupOptimizationSourceGuardTests.cs.txt" />
     <Compile Include="ActiveMilitaryLifecycleRulesTests.cs.txt" />
     <Compile Include="WartimeMilitaryTaskRulesTests.cs.txt" />
     <Compile Include="AWThirdPartySchedulerFaultRulesTests.cs.txt" />

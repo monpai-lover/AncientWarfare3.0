@@ -7,7 +7,8 @@ namespace AncientWarfare3.core.performance
         public AWIdleBehaviourThrottleDiagnosticSnapshot(
             long pSocializeAllowed, long pSocializeDeferred,
             long pEmoteAllowed, long pEmoteDeferred,
-            long pSleepAllowed, long pSleepDeferred)
+            long pSleepAllowed, long pSleepDeferred,
+            long pBudgetRejected)
         {
             SocializeAllowed = pSocializeAllowed;
             SocializeDeferred = pSocializeDeferred;
@@ -15,6 +16,7 @@ namespace AncientWarfare3.core.performance
             EmoteDeferred = pEmoteDeferred;
             SleepAllowed = pSleepAllowed;
             SleepDeferred = pSleepDeferred;
+            BudgetRejected = pBudgetRejected;
         }
 
         public long SocializeAllowed { get; }
@@ -23,6 +25,7 @@ namespace AncientWarfare3.core.performance
         public long EmoteDeferred { get; }
         public long SleepAllowed { get; }
         public long SleepDeferred { get; }
+        public long BudgetRejected { get; }
     }
 
     internal static class AWIdleBehaviourThrottleDiagnostics
@@ -33,6 +36,7 @@ namespace AncientWarfare3.core.performance
         private static long _emoteDeferred;
         private static long _sleepAllowed;
         private static long _sleepDeferred;
+        private static long _budgetRejected;
 
         public static void Record(AWIdleBehaviourKind pKind, bool allowed)
         {
@@ -56,6 +60,11 @@ namespace AncientWarfare3.core.performance
             }
         }
 
+        public static void RecordBudgetRejected()
+        {
+            Interlocked.Increment(ref _budgetRejected);
+        }
+
         public static AWIdleBehaviourThrottleDiagnosticSnapshot Snapshot()
         {
             return new AWIdleBehaviourThrottleDiagnosticSnapshot(
@@ -64,7 +73,8 @@ namespace AncientWarfare3.core.performance
                 Volatile.Read(ref _emoteAllowed),
                 Volatile.Read(ref _emoteDeferred),
                 Volatile.Read(ref _sleepAllowed),
-                Volatile.Read(ref _sleepDeferred));
+                Volatile.Read(ref _sleepDeferred),
+                Volatile.Read(ref _budgetRejected));
         }
 
         public static void Reset()
@@ -75,6 +85,7 @@ namespace AncientWarfare3.core.performance
             Interlocked.Exchange(ref _emoteDeferred, 0L);
             Interlocked.Exchange(ref _sleepAllowed, 0L);
             Interlocked.Exchange(ref _sleepDeferred, 0L);
+            Interlocked.Exchange(ref _budgetRejected, 0L);
         }
     }
 }

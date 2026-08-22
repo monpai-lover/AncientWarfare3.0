@@ -1,0 +1,40 @@
+using System;
+using System.IO;
+
+internal static class VanillaLookupOptimizationSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "AncientWarfare3.csproj")))
+        {
+            DirectoryInfo parent = Directory.GetParent(root);
+            if (parent == null) throw new InvalidOperationException(
+                "repository root missing");
+            root = parent.FullName;
+        }
+        string source = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_VanillaLookupOptimizationPatch.cs"));
+        Require(source, "[HarmonyPriority(Priority.Last)]");
+        Require(source, "AWChunkWindowIndex.Get");
+        Require(source, "AWFreeTileSearchIndex.TryFind");
+        Require(source, "return true;");
+        Require(source, "BehFindBuilding");
+        Require(source, "BehFindMeatSource");
+        Require(source, "BehFindTargetForHunter");
+        Require(source, "BehFindLover");
+        Require(source, "BehTryToSocialize");
+        Require(source, "Finder.findTileInChunk");
+        if (source.Contains("AWPathMovementBridge", StringComparison.Ordinal) ||
+            source.Contains("ArmyRtsControllerService", StringComparison.Ordinal) ||
+            source.Contains("Actor.goTo", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "vanilla lookup patch must not own military movement");
+    }
+
+    private static void Require(string source, string value)
+    {
+        if (!source.Contains(value, StringComparison.Ordinal))
+            throw new InvalidOperationException("missing source guard: " + value);
+    }
+}

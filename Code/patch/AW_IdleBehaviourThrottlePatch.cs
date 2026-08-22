@@ -2,6 +2,7 @@ using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.performance;
 using ai.behaviours;
 using HarmonyLib;
+using System.Reflection;
 
 namespace AncientWarfare3.patch
 {
@@ -62,6 +63,39 @@ namespace AncientWarfare3.patch
                 return true;
             pResult = BehResult.Stop;
             return false;
+        }
+    }
+
+    [HarmonyPatch]
+    internal static class AW_IdleBehaviourTaskFinishedPatch
+    {
+        private static MethodBase TargetMethod()
+        {
+            return AccessTools.Method(typeof(AiSystemActor),
+                "setTaskBehFinished");
+        }
+
+        [HarmonyPrefix]
+        private static void Prefix(AiSystemActor __instance)
+        {
+            AWIdleBehaviourThrottleService.ReleaseAllBudgets(
+                __instance?.ai_object);
+        }
+    }
+
+    [HarmonyPatch]
+    internal static class AW_IdleBehaviourTaskSwitchPatch
+    {
+        private static MethodBase TargetMethod()
+        {
+            return AccessTools.Method(typeof(AiSystemActor), "setTask");
+        }
+
+        [HarmonyPrefix]
+        private static void Prefix(AiSystemActor __instance, string __0)
+        {
+            AWIdleBehaviourThrottleService.OnTaskSwitch(
+                __instance?.ai_object, __0);
         }
     }
 }

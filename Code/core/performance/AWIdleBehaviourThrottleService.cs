@@ -6,6 +6,8 @@ namespace AncientWarfare3.core.performance
     {
         private static readonly AWIdleBehaviourThrottleGate Gate =
             new AWIdleBehaviourThrottleGate();
+        private static readonly AWIdleBehaviourBudget Budget =
+            new AWIdleBehaviourBudget();
 
         public static bool ShouldRun(Actor pActor, string pTaskId)
         {
@@ -46,7 +48,13 @@ namespace AncientWarfare3.core.performance
                 bool allowed = Gate.TryBeginScan(pActor.data.id, pKind,
                     Time.realtimeSinceStartupAsDouble, requestedSpeed);
                 AWIdleBehaviourThrottleDiagnostics.Record(pKind, allowed);
-                return allowed;
+                if (!allowed) return false;
+                if (!Budget.TryAcquire(pActor.data.id, pKind))
+                {
+                    AWIdleBehaviourThrottleDiagnostics.RecordBudgetRejected();
+                    return false;
+                }
+                return true;
             }
             catch
             {
@@ -58,11 +66,36 @@ namespace AncientWarfare3.core.performance
         {
             if (pActor?.data == null) return;
             Gate.RemoveActor(pActor.data.id);
+            Budget.ReleaseAll(pActor.data.id);
+        }
+
+        public static void ReleaseTask(Actor pActor, string pTaskId)
+        {
+            if (pActor?.data == null ||
+                !AWIdleBehaviourThrottleRules.TryGetKind(pTaskId,
+                    out AWIdleBehaviourKind kind)) return;
+            Budget.Release(pActor.data.id, kind);
+        }
+
+        public static void ReleaseAllBudgets(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            Budget.ReleaseAll(pActor.data.id);
+        }
+
+        public static void OnTaskSwitch(Actor pActor, string pNextTaskId)
+        {
+            if (pActor?.data == null) return;
+            AWIdleBehaviourKind retained = AWIdleBehaviourKind.None;
+            AWIdleBehaviourThrottleRules.TryGetActiveKind(
+                pNextTaskId, out retained);
+            Budget.ReleaseExcept(pActor.data.id, retained);
         }
 
         public static void ClearRuntime()
         {
             Gate.Clear();
+            Budget.Clear();
             AWIdleBehaviourThrottleDiagnostics.Reset();
         }
     }

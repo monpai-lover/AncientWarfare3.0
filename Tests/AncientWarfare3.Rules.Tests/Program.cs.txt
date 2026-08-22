@@ -651,6 +651,7 @@ if (args.Length == 2 && args[0] == "--benchmark" &&
 if (args.Length == 1 && args[0] == "--idle-throttle-gate")
 {
     IdleBehaviourThrottleGateTests.Run();
+    VanillaLookupOptimizationSourceGuardTests.Run();
     Console.WriteLine("Idle behaviour throttle gate tests passed.");
     return;
 }

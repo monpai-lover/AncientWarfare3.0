@@ -676,6 +676,7 @@ namespace AncientWarfare3.core.policy
                 " idle_emote_deferred=" + idleThrottle.EmoteDeferred +
                 " idle_sleep_allowed=" + idleThrottle.SleepAllowed +
                 " idle_sleep_deferred=" + idleThrottle.SleepDeferred +
+                " idle_budget_rejected=" + idleThrottle.BudgetRejected +
                 " path_smooth_ms=" + Milliseconds(_pathSmoothTicks) +
                 " path_smooth_calls=" + _pathSmoothCalls +
                 " path_smooth_slowest_actor=" + _slowestPathSmoothActorId +

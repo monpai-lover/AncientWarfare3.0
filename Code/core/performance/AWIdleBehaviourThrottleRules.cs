@@ -7,7 +7,8 @@ namespace AncientWarfare3.core.performance
         None = 0,
         Socialize = 1,
         EmoteSearch = 2,
-        Sleep = 3
+        Sleep = 3,
+        Singing = 4
     }
 
     public static class AWIdleBehaviourThrottleRules
@@ -27,16 +28,36 @@ namespace AncientWarfare3.core.performance
                 return true;
             }
             if (string.Equals(pTaskId, "happy_laughing",
-                    StringComparison.Ordinal) ||
-                string.Equals(pTaskId, "singing", StringComparison.Ordinal))
+                    StringComparison.Ordinal))
             {
                 pKind = AWIdleBehaviourKind.EmoteSearch;
+                return true;
+            }
+            if (string.Equals(pTaskId, "singing", StringComparison.Ordinal))
+            {
+                pKind = AWIdleBehaviourKind.Singing;
                 return true;
             }
             if (string.Equals(pTaskId, "decide_where_to_sleep",
                     StringComparison.Ordinal))
             {
                 pKind = AWIdleBehaviourKind.Sleep;
+                return true;
+            }
+            pKind = AWIdleBehaviourKind.None;
+            return false;
+        }
+
+        public static bool TryGetActiveKind(string pTaskId,
+            out AWIdleBehaviourKind pKind)
+        {
+            if (TryGetKind(pTaskId, out pKind)) return true;
+            if (string.Equals(pTaskId, "socialize_go_to_target",
+                    StringComparison.Ordinal) ||
+                string.Equals(pTaskId, "socialize_do_talk",
+                    StringComparison.Ordinal))
+            {
+                pKind = AWIdleBehaviourKind.Socialize;
                 return true;
             }
             pKind = AWIdleBehaviourKind.None;
@@ -63,6 +84,8 @@ namespace AncientWarfare3.core.performance
                 case AWIdleBehaviourKind.Socialize:
                     return fastest ? 8d : faster ? 4d : 2d;
                 case AWIdleBehaviourKind.EmoteSearch:
+                    return fastest ? 6d : faster ? 3d : 1.5d;
+                case AWIdleBehaviourKind.Singing:
                     return fastest ? 6d : faster ? 3d : 1.5d;
                 case AWIdleBehaviourKind.Sleep:
                     return fastest ? 10d : faster ? 4d : 0d;
