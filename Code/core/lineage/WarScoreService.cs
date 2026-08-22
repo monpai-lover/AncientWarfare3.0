@@ -242,6 +242,52 @@ namespace AncientWarfare3.core.lineage
                 pControllerSide, -1, -1, pWorldTime);
         }
 
+        public bool TrySettleTotalOccupation(long pWarId,
+            int pAttackerInitialCities, int pDefenderInitialCities,
+            int pAttackerCurrentCities, int pDefenderCurrentCities,
+            bool pAttackerControlsAllDefenderCities,
+            bool pDefenderControlsAllAttackerCities, double pWorldTime)
+        {
+            if (double.IsNaN(pWorldTime) || double.IsInfinity(pWorldTime))
+                return false;
+            if (!WarScoreTotalOccupationRules.TryResolveWinner(
+                    pAttackerInitialCities, pDefenderInitialCities,
+                    pAttackerCurrentCities, pDefenderCurrentCities,
+                    pAttackerControlsAllDefenderCities,
+                    pDefenderControlsAllAttackerCities,
+                    out WarScoreSide winner)) return false;
+            lock (_gate)
+            {
+                if (!_active.TryGetValue(pWarId,
+                        out WarScoreSnapshot current)) return false;
+                string eventKey = "total_occupation:" + pWarId + ":" +
+                    winner;
+                if (_persistence.HasEvent(eventKey)) return false;
+                WarScoreSnapshot settled = current.CloneCanonical();
+                settled.DecisiveScore = winner == WarScoreSide.Attackers
+                    ? WarScoreRules.MaximumScore
+                    : -WarScoreRules.MaximumScore;
+                settled.Score = settled.DecisiveScore;
+                RecalculateLossesAndExhaustion(settled);
+                Touch(settled, pWorldTime);
+                var marker = new WarScoreReliefEventState
+                {
+                    Key = eventKey,
+                    WarId = pWarId,
+                    Kind = "total_occupation",
+                    SubjectId = pWarId.ToString(),
+                    BeneficiarySide = winner,
+                    Amount = WarScoreRules.MaximumScore,
+                    WorldTime = pWorldTime
+                };
+                bool inserted = _persistence.SaveWithReliefEvent(current,
+                    settled, marker);
+                if (!inserted) return false;
+                _active[pWarId] = settled;
+                return true;
+            }
+        }
+
         public bool RecordCityControlChanged(long pWarId,
             WarScoreCityFacts pFacts, WarScoreSide pHomeSide,
             WarScoreSide pControllerSide, long pHomeKingdomId,

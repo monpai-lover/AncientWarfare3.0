@@ -21,6 +21,10 @@ namespace AncientWarfare3.core.db
         public int successor_support;
         public int claimant_support;
         [TableItemDef(pDefaultValue: "-1")] public long war_id = -1;
+        [TableItemDef(pDefaultValue: "-1")]
+        public long original_capital_city_id_at_war_start = -1;
+        [TableItemDef(pDefaultValue: "-1")]
+        public long rival_capital_city_id_at_war_start = -1;
         public double prepared_time = -1;
         [TableItemDef(pDefaultValue: "-1")] public double start_time = -1;
         public int prepared_year = -1;

@@ -26,6 +26,8 @@ namespace AncientWarfare3.core.lineage
         public int SuccessorSupport;
         public int ClaimantSupport;
         public long WarId = -1L;
+        public long OriginalCapitalCityIdAtWarStart = -1L;
+        public long RivalCapitalCityIdAtWarStart = -1L;
         public int DeadlineYear = -1;
         public SuccessionDisputeStatus Status;
         public long OriginalLineageId = -1L;
@@ -277,11 +279,17 @@ namespace AncientWarfare3.core.lineage
             if (snapshot.Status == SuccessionDisputeStatus.PermanentSplit)
             {
                 if (snapshot.WarId != pWar.data.id) return;
-                long winnerKingdomId = pWinner == WarWinner.Attackers
+                long fallbackWinnerKingdomId = pWinner == WarWinner.Attackers
                     ? pWar.getMainAttacker()?.id ?? -1L
                     : pWinner == WarWinner.Defenders
                         ? pWar.getMainDefender()?.id ?? -1L
                         : -1L;
+                long winnerKingdomId = SuccessionCapitalVictoryRules.ResolveWinner(
+                    snapshot.OriginalKingdomId, snapshot.RivalKingdomId,
+                    snapshot.OriginalCapitalCityIdAtWarStart,
+                    snapshot.RivalCapitalCityIdAtWarStart,
+                    cityId => ResolveFrozenController(pWar.data.id, cityId),
+                    fallbackWinnerKingdomId);
                 if (winnerKingdomId < 0)
                 {
                     ClearReunificationWar(snapshot);
@@ -602,14 +610,24 @@ namespace AncientWarfare3.core.lineage
                 row.OriginalKingdomId);
             war.data.set(LineageKeys.SUCCESSION_DISPUTE_RIVAL_KINGDOM_ID,
                 row.RivalKingdomId);
+            row.WarId = war.data.id;
+            row.OriginalCapitalCityIdAtWarStart = ReadValidCapitalId(pAttacker);
+            row.RivalCapitalCityIdAtWarStart = ReadValidCapitalId(pDefender);
             try
             {
                 using var command = new SQLiteCommand(DB);
                 command.CommandText = "UPDATE " +
                     SuccessionDisputeTableItem.GetTableName() +
-                    " SET WAR_ID=@war WHERE DISPUTE_ID=@id " +
+                    " SET WAR_ID=@war," +
+                    "ORIGINAL_CAPITAL_CITY_ID_AT_WAR_START=@original_capital," +
+                    "RIVAL_CAPITAL_CITY_ID_AT_WAR_START=@rival_capital " +
+                    "WHERE DISPUTE_ID=@id " +
                     "AND STATUS=@status AND END_TIME<0";
                 command.Parameters.AddWithValue("@war", war.data.id);
+                command.Parameters.AddWithValue("@original_capital",
+                    row.OriginalCapitalCityIdAtWarStart);
+                command.Parameters.AddWithValue("@rival_capital",
+                    row.RivalCapitalCityIdAtWarStart);
                 command.Parameters.AddWithValue("@id", row.DisputeId);
                 command.Parameters.AddWithValue("@status",
                     (int)SuccessionDisputeStatus.PermanentSplit);
@@ -629,7 +647,6 @@ namespace AncientWarfare3.core.lineage
                 catch { }
                 return false;
             }
-            row.WarId = war.data.id;
             WarGoalCreateResult goal =
                 WarTerritoryService.TryPersistGoalOrEndWar(war,
                     new WarTerritoryService.WarGoalRequest
@@ -924,6 +941,8 @@ namespace AncientWarfare3.core.lineage
                           "succession_dispute");
             if (war?.data == null) return false;
             pRow.WarId = war.data.id;
+            pRow.OriginalCapitalCityIdAtWarStart = ReadValidCapitalId(original);
+            pRow.RivalCapitalCityIdAtWarStart = ReadValidCapitalId(rival);
             war.data.set(LineageKeys.SUCCESSION_DISPUTE_ID,
                 pRow.DisputeId);
             war.data.set(
@@ -936,11 +955,18 @@ namespace AncientWarfare3.core.lineage
                 using var command = new SQLiteCommand(DB);
                 command.CommandText = "UPDATE " +
                     SuccessionDisputeTableItem.GetTableName() +
-                    " SET WAR_ID=@war,START_TIME=@time,STATUS=@next " +
+                    " SET WAR_ID=@war,START_TIME=@time," +
+                    "ORIGINAL_CAPITAL_CITY_ID_AT_WAR_START=@original_capital," +
+                    "RIVAL_CAPITAL_CITY_ID_AT_WAR_START=@rival_capital," +
+                    "STATUS=@next " +
                     "WHERE DISPUTE_ID=@id AND STATUS=@expected";
                 command.Parameters.AddWithValue("@war", war.data.id);
                 command.Parameters.AddWithValue("@time",
                     LineageService.CurTime());
+                command.Parameters.AddWithValue("@original_capital",
+                    pRow.OriginalCapitalCityIdAtWarStart);
+                command.Parameters.AddWithValue("@rival_capital",
+                    pRow.RivalCapitalCityIdAtWarStart);
                 command.Parameters.AddWithValue("@next",
                     (int)SuccessionDisputeStatus.WarStarted);
                 command.Parameters.AddWithValue("@id", pRow.DisputeId);
@@ -1676,6 +1702,25 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
+        private static long ResolveFrozenController(long pWarId,
+            long pCityId)
+        {
+            City city = FindCity(pCityId);
+            if (city?.data == null || city.isRekt()) return -1L;
+            if (WarScoreRuntimeBridge.TryGetTerminalFrozenOccupation(pWarId,
+                    pCityId, out long terminalController))
+                return terminalController;
+            return WarScoreRuntimeBridge.TryGetFrozenOccupation(pWarId,
+                pCityId, out long controller) ? controller : -1L;
+        }
+
+        private static long ReadValidCapitalId(Kingdom pKingdom)
+        {
+            City capital = pKingdom?.capital;
+            return capital?.data != null && !capital.isRekt() &&
+                   capital.kingdom == pKingdom ? capital.data.id : -1L;
+        }
+
         private static SuccessionDisputeSnapshot Read(long pDisputeId)
         {
             if (!Ready || pDisputeId < 0) return null;
@@ -1718,7 +1763,9 @@ namespace AncientWarfare3.core.lineage
                    "ORIGINAL_STATE_NAME,ORIGINAL_QUALIFIER," +
                    "RIVAL_QUALIFIER,ACCESSION_LAW,SUCCESSOR_MODE," +
                    "CLAIMANT_MODE,SUCCESSOR_SUPPORT,CLAIMANT_SUPPORT," +
-                   "WAR_ID,DEADLINE_YEAR,STATUS,ORIGINAL_LINEAGE_ID," +
+                   "WAR_ID,ORIGINAL_CAPITAL_CITY_ID_AT_WAR_START," +
+                   "RIVAL_CAPITAL_CITY_ID_AT_WAR_START,DEADLINE_YEAR,STATUS," +
+                   "ORIGINAL_LINEAGE_ID," +
                    "ORIGINAL_SHI_ID,CLAIM_GENERATION_BOUNDARY FROM " +
                    SuccessionDisputeTableItem.GetTableName();
         }
@@ -1744,25 +1791,67 @@ namespace AncientWarfare3.core.lineage
                 SuccessorSupport = Convert.ToInt32(pReader.GetValue(12)),
                 ClaimantSupport = Convert.ToInt32(pReader.GetValue(13)),
                 WarId = pReader.GetInt64(14),
-                DeadlineYear = Convert.ToInt32(pReader.GetValue(15)),
+                OriginalCapitalCityIdAtWarStart = pReader.GetInt64(15),
+                RivalCapitalCityIdAtWarStart = pReader.GetInt64(16),
+                DeadlineYear = Convert.ToInt32(pReader.GetValue(17)),
                 Status = (SuccessionDisputeStatus)Convert.ToInt32(
-                    pReader.GetValue(16)),
-                OriginalLineageId = pReader.GetInt64(17),
-                OriginalShiId = pReader.GetInt64(18),
+                    pReader.GetValue(18)),
+                OriginalLineageId = pReader.GetInt64(19),
+                OriginalShiId = pReader.GetInt64(20),
                 ClaimGenerationBoundary = Convert.ToInt32(
-                    pReader.GetValue(19))
+                    pReader.GetValue(21))
             };
         }
 
         private static void Publish(SuccessionDisputeSnapshot pRow)
         {
             if (pRow == null) return;
+            RepairMissingFrozenCapitals(pRow);
             pRow.Materialized = IsMaterializedNow(pRow);
             ById[pRow.DisputeId] = pRow;
             ByKingdom[pRow.OriginalKingdomId] = pRow.DisputeId;
             if (pRow.RivalKingdomId >= 0)
                 ByKingdom[pRow.RivalKingdomId] = pRow.DisputeId;
             ApplyHotIds(pRow);
+        }
+
+        private static void RepairMissingFrozenCapitals(
+            SuccessionDisputeSnapshot pRow)
+        {
+            if (!Ready || pRow.WarId < 0) return;
+            bool missingOriginal = pRow.OriginalCapitalCityIdAtWarStart < 0;
+            bool missingRival = pRow.RivalCapitalCityIdAtWarStart < 0;
+            if (!missingOriginal && !missingRival) return;
+            long original = missingOriginal
+                ? ReadValidCapitalId(FindKingdom(pRow.OriginalKingdomId))
+                : pRow.OriginalCapitalCityIdAtWarStart;
+            long rival = missingRival
+                ? ReadValidCapitalId(FindKingdom(pRow.RivalKingdomId))
+                : pRow.RivalCapitalCityIdAtWarStart;
+            if (original < 0 && rival < 0) return;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " +
+                    SuccessionDisputeTableItem.GetTableName() +
+                    " SET ORIGINAL_CAPITAL_CITY_ID_AT_WAR_START=@original," +
+                    "RIVAL_CAPITAL_CITY_ID_AT_WAR_START=@rival " +
+                    "WHERE DISPUTE_ID=@id AND WAR_ID=@war AND END_TIME<0";
+                command.Parameters.AddWithValue("@original", original);
+                command.Parameters.AddWithValue("@rival", rival);
+                command.Parameters.AddWithValue("@id", pRow.DisputeId);
+                command.Parameters.AddWithValue("@war", pRow.WarId);
+                if (command.ExecuteNonQuery() == 1)
+                {
+                    pRow.OriginalCapitalCityIdAtWarStart = original;
+                    pRow.RivalCapitalCityIdAtWarStart = rival;
+                }
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning("Succession capital repair failed: " +
+                                    exception.Message);
+            }
         }
 
         private static void ApplyHotIds(SuccessionDisputeSnapshot pRow)
