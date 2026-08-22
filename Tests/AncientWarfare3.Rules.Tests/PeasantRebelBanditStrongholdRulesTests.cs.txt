@@ -16,6 +16,7 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         ResolvesSuppressionVictorByConfirmedPrecedence();
         AttributesOnlyLiveCombatAttackers();
         DefersStrongholdFallUntilTheCorrectBoundary();
+        ResolvesLeaderlessSuppressionSettlement();
         AllowsStrongholdCreationWhenGateTowersCannotBePlaced();
         DisposesLogicallyEmptyStrongholdsAfterOwnershipChanges();
         CountsOnlyLivingStrongholdResidents();
@@ -162,6 +163,27 @@ internal static class PeasantRebelBanditStrongholdRulesTests
                 population: 12, hostileKillerKingdomId: -1,
                 captureFinished: false),
             "a populated uncaptured stronghold remains active");
+    }
+
+    private static void ResolvesLeaderlessSuppressionSettlement()
+    {
+        True(PeasantRebelBanditStrongholdRules.
+                ShouldCompleteLeaderlessSuppression(
+                    isSuppressionWar: true, isBanditKingdom: true,
+                    hasLivingKing: false, hasLivingRegisteredHeir: false),
+            "a suppression war ends when the bandit has neither king nor heir");
+        False(PeasantRebelBanditStrongholdRules.
+                ShouldCompleteLeaderlessSuppression(true, true, true, false),
+            "a living bandit king keeps the suppression war active");
+        False(PeasantRebelBanditStrongholdRules.
+                ShouldCompleteLeaderlessSuppression(true, true, false, true),
+            "a living registered heir keeps the suppression war active");
+        False(PeasantRebelBanditStrongholdRules.
+                ShouldCompleteLeaderlessSuppression(false, true, false, false),
+            "ordinary wars do not use bandit decapitation settlement");
+        False(PeasantRebelBanditStrongholdRules.
+                ShouldCompleteLeaderlessSuppression(true, false, false, false),
+            "a non-bandit participant cannot trigger bandit collapse");
     }
 
     private static void RelocatesOnlyOrdinaryResidents()

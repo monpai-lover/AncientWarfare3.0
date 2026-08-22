@@ -623,6 +623,24 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        internal static bool TryCompleteLeadershipCollapse(Kingdom pBandit,
+            Kingdom pSuppressor)
+        {
+            if (!CanMutate() || pBandit?.data == null || pBandit.isRekt() ||
+                !PeasantRebelBanditStateStore.TryRead(pBandit,
+                    out PeasantRebelBanditStrongholdState state)) return false;
+            City stronghold = ResolveCity(state.StrongholdCityId);
+            if (stronghold?.data == null || stronghold.kingdom != pBandit)
+                return false;
+            if (state.Phase == BanditStrongholdPhase.Completed)
+                return true;
+            if (state.Phase != BanditStrongholdPhase.Active &&
+                state.Phase != BanditStrongholdPhase.Falling)
+                return false;
+            return CompleteFall(pBandit, stronghold, state, pSuppressor,
+                pRecordSuppressionChronicle: true);
+        }
+
         internal static void QueueGuiyiRestorationFall(Kingdom pBandit,
             Action<City> pOnCompleted)
         {

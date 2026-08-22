@@ -6,6 +6,8 @@ internal static class WarTerminalSettlementSourceTests
         string lineage = Path.Combine(root, "Code", "core", "lineage");
         string coordinator = File.ReadAllText(Path.Combine(lineage,
             "WarTerminalSettlementCoordinator.cs"));
+        string banditSuppression = File.ReadAllText(Path.Combine(lineage,
+            "PeasantRebelBanditSuppressionSettlementService.cs"));
         string bridge = File.ReadAllText(Path.Combine(lineage,
             "WarScoreRuntimeBridge.cs"));
         string authority = File.ReadAllText(Path.Combine(root, "Code",
@@ -62,6 +64,15 @@ internal static class WarTerminalSettlementSourceTests
                  "WarTerminalSettlementRules.IsDecisiveScore(") &&
              coordinator.Contains("snapshot.Score"),
             "decisive score has a military-collapse-aware fallback");
+        True(coordinator.Contains(
+                "PeasantRebelBanditSuppressionSettlementService.IsReady") &&
+             coordinator.Contains(
+                "PeasantRebelBanditSuppressionSettlementService.TryExecuteImmediate"),
+            "leaderless bandit suppression uses the unified terminal coordinator");
+        True(banditSuppression.Contains(
+                "PeasantRebelBanditStrongholdService.TryCompleteLeadershipCollapse") &&
+             banditSuppression.Contains("World.world?.wars?.endWar"),
+            "bandit state is cleaned before the suppression war ends");
         True(bridge.Contains(
                 "WarTerminalSettlementCoordinator.NotifyWarChanged(pWar)") &&
              !bridge.Contains(

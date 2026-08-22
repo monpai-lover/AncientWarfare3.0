@@ -174,6 +174,14 @@ namespace AncientWarfare3.core.lineage
                 : BanditStrongholdFallAction.QueueFall;
         }
 
+        public static bool ShouldCompleteLeaderlessSuppression(
+            bool isSuppressionWar, bool isBanditKingdom,
+            bool hasLivingKing, bool hasLivingRegisteredHeir)
+        {
+            return isSuppressionWar && isBanditKingdom &&
+                   !hasLivingKing && !hasLivingRegisteredHeir;
+        }
+
         public static bool CanRelocateOrdinaryResident(bool adult,
             bool civilianProfession, bool king, bool cityLeader,
             bool heir)

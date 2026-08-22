@@ -60,6 +60,8 @@ namespace AncientWarfare3.core.lineage
 
         private static bool ShouldQueue(War pWar)
         {
+            if (PeasantRebelBanditSuppressionSettlementService.IsReady(pWar))
+                return true;
             if (ZhuluWarService.IsZhuluWar(pWar))
                 return WarForceEliminationSettlementService
                     .TryGetConfirmedDecision(pWar, out _);
@@ -73,6 +75,17 @@ namespace AncientWarfare3.core.lineage
             if (!IsLiveWar(war))
             {
                 FailureCounts.Remove(pWarId);
+                return;
+            }
+
+            if (PeasantRebelBanditSuppressionSettlementService.IsReady(war))
+            {
+                if (PeasantRebelBanditSuppressionSettlementService.
+                        TryExecuteImmediate(war))
+                    FailureCounts.Remove(pWarId);
+                else
+                    RecordFailure(pWarId,
+                        "bandit_leadership_collapse_failed");
                 return;
             }
 
