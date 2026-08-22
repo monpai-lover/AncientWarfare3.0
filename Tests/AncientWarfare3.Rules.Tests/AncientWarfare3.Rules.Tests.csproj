@@ -149,6 +149,9 @@
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditRaidRules.cs" Link="Production\PeasantRebelBanditRaidRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditAmnestyRules.cs" Link="Production\PeasantRebelBanditAmnestyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelGuiyiRules.cs" Link="Production\PeasantRebelGuiyiRules.cs" />
+    <Compile Include="SuccessionCapitalWarScoreRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\SuccessionCapitalVictoryRules.cs" Link="Production\SuccessionCapitalVictoryRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarScoreTotalOccupationRules.cs" Link="Production\WarScoreTotalOccupationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditAmnestyOffer.cs" Link="Production\PeasantRebelBanditAmnestyOffer.cs" />
     <Compile Include="CultiwayStyleWallGeometryRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\CultiwayStyleWallGeometryRules.cs" Link="Production\CultiwayStyleWallGeometryRules.cs" />

@@ -46,6 +46,26 @@ namespace AncientWarfare3.core.court
         MilitaryDefault = 2
     }
 
+    public enum CustomCourtOfficeRoleKind
+    {
+        Ordinary = 0,
+        RegionalChief = 1,
+        CommanderyChief = 2
+    }
+
+    public enum CustomCourtTemplateScope
+    {
+        CentralCourt = 0,
+        LocalGovernment = 1,
+        Combined = 2
+    }
+
+    public static class CustomCourtFixedRoleIds
+    {
+        public const string RegionalChief = "regional_chief";
+        public const string CommanderyChief = "commandery_chief";
+    }
+
     public enum CustomCourtTemplateValidationError
     {
         None = 0,
@@ -105,6 +125,8 @@ namespace AncientWarfare3.core.court
         public CustomCourtLocalizedText Name { get; set; } =
             new CustomCourtLocalizedText();
         public string Layer { get; set; } = string.Empty;
+        public CustomCourtOfficeRoleKind RoleKind { get; set; } =
+            CustomCourtOfficeRoleKind.Ordinary;
         public int Grade { get; set; }
         public int Slots { get; set; } = 1;
         public bool MilitaryCapable { get; set; }
@@ -140,6 +162,8 @@ namespace AncientWarfare3.core.court
     public sealed class CustomCourtTemplate
     {
         public int SchemaVersion { get; set; } = 3;
+        public CustomCourtTemplateScope Scope { get; set; } =
+            CustomCourtTemplateScope.CentralCourt;
         public string Id { get; set; } = string.Empty;
         public int Revision { get; set; } = 1;
         public CustomCourtLocalizedText Name { get; set; } =

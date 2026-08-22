@@ -29,6 +29,15 @@ namespace AncientWarfare3.core.court
                     Settings));
             normalized = CustomLocalCourtTemplateRules.UpgradeLegacy(
                 normalized);
+            if (!Enum.IsDefined(typeof(CustomCourtTemplateScope),
+                    normalized.Scope) ||
+                (normalized.Scope == CustomCourtTemplateScope.CentralCourt &&
+                 (normalized.Offices == null || normalized.Offices.Count == 0) &&
+                 normalized.LocalTemplates?.Count > 0))
+                normalized.Scope = normalized.Offices?.Count == 0 &&
+                    normalized.LocalTemplates?.Count > 0
+                    ? CustomCourtTemplateScope.LocalGovernment
+                    : CustomCourtTemplateScope.CentralCourt;
             normalized.Offices = (normalized.Offices ??
                 new List<CustomCourtOffice>()).Where(item => item != null)
                 .OrderBy(item => item.Id, StringComparer.Ordinal).ToList();
@@ -89,6 +98,15 @@ namespace AncientWarfare3.core.court
                     json, Settings);
                 template = CustomLocalCourtTemplateRules.UpgradeLegacy(
                     template);
+                if (!Enum.IsDefined(typeof(CustomCourtTemplateScope),
+                        template.Scope) ||
+                    (template.Scope == CustomCourtTemplateScope.CentralCourt &&
+                     (template.Offices == null || template.Offices.Count == 0) &&
+                     template.LocalTemplates?.Count > 0))
+                    template.Scope = template.Offices?.Count == 0 &&
+                        template.LocalTemplates?.Count > 0
+                        ? CustomCourtTemplateScope.LocalGovernment
+                        : CustomCourtTemplateScope.CentralCourt;
                 if (template?.Offices != null && template.Offices.Count > 0)
                     EnsureRegionalLayer(template);
                 error = CustomCourtTemplateRules.Validate(template);

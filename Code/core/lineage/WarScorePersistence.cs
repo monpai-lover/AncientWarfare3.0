@@ -266,6 +266,17 @@ namespace AncientWarfare3.core.lineage
             return pControllerKingdomId >= 0;
         }
 
+        public bool HasEvent(string pEventKey)
+        {
+            if (string.IsNullOrWhiteSpace(pEventKey)) return false;
+            using var command = new SQLiteCommand(
+                "SELECT 1 FROM " + ReliefEventTable +
+                " WHERE EVENT_KEY=@key LIMIT 1", _db);
+            command.Parameters.AddWithValue("@key", pEventKey);
+            object value = command.ExecuteScalar();
+            return value != null && value != DBNull.Value;
+        }
+
         public void Save(WarScoreSnapshot pSnapshot)
         {
             using SQLiteTransaction transaction = _db.BeginTransaction();

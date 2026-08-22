@@ -391,6 +391,13 @@ if (args.Length == 1 && args[0] == "--bandit-island-candidates")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--succession-capital-war-score")
+{
+    SuccessionCapitalWarScoreRulesTests.Run();
+    Console.WriteLine("Succession capital and total occupation rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--bandit-city-mutation")
 {
     CityManagerMutationScopeTests.Run();

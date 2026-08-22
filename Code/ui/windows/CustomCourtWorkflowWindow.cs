@@ -1711,8 +1711,15 @@ namespace AncientWarfare3.ui.windows
                     "Template is invalid."));
                 return;
             }
-            bool applied = CustomCourtRuntime.TryApply(kingdom, _template,
-                new Dictionary<string, long>());
+            CustomCourtTemplateScope scope = _editingLocal
+                ? CustomCourtTemplateScope.LocalGovernment
+                : CustomCourtTemplateScope.CentralCourt;
+            _template.Scope = scope;
+            bool applied = scope == CustomCourtTemplateScope.LocalGovernment
+                ? CustomCourtRuntime.TryApplyLocal(kingdom, _template,
+                    new Dictionary<string, long>())
+                : CustomCourtRuntime.TryApplyCentral(kingdom, _template,
+                    new Dictionary<string, long>());
             if (!applied) RollbackTemplateRebindings(staged);
             else _pendingReplacements.Clear();
             SetStatus(applied

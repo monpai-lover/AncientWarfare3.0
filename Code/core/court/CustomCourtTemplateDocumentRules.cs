@@ -11,6 +11,7 @@ namespace AncientWarfare3.core.court
         {
             CustomCourtTemplate document =
                 CustomCourtTemplateJsonCodec.Normalize(pSource);
+            document.Scope = CustomCourtTemplateScope.CentralCourt;
             CustomCourtTemplateJsonCodec.EnsureRegionalLayer(document);
             document.LocalTemplates = new List<CustomLocalCourtTemplate>();
             document.ArchivedCrossLayerEdges = new List<CustomCourtEdge>();
@@ -25,6 +26,7 @@ namespace AncientWarfare3.core.court
             var envelope = new CustomCourtTemplate
             {
                 SchemaVersion = CustomCourtTemplateRules.CurrentSchemaVersion,
+                Scope = CustomCourtTemplateScope.LocalGovernment,
                 Id = pSource.Id,
                 Revision = 1,
                 Name = pSource.Name ?? new CustomCourtLocalizedText(),

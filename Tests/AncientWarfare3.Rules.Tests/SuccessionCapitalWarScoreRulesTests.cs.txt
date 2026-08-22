@@ -1,0 +1,53 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class SuccessionCapitalWarScoreRulesTests
+{
+    public static void Run()
+    {
+        var controls = new System.Collections.Generic.Dictionary<long, long>
+        {
+            [11L] = 101L,
+            [22L] = 101L
+        };
+        Equal(101L, SuccessionCapitalVictoryRules.ResolveWinner(
+            101L, 202L, 11L, 22L, id => controls[id], -1L),
+            "original wins by taking rival frozen capital");
+        controls[11L] = 202L;
+        controls[22L] = 202L;
+        Equal(202L, SuccessionCapitalVictoryRules.ResolveWinner(
+            101L, 202L, 11L, 22L, id => controls[id], -1L),
+            "rival wins by taking original frozen capital");
+        controls.Clear();
+        Equal(202L, SuccessionCapitalVictoryRules.ResolveWinner(
+            101L, 202L, 11L, 22L, id => -1L, 202L),
+            "unresolved capitals fall back to war winner");
+        Equal(WarScoreSide.None, Total(2, 2, 1, 1, false, false),
+            "partial occupation does not settle");
+        Equal(WarScoreSide.Attackers, Total(2, 2, 1, 1, true, false),
+            "all defender cities controlled settles even before native transfer");
+        Equal(WarScoreSide.Attackers, Total(2, 2, 2, 0, true, false),
+            "attacker total occupation settles positive");
+        Equal(WarScoreSide.Defenders, Total(2, 2, 0, 2, false, true),
+            "defender total occupation settles negative");
+        Equal(WarScoreSide.None, Total(0, 2, 0, 0, true, false),
+            "missing initial attacker roster is invalid");
+    }
+
+    private static WarScoreSide Total(int attackerInitial, int defenderInitial,
+        int attackerCurrent, int defenderCurrent, bool attackerControls,
+        bool defenderControls)
+    {
+        return WarScoreTotalOccupationRules.TryResolveWinner(
+            attackerInitial, defenderInitial, attackerCurrent, defenderCurrent,
+            attackerControls, defenderControls, out WarScoreSide winner)
+            ? winner : WarScoreSide.None;
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                ": expected " + expected + ", got " + actual);
+    }
+}

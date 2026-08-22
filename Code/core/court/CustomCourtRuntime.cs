@@ -222,6 +222,19 @@ namespace AncientWarfare3.core.court
             CustomCourtTemplate template,
             IReadOnlyDictionary<string, long> incumbents)
         {
+            CustomCourtTemplateScope scope = template?.Scope ??
+                CustomCourtTemplateScope.CentralCourt;
+            if (scope == CustomCourtTemplateScope.LocalGovernment)
+                return TryApplyLocal(kingdom, template, incumbents);
+            if (scope == CustomCourtTemplateScope.Combined)
+                return TryApplyCombined(kingdom, template, incumbents);
+            return TryApplyCentral(kingdom, template, incumbents);
+        }
+
+        public static bool TryApplyCentral(Kingdom kingdom,
+            CustomCourtTemplate template,
+            IReadOnlyDictionary<string, long> incumbents)
+        {
             if (kingdom?.data == null) return false;
             CustomCourtInstance current;
             TryGetInstance(kingdom, out current);
@@ -248,17 +261,6 @@ namespace AncientWarfare3.core.court
                     next.TemplateHash);
                 kingdom.data.set(LineageKeys.CUSTOM_COURT_INSTANCE_SNAPSHOT,
                     CustomCourtInstanceCodec.Export(next));
-                try
-                {
-                    foreach (City city in kingdom.getCities() ??
-                             Enumerable.Empty<City>())
-                        if (city?.data != null && !city.isRekt() &&
-                            city.kingdom == kingdom)
-                            CityBureauAnnualWorkService.
-                                RequestImmediateReconcile(kingdom,
-                                    city.data.id);
-                }
-                catch { }
                 return true;
             }
             catch
@@ -267,6 +269,85 @@ namespace AncientWarfare3.core.court
                 else Instances.Save(current);
                 return false;
             }
+        }
+
+        public static bool TryApplyLocal(Kingdom kingdom,
+            CustomCourtTemplate template,
+            IReadOnlyDictionary<string, long> incumbents)
+        {
+            if (kingdom?.data == null || template == null) return false;
+            CustomCourtInstance current;
+            TryGetInstance(kingdom, out current);
+            var application = new CustomCourtApplicationService(Instances);
+            CustomCourtInstance next;
+            if (!application.TryBuildInstance(KingdomKey(kingdom), template,
+                    current, incumbents, out next) || !Instances.Save(next))
+                return false;
+            try
+            {
+                foreach (City city in kingdom.getCities() ??
+                         Enumerable.Empty<City>())
+                {
+                    if (city?.data == null || city.isRekt() ||
+                        city.kingdom != kingdom) continue;
+                    CustomLocalCourtTemplate target;
+                    if (!TryGetLocalTemplate(kingdom, city, out target))
+                        continue;
+                    CustomLocalCourtTemplate source =
+                        FindPersistedLocalTemplate(current?.ResolvedSnapshot,
+                            city);
+                    CourtTemplateOfficerMigrationService.TryMigrateLocal(
+                        kingdom, city, source, target);
+                    CityBureauAnnualWorkService.RequestImmediateReconcile(
+                        kingdom, city.data.id);
+                }
+                RegionalGovernmentAggregationService.Invalidate(kingdom);
+                PersistTemplateMetadata(kingdom, next);
+                return true;
+            }
+            catch
+            {
+                if (current == null) Instances.Remove(KingdomKey(kingdom));
+                else Instances.Save(current);
+                return false;
+            }
+        }
+
+        public static bool TryApplyCombined(Kingdom kingdom,
+            CustomCourtTemplate template,
+            IReadOnlyDictionary<string, long> incumbents)
+        {
+            if (kingdom?.data == null || template == null) return false;
+            CustomCourtTemplate central = CustomCourtTemplateJsonCodec.Normalize(
+                template);
+            central.Scope = CustomCourtTemplateScope.CentralCourt;
+            if (!TryApplyCentral(kingdom, central, incumbents)) return false;
+            central.Scope = CustomCourtTemplateScope.Combined;
+            return TryApplyLocal(kingdom, central, incumbents);
+        }
+
+        private static CustomLocalCourtTemplate FindPersistedLocalTemplate(
+            CustomCourtTemplate pSnapshot, City pCity)
+        {
+            if (pSnapshot?.LocalTemplates == null || pCity?.data == null)
+                return null;
+            pCity.data.get(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_ID,
+                out string id, string.Empty);
+            return pSnapshot.LocalTemplates.FirstOrDefault(template =>
+                template != null && template.Id == id);
+        }
+
+        private static void PersistTemplateMetadata(Kingdom pKingdom,
+            CustomCourtInstance pInstance)
+        {
+            pKingdom.data.set(LineageKeys.CUSTOM_COURT_TEMPLATE_ID,
+                pInstance.TemplateId);
+            pKingdom.data.set(LineageKeys.CUSTOM_COURT_TEMPLATE_REVISION,
+                pInstance.TemplateRevision);
+            pKingdom.data.set(LineageKeys.CUSTOM_COURT_TEMPLATE_HASH,
+                pInstance.TemplateHash);
+            pKingdom.data.set(LineageKeys.CUSTOM_COURT_INSTANCE_SNAPSHOT,
+                CustomCourtInstanceCodec.Export(pInstance));
         }
     }
 }

@@ -23,6 +23,9 @@ namespace AncientWarfare3.core.lineage
         private static readonly Dictionary<long, PendingCityOccupation>
             PendingCityOccupations =
                 new Dictionary<long, PendingCityOccupation>();
+        private static readonly Dictionary<string, long>
+            TerminalOccupationControllers =
+                new Dictionary<string, long>();
 
         private sealed class PendingCityOccupation
         {
@@ -105,6 +108,13 @@ namespace AncientWarfare3.core.lineage
                 if (runtime == null || war?.data == null) return false;
                 IReadOnlyList<WarScoreOccupiedCitySnapshot> frozen =
                     runtime.ReadAllOccupiedCitiesForWarCleanup(war.data.id);
+                for (int i = 0; i < frozen.Count; i++)
+                {
+                    WarScoreOccupiedCitySnapshot row = frozen[i];
+                    if (row == null || row.CityId < 0) continue;
+                    TerminalOccupationControllers[TerminalOccupationKey(
+                        row.WarId, row.CityId)] = row.ControllerKingdomId;
+                }
                 bool ended = runtime.EndWar(war.data.id,
                     winner.ToString().ToLowerInvariant(), CurrentWorldTime());
                 if (ended) ClearCaptureStateAfterWar(frozen);
@@ -437,10 +447,67 @@ namespace AncientWarfare3.core.lineage
                     "city:" + pCity.id, controllerSide, pControlled: true,
                     pValue: 15, pMatchesActiveWarGoal: true,
                     CurrentWorldTime());
+            TrySettleTotalOccupation(pWar, runtime);
             WarGoalSettlementRuntimeService.OnCityControlChanged(pWar,
                 pCity, pOccupier);
             WarTerminalSettlementCoordinator.NotifyWarChanged(pWar);
             return true;
+        }
+
+        private static void TrySettleTotalOccupation(War pWar,
+            WarScoreService pRuntime)
+        {
+            if (pWar?.data == null || pRuntime == null) return;
+            Kingdom attacker = SafeMainAttacker(pWar);
+            Kingdom defender = SafeMainDefender(pWar);
+            if (attacker?.data == null || defender?.data == null) return;
+            int attackerInitial = WarParticipantCityBaselineService.
+                GetOrRegister(pWar, attacker);
+            int defenderInitial = WarParticipantCityBaselineService.
+                GetOrRegister(pWar, defender);
+            int attackerCurrent = CountLiveCities(attacker);
+            int defenderCurrent = CountLiveCities(defender);
+            bool attackerControlsAll = ControlsAllInitialCities(pWar,
+                pRuntime, attacker, defender, defenderInitial);
+            bool defenderControlsAll = ControlsAllInitialCities(pWar,
+                pRuntime, defender, attacker, attackerInitial);
+            pRuntime.TrySettleTotalOccupation(pWar.data.id,
+                attackerInitial, defenderInitial, attackerCurrent,
+                defenderCurrent, attackerControlsAll, defenderControlsAll,
+                CurrentWorldTime());
+        }
+
+        private static bool ControlsAllInitialCities(War pWar,
+            WarScoreService pRuntime, Kingdom pController, Kingdom pHome,
+            int pInitialCount)
+        {
+            if (pInitialCount <= 0 || pController?.data == null ||
+                pHome?.data == null) return false;
+            IReadOnlyList<WarScoreOccupiedCitySnapshot> occupied =
+                pRuntime.ReadOccupiedCities(pWar.data.id, pController.id,
+                    Math.Min(256, Math.Max(1, pInitialCount + 8)));
+            int matched = 0;
+            for (int i = 0; i < occupied.Count; i++)
+                if (occupied[i].HomeKingdomId == pHome.id) matched++;
+            return matched >= pInitialCount;
+        }
+
+        private static int CountLiveCities(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return 0;
+            int count = 0;
+            try
+            {
+                foreach (City city in pKingdom.getCities())
+                    if (city?.data != null && !city.isRekt() &&
+                        city.kingdom == pKingdom) count++;
+            }
+            catch
+            {
+                try { count = Math.Max(0, pKingdom.countCities()); }
+                catch { count = 0; }
+            }
+            return count;
         }
 
         public static bool ShouldHoldFrozenOccupation(City city)
@@ -922,6 +989,23 @@ namespace AncientWarfare3.core.lineage
                     warId, cityId, out occupierKingdomId);
             }
             catch { return false; }
+        }
+
+        public static bool TryGetTerminalFrozenOccupation(long pWarId,
+            long pCityId, out long pControllerKingdomId)
+        {
+            pControllerKingdomId = -1L;
+            return pWarId >= 0 && pCityId >= 0 &&
+                   TerminalOccupationControllers.TryGetValue(
+                       TerminalOccupationKey(pWarId, pCityId),
+                       out pControllerKingdomId) &&
+                   pControllerKingdomId >= 0;
+        }
+
+        private static string TerminalOccupationKey(long pWarId,
+            long pCityId)
+        {
+            return pWarId + ":" + pCityId;
         }
 
         public static IReadOnlyList<WarScoreOccupiedCitySnapshot>
