@@ -64,6 +64,9 @@ namespace AncientWarfare3.core.court
                 template.LocalTemplates.Count >
                 CustomLocalCourtTemplateRules.MaximumTemplates)
                 return CustomCourtTemplateValidationError.MissingOffice;
+            if (!Enum.IsDefined(typeof(CustomCourtTemplateScope),
+                    template.Scope))
+                return CustomCourtTemplateValidationError.UnsupportedSchemaVersion;
 
             var ids = new HashSet<string>(StringComparer.Ordinal);
             foreach (CustomCourtOffice office in template.Offices)

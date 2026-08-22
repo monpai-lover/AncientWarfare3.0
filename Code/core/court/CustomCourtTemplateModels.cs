@@ -53,6 +53,13 @@ namespace AncientWarfare3.core.court
         CommanderyChief = 2
     }
 
+    public enum CustomCourtTemplateScope
+    {
+        CentralCourt = 0,
+        LocalGovernment = 1,
+        Combined = 2
+    }
+
     public static class CustomCourtFixedRoleIds
     {
         public const string RegionalChief = "regional_chief";
@@ -155,6 +162,8 @@ namespace AncientWarfare3.core.court
     public sealed class CustomCourtTemplate
     {
         public int SchemaVersion { get; set; } = 3;
+        public CustomCourtTemplateScope Scope { get; set; } =
+            CustomCourtTemplateScope.CentralCourt;
         public string Id { get; set; } = string.Empty;
         public int Revision { get; set; } = 1;
         public CustomCourtLocalizedText Name { get; set; } =
