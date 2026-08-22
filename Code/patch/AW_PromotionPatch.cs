@@ -108,6 +108,8 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return true;
             if (pActor == null) return true;
+            if (PeasantRebelBanditStrongholdService.IsInstallingDirectBanditKing)
+                return true;
             if (RoyalAsylumService.IsActive(pActor) &&
                 !RoyalAsylumService.RecallForSuccession(pActor, __instance))
             {

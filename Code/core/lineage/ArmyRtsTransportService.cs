@@ -663,15 +663,17 @@ namespace AncientWarfare3.core.lineage
             pSubmitResult = ExecuteEvent.False;
             if (pActor?.data == null || pTarget?.data == null) return;
             bool exactTarget = SameTile(pActor.tile_target, pTarget);
-            // Native boat paths are not represented by AW ownership. Once the
-            // original boat path has accepted this target, keep it alive
-            // instead of submitting goTo again every P0 frame.
-            if (exactTarget && pActor.asset?.is_boat == true)
+            bool customPathOwned = AWPathMovementBridge.HasOwnership(pActor);
+            // The front lane revisits transport members every render frame.
+            // Keep accepted work alive until its owner consumes the result.
+            if (ArmyRtsTransportRules.ShouldKeepExistingP0Path(
+                    exactTarget, customPathOwned,
+                    nativeTransportBoat: pActor.asset?.is_boat == true))
             {
                 pSubmitResult = ExecuteEvent.True;
                 return;
             }
-            if (AWPathMovementBridge.HasOwnership(pActor))
+            if (customPathOwned)
                 AWPathMovementBridge.Cancel(pActor,
                     AWPathFailureReason.CancelledByNewRequest);
             pSubmitted = true;

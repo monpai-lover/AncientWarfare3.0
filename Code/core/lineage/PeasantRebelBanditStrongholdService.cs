@@ -11,6 +11,35 @@ namespace AncientWarfare3.core.lineage
     {
         private const int GateTowerInwardSearchSteps = 6;
 
+        [ThreadStatic]
+        private static int _directBanditKingInstallationDepth;
+
+        internal static bool IsInstallingDirectBanditKing =>
+            _directBanditKingInstallationDepth > 0;
+
+        private sealed class DirectBanditKingInstallationScope : IDisposable
+        {
+            private bool _disposed;
+
+            internal DirectBanditKingInstallationScope()
+            {
+                _directBanditKingInstallationDepth++;
+            }
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                if (_directBanditKingInstallationDepth > 0)
+                    _directBanditKingInstallationDepth--;
+                _disposed = true;
+            }
+        }
+
+        private static IDisposable EnterDirectBanditKingInstallationScope()
+        {
+            return new DirectBanditKingInstallationScope();
+        }
+
         private static readonly CultiwayWallPoint[]
             GateTowerInwardDirections =
             {
@@ -394,6 +423,10 @@ namespace AncientWarfare3.core.lineage
                 Kingdom bandit = World.world.kingdoms.makeNewCivKingdom(
                     ruler);
                 pBandit = bandit;
+                if (!EnsureDirectBanditKing(bandit, ruler,
+                        "after_make_new_kingdom"))
+                    throw new InvalidOperationException(
+                        "native kingdom creation did not install bandit king");
                 bandit.copyMetasFromOtherKingdom(origin);
                 MandateRebelService.MarkRebelKingdom(bandit, ruler,
                     origin);
@@ -439,11 +472,15 @@ namespace AncientWarfare3.core.lineage
                             pMother.setLeader(ruler, pNew: true);
                         PrepareBanditKingdomRemoval(
                             bandit, origin, pMother, null, ruler);
-                        World.world.kingdoms.removeObject(bandit);
+                        RemoveBanditKingdomAndDrain(bandit);
                     }
                     pBandit = null;
                     return false;
                 }
+                if (!EnsureDirectBanditKing(bandit, ruler,
+                        "after_stronghold_creation"))
+                    throw new InvalidOperationException(
+                        "bandit king was lost during stronghold creation");
                 return true;
             }
             catch (Exception e)
@@ -458,7 +495,7 @@ namespace AncientWarfare3.core.lineage
                         pMother.setLeader(ruler, pNew: true);
                     PrepareBanditKingdomRemoval(
                         pBandit, origin, pMother, null, ruler);
-                    World.world.kingdoms.removeObject(pBandit);
+                    RemoveBanditKingdomAndDrain(pBandit);
                 }
                 pBandit = null;
                 pFailureKey = "aw_bandit_stronghold_transaction_failed";
@@ -550,6 +587,32 @@ namespace AncientWarfare3.core.lineage
                     alive, adult, cityLeader?.city == pMother)
                 ? cityLeader
                 : null;
+        }
+
+        private static bool EnsureDirectBanditKing(Kingdom pBandit,
+            Actor pRuler, string pPhase)
+        {
+            if (pBandit?.data == null || pRuler?.data == null ||
+                pBandit.isRekt() || pRuler.isRekt()) return false;
+            if (pBandit.king == pRuler) return true;
+            try
+            {
+                using (EnterDirectBanditKingInstallationScope())
+                    pBandit.setKing(pRuler);
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Bandit king installation failed at " +
+                                    pPhase + ": " + e.Message);
+                return false;
+            }
+            bool installed = pBandit.king == pRuler;
+            if (!installed)
+                ModClass.LogWarning("Bandit king installation was rejected at " +
+                                    pPhase + "; kingdom=" +
+                                    pBandit.getID() + "; ruler=" +
+                                    pRuler.getID());
+            return installed;
         }
 
         internal static City ResolveStronghold(Kingdom pKingdom)
@@ -1684,7 +1747,7 @@ namespace AncientWarfare3.core.lineage
                     PrepareBanditKingdomRemoval(plan.Context.Bandit,
                         plan.Context.Origin, plan.Context.Mother,
                         pTransaction.Actors, plan.Context.Ruler);
-                    World.world.kingdoms.removeObject(plan.Context.Bandit);
+                    RemoveBanditKingdomAndDrain(plan.Context.Bandit);
                 }
             }
             catch (Exception e)
@@ -1733,9 +1796,19 @@ namespace AncientWarfare3.core.lineage
                         pOrigin);
                 }
                 if (actor.kingdom != pBandit) continue;
-                actor.kingdom = null;
-                ActorKingdomSafetyService.QueueRepair(actor);
+                ActorKingdomSafetyService.DetachForTransfer(actor);
             }
+        }
+
+        private static void RemoveBanditKingdomAndDrain(Kingdom pBandit)
+        {
+            if (pBandit?.data == null) return;
+            World.world.kingdoms.removeObject(pBandit);
+
+            // The native manager only disposes removed kingdoms at the next
+            // maintenance boundary. Drain actor repairs now, while the
+            // actor still has a valid asset/tile and before map layers draw.
+            ActorKingdomSafetyService.DrainPendingRepairs(4096);
         }
 
         private static bool IsValidRemovalCity(City pCity,

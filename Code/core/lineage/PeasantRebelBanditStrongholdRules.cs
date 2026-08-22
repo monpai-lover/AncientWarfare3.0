@@ -204,6 +204,16 @@ namespace AncientWarfare3.core.lineage
                    cityLeaderBelongsToMotherCity;
         }
 
+        public static bool CanUseDirectRuler(bool candidateIsMale,
+            bool femaleSuccessionAllowed)
+        {
+            _ = candidateIsMale;
+            _ = femaleSuccessionAllowed;
+            // Direct bandit founding explicitly promotes the selected founder;
+            // the temporary setKing scope handles native gender-law gates.
+            return true;
+        }
+
         public static bool ShouldTransferFallenSurvivor(
             bool actorAlive, bool actorBelongsToBanditKingdom,
             bool destinationKingdomValid, bool destinationIsBanditKingdom)

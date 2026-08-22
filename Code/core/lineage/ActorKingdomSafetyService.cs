@@ -27,6 +27,18 @@ namespace AncientWarfare3.core.lineage
             PendingRepairs.Enqueue(pActor);
         }
 
+        /// <summary>
+        /// Clears an actor's kingdom pointer for a native affiliation
+        /// transfer, while ensuring a failed transfer is repaired before the
+        /// actor reaches kingdom-dependent vanilla systems.
+        /// </summary>
+        public static void DetachForTransfer(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.kingdom = null;
+            QueueRepair(pActor);
+        }
+
         public static bool RepairLoadedActor(Actor pActor)
         {
             return TryRepairLoadedActor(pActor);

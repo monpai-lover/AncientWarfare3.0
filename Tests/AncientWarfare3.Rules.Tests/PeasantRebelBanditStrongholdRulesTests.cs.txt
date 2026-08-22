@@ -24,6 +24,7 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         RelocatesOnlyOrdinaryResidents();
         PrefersOrdinaryResidentsForRuler();
         AllowsEligibleCityLeaderFallbackRuler();
+        RejectsRulerCandidatesThatCannotPassKingGate();
         TransfersFallenSurvivorsToTheMotherRealm();
         ComposesStrongholdNamesAndTitles();
     }
@@ -242,6 +243,19 @@ internal static class PeasantRebelBanditStrongholdRulesTests
                 cityLeaderAlive: true, cityLeaderAdult: true,
                 cityLeaderBelongsToMotherCity: false),
             "an unrelated city leader cannot be used as the fallback ruler");
+    }
+
+    private static void RejectsRulerCandidatesThatCannotPassKingGate()
+    {
+        True(PeasantRebelBanditStrongholdRules.CanUseDirectRuler(
+                candidateIsMale: true, femaleSuccessionAllowed: false),
+            "a male direct ruler passes the native kingship gate");
+        True(PeasantRebelBanditStrongholdRules.CanUseDirectRuler(
+                candidateIsMale: false, femaleSuccessionAllowed: true),
+            "a female direct ruler is allowed when the court law permits it");
+        True(PeasantRebelBanditStrongholdRules.CanUseDirectRuler(
+                candidateIsMale: false, femaleSuccessionAllowed: false),
+            "a city-leader fallback is promoted directly even when the native court law is male-only");
     }
 
     private static void AllowsStrongholdCreationWhenGateTowersCannotBePlaced()

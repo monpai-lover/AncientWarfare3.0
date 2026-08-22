@@ -615,7 +615,7 @@ namespace AncientWarfare3.core.lineage
             {
                 pActor.cancelAllBeh();
                 if (pActor.kingdom != pKingdom)
-                    pActor.kingdom = null;
+                    ActorKingdomSafetyService.DetachForTransfer(pActor);
                 using (FormalAffiliationTransferScope.Open(
                            pActor.data.id, pKingdom.id, capital.data.id))
                 {
@@ -637,7 +637,7 @@ namespace AncientWarfare3.core.lineage
                 {
                     if (pActor.kingdom != pKingdom)
                     {
-                        pActor.kingdom = null;
+                        ActorKingdomSafetyService.DetachForTransfer(pActor);
                         pActor.joinKingdom(pKingdom);
                     }
                     if (pActor.city != capital)

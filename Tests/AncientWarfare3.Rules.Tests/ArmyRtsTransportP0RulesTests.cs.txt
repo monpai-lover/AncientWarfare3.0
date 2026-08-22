@@ -52,6 +52,18 @@ internal static class ArmyRtsTransportP0RulesTests
         Assert(!ArmyRtsTransportRules.ShouldAdmitMemberP0(
                 pValidMember: false, pInsideBoat: false),
             "an invalid member is never admitted to P0");
+        Assert(ArmyRtsTransportRules.ShouldKeepExistingP0Path(
+                exactTarget: true, customPathOwned: true,
+                nativeTransportBoat: false),
+            "a captain keeps its pending AW path when P0 revisits the same shore target");
+        Assert(ArmyRtsTransportRules.ShouldKeepExistingP0Path(
+                exactTarget: true, customPathOwned: false,
+                nativeTransportBoat: true),
+            "a temporary boat keeps its native path when P0 revisits the same sea target");
+        Assert(!ArmyRtsTransportRules.ShouldKeepExistingP0Path(
+                exactTarget: false, customPathOwned: true,
+                nativeTransportBoat: false),
+            "a changed transport waypoint replaces the previous path");
         Assert(ArmyRtsTransportRules.SelectEmergencyLanding(
                    entryValid: true, entryDistanceSquared: 25f,
                    exitValid: true, exitDistanceSquared: 9f) ==
@@ -169,9 +181,12 @@ internal static class ArmyRtsTransportP0RulesTests
             : string.Empty;
         Assert(p0DriveBody.Contains("AWPathMovementBridge.Update(pActor)",
                    StringComparison.Ordinal) &&
-               !p0DriveBody.Contains("pActor.b5_checkPathMovement(",
+               p0DriveBody.Contains(
+                   "pActor.asset?.is_boat == true &&",
+                   StringComparison.Ordinal) &&
+               p0DriveBody.Contains("pActor.b5_checkPathMovement(",
                    StringComparison.Ordinal),
-            "transport P0 advances its owned path without native batch gating");
+            "transport P0 advances captain AW paths while preserving the native boat path lifecycle");
         Assert(p0DriveBody.Contains(
                    "AWPathMovementBridge.HasOwnership(pActor) &&\n                    !pActor.is_moving",
                    StringComparison.Ordinal),

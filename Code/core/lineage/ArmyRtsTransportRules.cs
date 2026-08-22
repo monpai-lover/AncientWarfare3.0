@@ -283,6 +283,13 @@ namespace AncientWarfare3.core.lineage
             return pValidMember;
         }
 
+        public static bool ShouldKeepExistingP0Path(bool exactTarget,
+            bool customPathOwned, bool nativeTransportBoat)
+        {
+            return exactTarget &&
+                   (customPathOwned || nativeTransportBoat);
+        }
+
         public static ArmyRtsEmergencyLandingChoice SelectEmergencyLanding(
             bool entryValid, float entryDistanceSquared,
             bool exitValid, float exitDistanceSquared)
