@@ -28,9 +28,7 @@ namespace AncientWarfare3.core.lineage
                     recorded, pLiveCount: 0,
                     pPermanentOwnershipChanged: false);
 
-            int cityCount = 0;
-            try { cityCount = pKingdom.countCities(); }
-            catch { }
+            int cityCount = ReadNativeCityCount(pKingdom);
             int normalized = WarParticipantCityBaselineRules.
                 ResolveRemainingCityCount(recorded, cityCount,
                     pPermanentOwnershipChanged: false);
@@ -60,9 +58,7 @@ namespace AncientWarfare3.core.lineage
             Kingdom pKingdom)
         {
             if (pWar?.data == null || pKingdom?.data == null) return 1;
-            int cityCount = 0;
-            try { cityCount = pKingdom.countCities(); }
-            catch { }
+            int cityCount = ReadNativeCityCount(pKingdom);
             pWar.data.get(WarParticipantCityBaselineRules.Key(pKingdom.id),
                 out int recorded, 0);
             int normalized = WarParticipantCityBaselineRules.
@@ -83,6 +79,17 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
             return result;
+        }
+
+        private static int ReadNativeCityCount(Kingdom pKingdom)
+        {
+            try
+            {
+                return pKingdom?.cities == null
+                    ? 0
+                    : Math.Max(0, pKingdom.cities.Count);
+            }
+            catch { return 0; }
         }
 
         private static bool IsActive(War pWar)

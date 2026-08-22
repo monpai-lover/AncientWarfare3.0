@@ -21,6 +21,17 @@ internal static class WarForceEliminationRulesTests
             WarForceEliminationRules.Resolve(0, 4, 2, 0, 20).Kind,
             "confirmed attacker exhaustion overrides score");
 
+        Equal(WarForceEliminationDecisionKind.DefendersSurrender,
+            WarForceEliminationRules.ResolveFullOccupation(
+                pAttackerInitialCities: 2, pAttackerOccupiedCities: 0,
+                pDefenderInitialCities: 3, pDefenderOccupiedCities: 3).Kind,
+            "full defender occupation forces surrender even with a live army");
+        Equal(WarForceEliminationDecisionKind.None,
+            WarForceEliminationRules.ResolveFullOccupation(
+                pAttackerInitialCities: 2, pAttackerOccupiedCities: 1,
+                pDefenderInitialCities: 3, pDefenderOccupiedCities: 2).Kind,
+            "partial occupation does not force terminal settlement");
+
         WarForceEliminationDecision attackerBenefit =
             WarForceEliminationRules.Resolve(0, 0, 2, 2, 35);
         Equal(WarForceEliminationDecisionKind.ScoreSettlement,
@@ -48,6 +59,7 @@ internal static class WarForceEliminationRulesTests
         Equal(5, WarForceEliminationRules.AddPotential(-2, 5),
             "negative facts do not reduce military potential");
         MilitaryPotentialReusesVanillaStatistics();
+        NativeKingdomCityRosterIsAuthoritative();
         DuplicateObservationsInOneMonthDoNotConfirmExhaustion();
         RuntimeWiresImmediateTerminalCoordinator();
         OrdinarySettlementUsesTheRequiredOfferMode();
@@ -179,7 +191,25 @@ internal static class WarForceEliminationRulesTests
                 "ArmyFieldIndexService.CreateSnapshotCursor"),
             "kingdom potential does not rescan Army indexes");
         True(source.Contains("TryCountAvailable"),
-            "AW3 reserves remain additive with explicit readiness");
+             "AW3 reserves remain additive with explicit readiness");
+    }
+
+    private static void NativeKingdomCityRosterIsAuthoritative()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string baseline = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "WarParticipantCityBaselineService.cs"));
+        string elimination = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage",
+            "WarForceEliminationSettlementService.cs"));
+        True(baseline.Contains("pKingdom.cities.Count"),
+            "war baseline reads the native kingdom city roster");
+        False(baseline.Contains("pKingdom.countCities()"),
+            "war baseline does not use the non-native city counter");
+        True(elimination.Contains("pKingdom.cities.Count"),
+            "full occupation reads the native kingdom city roster");
+        False(elimination.Contains("pKingdom?.countCities()"),
+            "full occupation does not fall back to the non-native city counter");
     }
 
     private static void True(bool value, string name)

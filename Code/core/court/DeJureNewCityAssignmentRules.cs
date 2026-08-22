@@ -7,19 +7,19 @@ namespace AncientWarfare3.core.court
     internal readonly struct DeJureNewCityRegionCandidate
     {
         internal readonly long RegionId;
-        internal readonly bool HasAdjacentMember;
+        internal readonly bool HasAdjacentSeat;
         internal readonly int AdjacentMemberCount;
         internal readonly long NearestMemberSquaredDistance;
         internal readonly long SeatSquaredDistance;
         internal readonly bool Eligible;
 
         internal DeJureNewCityRegionCandidate(long pRegionId,
-            bool pHasAdjacentMember, int pAdjacentMemberCount,
+            bool pHasAdjacentSeat, int pAdjacentMemberCount,
             long pNearestMemberSquaredDistance, long pSeatSquaredDistance,
             bool pEligible)
         {
             RegionId = pRegionId;
-            HasAdjacentMember = pHasAdjacentMember;
+            HasAdjacentSeat = pHasAdjacentSeat;
             AdjacentMemberCount = pAdjacentMemberCount;
             NearestMemberSquaredDistance = pNearestMemberSquaredDistance;
             SeatSquaredDistance = pSeatSquaredDistance;
@@ -32,17 +32,36 @@ namespace AncientWarfare3.core.court
         internal static long Select(
             IEnumerable<DeJureNewCityRegionCandidate> pCandidates)
         {
-            DeJureNewCityRegionCandidate? selected = (pCandidates ??
+            return Select(pCandidates, 0);
+        }
+
+        internal static long Select(
+            IEnumerable<DeJureNewCityRegionCandidate> pCandidates,
+            int pSelector)
+        {
+            List<DeJureNewCityRegionCandidate> eligible = (pCandidates ??
                 Array.Empty<DeJureNewCityRegionCandidate>())
                 .Where(p => p.Eligible && p.RegionId >= 0L)
-                .Where(p => p.HasAdjacentMember)
-                .OrderByDescending(p => p.AdjacentMemberCount)
-                .ThenBy(p => p.NearestMemberSquaredDistance)
+                .ToList();
+            if (eligible.Count == 0) return -1L;
+
+            List<DeJureNewCityRegionCandidate> adjacentSeats = eligible
+                .Where(p => p.HasAdjacentSeat)
+                .OrderBy(p => p.RegionId)
+                .ToList();
+            if (adjacentSeats.Count > 0)
+            {
+                int index = pSelector == int.MinValue
+                    ? 0
+                    : (int)((uint)pSelector % (uint)adjacentSeats.Count);
+                return adjacentSeats[index].RegionId;
+            }
+
+            return eligible
+                .OrderBy(p => p.NearestMemberSquaredDistance)
                 .ThenBy(p => p.SeatSquaredDistance)
                 .ThenBy(p => p.RegionId)
-                .Select(p => (DeJureNewCityRegionCandidate?)p)
-                .FirstOrDefault();
-            return selected?.RegionId ?? -1L;
+                .First().RegionId;
         }
     }
 }

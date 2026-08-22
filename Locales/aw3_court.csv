@@ -30,9 +30,11 @@ aw_court_statistics_fallback,州范围不可用，当前显示本郡,Regional sc
 aw_de_jure_region,州法理,De jure state,州法理
 aw_de_jure_region_description,使用神力创建或划分州法理,Create or assign de jure states with one divine power,使用神力建立或劃分州法理
 aw_de_jure_region_create,建立州法理,Create de jure state,建立州法理
+aw_de_jure_region_create_description,使用神力在选定城市建立新的州法理,Use divine power to create a new de jure state at the selected city,使用神力在選定城市建立新的州法理
 aw_de_jure_region_assign,划入州法理,Assign to de jure state,劃入州法理
+aw_de_jure_region_assign_description,使用神力先选择州法理首府；再将城市划入该州法理,Use divine power to select a de jure capital; then assign cities to that state,使用神力先選擇州法理首府；再將城市劃入該州法理
 aw_de_jure_region_retire,撤销州法理,Retire de jure state,撤銷州法理
-aw_de_jure_region_retire_description,撤销选中州法理；撤销后该州不再显示法理边界，城市、人口和官场数据不会被删除。若要恢复，需手动重新建立或划分州法理。,Retire the selected de jure state. Its legal boundaries disappear without deleting cities, population, or court records. Recreate or reassign it manually to restore it.,撤銷選中的州法理；撤銷後該州不再顯示法理邊界，城市、人口和官場資料不會被刪除。若要恢復，需手動重新建立或劃分州法理。
+aw_de_jure_region_retire_description,撤销选中州法理；撤销后该州不再显示法理边界；城市、人口和官场数据不会被删除。若要恢复需手动重新建立或划分州法理。,Retire the selected de jure state; its legal boundaries disappear without deleting cities population or court records. Recreate or reassign it manually to restore it.,撤銷選中的州法理；撤銷後該州不再顯示法理邊界；城市、人口和官場資料不會被刪除。若要恢復需手動重新建立或劃分州法理。
 aw_de_jure_region_retired,州法理已撤销,De jure state retired,州法理已撤銷
 aw_de_jure_region_city_unassigned,已移除该郡的州法理归属,City removed from de jure state,已移除該郡的州法理歸屬
 aw_de_jure_region_no_assignment,该郡没有州法理归属,This city has no de jure assignment,該郡沒有州法理歸屬

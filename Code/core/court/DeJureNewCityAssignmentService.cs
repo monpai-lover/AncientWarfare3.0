@@ -89,21 +89,8 @@ namespace AncientWarfare3.core.court
             long targetId = SelectRegion(pCity, kingdom);
             if (targetId < 0L)
             {
-                if (!DeJureRegionStore.CreateState(pCity,
-                    "city_created_auto_create", out _, out string createError))
-                {
-                    if (createError == "invalid_city")
-                    {
-                        QueueRetry(pCity, allowRetry);
-                        return false;
-                    }
-                    QueueRetry(pCity, allowRetry);
-                    return false;
-                }
                 RetryIds.Remove(pCity.data.id);
-                HierarchicalVassalMapModeService.MarkHierarchyDirty(kingdom);
-                HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
-                return true;
+                return false;
             }
             if (!DeJureRegionStore.AssignCityAutomatically(targetId, pCity,
                     "city_created_auto_assign", out string error))
@@ -143,7 +130,7 @@ namespace AncientWarfare3.core.court
                 new HashSet<City>()).Where(p => p?.data != null &&
                 !p.isRekt() && p.kingdom == pKingdom &&
                 DeJureRegionStore.IsEligibleCityId(p.data.id)).Select(
-                    p => p.data.id));
+                p => p.data.id));
             var facts = new List<DeJureNewCityRegionCandidate>();
             foreach (DeJureRegion region in DeJureRegionStore.ActiveRegions())
             {
@@ -154,18 +141,32 @@ namespace AncientWarfare3.core.court
                         DeJureRegionStore.IsEligibleCityId(city.data.id))
                     .ToList();
                 if (members.Count == 0) continue;
-                int adjacentCount = members.Count(city =>
-                    adjacent.Contains(city.data.id));
                 long nearest = members.Select(city => Distance(cityTile,
                     city.getTile())).DefaultIfEmpty(long.MaxValue).Min();
                 City seat = members.FirstOrDefault(city =>
                     city.data.id == region.SeatCityId);
+                bool adjacentSeat = seat?.data != null &&
+                    adjacent.Contains(seat.data.id);
                 long seatDistance = Distance(cityTile, seat?.getTile());
                 facts.Add(new DeJureNewCityRegionCandidate(region.RegionId,
-                    adjacentCount > 0, adjacentCount, nearest,
+                    adjacentSeat, adjacentSeat ? 1 : 0, nearest,
                     seatDistance, true));
             }
-            return DeJureNewCityAssignmentRules.Select(facts);
+            return DeJureNewCityAssignmentRules.Select(facts,
+                StableSelector(pCity.data.id));
+        }
+
+        private static int StableSelector(long pCityId)
+        {
+            unchecked
+            {
+                ulong value = (ulong)pCityId ^
+                    ((ulong)(uint)MapBox.current_world_seed_id << 32);
+                value ^= value >> 33;
+                value *= 0xff51afd7ed558ccdUL;
+                value ^= value >> 33;
+                return (int)(value ^ (value >> 32));
+            }
         }
 
         private static long Distance(WorldTile pFirst, WorldTile pSecond)

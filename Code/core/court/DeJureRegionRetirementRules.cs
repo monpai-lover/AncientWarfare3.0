@@ -34,6 +34,12 @@ namespace AncientWarfare3.core.court
             return !hasCurrentRegion && !explicitlyRemoved;
         }
 
+        internal static bool ShouldUseInferredRegions(
+            bool hasActiveLegalRegions, bool hasExplicitRetirement)
+        {
+            return hasActiveLegalRegions || !hasExplicitRetirement;
+        }
+
         internal static bool ShouldRepairEmptyRegion(bool activeRegion,
             bool hasLiveMember)
         {

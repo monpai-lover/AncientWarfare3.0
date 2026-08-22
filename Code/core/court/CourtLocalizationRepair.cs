@@ -29,7 +29,6 @@ namespace AncientWarfare3.core.court
                 ["aw_court_statistics_records"] = "\u7ecf\u6d4e\u8bb0\u5f55\uff1a{0}/{1}",
                 ["aw_court_statistics_no_record"] = "\u6682\u65e0\u5e74\u5ea6\u7ecf\u6d4e\u8bb0\u5f55",
                 ["aw_court_statistics_fallback"] = "\u5dde\u8303\u56f4\u4e0d\u53ef\u7528\uff0c\u5f53\u524d\u663e\u793a\u672c\u90e1",
-                ["aw_de_jure_region_retire_description"] = "\u64a4\u9500\u9009\u4e2d\u5dde\u6cd5\u7406\uff1b\u64a4\u9500\u540e\u8be5\u5dde\u4e0d\u518d\u663e\u793a\u6cd5\u7406\u8fb9\u754c\uff0c\u57ce\u5e02\u3001\u4eba\u53e3\u548c\u5b98\u573a\u6570\u636e\u4e0d\u4f1a\u88ab\u5220\u9664\u3002\u82e5\u8981\u6062\u590d\uff0c\u9700\u624b\u52a8\u91cd\u65b0\u5efa\u7acb\u6216\u5212\u5206\u5dde\u6cd5\u7406\u3002",
                 ["aw_court_vacancy"] = "空缺",
                 ["aw_court_history_end_missing"] = "原因不明",
                 ["aw_court_history_end_invalid"] = "任职失效",
@@ -58,7 +57,6 @@ namespace AncientWarfare3.core.court
                 ["aw_court_office_heir"] = "世子",
                 ["aw_court_command"] = "統帥",
                 ["aw_court_regional_governor"] = "區域長官",
-                ["aw_de_jure_region_retire_description"] = "\u64a4\u9500\u9078\u4e2d\u7684\u5dde\u6cd5\u7406\uff1b\u64a4\u92b7\u5f8c\u8a72\u5dde\u4e0d\u518d\u986f\u793a\u6cd5\u7406\u908a\u754c\uff0c\u57ce\u5e02\u3001\u4eba\u53e3\u548c\u5b98\u5834\u8cc7\u6599\u4e0d\u6703\u88ab\u522a\u9664\u3002\u82e5\u8981\u6062\u5fa9\uff0c\u9700\u624b\u52d5\u91cd\u65b0\u5efa\u7acb\u6216\u5283\u5206\u5dde\u6cd5\u7406\u3002"
             };
 
         private static readonly Dictionary<string, string> English =
@@ -92,7 +90,6 @@ namespace AncientWarfare3.core.court
                 ["aw_court_statistics_records"] = "Economy records: {0}/{1}",
                 ["aw_court_statistics_no_record"] = "No annual economy record is available",
                 ["aw_court_statistics_fallback"] = "Regional scope unavailable; showing the current prefecture."
-                , ["aw_de_jure_region_retire_description"] = "Retire the selected de jure state. Its legal boundaries disappear without deleting cities, population, or court records. Recreate or reassign it manually to restore it."
                 , ["aw_bandit_amnesty_settlement_title"] = "Bandit Amnesty Terms"
                 , ["aw_bandit_amnesty_reward"] = "Promised reward"
                 , ["aw_bandit_amnesty_reward_none"] = "No reward"

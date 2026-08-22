@@ -739,14 +739,14 @@ namespace AncientWarfare3.core.lineage
                 FrontTargetFacts target = pTargets[i];
                 if (target == null || !target.OperationallyReachable)
                     continue;
-                if (target.FrozenFriendly)
+                if (target.DefensiveObjective)
                     homelandEmergencyAvailable = true;
                 if (target.CityId == pArmy.CurrentTargetCityId)
                     currentIndex = i;
             }
             if (currentIndex < 0) return -1;
-            return homelandEmergencyAvailable &&
-                   !pTargets[currentIndex].FrozenFriendly
+                return homelandEmergencyAvailable &&
+                    !pTargets[currentIndex].DefensiveObjective
                 ? -1
                 : currentIndex;
         }
@@ -915,7 +915,7 @@ namespace AncientWarfare3.core.lineage
                     bestOverflow = i;
                 if (assignedArmies >= ArmyRtsRules.AssaultReservationCap(
                         target.EnemyCapital, target.FormalWarGoal) &&
-                    !target.FrozenFriendly) continue;
+                    !target.DefensiveObjective) continue;
                 int required = RequiredForce(target.EnemyForce,
                     AssignmentRatio(pArmy, target));
                 if (reserved >= required && reserved > 0) continue;
@@ -938,8 +938,8 @@ namespace AncientWarfare3.core.lineage
                     bestGather = i;
             }
             if (bestReady >= 0 && bestGather >= 0)
-                return pTargets[bestGather].FrozenFriendly &&
-                       !pTargets[bestReady].FrozenFriendly
+                return pTargets[bestGather].DefensiveObjective &&
+                       !pTargets[bestReady].DefensiveObjective
                     ? bestGather
                     : bestReady;
             if (bestReady >= 0) return bestReady;
@@ -1063,7 +1063,7 @@ namespace AncientWarfare3.core.lineage
 
         private static int TargetPriority(FrontTargetFacts pTarget)
         {
-            if (pTarget.FrozenFriendly) return 4;
+            if (pTarget.DefensiveObjective) return 5;
             if (pTarget.ConnectedCorridor) return 3;
             if (pTarget.LandReachable) return 2;
             if (pTarget.TransportReachable) return 1;
@@ -1073,7 +1073,8 @@ namespace AncientWarfare3.core.lineage
         private static bool IsLandObjective(FrontTargetFacts pTarget)
         {
             return pTarget != null &&
-                   (pTarget.FrozenFriendly || pTarget.ConnectedCorridor);
+                   (pTarget.DefensiveObjective ||
+                    pTarget.ConnectedCorridor);
         }
 
         private static int DistanceSquared(FrontArmyFacts pArmy,

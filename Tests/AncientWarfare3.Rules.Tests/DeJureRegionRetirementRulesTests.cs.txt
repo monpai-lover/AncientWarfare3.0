@@ -43,8 +43,17 @@ internal static class DeJureRegionRetirementRulesTests
                 false, true),
             "explicitly removed capital stays unassigned");
         False(DeJureRegionRetirementRules.ShouldAutoCreateCapitalSeat(
-                true, false),
+            true, false),
             "assigned capital does not receive a duplicate state");
+        True(DeJureRegionRetirementRules.ShouldUseInferredRegions(false,
+                false),
+            "legacy worlds may still infer regions before explicit planning");
+        False(DeJureRegionRetirementRules.ShouldUseInferredRegions(false,
+                true),
+            "explicitly retired kingdoms keep the map visually empty");
+        True(DeJureRegionRetirementRules.ShouldUseInferredRegions(true,
+                true),
+            "newly created legal regions take precedence over retired history");
 
         string power = Read("Code/content/GodPowerLibrary.cs");
         string service = Read("Code/core/court/DeJureRegionPowerService.cs");
@@ -59,11 +68,16 @@ internal static class DeJureRegionRetirementRulesTests
         Contains(store, "DeJureCityUnassigned");
         Contains(store, "DeJureRegionRetired");
         Contains(store, "HasExplicitDeJureRemovalLocked");
+        Contains(store, "HasExplicitRegionRetirement");
         Contains(store, "RepairEmptyRegionsLocked");
         Contains(store, "DeJureEmptyRegionRepaired");
         Contains(tab, "DE_JURE_REGION_RETIRE");
         Contains(mapRules, "aw_de_jure_region_retire");
         Contains(csv, "aw_de_jure_region_retire,");
+        Contains(csv, "aw_de_jure_region_description,");
+        Contains(csv, "aw_de_jure_region_create_description,");
+        Contains(csv, "aw_de_jure_region_assign_description,");
+        Contains(csv, "aw_de_jure_region_retire_description,");
         Contains(csv, "aw_de_jure_region_city_unassigned,");
         Contains(csv, "aw_de_jure_region_no_assignment,");
         Contains(csv, "aw_de_jure_region_stronghold_ineligible,");

@@ -35,6 +35,27 @@ internal static class ArmyRtsEndToEndFlowTests
         Equal(ArmyRtsState.Assault, state,
             "a deployed assault army enters the attack state");
 
+        Equal(ArmyRtsState.Hold,
+            ArmyRtsRules.ResolveState(new ArmyRtsTransitionFacts
+            {
+                CurrentState = ArmyRtsState.Hold,
+                Role = ArmyRtsRole.Defense,
+                Posture = ArmyRtsPosture.Defend,
+                HasMission = true,
+                TargetValid = true,
+                RouteArrived = true,
+                DeploymentReady = false,
+                ForceReady = true,
+                MinimumForceReady = true,
+                RallyReady = true,
+                HoldRequired = true,
+                Supply = 100,
+                Organization = 100
+            }),
+            "a defensive hold ignores transient formation quorum flicker");
+
+        VerifySiegeDefensePriority();
+
         Equal(ArmyRtsCombatControlDecision.KeepStrategicControl,
             ArmyRtsWarLifecycleRules.ResolveCombatControl(
                 ArmyRtsWarPhase.StrategicMovement,
@@ -88,11 +109,39 @@ internal static class ArmyRtsEndToEndFlowTests
                 insideBoat: false, customTransportOwned: false,
                 vanillaTaxiOwned: true),
             "P0 yields while vanilla transport owns the actor");
-        Equal(256,
+        Equal(600,
             ArmyMilitaryMovementPriorityRules.ResolveP0ChunkCount(600, 256),
-            "a 600-soldier army advances through bounded priority chunks");
+            "a 600-soldier army is not cut off by the ordinary actor budget");
 
         VerifyRuntimeCallOrder();
+    }
+
+    private static void VerifySiegeDefensePriority()
+    {
+        var besieged = new FrontTargetFacts(
+            cityId: 20L, frozenFriendly: false,
+            formalWarGoal: false, enemyCapital: false,
+            connectedCorridor: false, landReachable: false,
+            transportReachable: true, exposedSecondary: false,
+            distanceSquared: 900, enemyForce: 80,
+            defensiveObjective: true);
+        var offensive = new FrontTargetFacts(
+            cityId: 10L, frozenFriendly: false,
+            formalWarGoal: false, enemyCapital: false,
+            connectedCorridor: true, landReachable: true,
+            transportReachable: false, exposedSecondary: false,
+            distanceSquared: 100, enemyForce: 20);
+        Equal(0, KingdomWarDirectorRules.SelectBestTargetIndex(
+                new[] { besieged, offensive }),
+            "a besieged friendly city outranks a connected offensive target");
+
+        var assignments = KingdomWarDirectorRules.AssignFrontTargets(
+            new[] { new FrontArmyFacts(1L, 100, 10L, 100, 0, 0) },
+            new[] { besieged, offensive });
+        Equal(1, assignments.Count,
+            "a field army receives one support assignment");
+        Equal(20L, assignments[0].TargetCityId,
+            "an existing offensive lease is released for an active siege");
     }
 
     private static ArmyRtsState Resolve(ArmyRtsState current,
@@ -151,6 +200,18 @@ internal static class ArmyRtsEndToEndFlowTests
         string p0 = p0Start >= 0 && p0End > p0Start
             ? runner.Substring(p0Start, p0End - p0Start)
             : string.Empty;
+        Require(runner.Contains(
+                "return militaryP0Cursor < militaryP0ActorIds.Count &&",
+                StringComparison.Ordinal),
+            "the military P0 stage cannot re-enter after draining its snapshot");
+        Require(p0.Contains(
+                "ArmyMilitaryMovementPriorityIndex.WasProcessed(actorId)",
+                StringComparison.Ordinal),
+            "transport P0 and generic P0 cannot advance the same actor twice");
+        Require(controller.Contains(
+                "RefreshCaptainTaskAfterStateChange(army, record.Mission,",
+                StringComparison.Ordinal),
+            "controller state changes update the visible captain task without waiting for a later queue pass");
         int b2 = p0.IndexOf("actor.b2_checkCurrentEnemyTarget(cycleElapsed)",
             StringComparison.Ordinal);
         int b3 = p0.IndexOf("actor.b3_findEnemyTarget(cycleElapsed)",

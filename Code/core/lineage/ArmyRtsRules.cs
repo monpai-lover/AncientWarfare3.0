@@ -682,6 +682,9 @@ namespace AncientWarfare3.core.lineage
                 (!pFacts.ForceReady || !pFacts.RallyReady))
                 return ArmyRtsState.Rally;
             if (!pFacts.RouteArrived) return ArmyRtsState.March;
+            if (pFacts.CurrentState == ArmyRtsState.Hold &&
+                pFacts.HoldRequired)
+                return ArmyRtsState.Hold;
             if (!pFacts.DeploymentReady) return ArmyRtsState.Deploy;
 
             if (pFacts.Posture == ArmyRtsPosture.Attack ||

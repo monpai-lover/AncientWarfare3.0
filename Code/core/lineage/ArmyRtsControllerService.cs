@@ -4223,6 +4223,9 @@ namespace AncientWarfare3.core.lineage
                 Controllers.SetState(pArmyId, next);
             }
             ArmyLogisticsService.OnArmyStateChanged(army, next);
+            if (commit && current != next)
+                RefreshCaptainTaskAfterStateChange(army, record.Mission,
+                    next);
             UpdatePursuitRuntime(army, current, next, runtime);
             if (commit && current == ArmyRtsState.Retreat &&
                 next == ArmyRtsState.Regroup)
@@ -5578,6 +5581,29 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
             EnsureCustomMovementJobs(pArmy, pRuntime, pMission, pState);
+        }
+
+        private static void RefreshCaptainTaskAfterStateChange(Army pArmy,
+            ArmyRtsMission pMission, ArmyRtsState pState)
+        {
+            Actor captain = SafeCaptain(pArmy);
+            if (!IsLiveCombatantActor(captain)) return;
+            if (UsesVanillaRetreatMovement(pArmy, pMission))
+            {
+                SetJob(captain, ArmyRtsContent.RetreatCaptainJobId,
+                    ArmyRtsContent.RetreatTaskId);
+                return;
+            }
+            bool frontHold = ArmyRtsControllerRules.ShouldUseFrontHoldJob(
+                pMission?.ProposalKind ?? ArmyRtsProposalKind.None,
+                pState);
+            SetJob(captain, frontHold
+                    ? ArmyRtsContent.HoldJobId
+                    : ArmyRtsContent.CaptainJobId,
+                frontHold
+                    ? ArmyRtsContent.HoldTaskId
+                    : ArmyRtsContent.ResolveCaptainTaskId(pState,
+                        ArmyRtsTransportService.GetPhase(pArmy)));
         }
 
         private static void EnsureVanillaMarchJobs(Army pArmy,

@@ -354,7 +354,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
     private bool ShouldRunMilitaryP0Stage()
     {
-        return militaryP0ActorIds.Count > 0 &&
+        return militaryP0Cursor < militaryP0ActorIds.Count &&
                AWPerformanceSettings.Mode == AWSimulationMode.Large &&
                World.world?.isPaused() != true;
     }
@@ -389,6 +389,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
     private void ProcessMilitaryP0Actor(long actorId, float cycleElapsed)
     {
+        if (ArmyMilitaryMovementPriorityIndex.WasProcessed(actorId))
+            return;
         Actor actor = null;
         try { actor = World.world?.units?.get(actorId); }
         catch { }

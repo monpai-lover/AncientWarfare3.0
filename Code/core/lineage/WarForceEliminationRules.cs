@@ -134,5 +134,26 @@ namespace AncientWarfare3.core.lineage
                     : WarScoreSide.Defenders,
                 Math.Abs(pAttackerSignedScore));
         }
+
+        public static WarForceEliminationDecision ResolveFullOccupation(
+            int pAttackerInitialCities, int pAttackerOccupiedCities,
+            int pDefenderInitialCities, int pDefenderOccupiedCities)
+        {
+            bool attackersOccupied = pAttackerInitialCities > 0 &&
+                pAttackerOccupiedCities >= pAttackerInitialCities;
+            bool defendersOccupied = pDefenderInitialCities > 0 &&
+                pDefenderOccupiedCities >= pDefenderInitialCities;
+            if (attackersOccupied == defendersOccupied)
+                return new WarForceEliminationDecision(
+                    WarForceEliminationDecisionKind.None,
+                    WarScoreSide.None, 0);
+            return attackersOccupied
+                ? new WarForceEliminationDecision(
+                    WarForceEliminationDecisionKind.AttackersSurrender,
+                    WarScoreSide.Defenders, 100)
+                : new WarForceEliminationDecision(
+                    WarForceEliminationDecisionKind.DefendersSurrender,
+                    WarScoreSide.Attackers, 100);
+        }
     }
 }

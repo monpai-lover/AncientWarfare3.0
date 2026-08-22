@@ -209,6 +209,18 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
+        public int CountOccupiedCitiesByHomeKingdom(long pWarId,
+            long pHomeKingdomId)
+        {
+            using var command = new SQLiteCommand(
+                "SELECT COUNT(*) FROM " + ControlTable +
+                " WHERE WAR_ID=@war AND HOME_KINGDOM_ID=@home" +
+                " AND CONTROL_KIND='city' AND CONTRIBUTION<>0", _db);
+            command.Parameters.AddWithValue("@war", pWarId);
+            command.Parameters.AddWithValue("@home", pHomeKingdomId);
+            return Convert.ToInt32(command.ExecuteScalar());
+        }
+
         public IReadOnlyList<WarScoreOccupiedCitySnapshot>
             ReadAllOccupiedCitiesForWarCleanup(long pWarId)
         {

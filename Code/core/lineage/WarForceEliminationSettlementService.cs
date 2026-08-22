@@ -25,6 +25,8 @@ namespace AncientWarfare3.core.lineage
             out WarForceEliminationDecision pDecision)
         {
             pDecision = default;
+            if (TryGetFullOccupationDecision(pWar, out pDecision))
+                return true;
             if (!TryReadPotentials(pWar, out int attackers,
                     out int defenders)) return false;
             int score = 0;
@@ -34,6 +36,47 @@ namespace AncientWarfare3.core.lineage
                 defenders, attackers == 0 ? 1 : 0,
                 defenders == 0 ? 1 : 0, score);
             return pDecision.Kind != WarForceEliminationDecisionKind.None;
+        }
+
+        internal static bool TryGetFullOccupationDecision(War pWar,
+            out WarForceEliminationDecision pDecision)
+        {
+            pDecision = default;
+            if (!IsLiveWar(pWar)) return false;
+            Kingdom attacker = MainAttacker(pWar);
+            Kingdom defender = MainDefender(pWar);
+            if (attacker?.data == null || defender?.data == null)
+                return false;
+            int attackerBaseline = WarParticipantCityBaselineService.
+                GetOrRegister(pWar, attacker);
+            int defenderBaseline = WarParticipantCityBaselineService.
+                GetOrRegister(pWar, defender);
+            int attackerInitial = ReadLiveCityCount(attacker,
+                attackerBaseline);
+            int defenderInitial = ReadLiveCityCount(defender,
+                defenderBaseline);
+            int attackerOccupied = WarScoreService.
+                CountFrozenOccupationsForHomeKingdom(pWar.data.id,
+                    attacker.id);
+            int defenderOccupied = WarScoreService.
+                CountFrozenOccupationsForHomeKingdom(pWar.data.id,
+                    defender.id);
+            pDecision = WarForceEliminationRules.ResolveFullOccupation(
+                attackerInitial, attackerOccupied, defenderInitial,
+                defenderOccupied);
+            return pDecision.Kind != WarForceEliminationDecisionKind.None;
+        }
+
+        private static int ReadLiveCityCount(Kingdom pKingdom,
+            int pFallback)
+        {
+            try
+            {
+                if (pKingdom?.cities != null)
+                    return Math.Max(0, pKingdom.cities.Count);
+            }
+            catch { }
+            return Math.Max(0, pFallback);
         }
 
         internal static bool TryReadPotentials(War pWar,

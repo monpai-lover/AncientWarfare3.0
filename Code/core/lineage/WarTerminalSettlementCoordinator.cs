@@ -137,6 +137,17 @@ namespace AncientWarfare3.core.lineage
                 !WarScoreService.TryGetSnapshot(pWar, attacker,
                     out WarScoreSnapshot snapshot)) return false;
 
+            if (!guarded && WarForceEliminationSettlementService
+                    .TryGetFullOccupationDecision(pWar,
+                        out WarForceEliminationDecision fullOccupation))
+            {
+                pDecision = new WarTerminalSettlementDecision(
+                    WarTerminalSettlementReason.ForceElimination,
+                    fullOccupation.Beneficiary, 100);
+                pForceDecision = fullOccupation;
+                return true;
+            }
+
             bool potentialRead = WarForceEliminationSettlementService
                 .TryReadPotentials(pWar, out int attackers,
                     out int defenders);

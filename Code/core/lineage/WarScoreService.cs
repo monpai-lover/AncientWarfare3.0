@@ -734,6 +734,15 @@ namespace AncientWarfare3.core.lineage
                     pWarId, pHomeKingdomId, pAfterControlKey, pLimit);
         }
 
+        internal int CountOccupiedCitiesByHomeKingdom(long pWarId,
+            long pHomeKingdomId)
+        {
+            if (pWarId < 0 || pHomeKingdomId < 0) return 0;
+            lock (_gate)
+                return _persistence.CountOccupiedCitiesByHomeKingdom(
+                    pWarId, pHomeKingdomId);
+        }
+
         public IReadOnlyList<WarScoreOccupiedCitySnapshot>
             ReadAllOccupiedCitiesForWarCleanup(long pWarId)
         {

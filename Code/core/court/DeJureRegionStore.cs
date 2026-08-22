@@ -162,6 +162,23 @@ namespace AncientWarfare3.core.court
             lock (Gate) return HasExplicitDeJureRemovalLocked(pCityId);
         }
 
+        internal static bool HasExplicitRegionRetirement(long pKingdomId)
+        {
+            if (pKingdomId < 0L) return false;
+            EnsureInitialized();
+            lock (Gate)
+            {
+                if (_store?.Regions == null || _store.ChangeHistory == null)
+                    return false;
+                return _store.Regions.Any(region =>
+                    region != null && !region.Active &&
+                    region.CreatedByKingdomId == pKingdomId &&
+                    _store.ChangeHistory.Any(change =>
+                        change != null && change.RegionId == region.RegionId &&
+                        change.Reason == "DeJureRegionRetired"));
+            }
+        }
+
         internal static bool IsEligibleCityId(long pCityId)
         {
             if (pCityId < 0L) return false;

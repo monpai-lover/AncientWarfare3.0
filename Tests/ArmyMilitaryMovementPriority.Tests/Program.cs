@@ -26,8 +26,8 @@ Require(!ArmyMilitaryMovementPriorityRules.IsActiveRtsObjectiveOwner(
 Require(!ArmyMilitaryMovementPriorityRules.IsActiveRtsObjectiveOwner(
         controllerActive: true, ownsObjective: false),
     "a controller in rally without a physical objective must not enter P0");
-Require(ArmyMilitaryMovementPriorityRules.ResolveP0SliceCount(
-        registeredCount: 91, simulationBatchSize: 32) == 91,
+Require(ArmyMilitaryMovementPriorityRules.ResolveP0ChunkCount(
+        remainingCount: 91, batchSize: 32) == 91,
     "active military movement must not be cut off by the ordinary actor budget");
 Require(!ArmyMilitaryMovementPriorityRules.CanAdmitOrdinaryActorWork(
         p0SlicePending: true),
@@ -35,5 +35,15 @@ Require(!ArmyMilitaryMovementPriorityRules.CanAdmitOrdinaryActorWork(
 Require(ArmyMilitaryMovementPriorityRules.CanAdmitOrdinaryActorWork(
         p0SlicePending: false),
     "ordinary actor work may resume after the P0 slice completes");
+
+string runner = File.ReadAllText(Path.Combine(
+    Directory.GetCurrentDirectory(), "Code", "core", "performance",
+    "AWCooperativeActorPostRunner.cs"));
+Require(runner.Contains(
+        "return militaryP0Cursor < militaryP0ActorIds.Count &&"),
+    "a completed military P0 snapshot must not re-enter later in the same actor cycle");
+Require(runner.Contains(
+        "ArmyMilitaryMovementPriorityIndex.WasProcessed(actorId)"),
+    "an actor already advanced by transport P0 must not run the generic P0 pipeline again");
 
 Console.WriteLine("ArmyMilitaryMovementPriority.Tests: PASS");

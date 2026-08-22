@@ -108,89 +108,124 @@ namespace AncientWarfare3.core.lineage
             if (CityMilitaryThreatFacts.TryGet(pWar, pCity, pKingdom,
                     out bool cached))
                 return cached;
-            var scan = new HostileMilitaryScanContext(pWar, pKingdom);
-            bool completed = false;
-            try
+            Kingdom[] militaryKingdoms;
+            if (!CityMilitaryThreatFacts.TryGetPresence(pWar, pCity,
+                    out militaryKingdoms))
             {
-                CityMilitaryThreatFacts.RecordPhysicalScan();
-                for (int zoneIndex = 0;
-                     zoneIndex < pCity.zones.Count; zoneIndex++)
+                var scan = new MilitaryPresenceScanContext();
+                try
                 {
-                    ScanZone(pCity.zones[zoneIndex], scan);
-                    if (scan.Found) break;
+                    CityMilitaryThreatFacts.RecordPhysicalScan();
+                    for (int zoneIndex = 0;
+                         zoneIndex < pCity.zones.Count; zoneIndex++)
+                        ScanZone(pCity.zones[zoneIndex], scan);
+                    if (pCity.border_zones != null)
+                        foreach (TileZone borderZone in pCity.border_zones)
+                            ScanZone(borderZone, scan);
                 }
-                if (!scan.Found && pCity.border_zones != null)
-                    foreach (TileZone borderZone in pCity.border_zones)
-                    {
-                        ScanZone(borderZone, scan);
-                        if (scan.Found) break;
-                    }
+                catch { return false; }
+                militaryKingdoms = scan.ToArray();
+                CityMilitaryThreatFacts.StorePresence(pWar, pCity,
+                    militaryKingdoms);
             }
-            catch { return false; }
-            finally { completed = true; }
-            if (completed) CityMilitaryThreatFacts.Store(pWar, pCity,
-                pKingdom, scan.Found);
-            return scan.Found;
+            bool hostile = HasHostileMilitaryKingdom(pWar, pKingdom,
+                militaryKingdoms);
+            CityMilitaryThreatFacts.Store(pWar, pCity, pKingdom, hostile);
+            return hostile;
         }
 
         private static void ScanZone(TileZone pZone,
-            HostileMilitaryScanContext pScan)
+            MilitaryPresenceScanContext pScan)
         {
-            if (pZone?.tiles == null || pScan == null) return;
-            for (int tileIndex = 0; tileIndex < pZone.tiles.Length;
-                 tileIndex++)
-            {
-                WorldTile tile = pZone.tiles[tileIndex];
-                if (tile == null) continue;
-                tile.doUnits(pScan.Visit);
-                if (pScan.Found) break;
-            }
+            if (pZone?.chunk == null || pScan == null) return;
+            pScan.AddZone(pZone);
         }
 
-        private sealed class HostileMilitaryScanContext
+        private static bool HasHostileMilitaryKingdom(War pWar,
+            Kingdom pObservingKingdom, Kingdom[] pMilitaryKingdoms)
         {
-            private readonly War _war;
-            private readonly Kingdom _observingKingdom;
-            private readonly Dictionary<long, bool> HostilityByKingdom =
+            var HostilityByKingdom =
                 new Dictionary<long, bool>();
-
-            internal HostileMilitaryScanContext(War pWar,
-                Kingdom pObservingKingdom)
+            if (pMilitaryKingdoms == null) return false;
+            for (int index = 0; index < pMilitaryKingdoms.Length; index++)
             {
-                _war = pWar;
-                _observingKingdom = pObservingKingdom;
-                Visit = VisitActor;
-            }
-
-            internal Func<Actor, bool> Visit { get; }
-            internal bool Found { get; private set; }
-
-            private bool VisitActor(Actor pActor)
-            {
-                Kingdom actorKingdom = pActor?.kingdom;
-                if (pActor?.data == null ||
-                    !pActor.is_profession_warrior ||
-                    actorKingdom?.data == null ||
-                    actorKingdom == _observingKingdom)
-                    return true;
+                Kingdom actorKingdom = pMilitaryKingdoms[index];
+                if (actorKingdom?.data == null ||
+                    actorKingdom == pObservingKingdom) continue;
                 long actorKingdomId;
                 try { actorKingdomId = actorKingdom.id; }
-                catch { return true; }
+                catch { continue; }
                 if (!HostilityByKingdom.TryGetValue(actorKingdomId,
                         out bool hostile))
                 {
                     try
                     {
-                        hostile = !_war.onTheSameSide(_observingKingdom,
+                        hostile = !pWar.onTheSameSide(pObservingKingdom,
                                       actorKingdom) &&
-                                  _war.isInWarWith(_observingKingdom,
+                                  pWar.isInWarWith(pObservingKingdom,
                                       actorKingdom);
                     }
                     catch { hostile = false; }
                     HostilityByKingdom[actorKingdomId] = hostile;
                 }
-                Found = hostile;
-                return !Found;
+                if (hostile) return true;
+            }
+            return false;
+        }
+
+        private sealed class MilitaryPresenceScanContext
+        {
+            private readonly HashSet<Kingdom> Kingdoms =
+                new HashSet<Kingdom>();
+            private readonly HashSet<TileZone> AllowedZones =
+                new HashSet<TileZone>();
+            private readonly HashSet<MapChunk> Chunks =
+                new HashSet<MapChunk>();
+
+            internal Kingdom[] ToArray()
+            {
+                foreach (MapChunk chunk in Chunks) ScanChunk(chunk);
+                var result = new Kingdom[Kingdoms.Count];
+                Kingdoms.CopyTo(result);
+                return result;
+            }
+
+            internal void AddZone(TileZone pZone)
+            {
+                if (pZone?.chunk == null || !AllowedZones.Add(pZone))
+                    return;
+                Chunks.Add(pZone.chunk);
+            }
+
+            private void ScanChunk(MapChunk pChunk)
+            {
+                if (pChunk?.objects == null ||
+                    pChunk.objects.kingdoms == null) return;
+
+                // This is the same index used by vanilla EnemiesFinder.
+                for (int kingdomIndex = 0;
+                     kingdomIndex < pChunk.objects.kingdoms.Count;
+                     kingdomIndex++)
+                {
+                    long kingdomId = pChunk.objects.kingdoms[kingdomIndex];
+                    List<Actor> units;
+                    try { units = pChunk.objects.getUnits(kingdomId); }
+                    catch { continue; }
+                    if (units == null) continue;
+                    for (int unitIndex = 0; unitIndex < units.Count;
+                         unitIndex++)
+                        VisitActor(units[unitIndex]);
+                }
+            }
+
+            private void VisitActor(Actor pActor)
+            {
+                Kingdom actorKingdom = pActor?.kingdom;
+                if (pActor?.data == null ||
+                    !AllowedZones.Contains(pActor.current_tile?.zone) ||
+                    !pActor.is_profession_warrior ||
+                    actorKingdom?.data == null) return;
+                Kingdoms.Add(actorKingdom);
             }
         }
 

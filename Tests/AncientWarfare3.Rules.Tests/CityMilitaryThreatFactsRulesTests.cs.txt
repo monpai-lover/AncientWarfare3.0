@@ -5,6 +5,7 @@ internal static class CityMilitaryThreatFactsRulesTests
     public static void Run()
     {
         CacheEntryPointIsInstalledWithoutTileClosures();
+        PresenceSnapshotIsSharedAcrossObservingKingdoms();
         LiveInvalidationUsesTheRevisionRule();
         CacheRotationDoesNotInvalidateAsyncFacts();
 
@@ -52,8 +53,43 @@ internal static class CityMilitaryThreatFactsRulesTests
             "city hostile-military queries enter the authority-cycle cache");
         Assert(!source.Contains("tile.doUnits(actor =>"),
             "a physical city scan does not allocate one captured callback per tile");
+        Assert(source.Contains("pZone?.chunk"),
+            "city threat scans resolve the vanilla TileZone chunk index");
+        Assert(source.Contains("pChunk.objects.kingdoms"),
+            "city threat scans use the vanilla chunk kingdom index");
+        Assert(source.Contains("pChunk.objects.getUnits(kingdomId)"),
+            "city threat scans use the vanilla per-kingdom unit index");
+        Assert(source.Contains(
+                "AllowedZones.Contains(pActor.current_tile?.zone)"),
+            "chunk candidates are filtered back to the target city zones");
         Assert(source.Contains("HostilityByKingdom"),
             "a physical city scan caches war relation checks per kingdom");
+    }
+
+    private static void PresenceSnapshotIsSharedAcrossObservingKingdoms()
+    {
+        Assert(CityMilitaryThreatFactsRules.CanCachePresence(true, 17L, 9L),
+            "a valid war/city presence query is cacheable");
+        Assert(!CityMilitaryThreatFactsRules.CanCachePresence(false, 17L, 9L),
+            "presence snapshots are not reused outside an authority cycle");
+        Assert(CityMilitaryThreatFactsRules.ShouldReusePresence(true, 4L, 4L,
+                10.20d, 10.00d),
+            "one physical presence scan can serve multiple observers");
+        Assert(!CityMilitaryThreatFactsRules.ShouldReusePresence(true, 5L, 4L,
+                10.20d, 10.00d),
+            "a changed presence revision requires a fresh physical scan");
+
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "CityMilitaryThreatFacts.cs"));
+        Assert(source.Contains("TryGetPresence("),
+            "threat facts expose a shared war/city presence snapshot");
+        Assert(source.Contains("StorePresence("),
+            "threat facts persist the shared physical presence snapshot");
+        Assert(source.Contains("_cacheEpoch"),
+            "cache freshness is independent from async planner revision");
+        Assert(source.Contains("entry.CacheEpoch, _cacheEpoch"),
+            "city and war invalidation do not expire unrelated city facts");
     }
 
     private static void LiveInvalidationUsesTheRevisionRule()

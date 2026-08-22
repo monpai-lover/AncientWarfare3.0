@@ -55,6 +55,12 @@ namespace AncientWarfare3.core.lineage
                    pKingdomId >= 0L;
         }
 
+        internal static bool CanCachePresence(bool pCycleActive,
+            long pWarId, long pCityId)
+        {
+            return pCycleActive && pWarId >= 0L && pCityId >= 0L;
+        }
+
         internal static bool ShouldReuse(bool pCycleActive,
             long pCachedRevision, long pCurrentRevision, double pNow,
             double pCachedAt)
@@ -64,6 +70,14 @@ namespace AncientWarfare3.core.lineage
                 double.IsNaN(pCachedAt) || double.IsInfinity(pCachedAt) ||
                 pNow < pCachedAt) return false;
             return pNow - pCachedAt < CacheLifetimeSeconds;
+        }
+
+        internal static bool ShouldReusePresence(bool pCycleActive,
+            long pCachedRevision, long pCurrentRevision, double pNow,
+            double pCachedAt)
+        {
+            return ShouldReuse(pCycleActive, pCachedRevision,
+                pCurrentRevision, pNow, pCachedAt);
         }
 
         internal static bool KeyMatches(CityMilitaryThreatKey pLeft,

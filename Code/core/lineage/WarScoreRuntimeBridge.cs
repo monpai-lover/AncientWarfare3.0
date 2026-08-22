@@ -944,6 +944,20 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        public static int CountFrozenOccupationsForHomeKingdom(long pWarId,
+            long pHomeKingdomId)
+        {
+            try
+            {
+                WarScoreService runtime = GetRuntime();
+                if (runtime == null || pWarId < 0 || pHomeKingdomId < 0)
+                    return 0;
+                return runtime.CountOccupiedCitiesByHomeKingdom(
+                    pWarId, pHomeKingdomId);
+            }
+            catch { return 0; }
+        }
+
         public static bool IsCityFrozenControlledBySide(City pCity,
             Kingdom pController)
         {
@@ -1115,7 +1129,18 @@ namespace AncientWarfare3.core.lineage
             try { activeGoal = HasMatchingActiveCityGoal(pWar, pCity,
                 pController); }
             catch { }
-            bool onlyLiveCity = initialOwnerCityCount == 1;
+            // The native Kingdom.cities list is the authoritative live roster.
+            // A save may contain a stale AW3 war baseline, so it must not
+            // prevent the last remaining city from producing a decisive
+            // occupation score.
+            int liveCityCount = initialOwnerCityCount;
+            try
+            {
+                if (pCity.kingdom?.cities != null)
+                    liveCityCount = Math.Max(0, pCity.kingdom.cities.Count);
+            }
+            catch { }
+            bool onlyLiveCity = liveCityCount == 1;
             return new WarScoreCityFacts(pCity.id, development, population,
                 zones, buildings, capital, activeGoal, onlyLiveCity,
                 initialOwnerCityCount);

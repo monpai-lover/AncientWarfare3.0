@@ -34,6 +34,16 @@ namespace AncientWarfare3.core.court
                 Cache[pKingdom.id] = legal;
                 return legal;
             }
+            if (!DeJureRegionRetirementRules.ShouldUseInferredRegions(
+                    hasActiveLegalRegions: false,
+                    hasExplicitRetirement: DeJureRegionStore.
+                        HasExplicitRegionRetirement(pKingdom.id)))
+            {
+                IReadOnlyList<RegionalGovernmentReadModel> empty =
+                    Array.Empty<RegionalGovernmentReadModel>();
+                Cache[pKingdom.id] = empty;
+                return empty;
+            }
             if (Cache.TryGetValue(pKingdom.id, out IReadOnlyList<
                     RegionalGovernmentReadModel> cached)) return cached;
 
