@@ -41,7 +41,7 @@ namespace AncientWarfare3.core.court
                     legal.SeatCityId,
                     ownMembers.Select(p => new RegionalSeatCandidate(
                         p.data.id, SafePopulation(p),
-                        DevelopmentMapModeService.GetCityScore(p)).ToArray());
+                        DevelopmentMapModeService.GetCityScore(p))).ToArray());
                 City effectiveSeat = ownMembers.FirstOrDefault(p =>
                     p.data.id == effectiveSeatId);
                 var model = new RegionalGovernmentReadModel
