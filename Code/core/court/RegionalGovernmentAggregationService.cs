@@ -93,6 +93,8 @@ namespace AncientWarfare3.core.court
                 {
                     KingdomId = pKingdom.id,
                     SeatCityId = group.SeatCityId,
+                    LegalSeatCityId = group.SeatCityId,
+                    EffectiveSeatCityId = group.SeatCityId,
                     RegionTitle = string.IsNullOrWhiteSpace(pRegionTitle)
                         ? RegionalGovernmentRules.DefaultRegionTitle
                         : pRegionTitle.Trim(),

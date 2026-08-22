@@ -25,16 +25,11 @@ namespace AncientWarfare3.core.court
             var result = new List<RegionalGovernmentReadModel>();
             foreach (DeJureRegion legal in DeJureRegionStore.ActiveRegions())
             {
-                List<long> members = (legal.MemberCityIds ?? new List<long>())
-                    .Where(controlled.ContainsKey).OrderBy(p => p).ToList();
-                if (members.Count == 0) continue;
                 List<City> allMembers = (legal.MemberCityIds ??
                     new List<long>()).Select(p => World.world?.cities?.get(p))
                     .Where(p => p?.data != null && !p.isRekt() &&
                         !PeasantRebelBanditStrongholdService.
                             IsStrongholdCity(p)).ToList();
-                City seat = allMembers.FirstOrDefault(p =>
-                    p.data.id == legal.SeatCityId);
                 var counts = new Dictionary<long, int>();
                 foreach (City city in allMembers)
                 {
@@ -42,33 +37,57 @@ namespace AncientWarfare3.core.court
                     counts[kingdomId] = counts.TryGetValue(kingdomId,
                         out int current) ? current + 1 : 1;
                 }
+                Dictionary<long, List<City>> groups = allMembers
+                    .Where(p => p.kingdom?.data != null)
+                    .GroupBy(p => p.kingdom.data.id)
+                    .ToDictionary(p => p.Key, p => p.ToList());
+                if (!groups.TryGetValue(pKingdom.id, out List<City> ownMembers) ||
+                    ownMembers.Count == 0) continue;
+                List<long> members = ownMembers.Select(p => p.data.id)
+                    .OrderBy(p => p).ToList();
+                long effectiveSeatId = RegionalEffectiveSeatRules.SelectEffectiveSeat(
+                    legal.SeatCityId,
+                    ownMembers.Select(p => new RegionalSeatCandidate(
+                        p.data.id, SafePopulation(p),
+                        DevelopmentMapModeService.GetCityScore(p)).ToArray());
+                City effectiveSeat = ownMembers.FirstOrDefault(p =>
+                    p.data.id == effectiveSeatId);
                 var model = new RegionalGovernmentReadModel
                 {
                     KingdomId = pKingdom.id,
                     RegionId = legal.RegionId,
                     SeatCityId = legal.SeatCityId,
+                    LegalSeatCityId = legal.SeatCityId,
+                    EffectiveSeatCityId = effectiveSeatId,
                     RegionName = legal.RegionName ?? string.Empty,
                     RegionTitle = pRegionTitle ?? string.Empty,
                     GovernorTitle = pGovernorTitle ?? string.Empty,
                     LocalLevelTitle = pLocalLevelTitle ?? string.Empty,
                     GovernorActorId = LocalGovernorIdentityRules.ResolveRegionalGovernorActorId(
-                        seat?.kingdom == pKingdom,
-                        seat?.leader?.data?.id ?? -1L,
-                        seat?.leader != null && seat.leader.isAlive() &&
-                        !seat.leader.isRekt()),
+                        effectiveSeat != null,
+                        effectiveSeat?.leader?.data?.id ?? -1L,
+                        effectiveSeat?.leader != null && effectiveSeat.leader.isAlive() &&
+                        !effectiveSeat.leader.isRekt()),
                     MemberCityIds = members,
                     LocalGovernmentCityIds = members.ToList(),
                     TotalMemberCount = allMembers.Count,
                     ControlledMemberCount = members.Count,
                     ForeignMemberCount = Math.Max(0, allMembers.Count - members.Count),
-                    IsSeatControlled = seat?.kingdom == pKingdom,
+                    IsSeatControlled = effectiveSeat != null,
                     HasForeignDeJureMembers = allMembers.Any(p =>
                         p.kingdom != pKingdom),
                     ControllerMemberCounts = counts
                 };
                 result.Add(model);
             }
-            return result.OrderBy(p => p.SeatCityId).ToArray();
+            return result.OrderBy(p => p.SeatCityId).ThenBy(p => p.KingdomId)
+                .ToArray();
+        }
+
+        private static int SafePopulation(City pCity)
+        {
+            try { return pCity?.getPopulationPeople() ?? 0; }
+            catch { return 0; }
         }
 
     }
