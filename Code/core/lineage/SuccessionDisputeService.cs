@@ -1729,10 +1729,10 @@ namespace AncientWarfare3.core.lineage
         {
             City city = FindCity(pCityId);
             if (city?.data == null || city.isRekt()) return -1L;
-            if (WarScoreRuntimeBridge.TryGetTerminalFrozenOccupation(pWarId,
+            if (WarScoreService.TryGetTerminalFrozenOccupation(pWarId,
                     pCityId, out long terminalController))
                 return terminalController;
-            return WarScoreRuntimeBridge.TryGetFrozenOccupation(pWarId,
+            return WarScoreService.TryGetFrozenOccupation(pWarId,
                 pCityId, out long controller) ? controller : -1L;
         }
 
