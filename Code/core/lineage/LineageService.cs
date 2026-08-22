@@ -1386,6 +1386,9 @@ namespace AncientWarfare3.core.lineage
             {
                 ApplyFeudatoryFoundedBranchIdentity(pPrince, currentShiId,
                     current.founder_actor_id);
+                RepairFeudatoryBranchDescendants(pPrince, lineageId,
+                    current.parent_shi_id, currentShiId,
+                    current.clan_name ?? clanName);
                 return currentShiId;
             }
 
@@ -1403,6 +1406,9 @@ namespace AncientWarfare3.core.lineage
                         recorded.clan_name);
                 ApplyFeudatoryFoundedBranchIdentity(pPrince, recordedShiId,
                     recorded.founder_actor_id);
+                RepairFeudatoryBranchDescendants(pPrince, lineageId,
+                    recorded.parent_shi_id, recordedShiId,
+                    recorded.clan_name ?? clanName);
                 return recordedShiId;
             }
 
@@ -1425,16 +1431,31 @@ namespace AncientWarfare3.core.lineage
             pPrince.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             if (!pPrince.hasTrait(LineageKeys.TRAIT_GUIZU))
                 pPrince.addTrait(LineageKeys.TRAIT_GUIZU);
-            MoveExistingDescendantsToBranch(pPrince, lineageId, currentShiId,
-                newShiId, clanName, pDeferProjection: true,
-                pAllWritesAccepted: out bool moveWritesAccepted);
-            ApplyDisplayName(pPrince);
-            bool syncWritesAccepted =
-                SyncExistingChildrenAfterLineageChange(pPrince,
-                pDeferProjection: true);
-            FinalizeFounderArchive(pPrince,
-                moveWritesAccepted && syncWritesAccepted);
+            RepairFeudatoryBranchDescendants(pPrince, lineageId, currentShiId,
+                newShiId, clanName);
             return newShiId;
+        }
+
+        private static bool RepairFeudatoryBranchDescendants(
+            Actor pPrince, long pLineageId, long pSourceShiId,
+            long pBranchShiId, string pBranchClanName)
+        {
+            if (pPrince?.data == null || pLineageId < 0L ||
+                pBranchShiId < 0L ||
+                string.IsNullOrWhiteSpace(pBranchClanName))
+                return false;
+
+            bool moved = true;
+            if (pSourceShiId >= 0L && pSourceShiId != pBranchShiId)
+                MoveExistingDescendantsToBranch(pPrince, pLineageId,
+                    pSourceShiId, pBranchShiId, pBranchClanName,
+                    pDeferProjection: true,
+                    pAllWritesAccepted: out moved);
+            bool synced = SyncExistingChildrenAfterLineageChange(
+                pPrince, pDeferProjection: true);
+            ApplyDisplayName(pPrince);
+            FinalizeFounderArchive(pPrince, moved && synced);
+            return moved && synced;
         }
 
         private static void ApplyFeudatoryFoundedBranchIdentity(Actor pPrince,
