@@ -27,8 +27,8 @@ internal static class ArmyRtsExecutionBudgetRulesTests
             ArmyRtsExecutionBudgetRules.Capture(
                 AWSimulationMode.Large, pending);
 
-        Equal(41, budget.ControllerArmies,
-            "Large drains the controller snapshot");
+        Equal(32, budget.ControllerArmies,
+            "Large keeps a bounded controller slice");
         Equal(9, budget.FirstOrders,
             "Large drains the first-order snapshot");
         Equal(7, budget.ReplenishmentArrivals,
@@ -46,7 +46,7 @@ internal static class ArmyRtsExecutionBudgetRulesTests
 
         pending = new ArmyRtsPendingWork(100, 100, 100, 100,
             100, 100, 100, 100);
-        Equal(41, budget.ControllerArmies,
+        Equal(32, budget.ControllerArmies,
             "a captured budget is unaffected by later pending work");
     }
 
