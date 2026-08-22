@@ -9,6 +9,11 @@ namespace AncientWarfare3.core.court
 
     public static class LocalLowOfficeVacancyRules
     {
+        public static bool IsLowestLocalGrade(int officeGrade)
+        {
+            return officeGrade == 30;
+        }
+
         public static LocalLowOfficeCandidateTier CandidateTier(
             bool hasFormalQualification, bool hasClanOrShi)
         {
