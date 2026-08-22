@@ -17,7 +17,9 @@ The player-visible outcomes are:
 - appointing a subordinate local or central office never changes a city
   leader;
 - renaming a de jure seat city from `X` to `Y` immediately renames its active
-  region to `Y州`.
+  region to `Y州`;
+- local-office history displays localized end reasons instead of technical
+  identifiers such as `city_leader_mismatch`.
 
 ## Scope
 
@@ -111,6 +113,26 @@ Existing career tables and command payloads already contain the kingdom,
 office layer, office ID, city ID and actor IDs required for authoritative root
 appointment. No multiplayer protocol change is required.
 
+## Local Office History Localization
+
+Local-office end reasons are data identifiers and must remain unchanged in
+persistence. Presentation resolves them through `Locales/aw3_court.csv`.
+Both history surfaces require entries because they use different prefixes:
+
+- the office history window reads `aw_court_history_end_<reason>`;
+- the actor career window reads `aw_career_end_reason_<reason>`.
+
+The local-government reason catalog includes at least
+`city_leader_mismatch`, `term_expired`, `local_office_reformed`, `invalid`
+and `promoted_city_leader`. The CSV must contain the applicable key for each
+surface. `city_leader_mismatch` is displayed as `地方主官更替` in simplified
+and traditional Chinese and as `City leader changed` in English.
+
+This remains CSV-owned localization. No new runtime localization fallback is
+added. A regression guard compares the local-government reason catalog with
+both CSV prefixes so a newly introduced reason cannot silently render as a
+raw identifier.
+
 ## Verification
 
 Rules and source-guard coverage must prove:
@@ -125,7 +147,10 @@ Rules and source-guard coverage must prove:
 - a seat-city rename produces `new city name + 州`, increments revisions and
   records `DeJureRegionRenamedFromSeat` once;
 - non-seat, inactive and unchanged city names do not mutate the de jure store;
-- cache invalidation occurs after a successful region rename.
+- cache invalidation occurs after a successful region rename;
+- `city_leader_mismatch` and every other local-government end reason used by
+  either history surface has its required `aw3_court.csv` key;
+- no code fallback is required to display a known local-office end reason.
 
 Runtime verification should replace a populated commandery chief, inspect the
 city window and both court-history views, then rename the de jure seat and
