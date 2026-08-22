@@ -30,7 +30,16 @@ namespace AncientWarfare3.core.court
         internal static bool ReconcileCity(Kingdom pKingdom, City pCity,
             int pCapacity, int pYear, out IReadOnlyList<long> pOfficerActorIds)
         {
+            return ReconcileCity(pKingdom, pCity, pCapacity, pYear,
+                out pOfficerActorIds, out _);
+        }
+
+        internal static bool ReconcileCity(Kingdom pKingdom, City pCity,
+            int pCapacity, int pYear, out IReadOnlyList<long> pOfficerActorIds,
+            out bool pHasVacancy)
+        {
             pOfficerActorIds = Array.Empty<long>();
+            pHasVacancy = false;
             if (DB == null || pKingdom?.data == null || pCity?.data == null ||
                 pCity.kingdom != pKingdom) return false;
             List<string> desiredSeats = DesiredSeats(pKingdom, pCity,
@@ -119,6 +128,19 @@ namespace AncientWarfare3.core.court
                 return false;
             pOfficerActorIds = active.Select(row => row.ActorId).Distinct()
                 .OrderBy(id => id).ToArray();
+            var finalCounts = active.GroupBy(row => row.OfficeId,
+                StringComparer.Ordinal).ToDictionary(group => group.Key,
+                group => group.Count(), StringComparer.Ordinal);
+            foreach (string seat in desiredSeats)
+            {
+                finalCounts.TryGetValue(seat, out int filled);
+                if (filled <= 0)
+                {
+                    pHasVacancy = true;
+                    break;
+                }
+                finalCounts[seat] = filled - 1;
+            }
             return true;
         }
 
@@ -314,15 +336,31 @@ namespace AncientWarfare3.core.court
                             pCity: pCity)) continue;
                 actor.data.get(LineageKeys.OFFICER_MERIT,
                     out float merit, 0f);
+                bool formalLocalQualification =
+                    HasFormalLocalQualification(actor, pKingdom);
                 int score = LocalOfficialCandidateRules.Score(
                     MainAbility(actor), (int)Math.Max(0f, merit),
                     pLeaderNativeCityId >= 0L &&
                     NativeCityId(actor) == pLeaderNativeCityId);
                 int tier = lowOffice
                     ? (int)LocalLowOfficeVacancyRules.CandidateTier(
-                        HasFormalLocalQualification(actor, pKingdom),
+                        formalLocalQualification,
                         HasClanOrShi(actor))
                     : 0;
+                if (lowOffice && pAllowVacancyPromotion)
+                {
+                    int resolvedRank =
+                        OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
+                            OfficialCareerStateService.ReadRankFast(actor),
+                            officeGrade, CourtService.HasNineRankSystem(
+                                pKingdom),
+                            formalLocalQualification ||
+                            LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
+                                isCityLayer: true, officeGrade: officeGrade,
+                                vacancyPromotion: true),
+                            vacancyPromotion: true);
+                    score += Math.Max(0, resolvedRank);
+                }
                 if (best == null || tier < bestTier ||
                     tier == bestTier && (score > bestScore ||
                     score == bestScore && actor.data.id < best.data.id))

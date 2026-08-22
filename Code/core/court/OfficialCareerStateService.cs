@@ -1616,10 +1616,15 @@ namespace AncientWarfare3.core.court
                         allowLocalLowerQualification: true));
             bool hasLegacyCredential = CivilServiceLegacyTransitionService.
                 HasUsableCredential(pActor, pKingdom, pLayer, pOfficeId);
-            bool hasAppointmentQualification = hasFormalQualification ||
-                hasLocalQualification || hasLegacyCredential;
             int officeGrade = OfficeGradeForOffice(pKingdom, pLayer,
                 pOfficeId, pCity);
+            bool allowUnqualifiedLocalFallback =
+                LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
+                    localOffice, officeGrade,
+                    pVacancyPromotion && pAllowLocalLowerQualification);
+            bool hasAppointmentQualification = hasFormalQualification ||
+                hasLocalQualification || hasLegacyCredential ||
+                allowUnqualifiedLocalFallback;
             if (pVacancyPromotion)
             {
                 if (localOffice)

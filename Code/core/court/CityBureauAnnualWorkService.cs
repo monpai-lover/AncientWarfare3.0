@@ -23,6 +23,8 @@ namespace AncientWarfare3.core.court
 
         private static readonly Dictionary<long, PendingWork> Pending =
             new Dictionary<long, PendingWork>();
+        private static readonly HashSet<string> PendingVacancyRetries =
+            new HashSet<string>(StringComparer.Ordinal);
 
         internal static void Schedule(Kingdom pKingdom,
             float pCourtEfficiency)
@@ -65,7 +67,18 @@ namespace AncientWarfare3.core.court
             if (kingdom?.data == null || city?.data == null ||
                 kingdom.isRekt() || city.isRekt() || city.kingdom != kingdom)
                 return;
-            if (ProcessCity(kingdom, city, 0f, Date.getCurrentYear())) return;
+            bool hasVacancy;
+            if (ProcessCity(kingdom, city, 0f, Date.getCurrentYear(),
+                    out hasVacancy))
+            {
+                string completedKey = VacancyKey(pKingdomId, pCityId);
+                if (!hasVacancy)
+                    PendingVacancyRetries.Remove(completedKey);
+                else
+                    PendingVacancyRetries.Add(completedKey);
+                if (!hasVacancy || pAttempt + 1 >= MaximumWriteAttempts)
+                    return;
+            }
             if (pAttempt + 1 >= MaximumWriteAttempts) return;
             string key = "city-bureau-vacancy:" + pKingdomId + ":" +
                          pCityId;
@@ -78,6 +91,7 @@ namespace AncientWarfare3.core.court
         {
             foreach (PendingWork work in Pending.Values) Dispose(work);
             Pending.Clear();
+            PendingVacancyRetries.Clear();
             LocalCourtAppointmentService.ClearRuntime();
         }
 
@@ -104,13 +118,19 @@ namespace AncientWarfare3.core.court
             if (work.RetryCityId >= 0L)
             {
                 City retryCity = ResolveCity(work.RetryCityId);
-                if (retryCity?.data == null || retryCity.isRekt() ||
-                    retryCity.kingdom != kingdom ||
+                bool retryHasVacancy = false;
+                bool retryCompleted = retryCity?.data == null ||
+                    retryCity.isRekt() || retryCity.kingdom != kingdom ||
                     ProcessCity(kingdom, retryCity, work.CourtEfficiency,
-                        work.Year))
+                        work.Year, out retryHasVacancy);
+                if (retryCompleted)
                 {
                     if (retryCity?.data != null)
+                    {
                         work.CompletedCityIds.Add(retryCity.data.id);
+                        UpdateVacancyRetry(kingdom.id, retryCity.data.id,
+                            retryHasVacancy);
+                    }
                     ClearRetry(work);
                 }
                 else if (++work.RetryAttempts < MaximumWriteAttempts)
@@ -155,22 +175,25 @@ namespace AncientWarfare3.core.court
                 if (city?.data == null || city.isRekt() ||
                     city.kingdom != kingdom ||
                     work.CompletedCityIds.Contains(city.data.id)) continue;
+                bool hasVacancy;
                 if (!ProcessCity(kingdom, city, work.CourtEfficiency,
-                        work.Year))
+                        work.Year, out hasVacancy))
                 {
                     work.RetryCityId = city.data.id;
                     work.RetryAttempts = 1;
                     Enqueue(pKingdomId);
                     return;
                 }
+                UpdateVacancyRetry(kingdom.id, city.data.id, hasVacancy);
                 work.CompletedCityIds.Add(city.data.id);
             }
             Enqueue(pKingdomId);
         }
 
         private static bool ProcessCity(Kingdom pKingdom, City pCity,
-            float pCourtEfficiency, int pYear)
+            float pCourtEfficiency, int pYear, out bool pHasVacancy)
         {
+            pHasVacancy = false;
             CustomLocalCourtTemplate localTemplate = null;
             bool customTemplate = CustomCourtRuntime.
                 HasCustomLocalTemplates(pKingdom);
@@ -191,7 +214,8 @@ namespace AncientWarfare3.core.court
             if (schoolSnapshot == null)
                 CitySchoolSnapshotService.MarkDirty(pCity);
             if (!LocalCourtAppointmentService.ReconcileCity(pKingdom, pCity,
-                    slots, pYear, out IReadOnlyList<long> officerActorIds))
+                    slots, pYear, out IReadOnlyList<long> officerActorIds,
+                    out pHasVacancy))
                 return false;
             int filled = officerActorIds.Count;
             float efficiency = CourtBureauRules.BureauEfficiency(slots,
@@ -254,6 +278,21 @@ namespace AncientWarfare3.core.court
                 ChronicleEvents.OnCourtCityBureau(pKingdom,
                     pCity.data.name ?? "", localSchool ?? "");
             return true;
+        }
+
+        private static string VacancyKey(long pKingdomId, long pCityId)
+        {
+            return pKingdomId + ":" + pCityId;
+        }
+
+        private static void UpdateVacancyRetry(long pKingdomId, long pCityId,
+            bool pHasVacancy)
+        {
+            string key = VacancyKey(pKingdomId, pCityId);
+            if (pHasVacancy)
+                PendingVacancyRetries.Add(key);
+            else
+                PendingVacancyRetries.Remove(key);
         }
 
         private static bool TryRestart(PendingWork pWork, Kingdom pKingdom)
