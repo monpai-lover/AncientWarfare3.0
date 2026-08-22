@@ -14,14 +14,6 @@ namespace AncientWarfare3.core.court
         {
             if (pKingdom?.data == null || pKingdom.isRekt())
                 return Array.Empty<RegionalGovernmentReadModel>();
-            var controlled = (pKingdom.getCities() ?? Array.Empty<City>())
-                .Where(p => p?.data != null && !p.isRekt() &&
-                            p.kingdom == pKingdom &&
-                            !PeasantRebelBanditStrongholdService.
-                                IsStrongholdCity(p))
-                .ToDictionary(p => p.data.id);
-            if (controlled.Count == 0) return Array.Empty<RegionalGovernmentReadModel>();
-
             var result = new List<RegionalGovernmentReadModel>();
             foreach (DeJureRegion legal in DeJureRegionStore.ActiveRegions())
             {
