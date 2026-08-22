@@ -78,6 +78,7 @@ namespace AncientWarfare3.core.court
         {
             foreach (PendingWork work in Pending.Values) Dispose(work);
             Pending.Clear();
+            LocalCourtAppointmentService.ClearRuntime();
         }
 
         private static void Enqueue(long pKingdomId)

@@ -13,6 +13,13 @@ namespace AncientWarfare3.core.court
         private const int CandidateScanLimit = 96;
         private static SQLiteConnection DB =>
             LineageArchiveManager.Instance?.OperatingDB;
+        private sealed class CandidateScanState
+        {
+            public int Cursor;
+        }
+        private static readonly Dictionary<string, CandidateScanState>
+            CandidateScans = new Dictionary<string, CandidateScanState>(
+                StringComparer.Ordinal);
 
         private sealed class ActiveLocalOfficer
         {
@@ -83,7 +90,7 @@ namespace AncientWarfare3.core.court
                     retainedCounts[rootOffice] = 1;
             }
 
-            List<Actor> candidates = LoadAllCandidates(pKingdom,
+            List<Actor> candidates = LoadAllCandidates(pKingdom, pCity,
                 LoadCandidates(pKingdom, pCity));
             long leaderNativeCityId = NativeCityId(pCity.leader);
             for (int seatIndex = 1; seatIndex < desiredSeats.Count; seatIndex++)
@@ -94,12 +101,12 @@ namespace AncientWarfare3.core.court
                 retainedCounts.TryGetValue(officeId, out int current);
                 if (current >= requiredBefore) continue;
                 Actor candidate = SelectCandidate(candidates, pKingdom,
-                    leaderNativeCityId, officeId,
+                    pCity, leaderNativeCityId, officeId,
                     pAllowVacancyPromotion: false);
                 bool vacancyFallback = candidate == null;
                 if (vacancyFallback)
                     candidate = SelectCandidate(candidates, pKingdom,
-                        leaderNativeCityId, officeId,
+                        pCity, leaderNativeCityId, officeId,
                         pAllowVacancyPromotion: true);
                 if (candidate == null) continue;
                 if (CourtService.TryAssignLocalOfficer(candidate, pKingdom,
@@ -189,17 +196,6 @@ namespace AncientWarfare3.core.court
                 return result;
             }
 
-            int inspected = 0;
-            try
-            {
-                foreach (Actor actor in pKingdom.getUnits())
-                {
-                    if (++inspected > CandidateScanLimit) break;
-                    if (CanUseCandidate(actor, pKingdom,
-                            pFromLocalWaitingPool: false)) result.Add(actor);
-                }
-            }
-            catch { result.Clear(); }
             return result;
         }
 
@@ -247,7 +243,7 @@ namespace AncientWarfare3.core.court
         }
 
         private static List<Actor> LoadAllCandidates(Kingdom pKingdom,
-            IReadOnlyList<Actor> pWaitingCandidates)
+            City pCity, IReadOnlyList<Actor> pWaitingCandidates)
         {
             var result = new List<Actor>();
             var actorIds = new HashSet<long>();
@@ -258,28 +254,55 @@ namespace AncientWarfare3.core.court
                 result.Add(actor);
             }
 
-            int inspected = 0;
+            List<Actor> units;
             try
             {
-                foreach (Actor actor in pKingdom.getUnits())
-                {
-                    if (++inspected > CandidateScanLimit) break;
-                    if (actor?.data == null || actorIds.Contains(actor.data.id) ||
-                        !CanUseCandidateFacts(actor, pKingdom)) continue;
-                    actorIds.Add(actor.data.id);
-                    result.Add(actor);
-                }
+                units = pKingdom.getUnits()?.Where(actor => actor?.data != null)
+                    .ToList() ?? new List<Actor>();
             }
-            catch { }
+            catch
+            {
+                units = new List<Actor>();
+            }
+            if (units.Count == 0) return result;
+
+            string scanKey = pKingdom.id + ":" + (pCity?.data?.id ?? -1L);
+            if (!CandidateScans.TryGetValue(scanKey,
+                    out CandidateScanState scan))
+            {
+                scan = new CandidateScanState();
+                CandidateScans[scanKey] = scan;
+            }
+            int start = scan.Cursor % units.Count;
+            int inspected = Math.Min(CandidateScanLimit, units.Count);
+            for (int offset = 0; offset < inspected; offset++)
+            {
+                Actor actor = units[(start + offset) % units.Count];
+                if (actor?.data == null || actorIds.Contains(actor.data.id) ||
+                    !CanUseCandidateFacts(actor, pKingdom)) continue;
+                actorIds.Add(actor.data.id);
+                result.Add(actor);
+            }
+            scan.Cursor = (start + inspected) % units.Count;
             return result;
         }
 
+        internal static void ClearRuntime()
+        {
+            CandidateScans.Clear();
+        }
+
         private static Actor SelectCandidate(IReadOnlyList<Actor> pCandidates,
-            Kingdom pKingdom, long pLeaderNativeCityId, string pOfficeId,
-            bool pAllowVacancyPromotion)
+            Kingdom pKingdom, City pCity, long pLeaderNativeCityId,
+            string pOfficeId, bool pAllowVacancyPromotion)
         {
             Actor best = null;
             int bestScore = int.MinValue;
+            int bestTier = int.MaxValue;
+            int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
+                pKingdom, CourtOfficeLayer.City, pOfficeId, pCity);
+            bool lowOffice = LocalLowOfficeVacancyRules.IsLowestLocalGrade(
+                officeGrade);
             foreach (Actor actor in pCandidates)
             {
                 if (!CanUseCandidateFacts(actor, pKingdom) ||
@@ -287,21 +310,53 @@ namespace AncientWarfare3.core.court
                         CanReceiveFormalCivilAppointment(actor, pKingdom,
                             CourtOfficeLayer.City, pOfficeId,
                             pAllowVacancyPromotion,
-                            pAllowLocalLowerQualification: true)) continue;
+                            pAllowLocalLowerQualification: true,
+                            pCity: pCity)) continue;
                 actor.data.get(LineageKeys.OFFICER_MERIT,
                     out float merit, 0f);
                 int score = LocalOfficialCandidateRules.Score(
                     MainAbility(actor), (int)Math.Max(0f, merit),
                     pLeaderNativeCityId >= 0L &&
                     NativeCityId(actor) == pLeaderNativeCityId);
-                if (best == null || score > bestScore ||
-                    score == bestScore && actor.data.id < best.data.id)
+                int tier = lowOffice
+                    ? (int)LocalLowOfficeVacancyRules.CandidateTier(
+                        HasFormalLocalQualification(actor, pKingdom),
+                        HasClanOrShi(actor))
+                    : 0;
+                if (best == null || tier < bestTier ||
+                    tier == bestTier && (score > bestScore ||
+                    score == bestScore && actor.data.id < best.data.id))
                 {
                     best = actor;
+                    bestTier = tier;
                     bestScore = score;
                 }
             }
             return best;
+        }
+
+        private static bool HasFormalLocalQualification(Actor pActor,
+            Kingdom pKingdom)
+        {
+            CivilServiceQualificationRecord qualification =
+                CivilServiceQualificationService.LoadOrRepair(pActor,
+                    pKingdom);
+            return qualification != null &&
+                   LocalOfficialCandidateRules.IsLocalQualification(
+                       qualification.Qualification);
+        }
+
+        private static bool HasClanOrShi(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            try
+            {
+                if (pActor.hasClan() && pActor.clan?.data != null)
+                    return true;
+            }
+            catch { }
+            pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            return shiId >= 0L;
         }
 
         private static bool IsTermDue(Actor pActor, int pYear)
