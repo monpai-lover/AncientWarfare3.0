@@ -82,4 +82,3 @@
 - [ ] **Step 3: Run the focused succession and war-score test entry directly** from the built DLL or isolated project and verify the new assertions pass.
 - [ ] **Step 4: Review `git diff master...HEAD --check` and status.** Confirm no `SuccessionDisputeService.cs` edits from the main worktree are copied accidentally except this plan's intentional changes.
 - [ ] **Step 5: Use `finishing-a-development-branch`** and present merge/push/keep/discard options; do not merge or push without explicit user choice.
-
