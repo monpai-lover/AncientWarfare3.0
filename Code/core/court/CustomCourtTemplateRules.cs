@@ -162,6 +162,12 @@ namespace AncientWarfare3.core.court
                 return CustomCourtTemplateValidationError.InvalidOfficeGrade;
             if (office.Slots < 1 || office.Slots > 32)
                 return CustomCourtTemplateValidationError.InvalidOfficeSlots;
+            if (!Enum.IsDefined(typeof(CustomCourtOfficeRoleKind),
+                    office.RoleKind))
+                return CustomCourtTemplateValidationError.InvalidOfficeId;
+            if (office.RoleKind != CustomCourtOfficeRoleKind.Ordinary &&
+                !IsFixedChiefOffice(office))
+                return CustomCourtTemplateValidationError.InvalidOfficeLayer;
             if (!IsValidLayer(office.Layer))
                 return CustomCourtTemplateValidationError.InvalidOfficeLayer;
             if (!IsValidLayout(office.Layout))
@@ -179,6 +185,16 @@ namespace AncientWarfare3.core.court
                     return CustomCourtTemplateValidationError.InvalidEffectValue;
             }
             return CustomCourtTemplateValidationError.None;
+        }
+
+        public static bool IsFixedChiefOffice(CustomCourtOffice pOffice)
+        {
+            return pOffice != null &&
+                pOffice.RoleKind != CustomCourtOfficeRoleKind.Ordinary &&
+                (string.Equals(pOffice.Id, CustomCourtFixedRoleIds.RegionalChief,
+                        StringComparison.Ordinal) ||
+                 string.Equals(pOffice.Id, CustomCourtFixedRoleIds.CommanderyChief,
+                        StringComparison.Ordinal));
         }
 
         public static CustomCourtTemplateValidationError ValidateGraph(

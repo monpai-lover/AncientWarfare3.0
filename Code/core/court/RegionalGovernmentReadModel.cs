@@ -29,6 +29,7 @@ namespace AncientWarfare3.core.court
         public long SeatCityId { get; set; } = -1L;
         public long LegalSeatCityId { get; set; } = -1L;
         public long EffectiveSeatCityId { get; set; } = -1L;
+        public long CommanderyChiefActorId { get; set; } = -1L;
         public string RegionName { get; set; } = string.Empty;
         public string RegionTitle { get; set; } = string.Empty;
         public string GovernorTitle { get; set; } = string.Empty;
