@@ -112,6 +112,8 @@
     <Compile Include="CourtImmediateVacancyModeRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CourtImmediateVacancyModeRules.cs" Link="Production\CourtImmediateVacancyModeRules.cs" />
     <Compile Include="DeJureNewCityAssignmentRulesTests.cs.txt" />
+    <Compile Include="DeJureWarEligibilityRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\DeJureWarEligibilityRules.cs" Link="Production\DeJureWarEligibilityRules.cs" />
     <Compile Include="CourtLocalLayoutAndLeaderRepairSourceGuardTests.cs.txt" />
     <Compile Include="DeJureRegionRetirementRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\DeJureRegionRetirementRules.cs" Link="Production\DeJureRegionRetirementRules.cs" />

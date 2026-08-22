@@ -1,6 +1,8 @@
 key,cz,en,ch
 war_type_aw_normal_war,普通战争,Normal War,普通戰爭
 war_name_aw_normal_war,普通战争,Normal War,普通戰爭
+war_type_de_jure_war,法理战争,De Jure War,法理戰爭
+war_name_de_jure_war,法理战争,De Jure War,法理戰爭
 war_type_restoration_war,复国战争,Restoration War,復國戰爭
 war_name_restoration_war,复国战争,Restoration War,復國戰爭
 war_type_reclaim,收复战争,Reclaim War,收復戰爭

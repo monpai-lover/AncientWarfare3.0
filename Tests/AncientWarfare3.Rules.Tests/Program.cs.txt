@@ -208,6 +208,7 @@ if (args.Length == 1 && args[0] == "--court-immediate-vacancies")
 if (args.Length == 1 && args[0] == "--court-de-jure-city")
 {
     DeJureNewCityAssignmentRulesTests.Run();
+    DeJureWarEligibilityRulesTests.Run();
     CourtLocalLayoutAndLeaderRepairSourceGuardTests.Run();
     DeJureRegionRetirementRulesTests.Run();
     Console.WriteLine("Court and de jure city rules passed.");

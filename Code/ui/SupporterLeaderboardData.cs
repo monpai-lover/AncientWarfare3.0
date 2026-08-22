@@ -39,7 +39,7 @@ namespace AncientWarfare3.ui
                 new SupporterLeaderboardEntry
                 {
                     Rank = 2,
-                    Name = "Justin",
+                    Name = "刘季",
                     Amount = "80",
                     Date = "2026-08-19"
                 },
@@ -140,6 +140,14 @@ namespace AncientWarfare3.ui
                     Name = "阿巴",
                     Amount = "10",
                     Date = "2026-08-19"
+                },
+                new SupporterLeaderboardEntry
+                {
+                    Rank = 19,
+                    Name = "博士",
+                    Amount = "",
+                    Date = "",
+                    Description = "提供了一些建筑和人物贴图"
                 }
             };
 
@@ -204,7 +212,7 @@ namespace AncientWarfare3.ui
                 string amount = Clean(fields.Count > 2 ? fields[2] : "");
                 string date = Clean(fields.Count > 3 ? fields[3] : "");
                 string description = Clean(fields.Count > 4 ? fields[4] : "");
-                if (string.IsNullOrEmpty(name)) name = "Justin";
+                if (string.IsNullOrEmpty(name)) name = "刘季";
                 if (string.IsNullOrEmpty(amount) && string.IsNullOrEmpty(description))
                     amount = "-";
                 if (string.IsNullOrEmpty(date) && string.IsNullOrEmpty(description))

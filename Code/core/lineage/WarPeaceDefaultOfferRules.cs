@@ -231,14 +231,17 @@ namespace AncientWarfare3.core.lineage
         {
             if (pRight == null) return pLeft != null;
             if (pLeft == null) return false;
-            if (pLeft.Gross != pRight.Gross)
-                return pLeft.Gross > pRight.Gross;
-            if (pLeft.CessionGross != pRight.CessionGross)
-                return pLeft.CessionGross > pRight.CessionGross;
-            if (pLeft.CededCities != pRight.CededCities)
-                return pLeft.CededCities > pRight.CededCities;
             if (pLeft.WarGoalCount != pRight.WarGoalCount)
                 return pLeft.WarGoalCount > pRight.WarGoalCount;
+            // A terminal settlement is primarily territorial. Once declared
+            // war goals are preserved, prefer taking more cities, then more
+            // territorial value, before liquid compensation or subjects.
+            if (pLeft.CededCities != pRight.CededCities)
+                return pLeft.CededCities > pRight.CededCities;
+            if (pLeft.CessionGross != pRight.CessionGross)
+                return pLeft.CessionGross > pRight.CessionGross;
+            if (pLeft.Gross != pRight.Gross)
+                return pLeft.Gross > pRight.Gross;
             if (pLeft.PriorityTotal != pRight.PriorityTotal)
                 return pLeft.PriorityTotal > pRight.PriorityTotal;
             int count = Math.Min(pLeft.Terms.Count, pRight.Terms.Count);

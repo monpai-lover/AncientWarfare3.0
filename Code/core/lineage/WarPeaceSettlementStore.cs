@@ -642,10 +642,11 @@ namespace AncientWarfare3.core.lineage
                     WarPeaceSettlementProposalTableItem.GetTableName() +
                     " WHERE (REQUESTER_KINGDOM_ID=@kingdom OR " +
                     "RESPONDER_KINGDOM_ID=@kingdom) AND STATUS IN " +
-                    "('executing','terms_applied') " +
+                    "('accepted','executing','terms_applied') " +
                     "ORDER BY RECOVERY_ATTEMPTS ASC," +
-                    "CASE STATUS WHEN 'executing' THEN 0 " +
-                    "WHEN 'terms_applied' THEN 1 ELSE 2 END," +
+                    "CASE STATUS WHEN 'accepted' THEN 0 " +
+                    "WHEN 'executing' THEN 1 " +
+                    "WHEN 'terms_applied' THEN 2 ELSE 3 END," +
                     "PROPOSAL_ID DESC LIMIT @limit";
                 command.Parameters.AddWithValue("@kingdom", kingdomId);
                 command.Parameters.AddWithValue("@limit", bounded);
@@ -672,7 +673,8 @@ namespace AncientWarfare3.core.lineage
                     " SET RECOVERY_ATTEMPTS=CASE WHEN RECOVERY_ATTEMPTS<" +
                     int.MaxValue + " THEN RECOVERY_ATTEMPTS+1 ELSE " +
                     "RECOVERY_ATTEMPTS END WHERE PROPOSAL_ID=@id AND " +
-                    "STATUS IN ('executing','terms_applied','executed')";
+                        "STATUS IN ('accepted','executing','terms_applied'," +
+                        "'executed')";
                 command.Parameters.AddWithValue("@id", proposalId);
                 return command.ExecuteNonQuery() == 1;
             }

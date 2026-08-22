@@ -18,15 +18,35 @@ internal static class WarTerminalSettlementSourceTests
             "WarGoalSettlementRuntimeService.cs"));
         string settlement = File.ReadAllText(Path.Combine(lineage,
             "WarPeaceSettlementService.cs"));
+        string store = File.ReadAllText(Path.Combine(lineage,
+            "WarPeaceSettlementStore.cs"));
+        string offerRules = File.ReadAllText(Path.Combine(lineage,
+            "WarPeaceDefaultOfferRules.cs"));
 
         True(coordinator.Contains(
                 "QueuePrefix = \"war_terminal_settlement:\"") &&
-             coordinator.Contains("EnqueueCoalesced("),
+             coordinator.Contains("EnqueueCoalesced(") &&
+             coordinator.Contains("DeferredWorkClass.CriticalRuntime"),
             "one coalesced terminal task owns each war");
-        True(coordinator.Contains("WarsPerAuthorityCycle = 2") &&
+        True(coordinator.Contains("WarsPerAuthorityCycle = 8") &&
              coordinator.Contains("_recoveryCursor") &&
              coordinator.Contains("wars.list"),
             "recovery uses a bounded persistent war cursor");
+        True(store.Contains("'accepted','executing','terms_applied'") &&
+             store.Contains("STATUS IN ('accepted','executing','terms_applied',"),
+            "accepted settlements are included in recovery");
+        int goalPriority = offerRules.IndexOf(
+            "pLeft.WarGoalCount != pRight.WarGoalCount",
+            StringComparison.Ordinal);
+        int cityPriority = offerRules.IndexOf(
+            "pLeft.CededCities != pRight.CededCities",
+            StringComparison.Ordinal);
+        int grossPriority = offerRules.IndexOf(
+            "pLeft.Gross != pRight.Gross",
+            StringComparison.Ordinal);
+        True(goalPriority >= 0 && cityPriority > goalPriority &&
+             grossPriority > cityPriority,
+            "maximum benefit prioritizes war goals and cessions before payments");
         False(coordinator.Contains("foreach (War war in World.world.wars)") ||
               coordinator.Contains("World.world.cities") ||
               coordinator.Contains("World.world.units"),
@@ -36,17 +56,12 @@ internal static class WarTerminalSettlementSourceTests
              coordinator.Contains("TryReadDecision(war") &&
              coordinator.Contains("ModClass.LogError("),
             "execution is authoritative, revalidated, and error-visible");
-        int scoreRead = coordinator.IndexOf(
-            "WarScoreService.TryGetSnapshot(pWar, attacker",
-            StringComparison.Ordinal);
-        int potentialRead = coordinator.IndexOf(
-            "WarForceEliminationSettlementService.TryReadPotentials(",
-            StringComparison.Ordinal);
-        True(scoreRead >= 0 && potentialRead > scoreRead &&
+        True(coordinator.Contains("TryReadPotentials(pWar") &&
+             coordinator.Contains("bool potentialRead") &&
              coordinator.Contains(
                  "WarTerminalSettlementRules.IsDecisiveScore(") &&
              coordinator.Contains("snapshot.Score"),
-            "decisive score is recognized before optional potential reads");
+            "decisive score has a military-collapse-aware fallback");
         True(bridge.Contains(
                 "WarTerminalSettlementCoordinator.NotifyWarChanged(pWar)") &&
              !bridge.Contains(

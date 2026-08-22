@@ -322,7 +322,11 @@ namespace AncientWarfare3.core.lineage
                 if (!returnActive && !hasValidMission)
                     WarArmyReturnService.TryBegin(army);
                 returnActive = WarArmyReturnService.IsActive(army);
-                if (!hasValidMission) ClearWarCombatState(army);
+                // A return admission has already replaced the wartime task.
+                // Do not cancel that task while clearing the ended war's
+                // combat state; the return queue owns the actor until arrival.
+                if (!hasValidMission && !returnActive)
+                    ClearWarCombatState(army);
                 ModClass.LogInfo(
                     "[AW3 RTS return] trigger=lifecycle_war_ended" +
                     " war=" + warId + " army=" + record.ArmyId +

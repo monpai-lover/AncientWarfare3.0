@@ -10,6 +10,7 @@ namespace AncientWarfare3.core.court
     {
         private const string RetryPrefix = "de_jure_new_city:";
         private static readonly HashSet<long> RetryIds = new HashSet<long>();
+        private static bool _worldRepairCompleted;
 
         internal static void OnCityFounded(City pCity)
         {
@@ -19,6 +20,38 @@ namespace AncientWarfare3.core.court
         internal static void ClearRuntime()
         {
             RetryIds.Clear();
+            _worldRepairCompleted = false;
+        }
+
+        // Existing saves may contain cities created before the automatic
+        // assignment hook was installed, or while the city had no kingdom
+        // yet. Repair those gaps once after the world is fully available.
+        internal static void RepairUnassignedCities()
+        {
+            if (_worldRepairCompleted || World.world?.cities == null ||
+                World.world.cities.Count == 0 || !Config.game_loaded ||
+                SmoothLoader.isLoading()) return;
+            _worldRepairCompleted = true;
+            try
+            {
+                foreach (City city in World.world.cities.ToArray())
+                {
+                    if (city?.data == null || city.isRekt() ||
+                        city.kingdom?.data == null || city.kingdom.isRekt() ||
+                        city.kingdom.isNeutral() ||
+                        PeasantRebelBanditStrongholdService.IsStrongholdCity(city))
+                        continue;
+                    if (DeJureRegionStore.TryGetForCity(city.data.id, out _))
+                        continue;
+                    TryAssign(city, allowRetry: true);
+                }
+            }
+            catch (Exception error)
+            {
+                _worldRepairCompleted = false;
+                ModClass.LogWarning("De jure unassigned city repair failed: " +
+                    error.Message);
+            }
         }
 
         private static bool TryAssign(City pCity, bool allowRetry)
@@ -34,6 +67,11 @@ namespace AncientWarfare3.core.court
                 return false;
             }
             if (kingdom.isRekt() || kingdom.isNeutral())
+                return false;
+            // A retired/unassigned city is an intentional empty-map state,
+            // not a missed automatic assignment. It can be assigned again
+            // only through the explicit create/assign power.
+            if (DeJureRegionStore.HasExplicitDeJureRemoval(pCity.data.id))
                 return false;
             if (kingdom.capital == pCity)
             {
@@ -103,18 +141,28 @@ namespace AncientWarfare3.core.court
             if (cityTile == null) return -1L;
             var adjacent = new HashSet<long>((pCity.neighbours_cities ??
                 new HashSet<City>()).Where(p => p?.data != null &&
-                !p.isRekt() && DeJureRegionStore.IsEligibleCityId(
-                    p.data.id)).Select(p => p.data.id));
+                !p.isRekt() && p.kingdom == pKingdom &&
+                DeJureRegionStore.IsEligibleCityId(p.data.id)).Select(
+                    p => p.data.id));
             var facts = new List<DeJureNewCityRegionCandidate>();
             foreach (DeJureRegion region in DeJureRegionStore.ActiveRegions())
             {
-                City seat = World.world?.cities?.get(region.SeatCityId);
-                if (seat?.data == null || seat.isRekt() ||
-                    !DeJureRegionStore.IsEligibleCityId(seat.data.id)) continue;
-                bool adjacentSeat = adjacent.Contains(seat.data.id);
+                var members = (region.MemberCityIds ?? new List<long>())
+                    .Select(id => World.world?.cities?.get(id))
+                    .Where(city => city?.data != null && !city.isRekt() &&
+                        city.kingdom == pKingdom &&
+                        DeJureRegionStore.IsEligibleCityId(city.data.id))
+                    .ToList();
+                if (members.Count == 0) continue;
+                int adjacentCount = members.Count(city =>
+                    adjacent.Contains(city.data.id));
+                long nearest = members.Select(city => Distance(cityTile,
+                    city.getTile())).DefaultIfEmpty(long.MaxValue).Min();
+                City seat = members.FirstOrDefault(city =>
+                    city.data.id == region.SeatCityId);
                 long seatDistance = Distance(cityTile, seat?.getTile());
                 facts.Add(new DeJureNewCityRegionCandidate(region.RegionId,
-                    adjacentSeat, adjacentSeat ? 1 : 0, seatDistance,
+                    adjacentCount > 0, adjacentCount, nearest,
                     seatDistance, true));
             }
             return DeJureNewCityAssignmentRules.Select(facts);
@@ -144,7 +192,10 @@ namespace AncientWarfare3.core.court
                 () =>
                 {
                     RetryIds.Remove(cityId);
-                    TryAssign(World.world?.cities?.get(cityId), false);
+                    // The first retry can still race city/zone initialization;
+                    // keep the same bounded coalesced retry contract until
+                    // the native city graph is ready.
+                    TryAssign(World.world?.cities?.get(cityId), true);
                 });
         }
     }

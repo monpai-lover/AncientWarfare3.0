@@ -656,11 +656,15 @@ namespace AncientWarfare3.core.lineage
             if (goalType ==
                 WarTerritoryService.GOAL_TAKE_DE_JURE_REGION)
             {
+                int sourceMemberCount = WarTerritoryService
+                    .GetDeJureRegionCities(sourceDeJureRegionId,
+                        pAttacker).Count;
                 List<City> regionCities = WarTerritoryService
                     .GetDeJureRegionCities(sourceDeJureRegionId, pDefender);
-                if (regionCities.Count == 0)
+                if (!DeJureWarEligibilityRules.HasCommonRegionMembers(
+                        sourceMemberCount, regionCities.Count))
                 {
-                    pFailureReason = "missing_de_jure_region_target";
+                    pFailureReason = "missing_common_de_jure_region_target";
                     return false;
                 }
                 city = regionCities.Find(p => p?.data?.id ==

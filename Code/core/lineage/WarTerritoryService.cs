@@ -1317,9 +1317,13 @@ namespace AncientWarfare3.core.lineage
 
             foreach (DeJureRegion region in DeJureRegionStore.ActiveRegions())
             {
+                List<City> sourceRegionCities = GetDeJureRegionCities(
+                    region?.RegionId ?? -1L, pSource);
                 List<City> regionCities = GetDeJureRegionCities(
                     region?.RegionId ?? -1L, pTarget);
-                if (regionCities.Count == 0) continue;
+                if (!DeJureWarEligibilityRules.HasCommonRegionMembers(
+                        sourceRegionCities.Count, regionCities.Count))
+                    continue;
                 City representative = regionCities[0];
                 result.Add(MakeOption(pTarget, representative,
                     GOAL_TAKE_DE_JURE_REGION,
@@ -1417,8 +1421,14 @@ namespace AncientWarfare3.core.lineage
         {
             if (IsVassalDecisionOnlyTarget(pSource, pTarget)) return false;
             foreach (DeJureRegion region in DeJureRegionStore.ActiveRegions())
-                if (GetDeJureRegionCities(region?.RegionId ?? -1L,
-                    pTarget).Count > 0) return true;
+            {
+                int sourceCount = GetDeJureRegionCities(
+                    region?.RegionId ?? -1L, pSource).Count;
+                int targetCount = GetDeJureRegionCities(
+                    region?.RegionId ?? -1L, pTarget).Count;
+                if (DeJureWarEligibilityRules.HasCommonRegionMembers(
+                        sourceCount, targetCount)) return true;
+            }
             return false;
         }
 
@@ -1428,6 +1438,12 @@ namespace AncientWarfare3.core.lineage
             City selected = null;
             foreach (DeJureRegion region in DeJureRegionStore.ActiveRegions())
             {
+                if (!DeJureWarEligibilityRules.HasCommonRegionMembers(
+                        GetDeJureRegionCities(region?.RegionId ?? -1L,
+                            pSource).Count,
+                        GetDeJureRegionCities(region?.RegionId ?? -1L,
+                            pTarget).Count))
+                    continue;
                 List<City> cities = GetDeJureRegionCities(
                     region?.RegionId ?? -1L, pTarget);
                 if (cities.Count == 0) continue;

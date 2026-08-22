@@ -1,0 +1,25 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class DeJureWarEligibilityRulesTests
+{
+    internal static void Run()
+    {
+        True(DeJureWarEligibilityRules.HasCommonRegionMembers(2, 3),
+            "a de jure war requires members on both sides");
+        False(DeJureWarEligibilityRules.HasCommonRegionMembers(0, 3),
+            "the attacker cannot use a target-only de jure region");
+        False(DeJureWarEligibilityRules.HasCommonRegionMembers(2, 0),
+            "the defender must own a live member of the region");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+}

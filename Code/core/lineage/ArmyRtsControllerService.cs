@@ -3883,8 +3883,11 @@ namespace AncientWarfare3.core.lineage
         {
             CoalitionWarTaskService.OnArmyInvalidated(pArmyId);
             Army army = FindArmy(pArmyId);
+            RuntimeState invalidatedRuntime = null;
+            RuntimeByArmy.TryGetValue(pArmyId, out invalidatedRuntime);
             ArmyRtsTransportService.ReleaseArmy(army);
             ArmyRtsMobilizationStatusService.Clear(army);
+            ClearIndependentMemberPaths(army, invalidatedRuntime);
             if (pReleaseActorJobs) ReleaseArmyActors(army);
             GarrisonSortieService.OnMissionCompleted(army);
             ArmyMissionPersistence.Invalidate(army);

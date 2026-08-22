@@ -197,6 +197,7 @@ namespace AncientWarfare3.core.policy
         internal static void RefreshAfterDeJureMutation()
         {
             RegionalGovernmentAggregationService.Clear();
+            CityRegionMetaCache.Clear();
             InvalidateNativeLabelCache();
             HierarchicalVassalMapModeLabelLayer.MarkDirty();
             HierarchicalVassalMapModeLabelLayer.RequestRefresh();
@@ -1099,8 +1100,8 @@ namespace AncientWarfare3.core.policy
             if (!CityRegionMetaCache.TryGetValue(seatCityId,
                     out AWMapModeMetaObject meta) || meta == null)
             {
-                ColorAsset color = ColorAsset.tryMakeNewColorAsset(
-                    CityAdministrationMapModeRules.RegionColorHex(seatCityId));
+                ColorAsset color = ResolveDeJureRegionColor(pRegion.RegionId,
+                    seatCityId);
                 color?.initColor();
                 meta = new AWMapModeMetaObject(seatCityId, name,
                     AWMapModeMetaTypes.HierarchicalVassal, color);
@@ -1109,6 +1110,26 @@ namespace AncientWarfare3.core.policy
             else if (meta.data != null && meta.data.name != name)
                 meta.data.name = name ?? string.Empty;
             return meta;
+        }
+
+        private static ColorAsset ResolveDeJureRegionColor(long pRegionId,
+            long pSeatCityId)
+        {
+            try
+            {
+                ColorLibrary palette = AssetManager.kingdom_colors_library;
+                if (palette?.list != null && palette.list.Count > 0)
+                {
+                    long normalized = pRegionId >= 0L ? pRegionId : pSeatCityId;
+                    if (normalized < 0L) normalized = -normalized;
+                    int index = (int)(normalized % palette.list.Count);
+                    ColorAsset color = palette.getColorByIndex(index);
+                    if (color != null) return color;
+                }
+            }
+            catch { }
+            return ColorAsset.tryMakeNewColorAsset(
+                CityAdministrationMapModeRules.RegionColorHex(pSeatCityId));
         }
 
         private static bool SwitchToPhysicalRealm(TileZone pClickedZone,

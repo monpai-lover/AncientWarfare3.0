@@ -512,6 +512,10 @@ internal static class WarArmyReturnRulesTests
                  .Contains("if (!hasValidMission)",
                      StringComparison.Ordinal),
             "war lifecycle preserves replacement missions while fallback return owns ended-war cleanup");
+        True(lifecycleWarEnd.Contains(
+                 "if (!hasValidMission && !returnActive)",
+                 StringComparison.Ordinal),
+            "war lifecycle does not cancel a return task immediately after admitting it");
 
         int lifecycleEndCall = warPatch.IndexOf(
             "ArmyRtsWarLifecycleService.OnWarEnded(pWar)",
@@ -614,6 +618,10 @@ internal static class WarArmyReturnRulesTests
              string.IsNullOrWhiteSpace(beforeStandardRefresh) &&
              duplicateStandardRefresh < 0,
             "ordinary invalidation preserves immediate actor release and peacetime refresh");
+        True(standardInvalidation.Contains(
+                 "ClearIndependentMemberPaths(army, invalidatedRuntime)",
+                 StringComparison.Ordinal),
+            "mission invalidation clears tracked member paths before dropping runtime state");
         string returnInvalidation = Section(controller,
             "private static bool InvalidateAndTryBeginReturn(",
             "public static int InvalidateWarParticipant(");

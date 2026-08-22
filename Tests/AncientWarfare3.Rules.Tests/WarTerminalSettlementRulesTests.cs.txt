@@ -16,13 +16,22 @@ internal static class WarTerminalSettlementRulesTests
     {
         WarTerminalSettlementDecision decision =
             WarTerminalSettlementRules.Resolve(
-                new WarTerminalSettlementFacts(false, 100, 0, 0, true));
+                new WarTerminalSettlementFacts(false, 100, 3, 4, true));
         Equal(WarTerminalSettlementReason.DecisiveScore, decision.Reason,
             "decisive score outranks force and goal facts");
         Equal(WarScoreSide.Attackers, decision.Beneficiary,
             "positive decisive score benefits attackers");
         Equal(100, decision.Budget,
             "decisive settlement receives the treaty cap");
+
+        WarTerminalSettlementDecision staleScore =
+            WarTerminalSettlementRules.Resolve(
+                new WarTerminalSettlementFacts(false, 100, 0, 3, true));
+        Equal(WarTerminalSettlementReason.ForceElimination,
+            staleScore.Reason,
+            "confirmed military collapse outranks a stale decisive score");
+        Equal(WarScoreSide.Defenders, staleScore.Beneficiary,
+            "surviving defenders receive the surrender settlement");
     }
 
     private static void DecisiveScoreIsRecognizedWithoutPotentialFacts()

@@ -40,6 +40,7 @@ namespace AncientWarfare3.core.court
                 RepairEmptyRegionsLocked();
                 EnsureAllKingdomCapitalSeatsLocked();
             }
+            DeJureNewCityAssignmentService.ClearRuntime();
         }
 
         internal static void PublishToSave(string pDirectory)
@@ -91,6 +92,20 @@ namespace AncientWarfare3.core.court
             DeJureNewCityAssignmentService.ClearRuntime();
         }
 
+        internal static void RepairAfterWorldLoaded()
+        {
+            try
+            {
+                EnsureInitialized();
+                DeJureNewCityAssignmentService.RepairUnassignedCities();
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("De jure post-load repair failed: " +
+                    error.Message);
+            }
+        }
+
         internal static IReadOnlyList<DeJureRegion> ActiveRegions()
         {
             EnsureInitialized();
@@ -138,6 +153,13 @@ namespace AncientWarfare3.core.court
                 pRegion = CloneRegion(found);
                 return true;
             }
+        }
+
+        internal static bool HasExplicitDeJureRemoval(long pCityId)
+        {
+            if (pCityId < 0L) return false;
+            EnsureInitialized();
+            lock (Gate) return HasExplicitDeJureRemovalLocked(pCityId);
         }
 
         internal static bool IsEligibleCityId(long pCityId)
@@ -513,6 +535,9 @@ namespace AncientWarfare3.core.court
                     EnsureAllKingdomCapitalSeatsLocked();
                 }
             }
+            if (_store != null && HasLiveWorld() && Config.game_loaded &&
+                !SmoothLoader.isLoading())
+                DeJureNewCityAssignmentService.RepairUnassignedCities();
         }
 
         private static DeJureAdministrationStore ReadFile(string pDirectory)

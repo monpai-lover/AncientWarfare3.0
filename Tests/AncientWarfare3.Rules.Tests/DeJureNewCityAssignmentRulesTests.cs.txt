@@ -10,8 +10,16 @@ internal static class DeJureNewCityAssignmentRulesTests
             new DeJureNewCityRegionCandidate(2L, true, 1, 900, 900, true),
             new DeJureNewCityRegionCandidate(1L, true, 2, 1200, 1200, true)
         });
-        Equal(2L, adjacent,
-            "the nearest adjacent de jure seat wins");
+        Equal(1L, adjacent,
+            "the state sharing more adjacent members wins");
+
+        long nearestMember = DeJureNewCityAssignmentRules.Select(new[]
+        {
+            new DeJureNewCityRegionCandidate(7L, true, 1, 900, 900, true),
+            new DeJureNewCityRegionCandidate(3L, true, 1, 1200, 1200, true)
+        });
+        Equal(7L, nearestMember,
+            "nearest adjacent member breaks adjacent-count ties");
 
         long noAdjacentSeat = DeJureNewCityAssignmentRules.Select(new[]
         {

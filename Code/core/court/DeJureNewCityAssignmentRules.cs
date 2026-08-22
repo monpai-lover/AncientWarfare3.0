@@ -7,20 +7,20 @@ namespace AncientWarfare3.core.court
     internal readonly struct DeJureNewCityRegionCandidate
     {
         internal readonly long RegionId;
-        internal readonly bool HasAdjacentSeat;
-        internal readonly int AdjacentSeatCount;
+        internal readonly bool HasAdjacentMember;
+        internal readonly int AdjacentMemberCount;
         internal readonly long NearestMemberSquaredDistance;
         internal readonly long SeatSquaredDistance;
         internal readonly bool Eligible;
 
         internal DeJureNewCityRegionCandidate(long pRegionId,
-            bool pHasAdjacentSeat, int pAdjacentSeatCount,
+            bool pHasAdjacentMember, int pAdjacentMemberCount,
             long pNearestMemberSquaredDistance, long pSeatSquaredDistance,
             bool pEligible)
         {
             RegionId = pRegionId;
-            HasAdjacentSeat = pHasAdjacentSeat;
-            AdjacentSeatCount = pAdjacentSeatCount;
+            HasAdjacentMember = pHasAdjacentMember;
+            AdjacentMemberCount = pAdjacentMemberCount;
             NearestMemberSquaredDistance = pNearestMemberSquaredDistance;
             SeatSquaredDistance = pSeatSquaredDistance;
             Eligible = pEligible;
@@ -35,8 +35,10 @@ namespace AncientWarfare3.core.court
             DeJureNewCityRegionCandidate? selected = (pCandidates ??
                 Array.Empty<DeJureNewCityRegionCandidate>())
                 .Where(p => p.Eligible && p.RegionId >= 0L)
-                .Where(p => p.HasAdjacentSeat)
-                .OrderBy(p => p.SeatSquaredDistance)
+                .Where(p => p.HasAdjacentMember)
+                .OrderByDescending(p => p.AdjacentMemberCount)
+                .ThenBy(p => p.NearestMemberSquaredDistance)
+                .ThenBy(p => p.SeatSquaredDistance)
                 .ThenBy(p => p.RegionId)
                 .Select(p => (DeJureNewCityRegionCandidate?)p)
                 .FirstOrDefault();

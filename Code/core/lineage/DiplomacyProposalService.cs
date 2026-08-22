@@ -2215,18 +2215,23 @@ namespace AncientWarfare3.core.lineage
         {
             CalibrateOwnedWarScores(pKingdom, pYear);
             WarPeaceSettlementService.Instance.ProcessReparations(pKingdom);
-            var recoveryWarIds = new List<long>(1);
+            const int recoveryPasses = 4;
+            var recoveryWarIds = new List<long>(4);
             try
             {
-                foreach (War war in WarRecoveryCursor(pKingdom).Take(1))
+                foreach (War war in WarRecoveryCursor(pKingdom).Take(4))
                 {
                     if (war?.data == null || war.hasEnded()) continue;
                     recoveryWarIds.Add(war.data.id);
                 }
             }
             catch { }
-            WarPeaceSettlementService.Instance.RecoverOneForKingdom(
-                pKingdom.id, recoveryWarIds);
+            for (int i = 0; i < recoveryPasses; i++)
+            {
+                if (!WarPeaceSettlementService.Instance
+                        .RecoverOneForKingdom(pKingdom.id, recoveryWarIds))
+                    break;
+            }
             double now = LineageService.CurTime();
             DiplomacyProposal incoming = FindOldestPendingIncoming(
                 pKingdom.id);

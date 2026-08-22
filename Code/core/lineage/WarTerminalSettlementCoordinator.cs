@@ -6,7 +6,10 @@ namespace AncientWarfare3.core.lineage
 {
     internal static class WarTerminalSettlementCoordinator
     {
-        private const int WarsPerAuthorityCycle = 2;
+        // Terminal wars must be noticed promptly, but the recovery scan must
+        // remain bounded so a large world cannot turn this into a full-war
+        // hot path.
+        private const int WarsPerAuthorityCycle = 8;
         private const string QueuePrefix = "war_terminal_settlement:";
         private static readonly Dictionary<long, int> FailureCounts =
             new Dictionary<long, int>();
@@ -25,7 +28,7 @@ namespace AncientWarfare3.core.lineage
             if (!ShouldQueue(pWar)) return false;
             long warId = pWar.data.id;
             DeferredRuntimeWorkService.EnqueueCoalesced(
-                QueuePrefix + warId, DeferredWorkClass.Runtime,
+                QueuePrefix + warId, DeferredWorkClass.CriticalRuntime,
                 () => Process(warId));
             return true;
         }
@@ -134,21 +137,22 @@ namespace AncientWarfare3.core.lineage
                 !WarScoreService.TryGetSnapshot(pWar, attacker,
                     out WarScoreSnapshot snapshot)) return false;
 
-            // A decisive score is already an authoritative terminal state.
-            // Do not gate its forced maximum-benefit peace on the separate
-            // military-potential probe, which can be temporarily unavailable
-            // while armies are being rebuilt or a war participant is changing.
-            if (!guarded && WarTerminalSettlementRules.IsDecisiveScore(
-                    snapshot.Score))
+            bool potentialRead = WarForceEliminationSettlementService
+                .TryReadPotentials(pWar, out int attackers,
+                    out int defenders);
+            // A decisive score remains a safe fallback while the native
+            // warrior counters are temporarily unavailable. If counters are
+            // available, Resolve must see them so a stale +100/-100 score
+            // cannot override a confirmed one-sided military collapse.
+            if (!potentialRead)
             {
+                if (guarded || !WarTerminalSettlementRules.IsDecisiveScore(
+                        snapshot.Score)) return false;
                 pDecision = WarTerminalSettlementRules.Resolve(
                     new WarTerminalSettlementFacts(false, snapshot.Score,
                         1, 1, false));
                 return true;
             }
-
-            if (!WarForceEliminationSettlementService.TryReadPotentials(
-                    pWar, out int attackers, out int defenders)) return false;
             bool affordableGoal = !guarded &&
                 WarGoalSettlementRuntimeService.HasAffordableGoal(pWar);
             pDecision = WarTerminalSettlementRules.Resolve(
