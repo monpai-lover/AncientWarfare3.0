@@ -50,6 +50,18 @@ namespace AncientWarfare3.patch
                 try { liveCityCount = __instance.countCities(); }
                 catch { liveCityCount = __instance.hasCities() ? 1 : 0; }
                 if (liveCityCount > 0) return true;
+                // Vanilla only removes a kingdom after its unit list is empty.
+                // Move ordinary survivors out before handing readiness back to
+                // the native manager; island-exile kingdoms remain protected.
+                if (!MandateIslandExileService.IsActive(__instance))
+                {
+                    try
+                    {
+                        RoyalAsylumService.NaturalizeBeforeExtinction(__instance);
+                        __instance.makeSurvivorsToNomads();
+                    }
+                    catch { }
+                }
                 // 零城已确认,但尸体/单位/建筑/弹道还指着本王国时不能抢跑:
                 // Dispose 会把 asset 置 null,而尸体仍在 visible_units 里渲染。
                 if (!KingdomExtinctionRules.ShouldForceImmediateRemoval(

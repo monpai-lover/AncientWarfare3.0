@@ -144,9 +144,9 @@ internal static class KingSuccessionPreparationRulesTests
         True(patch.Contains("__result = true",
                 StringComparison.Ordinal),
             "stable zero-city removal returns native readiness");
-        Equal(false, patch.Contains("makeSurvivorsToNomads",
+        Equal(true, patch.Contains("makeSurvivorsToNomads",
                 StringComparison.Ordinal),
-            "extinction prefix does not convert survivors directly");
+            "extinction prefix detaches survivors before native removal");
         string queue = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
             "KingdomExtinctionQueue.cs"));
