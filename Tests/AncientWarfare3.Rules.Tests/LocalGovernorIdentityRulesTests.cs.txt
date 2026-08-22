@@ -1,3 +1,4 @@
+using System;
 using AncientWarfare3.core.court;
 
 internal static class LocalGovernorIdentityRulesTests
@@ -14,6 +15,15 @@ internal static class LocalGovernorIdentityRulesTests
         False(LocalGovernorIdentityRules.IsCurrentSeatLeader(false, true, true), "an uncontrolled seat cannot project as regional governor");
         True(LocalGovernorIdentityRules.IsCurrentCityLeader(true, true), "a live controlled city leader can fill the root local office");
         False(LocalGovernorIdentityRules.IsCurrentCityLeader(true, false), "a dead city leader cannot fill the root local office");
+        Equal("custom_root", LocalChiefOfficeRules.SelectChiefOffice(
+            new[] { "custom_root", "custom_subordinate" }, "governor"),
+            "the first ordered custom office is the city chief");
+        Equal("governor", LocalChiefOfficeRules.SelectChiefOffice(
+            Array.Empty<string>(), "governor"),
+            "a built-in government uses its profile governor office");
+        Equal("", LocalChiefOfficeRules.SelectChiefOffice(
+            new[] { "", "custom_subordinate" }, ""),
+            "an invalid first slot cannot silently promote a subordinate");
     }
     private static void True(bool value, string message) { if (!value) throw new System.InvalidOperationException(message); }
     private static void False(bool value, string message) { if (value) throw new System.InvalidOperationException(message); }

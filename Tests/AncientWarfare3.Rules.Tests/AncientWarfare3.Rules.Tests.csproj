@@ -39,6 +39,7 @@
     <Compile Include="..\..\Code\core\court\CourtStatisticsRules.cs" Link="Production\CourtStatisticsRules.cs" />
     <Compile Include="CityLeaderCandidateScoringRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\LocalGovernorIdentityRules.cs" Link="Production\LocalGovernorIdentityRules.cs" />
+    <Compile Include="..\..\Code\core\court\LocalChiefOfficeRules.cs" Link="Production\LocalChiefOfficeRules.cs" />
     <Compile Include="..\..\Code\core\court\DeJureRegionEligibilityRules.cs" Link="Production\DeJureRegionEligibilityRules.cs" />
     <Compile Include="..\..\Code\core\court\CityLeaderCandidateScoringRules.cs" Link="Production\CityLeaderCandidateScoringRules.cs" />
     <Compile Include="MandateBorderTowerSpacingRulesTests.cs.txt" />

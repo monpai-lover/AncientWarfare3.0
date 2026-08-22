@@ -118,41 +118,8 @@ namespace AncientWarfare3.core.court
         private static List<string> DesiredSeats(Kingdom pKingdom, City pCity,
             int pCapacity)
         {
-            var result = new List<string>(pCapacity);
-            if (pCapacity <= 0) return result;
-            if (CustomCourtRuntime.TryGetLocalTemplate(pKingdom, pCity,
-                    out CustomLocalCourtTemplate local))
-            {
-                List<CustomCourtOffice> offices = (local.Offices ??
-                    new List<CustomCourtOffice>()).Where(office =>
-                    office != null && office.Layer == CourtOfficeLayer.City)
-                    .ToList();
-                IReadOnlyDictionary<string, int> ranks =
-                    CustomCourtHierarchyLayoutRules.BuildRanks(offices,
-                        local.Edges);
-                foreach (CustomCourtOffice office in offices.OrderBy(office =>
-                             ranks.TryGetValue(office.Id, out int rank)
-                                 ? rank
-                                 : int.MaxValue)
-                             .ThenBy(office => office.Grade)
-                             .ThenBy(office => office.Id,
-                                 StringComparer.Ordinal))
-                    for (int slot = 0;
-                         slot < Math.Max(1, office.Slots);
-                         slot++)
-                        result.Add(office.Id);
-                return result;
-            }
-
-            string leaderOffice = CourtService.ResolveCityOffice(pKingdom,
-                pCity);
-            for (int slot = 0; slot < pCapacity; slot++)
-            {
-                string office = LocalCourtOfficeRules.OfficeForSlot(slot,
-                    leaderOffice);
-                if (!string.IsNullOrEmpty(office)) result.Add(office);
-            }
-            return result;
+            return LocalChiefOfficeResolver.ResolveOrderedSeats(pKingdom,
+                pCity, pCapacity).ToList();
         }
 
         private static bool TryLoadActive(long pKingdomId, long pCityId,

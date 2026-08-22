@@ -161,6 +161,13 @@ namespace AncientWarfare3.core.court
         internal static string ResolveCityOffice(Kingdom pKingdom,
             City pCity)
         {
+            return LocalChiefOfficeResolver.ResolveChiefOffice(pKingdom,
+                pCity);
+        }
+
+        internal static string ResolveBuiltInCityOffice(Kingdom pKingdom,
+            City pCity)
+        {
             CourtProfileId profile = CourtProfileRegistry.For(pKingdom)?.Id ??
                                       CourtProfileId.None;
             bool feudatorySeat = false;
