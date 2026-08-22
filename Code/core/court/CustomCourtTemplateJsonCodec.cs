@@ -30,7 +30,10 @@ namespace AncientWarfare3.core.court
             normalized = CustomLocalCourtTemplateRules.UpgradeLegacy(
                 normalized);
             if (!Enum.IsDefined(typeof(CustomCourtTemplateScope),
-                    normalized.Scope))
+                    normalized.Scope) ||
+                (normalized.Scope == CustomCourtTemplateScope.CentralCourt &&
+                 (normalized.Offices == null || normalized.Offices.Count == 0) &&
+                 normalized.LocalTemplates?.Count > 0))
                 normalized.Scope = normalized.Offices?.Count == 0 &&
                     normalized.LocalTemplates?.Count > 0
                     ? CustomCourtTemplateScope.LocalGovernment
@@ -96,7 +99,10 @@ namespace AncientWarfare3.core.court
                 template = CustomLocalCourtTemplateRules.UpgradeLegacy(
                     template);
                 if (!Enum.IsDefined(typeof(CustomCourtTemplateScope),
-                        template.Scope))
+                        template.Scope) ||
+                    (template.Scope == CustomCourtTemplateScope.CentralCourt &&
+                     (template.Offices == null || template.Offices.Count == 0) &&
+                     template.LocalTemplates?.Count > 0))
                     template.Scope = template.Offices?.Count == 0 &&
                         template.LocalTemplates?.Count > 0
                         ? CustomCourtTemplateScope.LocalGovernment

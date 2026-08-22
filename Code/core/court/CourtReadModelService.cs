@@ -130,7 +130,7 @@ namespace AncientWarfare3.core.court
                     Influence = liveGovernor ? SafeStat(governor, "stewardship") : 0f
                 };
                 node.IsFixedRole = true;
-                region.CommanderyChiefActorId = node.ActorId;
+                region.CommanderyChiefActorId = seatCity?.leader?.data?.id ?? -1L;
                 pSeeds.Add(node);
             }
         }
@@ -142,7 +142,6 @@ namespace AncientWarfare3.core.court
             Actor leader = pSeatCity?.leader;
             bool live = IsCurrentCityLeader(pSeatCity, pKingdom) &&
                 leader?.data != null;
-            string office = CustomCourtFixedRoleIds.CommanderyChief;
             var node = new CourtPyramidNodeModel(live ? leader.data.id : -1L,
                 "commandery-chief:" + pKingdom.id + ":" + pRegion.RegionId,
                 CourtPyramidRoleId.Governor, CourtPyramidRules.GovernorRank,
@@ -237,6 +236,7 @@ namespace AncientWarfare3.core.court
                 localTemplate, pCareerStates);
             AddRegionalSuperiorNode(model, pKingdom, pCity);
             if (model.CommanderyChiefNode != null &&
+                model.CommanderyChiefNode.CityId == pCity.data.id &&
                 !model.Nodes.Any(node => node != null &&
                     node.OfficeId == model.CommanderyChiefNode.OfficeId))
                 model.Nodes.Insert(1, model.CommanderyChiefNode);
