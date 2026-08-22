@@ -999,7 +999,7 @@ namespace AncientWarfare3.core.performance
             }
 
             double targetFrameMilliseconds =
-                1000d / AWPerformanceSettings.TargetRenderFps;
+                1000d / AWFramePriorityGovernor.EffectiveTargetRenderFps;
             double desiredBurstMilliseconds = Math.Max(
                 MinimumBurstMilliseconds,
                 Math.Min(MaximumBurstMilliseconds,

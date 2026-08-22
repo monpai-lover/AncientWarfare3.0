@@ -103,6 +103,16 @@ namespace AncientWarfare3.patch
                             "AW deferred path request flush failed: " +
                             error);
                     }
+
+                    try
+                    {
+                        AWMilitaryFrontLaneScheduler.ProcessFrame();
+                    }
+                    catch (System.Exception error)
+                    {
+                        ModClass.LogError(
+                            "AW military front lane failed: " + error);
+                    }
                 }
 
                 AWPresentationCommandQueue.DrainMainThread();

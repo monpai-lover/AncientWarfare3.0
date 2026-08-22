@@ -388,9 +388,12 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     }
 
     internal static void ProcessMilitaryP0Actor(long actorId,
-        float cycleElapsed)
+        float cycleElapsed, bool allowAdditionalFrameStep = false)
     {
-        if (ArmyMilitaryMovementPriorityIndex.WasProcessed(actorId))
+        if (allowAdditionalFrameStep
+                ? ArmyMilitaryMovementPriorityIndex.
+                    WasProcessedInMilitaryStep(actorId)
+                : ArmyMilitaryMovementPriorityIndex.WasProcessed(actorId))
             return;
         Actor actor = null;
         try { actor = World.world?.units?.get(actorId); }

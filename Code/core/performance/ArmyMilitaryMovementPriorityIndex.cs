@@ -17,8 +17,11 @@ namespace AncientWarfare3.core.performance
         private static readonly List<long> Order = new List<long>();
         private static readonly Dictionary<long, int> ProcessedFrameByActor =
             new Dictionary<long, int>();
+        private static readonly HashSet<long> ProcessedThisMilitaryStep =
+            new HashSet<long>();
         private static readonly HashSet<long> VanillaTaxiActors =
             new HashSet<long>();
+        private static int _rtsMemberCount;
 
         internal static void Register(long actorId,
             ArmyMilitaryMovementPriorityKind kind)
@@ -26,22 +29,38 @@ namespace AncientWarfare3.core.performance
             if (actorId < 0L) return;
             if (Entries.ContainsKey(actorId))
             {
+                if (Entries[actorId] != kind)
+                {
+                    if (Entries[actorId] ==
+                        ArmyMilitaryMovementPriorityKind.RtsMember)
+                        _rtsMemberCount--;
+                    if (kind == ArmyMilitaryMovementPriorityKind.RtsMember)
+                        _rtsMemberCount++;
+                }
                 Entries[actorId] = kind;
                 return;
             }
             Entries.Add(actorId, kind);
+            if (kind == ArmyMilitaryMovementPriorityKind.RtsMember)
+                _rtsMemberCount++;
             Order.Add(actorId);
         }
 
         internal static void Unregister(long actorId)
         {
             if (actorId < 0L) return;
+            bool wasRtsMember = Entries.TryGetValue(actorId,
+                out ArmyMilitaryMovementPriorityKind existingKind) &&
+                existingKind == ArmyMilitaryMovementPriorityKind.RtsMember;
             if (Entries.Remove(actorId))
             {
+                if (wasRtsMember)
+                    _rtsMemberCount--;
                 int index = Order.IndexOf(actorId);
                 if (index >= 0) Order.RemoveAt(index);
             }
             ProcessedFrameByActor.Remove(actorId);
+            ProcessedThisMilitaryStep.Remove(actorId);
             VanillaTaxiActors.Remove(actorId);
         }
 
@@ -104,6 +123,7 @@ namespace AncientWarfare3.core.performance
         }
 
         internal static int Count => Entries.Count;
+        internal static int RtsMemberCount => Math.Max(0, _rtsMemberCount);
 
         internal static void BeginCycle()
         {
@@ -115,6 +135,11 @@ namespace AncientWarfare3.core.performance
             _ = frameId;
         }
 
+        internal static void BeginMilitaryStep()
+        {
+            ProcessedThisMilitaryStep.Clear();
+        }
+
         internal static void MarkProcessed(long actorId)
         {
             MarkProcessed(actorId, UnityEngine.Time.frameCount);
@@ -122,7 +147,9 @@ namespace AncientWarfare3.core.performance
 
         internal static void MarkProcessed(long actorId, int frameId)
         {
-            if (actorId >= 0L) ProcessedFrameByActor[actorId] = frameId;
+            if (actorId < 0L) return;
+            ProcessedFrameByActor[actorId] = frameId;
+            ProcessedThisMilitaryStep.Add(actorId);
         }
 
         internal static bool WasProcessed(long actorId)
@@ -138,12 +165,20 @@ namespace AncientWarfare3.core.performance
                    processedFrame == frameId;
         }
 
+        internal static bool WasProcessedInMilitaryStep(long actorId)
+        {
+            return actorId >= 0L &&
+                   ProcessedThisMilitaryStep.Contains(actorId);
+        }
+
         internal static void Clear()
         {
             Entries.Clear();
             Order.Clear();
             ProcessedFrameByActor.Clear();
+            ProcessedThisMilitaryStep.Clear();
             VanillaTaxiActors.Clear();
+            _rtsMemberCount = 0;
         }
     }
 }

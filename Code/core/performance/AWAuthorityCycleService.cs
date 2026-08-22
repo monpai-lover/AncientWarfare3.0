@@ -38,6 +38,7 @@ namespace AncientWarfare3.core.performance
             CooperativeGate.Reset();
             NativeGate.Reset();
             _nativeCycleToken = 0L;
+            AWMilitaryFrontLaneScheduler.Reset();
             ArmyRtsSchedulingService.Reset();
             NobleHeirPregnancyService.Reset();
             RulerHouseholdPregnancyService.Reset();
