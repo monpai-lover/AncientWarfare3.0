@@ -573,6 +573,19 @@ namespace AncientWarfare3.core.lineage
                 zone => zone.city);
             var newZones = selected.Where(zone => zone.city != stronghold)
                 .ToList();
+            var originalSize = state.Size;
+            var originalFixedZoneKeys = state.FixedZoneKeys == null
+                ? new List<string>()
+                : new List<string>(state.FixedZoneKeys);
+            var originalWallPoints = (state.WallPoints ??
+                new List<BanditStrongholdPoint>()).Select(point =>
+                    point == null ? null : new BanditStrongholdPoint
+                    {
+                        X = point.X,
+                        Y = point.Y,
+                        OriginalTopTypeId = point.OriginalTopTypeId
+                    }).ToList();
+            var expansionWallTiles = new List<TileSnapshot>();
             try
             {
                 foreach (TileZone zone in newZones) stronghold.addZone(zone);
@@ -587,9 +600,14 @@ namespace AncientWarfare3.core.lineage
                 {
                     WorldTile tile = World.world.GetTile(point.X, point.Y);
                     string originalType = tile?.top_type?.id ?? "";
-                    if (tile != null)
+                    if (tile != null && knownWalls.Add(point.X + ":" + point.Y))
+                    {
+                        expansionWallTiles.Add(new TileSnapshot
+                        {
+                            Tile = tile,
+                            TopType = tile.top_type
+                        });
                         tile.setTopTileType(TopTileLibrary.wall_wild);
-                    if (knownWalls.Add(point.X + ":" + point.Y))
                         state.WallPoints.Add(new BanditStrongholdPoint
                         {
                             X = point.X,
@@ -609,6 +627,14 @@ namespace AncientWarfare3.core.lineage
             }
             catch (Exception e)
             {
+                foreach (TileSnapshot snapshot in expansionWallTiles)
+                {
+                    try { snapshot.Tile?.setTopTileType(snapshot.TopType); }
+                    catch { }
+                }
+                state.Size = originalSize;
+                state.FixedZoneKeys = originalFixedZoneKeys;
+                state.WallPoints = originalWallPoints;
                 foreach (KeyValuePair<TileZone, City> pair in originalCities)
                 {
                     try
@@ -619,6 +645,13 @@ namespace AncientWarfare3.core.lineage
                     }
                     catch { }
                 }
+                try
+                {
+                    stronghold.recalculateNeighbourZones();
+                    mother.recalculateNeighbourZones();
+                    PeasantRebelBanditStateStore.Write(pBandit, state);
+                }
+                catch { }
                 ModClass.LogWarning("Bandit stronghold expansion failed: " +
                     e.Message);
                 return false;
