@@ -97,6 +97,7 @@ namespace AncientWarfare3.core.court
         public int OfficialLocalGrade = -1;
         public int StableOrder;
         public bool IsVacancy;
+        public bool IsFixedRole;
         public float X;
         public float Y;
         public List<string> Roles = new List<string>();
@@ -136,7 +137,8 @@ namespace AncientWarfare3.core.court
                 OfficialLocalGrade = OfficialLocalGrade,
                 X = X,
                 Y = Y,
-                Roles = new List<string>(Roles)
+                Roles = new List<string>(Roles),
+                IsFixedRole = IsFixedRole
             };
         }
     }

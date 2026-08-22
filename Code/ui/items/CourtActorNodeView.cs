@@ -105,7 +105,8 @@ namespace AncientWarfare3.ui.items
             bool appointmentAllowed = CourtService.CanUseManualAppointment(
                 pKingdom);
             bool canAppoint = CourtManualAppointmentRules.
-                CanOpenVacancyAppointment(pNode.IsVacancy, officeAvailable,
+                CanOpenVacancyAppointment(pNode.IsVacancy && !pNode.IsFixedRole,
+                    officeAvailable,
                     appointmentAllowed);
             _button.interactable = live || canAppoint;
             if (live)
@@ -122,7 +123,8 @@ namespace AncientWarfare3.ui.items
                 CourtManualAppointmentRules.ResolveOfficeAction(
                     officeAvailable && appointmentAllowed,
                     incumbentActorId);
-            bool canManageOffice = officeAction != CourtManualOfficeAction.None;
+            bool canManageOffice = officeAction != CourtManualOfficeAction.None &&
+                                   !pNode.IsFixedRole;
             _manageOfficeObject.SetActive(canManageOffice);
             bool canDispose = live && !pNode.IsVacancy && !actor.isKing() &&
                                !IsMilitaryGovernorateCommandNode(pNode);

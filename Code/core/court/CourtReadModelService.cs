@@ -129,6 +129,7 @@ namespace AncientWarfare3.core.court
                     DisplayTitle = region.GovernorTitle,
                     Influence = liveGovernor ? SafeStat(governor, "stewardship") : 0f
                 };
+                node.IsFixedRole = true;
                 region.CommanderyChiefActorId = node.ActorId;
                 pSeeds.Add(node);
             }
@@ -154,6 +155,7 @@ namespace AncientWarfare3.core.court
                 DisplayTitle = pRegion.LocalLevelTitle,
                 CommandName = pRegion.RegionName ?? string.Empty
             };
+            node.IsFixedRole = true;
         }
 
         private static LocalCourtReadModel BuildLocal(Kingdom pKingdom,
@@ -297,6 +299,7 @@ namespace AncientWarfare3.core.court
                         CityName = FindCityName(pKingdom, pModel.RegionSeatCityId),
                         DisplayTitle = pModel.RegionalGovernorTitle
                     };
+                pModel.RegionalSuperiorNode.IsFixedRole = true;
                 pModel.Nodes.Insert(0, pModel.RegionalSuperiorNode);
                 return;
             }
@@ -321,6 +324,7 @@ namespace AncientWarfare3.core.court
                         pModel.RegionMemberCount),
                     DisplayTitle = pModel.RegionalGovernorTitle
                 };
+            node.IsFixedRole = true;
             pModel.RegionalSuperiorNode = node;
             pModel.Nodes.Insert(0, node);
         }
