@@ -1,0 +1,55 @@
+using AncientWarfare3.core.court;
+
+internal static class LocalLowOfficeVacancyRulesTests
+{
+    public static void Run()
+    {
+        Equal(LocalLowOfficeCandidateTier.Qualified,
+            LocalLowOfficeVacancyRules.CandidateTier(
+                hasFormalQualification: true, hasClanOrShi: true),
+            "qualified candidates remain first");
+        Equal(LocalLowOfficeCandidateTier.Clan,
+            LocalLowOfficeVacancyRules.CandidateTier(
+                hasFormalQualification: false, hasClanOrShi: true),
+            "clan candidates precede ordinary residents");
+        Equal(LocalLowOfficeCandidateTier.Ordinary,
+            LocalLowOfficeVacancyRules.CandidateTier(
+                hasFormalQualification: false, hasClanOrShi: false),
+            "ordinary residents are the final fallback");
+        True(LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
+                isCityLayer: true, officeGrade: 30,
+                vacancyPromotion: true),
+            "grade thirty city vacancies allow the lower qualification fallback");
+        False(LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
+                isCityLayer: true, officeGrade: 20,
+                vacancyPromotion: true),
+            "higher local offices keep formal qualification gates");
+        False(LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
+                isCityLayer: false, officeGrade: 30,
+                vacancyPromotion: true),
+            "central offices never use the local lower qualification fallback");
+        Equal(1, LocalLowOfficeVacancyRules.ResolveEntryRank(
+                currentRank: 0, officeGrade: 30),
+            "an unranked lowest local appointment starts at ninth rank");
+        Equal(7, LocalLowOfficeVacancyRules.ResolveEntryRank(
+                currentRank: 7, officeGrade: 30),
+            "an existing rank is never lowered by the local floor");
+    }
+
+    private static void True(bool pActual, string pMessage)
+    {
+        if (!pActual) throw new System.InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pActual, string pMessage)
+    {
+        True(!pActual, pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new System.InvalidOperationException(pMessage +
+                ": expected " + pExpected + ", got " + pActual);
+    }
+}

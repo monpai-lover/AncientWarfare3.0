@@ -110,7 +110,12 @@
     <Compile Include="HierarchicalVassalCourtPresentationSourceGuardTests.cs.txt" />
     <Compile Include="CourtRegionalFolderSourceGuardTests.cs.txt" />
     <Compile Include="CourtHistoryLocalizationRegressionTests.cs.txt" />
+    <Compile Include="ManualLocalChiefAppointmentRulesTests.cs.txt" />
+    <Compile Include="ManualLocalChiefAppointmentSourceGuardTests.cs.txt" />
+    <Compile Include="DeJureSeatRenameSourceGuardTests.cs.txt" />
     <Compile Include="CourtImmediateVacancyModeRulesTests.cs.txt" />
+    <Compile Include="LocalLowOfficeVacancyRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\LocalLowOfficeVacancyRules.cs" Link="Production\LocalLowOfficeVacancyRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtImmediateVacancyModeRules.cs" Link="Production\CourtImmediateVacancyModeRules.cs" />
     <Compile Include="DeJureNewCityAssignmentRulesTests.cs.txt" />
     <Compile Include="DeJureWarEligibilityRulesTests.cs.txt" />
