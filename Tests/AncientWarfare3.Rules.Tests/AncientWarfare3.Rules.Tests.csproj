@@ -138,6 +138,7 @@
     <Compile Include="PeasantRebelBanditAnnexationRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditSpawnRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditRecruitmentRulesTests.cs.txt" />
+    <Compile Include="MandateHistoricalLeaderRulesTests.cs.txt" />
     <Compile Include="PeasantRebelBanditPressureRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelBanditPressureRules.cs" Link="Production\PeasantRebelBanditPressureRules.cs" />
     <Compile Include="PeasantRebelBanditZoneWallRulesTests.cs.txt" />

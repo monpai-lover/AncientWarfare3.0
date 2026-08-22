@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.content.figures;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.policy;
@@ -104,7 +106,64 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.MANDATE_REBEL_LAST_YEAR, out int lastYear, int.MinValue);
             if (lastYear == year) return;
             pKingdom.data.set(LineageKeys.MANDATE_REBEL_LAST_YEAR, year);
+            TrySummonHistoricalLeader(pKingdom);
             PeasantRebelRouteService.OnKingdomYear(pKingdom);
+        }
+
+        private static bool TrySummonHistoricalLeader(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
+                PeasantRebelBanditStrongholdService.HasActiveStronghold(
+                    pKingdom)) return false;
+            try
+            {
+                if (pKingdom.king?.data != null && pKingdom.king.isAlive() &&
+                    !pKingdom.king.isRekt()) return false;
+                Actor heir = HeirService.PeekRegisteredHeir(pKingdom);
+                if (heir?.data != null && heir.isAlive() && !heir.isRekt())
+                    return false;
+            }
+            catch { }
+
+            City capital = pKingdom.capital;
+            if (capital?.data == null || capital.isRekt())
+            {
+                try { capital = pKingdom.getCities().FirstOrDefault(); }
+                catch { capital = null; }
+            }
+            if (capital?.data == null) return false;
+            if (!HistoricalFigureService.TrySummonRebelLeader(pKingdom,
+                    capital, out Actor leader)) return false;
+            try
+            {
+                pKingdom.setKing(leader);
+                if (pKingdom.king != leader) return false;
+                MarkRebelKingdom(pKingdom, leader,
+                    ResolveOriginKingdom(pKingdom));
+                HistoryWriter.RecordPerson(leader.data.id, pKingdom,
+                    leader.getName(), PersonEvent.MANDATE_REBEL_LEADER,
+                    HistoryText.Actor(leader) +
+                    HistoryLocalizationRules.H(
+                        "aw_hist_mandate_rebel_leader"),
+                    ChronicleCategory.WAR, HistoryTarget.Kingdom(pKingdom));
+                return true;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Historical rebel leader installation failed: " +
+                    error.Message);
+                return false;
+            }
+        }
+
+        private static Kingdom ResolveOriginKingdom(Kingdom pRebel)
+        {
+            if (pRebel?.data == null) return null;
+            pRebel.data.get(LineageKeys.MANDATE_REBEL_ORIGIN_KINGDOM_ID,
+                out long originId, -1L);
+            if (originId < 0 || World.world?.kingdoms == null) return null;
+            try { return World.world.kingdoms.get(originId); }
+            catch { return null; }
         }
 
         internal static void RunFoundingRouteYear(Kingdom pKingdom)

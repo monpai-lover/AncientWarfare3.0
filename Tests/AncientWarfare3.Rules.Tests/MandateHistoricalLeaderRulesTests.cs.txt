@@ -1,0 +1,38 @@
+using System;
+using AncientWarfare3.content.figures;
+
+internal static class MandateHistoricalLeaderRulesTests
+{
+    public static void Run()
+    {
+        int[] order = { 0, 1, 2 };
+        int[] available = { HistoricalFigureSpawnRules.Available,
+            HistoricalFigureSpawnRules.Available,
+            HistoricalFigureSpawnRules.Available };
+        bool[] dead = { false, false, false };
+        bool[] eligible = { true, true, true };
+        Equal(0, HistoricalFigureSpawnRules.SelectLeaderCandidate(
+            order, available, dead, eligible),
+            "first available historical figure is selected");
+
+        int[] committedDead = { HistoricalFigureSpawnRules.Committed,
+            HistoricalFigureSpawnRules.Available,
+            HistoricalFigureSpawnRules.Available };
+        dead[0] = true;
+        Equal(1, HistoricalFigureSpawnRules.SelectLeaderCandidate(
+            order, committedDead, dead, eligible),
+            "dead historical figure unlocks the next candidate");
+
+        eligible[1] = false;
+        Equal(-1, HistoricalFigureSpawnRules.SelectLeaderCandidate(
+            order, committedDead, dead, eligible),
+            "ineligible candidate does not get summoned");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                expected + ", got " + actual);
+    }
+}

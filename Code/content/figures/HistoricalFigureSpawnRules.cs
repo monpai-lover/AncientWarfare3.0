@@ -183,5 +183,15 @@ namespace AncientWarfare3.content.figures
             }
             return -1;
         }
+
+        public static int SelectLeaderCandidate(int[] registryOrder,
+            int[] spawnStates, bool[] dead, bool[] eligible)
+        {
+            if (eligible == null || spawnStates == null ||
+                eligible.Length != spawnStates.Length) return -1;
+            int index = NextSpawnableRegistryIndex(registryOrder,
+                spawnStates, dead);
+            return index >= 0 && eligible[index] ? index : -1;
+        }
     }
 }

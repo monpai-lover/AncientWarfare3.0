@@ -175,6 +175,56 @@ namespace AncientWarfare3.content.figures
             ApplyFigure(pActor, def, idx, integrationReady);
         }
 
+        internal static bool TrySummonRebelLeader(Kingdom pKingdom,
+            City pCity, out Actor pLeader)
+        {
+            pLeader = null;
+            if (!Enabled || pKingdom?.data == null || pCity?.data == null ||
+                pKingdom.isRekt() || pCity.isRekt() ||
+                pCity.kingdom != pKingdom || World.world?.units == null ||
+                FigureStateStore.AnyAliveFigure()) return false;
+            int index = FigureStateStore.NextSpawnableIndex();
+            HistoricalFigureDef definition = HistoricalFigureDef.Get(index);
+            if (definition == null) return false;
+
+            string assetId = pKingdom.getActorAsset()?.id ??
+                pCity.getActorAsset()?.id;
+            WorldTile tile = pCity.getTile();
+            if (string.IsNullOrWhiteSpace(assetId) || tile == null) return false;
+
+            Actor actor = null;
+            try
+            {
+                actor = World.world.units.createNewUnit(assetId, tile,
+                    pMiracleSpawn: false, 0f, null, null,
+                    pSpawnWithItems: true, pAdultAge: true);
+                if (actor?.data == null || actor.isRekt())
+                    throw new InvalidOperationException(
+                        "historical rebel leader actor creation failed");
+                actor.joinKingdom(pKingdom);
+                actor.joinCity(pCity);
+                ApplyFigure(actor, definition, index,
+                    pIntegrationReady: false);
+                if (actor.isRekt() || !actor.hasTrait(TRAIT_FIGURE) ||
+                    FigureStateStore.IndexOfActor(actor.data.id) != index)
+                    throw new InvalidOperationException(
+                        "historical rebel leader figure initialization failed");
+                pLeader = actor;
+                return true;
+            }
+            catch (Exception error)
+            {
+                if (actor?.data != null)
+                {
+                    try { ActionLibrary.removeUnit(actor); }
+                    catch { }
+                }
+                ModClass.LogWarning("Historical rebel leader summon failed: " +
+                    error.Message);
+                return false;
+            }
+        }
+
         private static int SelectSpawnCandidate(Actor pActor)
         {
             int[] spawnStates = FigureStateStore.SpawnStateSnapshot();
