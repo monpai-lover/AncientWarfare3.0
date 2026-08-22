@@ -382,6 +382,7 @@ if (args.Length == 1 && args[0] == "--bandit-stronghold")
     PeasantRebelBanditStrongholdRulesTests.Run();
     PeasantRebelBanditAnnexationRulesTests.Run();
     PeasantRebelBanditSpawnRulesTests.Run();
+    PeasantRebelBanditRecruitmentRulesTests.Run();
     PeasantRebelBanditZoneWallRulesTests.Run();
     PeasantRebelBanditRaidRulesTests.Run();
     Console.WriteLine("Bandit stronghold and raid rules passed.");

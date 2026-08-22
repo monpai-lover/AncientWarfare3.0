@@ -1,0 +1,53 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelBanditRecruitmentRulesTests
+{
+    public static void Run()
+    {
+        Equal(0, PeasantRebelBanditSpawnRules.CalculateAnnualRecruitment(
+            20, famine: false, highCorruption: false, currentPopulation: 20),
+            "normal city has no forced recruitment");
+        True(PeasantRebelBanditSpawnRules.CalculateAnnualRecruitment(
+            100, famine: true, highCorruption: false, currentPopulation: 100) > 0,
+            "famine increases recruitment");
+        True(PeasantRebelBanditSpawnRules.CalculateAnnualRecruitment(
+            100, famine: true, highCorruption: true, currentPopulation: 100) >
+            PeasantRebelBanditSpawnRules.CalculateAnnualRecruitment(
+                100, famine: true, highCorruption: false, currentPopulation: 100),
+            "famine and corruption stack");
+        Equal(PeasantRebelBanditSpawnRules.AnnualRecruitmentCap,
+            PeasantRebelBanditSpawnRules.CalculateAnnualRecruitment(
+                100000, famine: true, highCorruption: true,
+                currentPopulation: 100000),
+            "recruitment has a hard yearly cap");
+        Equal(0, PeasantRebelBanditSpawnRules.CalculateAnnualRecruitment(
+            100, famine: true, highCorruption: true,
+            currentPopulation: PeasantRebelBanditSpawnRules.MinimumCityPopulation),
+            "minimum city population is protected");
+        True(PeasantRebelBanditSpawnRules.CanRecruitResident(
+            adult: true, civilianProfession: true, king: false,
+            cityLeader: false, heir: false),
+            "ordinary adult civilian is recruitable");
+        False(PeasantRebelBanditSpawnRules.CanRecruitResident(
+            adult: true, civilianProfession: true, king: true,
+            cityLeader: false, heir: false),
+            "king is protected from recruitment");
+        False(PeasantRebelBanditSpawnRules.CanRecruitResident(
+            adult: true, civilianProfession: true, king: false,
+            cityLeader: false, heir: true),
+            "heir is protected from recruitment");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                expected + ", got " + actual);
+    }
+}

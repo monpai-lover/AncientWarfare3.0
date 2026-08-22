@@ -9,6 +9,7 @@ namespace AncientWarfare3.core.lineage
         internal Kingdom Origin;
         internal City Mother;
         internal Actor Ruler;
+        internal int RecruitmentQuota;
         internal bool RemoveBanditOnFailure;
         internal Func<City, bool> FinalizeGovernment;
         internal Action RollbackGovernment;
