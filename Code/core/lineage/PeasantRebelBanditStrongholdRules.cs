@@ -38,8 +38,6 @@ namespace AncientWarfare3.core.lineage
 
     public static class PeasantRebelBanditStrongholdRules
     {
-        private const int StrongholdZoneCount = 4;
-
         private sealed class RankedCandidate
         {
             internal IReadOnlyList<string> Keys;
@@ -52,7 +50,16 @@ namespace AncientWarfare3.core.lineage
             RankFourZoneCandidates(IReadOnlyList<BanditZoneFact> zones,
                 string centerKey)
         {
-            if (zones == null || zones.Count < StrongholdZoneCount ||
+            return RankZoneCandidates(zones, centerKey, 2);
+        }
+
+        public static IReadOnlyList<IReadOnlyList<string>>
+            RankZoneCandidates(IReadOnlyList<BanditZoneFact> zones,
+                string centerKey, int pSideLength)
+        {
+            if (pSideLength < (int)BanditStrongholdSize.Small2x2 ||
+                pSideLength > (int)BanditStrongholdSize.Large4x4 ||
+                zones == null || zones.Count < pSideLength * pSideLength ||
                 string.IsNullOrWhiteSpace(centerKey))
                 return Array.Empty<IReadOnlyList<string>>();
 
@@ -73,15 +80,18 @@ namespace AncientWarfare3.core.lineage
                 byCoordinate[(zone.X, zone.Y)] = zone;
 
             var ranked = new List<RankedCandidate>();
-            for (int offsetY = 0; offsetY < 2; offsetY++)
-            for (int offsetX = 0; offsetX < 2; offsetX++)
+            for (int offsetY = 0; offsetY < pSideLength; offsetY++)
+            for (int offsetX = 0; offsetX < pSideLength; offsetX++)
             {
                 int originX = center.X - offsetX;
                 int originY = center.Y - offsetY;
-                var facts = new List<BanditZoneFact>(StrongholdZoneCount);
+                var facts = new List<BanditZoneFact>(
+                    pSideLength * pSideLength);
                 bool complete = true;
-                for (int y = originY; y < originY + 2 && complete; y++)
-                for (int x = originX; x < originX + 2; x++)
+                for (int y = originY;
+                     y < originY + pSideLength && complete; y++)
+                for (int x = originX;
+                     x < originX + pSideLength; x++)
                 {
                     if (!byCoordinate.TryGetValue((x, y),
                             out BanditZoneFact fact))
@@ -91,7 +101,7 @@ namespace AncientWarfare3.core.lineage
                     }
                     facts.Add(fact);
                 }
-                if (!complete || facts.Count != StrongholdZoneCount)
+                if (!complete || facts.Count != pSideLength * pSideLength)
                     continue;
                 string[] keys = facts.Select(fact => fact.Key)
                     .OrderBy(key => key, StringComparer.Ordinal).ToArray();
@@ -122,8 +132,42 @@ namespace AncientWarfare3.core.lineage
         public static bool IsViableSplit(int interiorCount,
             int exteriorCount)
         {
-            return interiorCount == StrongholdZoneCount &&
+            return IsViableSplit(interiorCount, exteriorCount, 2);
+        }
+
+        public static bool IsViableSplit(int interiorCount,
+            int exteriorCount, int pSideLength)
+        {
+            return pSideLength >= (int)BanditStrongholdSize.Small2x2 &&
+                   pSideLength <= (int)BanditStrongholdSize.Large4x4 &&
+                   interiorCount == pSideLength * pSideLength &&
                    exteriorCount >= 0;
+        }
+
+        public static BanditStrongholdSize NormalizeSize(int pValue)
+        {
+            if (pValue == (int)BanditStrongholdSize.Medium3x3)
+                return BanditStrongholdSize.Medium3x3;
+            if (pValue == (int)BanditStrongholdSize.Large4x4)
+                return BanditStrongholdSize.Large4x4;
+            return BanditStrongholdSize.Small2x2;
+        }
+
+        public static BanditStrongholdSize ResolveNextSize(
+            BanditStrongholdSize pCurrent, int pPressure, bool pFamine,
+            bool pHighCorruption)
+        {
+            BanditStrongholdSize current = NormalizeSize((int)pCurrent);
+            int effectivePressure = Math.Max(0, pPressure);
+            if (pFamine) effectivePressure += 15;
+            if (pHighCorruption) effectivePressure += 15;
+            if (current == BanditStrongholdSize.Small2x2 &&
+                effectivePressure >= 45)
+                return BanditStrongholdSize.Medium3x3;
+            if (current == BanditStrongholdSize.Medium3x3 &&
+                effectivePressure >= 85)
+                return BanditStrongholdSize.Large4x4;
+            return current;
         }
 
         public static bool CanUseWallCandidate(bool wallPlanExists,

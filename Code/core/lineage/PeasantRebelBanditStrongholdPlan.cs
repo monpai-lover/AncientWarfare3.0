@@ -18,6 +18,7 @@ namespace AncientWarfare3.core.lineage
     internal sealed class PeasantRebelBanditStrongholdPlan
     {
         internal PeasantRebelBanditCreationContext Context;
+        internal BanditStrongholdSize Size = BanditStrongholdSize.Small2x2;
         internal TileZone CenterZone;
         internal List<TileZone> InteriorZones = new List<TileZone>();
         internal List<TileZone> ExteriorZones = new List<TileZone>();

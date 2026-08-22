@@ -101,6 +101,8 @@ namespace AncientWarfare3.core.lineage
         {
             pState.FixedZoneKeys ??= new System.Collections.Generic.List<
                 string>();
+            pState.Size = PeasantRebelBanditStrongholdRules.NormalizeSize(
+                (int)pState.Size);
             pState.WallPoints ??= new System.Collections.Generic.List<
                 BanditStrongholdPoint>();
             foreach (BanditStrongholdPoint point in pState.WallPoints)

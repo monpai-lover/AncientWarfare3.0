@@ -80,7 +80,9 @@ namespace AncientWarfare3.core.lineage
         internal static bool TryPlan(City pMother, Kingdom pBandit,
             Kingdom pOrigin, Actor pRuler,
             out PeasantRebelBanditStrongholdPlan pPlan,
-            out string pFailureKey)
+            out string pFailureKey,
+            BanditStrongholdSize pRequestedSize =
+                BanditStrongholdSize.Small2x2)
         {
             pPlan = null;
             pFailureKey = "aw_bandit_stronghold_invalid_city";
@@ -98,10 +100,15 @@ namespace AncientWarfare3.core.lineage
                 pFailureKey = "aw_bandit_stronghold_already_exists";
                 return false;
             }
+            BanditStrongholdSize requestedSize =
+                PeasantRebelBanditStrongholdRules.NormalizeSize(
+                    (int)pRequestedSize);
+            int sideLength = (int)requestedSize;
+            int requiredZoneCount = sideLength * sideLength;
             List<TileZone> motherZones = pMother.zones
                 .Where(zone => zone != null && zone.city == pMother)
                 .Distinct().ToList();
-            if (motherZones.Count < 4)
+            if (motherZones.Count < requiredZoneCount)
             {
                 pFailureKey = "aw_bandit_stronghold_split_failed";
                 LogPlanFailure("fewer_than_four_mother_zones",
@@ -132,7 +139,7 @@ namespace AncientWarfare3.core.lineage
 
             IReadOnlyList<IReadOnlyList<string>> candidates =
                 PeasantRebelBanditStrongholdRules.
-                    RankFourZoneCandidates(facts, ZoneKey(centerZone));
+                    RankZoneCandidates(facts, ZoneKey(centerZone), sideLength);
             if (candidates.Count == 0)
             {
                 pFailureKey = "aw_bandit_stronghold_split_failed";
@@ -149,10 +156,10 @@ namespace AncientWarfare3.core.lineage
             BanditZoneWallPlan wallFallbackPlan = null;
             foreach (IReadOnlyList<string> candidateKeys in candidates)
             {
-                if (candidateKeys.Count != 4) continue;
+                if (candidateKeys.Count != requiredZoneCount) continue;
                 List<TileZone> candidate = motherZones.Where(zone =>
                     candidateKeys.Contains(ZoneKey(zone))).ToList();
-                if (candidate.Count != 4) continue;
+                if (candidate.Count != requiredZoneCount) continue;
                 if (!PeasantRebelBanditZoneWallService.TryPlan(
                         pMother, candidate, strongholdCenter,
                         out BanditZoneWallPlan candidateWall) ||
@@ -191,10 +198,10 @@ namespace AncientWarfare3.core.lineage
             List<TileZone> exterior = motherZones.Where(zone =>
                 !interiorSet.Contains(zone)).ToList();
             if (!PeasantRebelBanditStrongholdRules.IsViableSplit(
-                    interior.Count, exterior.Count))
+                    interior.Count, exterior.Count, sideLength))
             {
                 pFailureKey = "aw_bandit_stronghold_split_failed";
-                LogPlanFailure("invalid_exact_four_zone_split",
+                LogPlanFailure("invalid_exact_zone_split",
                     motherZones.Count, candidates.Count, pFailureKey);
                 return false;
             }
@@ -234,6 +241,7 @@ namespace AncientWarfare3.core.lineage
                     Origin = pOrigin,
                     Ruler = pRuler
                 },
+                Size = requestedSize,
                 CenterZone = centerZone,
                 InteriorZones = interior,
                 ExteriorZones = exterior,
@@ -281,7 +289,8 @@ namespace AncientWarfare3.core.lineage
                 pPlan.Context.Origin?.data == null ||
                 pPlan.Context.Ruler?.data == null ||
                 pPlan.CenterZone == null ||
-                pPlan.InteriorZones?.Count != 4 ||
+                pPlan.InteriorZones?.Count !=
+                    (int)pPlan.Size * (int)pPlan.Size ||
                 pPlan.WallPoints == null || pPlan.WallPoints.Count == 0 ||
                 pPlan.TowerTiles == null) return false;
             PeasantRebelBanditStrongholdPlan plan = pPlan;
@@ -361,13 +370,14 @@ namespace AncientWarfare3.core.lineage
             out string pFailureKey)
         {
             return TryCreateDirect(pMother, out pBandit, out pStronghold,
-                out pFailureKey, out _, pAllowClaimRedirect: true);
+                out pFailureKey, out _, pAllowClaimRedirect: true,
+                pRecruitmentQuota: 0);
         }
 
         internal static bool TryCreateDirect(City pMother,
             out Kingdom pBandit, out City pStronghold,
             out string pFailureKey, out bool restorationRedirected,
-            bool pAllowClaimRedirect = true)
+            bool pAllowClaimRedirect = true, int pRecruitmentQuota = 0)
         {
             pBandit = null;
             pStronghold = null;
@@ -413,6 +423,7 @@ namespace AncientWarfare3.core.lineage
                     out PeasantRebelBanditStrongholdPlan plan,
                     out pFailureKey))
                 return false;
+            plan.Context.RecruitmentQuota = Math.Max(0, pRecruitmentQuota);
 
             bool rulerWasMotherCityLeader = pMother.leader == ruler;
             if (rulerWasMotherCityLeader)
@@ -517,6 +528,132 @@ namespace AncientWarfare3.core.lineage
         {
             return PeasantRebelBanditStateStore.TryResolveActive(pKingdom,
                 out _);
+        }
+
+        internal static bool TryExpandActiveStronghold(Kingdom pBandit,
+            bool pFamine, bool pHighCorruption)
+        {
+            if (!CanMutate() || pBandit?.data == null ||
+                !PeasantRebelBanditStateStore.TryResolveActive(pBandit,
+                    out PeasantRebelBanditStrongholdState state)) return false;
+            BanditStrongholdSize next =
+                PeasantRebelBanditStrongholdRules.ResolveNextSize(
+                    state.Size, state.Pressure, pFamine, pHighCorruption);
+            if (next == state.Size) return false;
+
+            City stronghold = ResolveCity(state.StrongholdCityId);
+            City mother = ResolveCity(state.MotherCityId);
+            WorldTile center = stronghold?.getTile();
+            TileZone centerZone = center?.zone;
+            if (stronghold?.data == null || mother?.data == null ||
+                centerZone == null) return false;
+
+            int sideLength = (int)next;
+            var pool = CollectExpansionZones(stronghold, mother,
+                centerZone, sideLength);
+            var facts = pool.Select(zone => BanditZoneFact.At(ZoneKey(zone),
+                zone.x, zone.y, (zone.neighbours ?? Array.Empty<TileZone>())
+                    .Where(pool.Contains).Select(ZoneKey))).ToList();
+            IReadOnlyList<IReadOnlyList<string>> candidates =
+                PeasantRebelBanditStrongholdRules.RankZoneCandidates(
+                    facts, ZoneKey(centerZone), sideLength);
+            var byKey = pool.ToDictionary(ZoneKey,
+                zone => zone, StringComparer.Ordinal);
+            IReadOnlyList<TileZone> selected = null;
+            foreach (IReadOnlyList<string> keys in candidates)
+            {
+                if (keys.Any(key => !byKey.ContainsKey(key))) continue;
+                selected = keys.Select(key => byKey[key]).ToList();
+                break;
+            }
+            if (selected == null || selected.Count != sideLength * sideLength)
+                return false;
+
+            var originalCities = selected.ToDictionary(zone => zone,
+                zone => zone.city);
+            var newZones = selected.Where(zone => zone.city != stronghold)
+                .ToList();
+            try
+            {
+                foreach (TileZone zone in newZones) stronghold.addZone(zone);
+                if (!PeasantRebelBanditZoneWallService.TryPlan(stronghold,
+                        selected, center, out BanditZoneWallPlan wallPlan))
+                    throw new InvalidOperationException(
+                        "expanded stronghold wall plan failed");
+
+                var knownWalls = new HashSet<string>(state.WallPoints.Select(
+                    point => point.X + ":" + point.Y), StringComparer.Ordinal);
+                foreach (CultiwayWallPoint point in wallPlan.WallPoints)
+                {
+                    WorldTile tile = World.world.GetTile(point.X, point.Y);
+                    string originalType = tile?.top_type?.id ?? "";
+                    if (tile != null)
+                        tile.setTopTileType(TopTileLibrary.wall_wild);
+                    if (knownWalls.Add(point.X + ":" + point.Y))
+                        state.WallPoints.Add(new BanditStrongholdPoint
+                        {
+                            X = point.X,
+                            Y = point.Y,
+                            OriginalTopTypeId = originalType
+                        });
+                }
+                state.Size = next;
+                state.FixedZoneKeys = selected.Select(ZoneKey)
+                    .OrderBy(key => key, StringComparer.Ordinal).ToList();
+                if (!PeasantRebelBanditStateStore.Write(pBandit, state))
+                    throw new InvalidOperationException(
+                        "expanded stronghold state write failed");
+                stronghold.recalculateNeighbourZones();
+                mother.recalculateNeighbourZones();
+                return true;
+            }
+            catch (Exception e)
+            {
+                foreach (KeyValuePair<TileZone, City> pair in originalCities)
+                {
+                    try
+                    {
+                        if (pair.Value != null) pair.Value.addZone(pair.Key);
+                        else if (pair.Key.city == stronghold)
+                            stronghold.removeZone(pair.Key);
+                    }
+                    catch { }
+                }
+                ModClass.LogWarning("Bandit stronghold expansion failed: " +
+                    e.Message);
+                return false;
+            }
+        }
+
+        private static List<TileZone> CollectExpansionZones(City pStronghold,
+            City pMother, TileZone pCenter, int pSideLength)
+        {
+            var result = new HashSet<TileZone>();
+            var frontier = new Queue<TileZone>();
+            foreach (TileZone zone in pStronghold.zones ??
+                Array.Empty<TileZone>())
+                if (zone != null && result.Add(zone)) frontier.Enqueue(zone);
+            if (result.Add(pCenter)) frontier.Enqueue(pCenter);
+            int maxSteps = Math.Max(2, pSideLength * 2);
+            for (int step = 0; step < maxSteps && frontier.Count > 0;
+                 step++)
+            {
+                int count = frontier.Count;
+                while (count-- > 0)
+                {
+                    TileZone zone = frontier.Dequeue();
+                    foreach (TileZone neighbour in zone.neighbours ??
+                        Array.Empty<TileZone>())
+                    {
+                        if (neighbour == null ||
+                            (neighbour.city != null &&
+                             neighbour.city != pStronghold &&
+                             neighbour.city != pMother)) continue;
+                        if (result.Add(neighbour)) frontier.Enqueue(neighbour);
+                    }
+                }
+            }
+            return result.ToList();
         }
 
         internal static bool IsStrongholdKingdom(Kingdom pKingdom)
@@ -1334,6 +1471,7 @@ namespace AncientWarfare3.core.lineage
             PeasantRebelBanditStrongholdPlan pPlan, City pStronghold)
         {
             var interior = new HashSet<TileZone>(pPlan.InteriorZones);
+            int recruited = 0;
             foreach (Actor actor in pPlan.Context.Mother.units.ToList())
             {
                 if (actor?.data == null || actor.isRekt() ||
@@ -1346,6 +1484,12 @@ namespace AncientWarfare3.core.lineage
                 if (interior.Contains(actor.current_tile?.zone) &&
                     IsOrdinaryResident(actor, pPlan.Context.Origin))
                     actor.joinCity(pStronghold);
+                else if (recruited < pPlan.Context.RecruitmentQuota &&
+                    IsOrdinaryResident(actor, pPlan.Context.Origin))
+                {
+                    actor.joinCity(pStronghold);
+                    recruited++;
+                }
             }
             pPlan.Context.Ruler.joinCity(pStronghold);
             pPlan.Context.Ruler.spawnOn(pStronghold.getTile());
@@ -1434,7 +1578,8 @@ namespace AncientWarfare3.core.lineage
             if (pWallPlan?.GateCenters == null ||
                 pWallPlan.GateCenters.Count != 4 || pCenter == null ||
                 pAsset?.fundament == null || pZones == null ||
-                pZones.Count != 4)
+                pZones.Count < (int)BanditStrongholdSize.Small2x2 *
+                    (int)BanditStrongholdSize.Small2x2)
             {
                 LogGateTowerFailure("invalid_input", pAsset, pCenter,
                     pZones?.Count ?? 0, null, null);
@@ -1603,6 +1748,7 @@ namespace AncientWarfare3.core.lineage
             return new PeasantRebelBanditStrongholdState
             {
                 Phase = pPhase,
+                Size = plan.Size,
                 StrongholdCityId = pStrongholdCityId,
                 MotherCityId = plan.Context.Mother.getID(),
                 OriginKingdomId = plan.Context.Origin.getID(),

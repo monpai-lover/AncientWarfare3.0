@@ -68,6 +68,15 @@ namespace AncientWarfare3.core.lineage
                 if (!PeasantRebelBanditStateStore.Write(pBandit, state))
                     return;
             }
+            City stronghold = ResolveCity(state.StrongholdCityId);
+            bool famine = false;
+            try { famine = stronghold != null && !stronghold.hasAnyFood(); }
+            catch { }
+            bool highCorruption = stronghold != null &&
+                CorruptionService.ReadCity(stronghold).Score >=
+                CorruptionRules.HighThreshold;
+            PeasantRebelBanditStrongholdService.TryExpandActiveStronghold(
+                pBandit, famine, highCorruption);
             if (state.Pressure >=
                 PeasantRebelBanditPressureRules.MaximumPressure)
                 QueuePressureResolution(pBandit.getID());

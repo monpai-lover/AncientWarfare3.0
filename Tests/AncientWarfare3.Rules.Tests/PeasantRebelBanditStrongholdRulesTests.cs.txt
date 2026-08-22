@@ -10,6 +10,8 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         RanksTwoByTwoContainingCore();
         RejectsIncompleteTwoByTwoBlock();
         RanksOffsetTwoByTwoContainingCore();
+        RanksExpandableStrongholdCandidates();
+        ResolvesStrongholdSizeProgression();
         RequiresExactlyFourStrongholdZones();
         LocksBanditGrowthToPersistedZones();
         RestoresOnlyUnchangedStrongholdWalls();
@@ -72,6 +74,39 @@ internal static class PeasantRebelBanditStrongholdRulesTests
             "a corner core may belong to an offset two-by-two block");
         Equal(4, ranked[0].Count,
             "the offset candidate still contains exactly four zones");
+    }
+
+    private static void RanksExpandableStrongholdCandidates()
+    {
+        IReadOnlyList<BanditZoneFact> zones = Grid(0, 0, 6, 6);
+        Equal(9, PeasantRebelBanditStrongholdRules.RankZoneCandidates(
+            zones, "3:3", 3).Count,
+            "a centered three-by-three grid has nine candidate origins");
+        Equal(16, PeasantRebelBanditStrongholdRules.RankZoneCandidates(
+            zones, "3:3", 4).Count,
+            "a four-by-four grid has sixteen candidate origins");
+        Equal(0, PeasantRebelBanditStrongholdRules.RankZoneCandidates(
+            zones, "3:3", 5).Count,
+            "sizes above four-by-four are rejected");
+    }
+
+    private static void ResolvesStrongholdSizeProgression()
+    {
+        Equal(BanditStrongholdSize.Medium3x3,
+            PeasantRebelBanditStrongholdRules.ResolveNextSize(
+                BanditStrongholdSize.Small2x2, 60, false, true),
+            "small expands to medium under pressure");
+        Equal(BanditStrongholdSize.Large4x4,
+            PeasantRebelBanditStrongholdRules.ResolveNextSize(
+                BanditStrongholdSize.Medium3x3, 100, true, true),
+            "medium expands to large under pressure");
+        Equal(BanditStrongholdSize.Large4x4,
+            PeasantRebelBanditStrongholdRules.ResolveNextSize(
+                BanditStrongholdSize.Large4x4, 1000, true, true),
+            "large is capped");
+        Equal(BanditStrongholdSize.Small2x2,
+            PeasantRebelBanditStrongholdRules.NormalizeSize(0),
+            "legacy state defaults to small size");
     }
 
     private static void RequiresExactlyFourStrongholdZones()

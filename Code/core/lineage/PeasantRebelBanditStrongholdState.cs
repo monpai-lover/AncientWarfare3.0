@@ -21,6 +21,13 @@ namespace AncientWarfare3.core.lineage
         Cooldown
     }
 
+    public enum BanditStrongholdSize
+    {
+        Small2x2 = 2,
+        Medium3x3 = 3,
+        Large4x4 = 4
+    }
+
     internal sealed class BanditStrongholdPoint
     {
         public int X = 0;
@@ -58,12 +65,13 @@ namespace AncientWarfare3.core.lineage
 
     internal sealed class PeasantRebelBanditStrongholdState
     {
-        public const int CurrentSchemaVersion = 7;
+        public const int CurrentSchemaVersion = 8;
 
         public int SchemaVersion = CurrentSchemaVersion;
         public BanditStrongholdPhase Phase = BanditStrongholdPhase.None;
         public BanditStrongholdKind StrongholdKind =
             BanditStrongholdKind.Land;
+        public BanditStrongholdSize Size = BanditStrongholdSize.Small2x2;
         public BanditIslandMigrationState Migration =
             new BanditIslandMigrationState();
         public long StrongholdCityId = -1L;
