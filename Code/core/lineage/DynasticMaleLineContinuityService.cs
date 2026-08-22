@@ -130,22 +130,9 @@ namespace AncientWarfare3.core.lineage
 
         private static long SelectExpectedSuccessorId(Actor pHolder)
         {
-            var candidates = new List<NobleRankCandidate>();
-            try
-            {
-                foreach (Actor child in pHolder.getChildren(false))
-                {
-                    if (child?.data == null || child == pHolder) continue;
-                    bool eligible = child.isSexMale() &&
-                                    SafeIsAlive(child) &&
-                                    !child.hasTrait("madness") &&
-                                    !SlaveService.IsSlave(child);
-                    candidates.Add(new NobleRankCandidate(child.data.id,
-                        eligible, child.data.created_time));
-                }
-            }
-            catch { }
-            return NobleRankRules.SelectEldestEligibleId(candidates);
+            Actor successor = HereditaryTitleSuccessionService.FindSuccessor(
+                pHolder, pHolder?.kingdom);
+            return successor?.data?.id ?? -1L;
         }
 
         private static void QueueIfMaleTitleHolder(Actor pActor)

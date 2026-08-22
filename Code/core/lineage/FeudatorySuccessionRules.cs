@@ -13,7 +13,8 @@ namespace AncientWarfare3.core.lineage
     {
         public FeudatorySuccessionCandidate(long actorId, bool eligible,
             bool directSon, bool sameShiBranch, int kinDistance,
-            double birthTime, bool directTreeDescendant = true)
+            double birthTime, bool directTreeDescendant = true,
+            bool legitimateBirth = true, bool adult = true)
         {
             ActorId = actorId;
             Eligible = eligible;
@@ -22,6 +23,8 @@ namespace AncientWarfare3.core.lineage
             KinDistance = Math.Max(0, kinDistance);
             BirthTime = birthTime;
             DirectTreeDescendant = directTreeDescendant;
+            LegitimateBirth = legitimateBirth;
+            Adult = adult;
         }
 
         public long ActorId { get; }
@@ -31,6 +34,8 @@ namespace AncientWarfare3.core.lineage
         public int KinDistance { get; }
         public double BirthTime { get; }
         public bool DirectTreeDescendant { get; }
+        public bool LegitimateBirth { get; }
+        public bool Adult { get; }
     }
 
     public static class FeudatorySuccessionRules
@@ -60,19 +65,22 @@ namespace AncientWarfare3.core.lineage
         public static long SelectSuccessor(
             IReadOnlyList<FeudatorySuccessionCandidate> candidates)
         {
-            FeudatorySuccessionCandidate? best = null;
-            int count = candidates?.Count ?? 0;
-            for (int i = 0; i < count; i++)
+            if (candidates == null || candidates.Count == 0) return -1L;
+            var mapped = new List<HereditaryTitleSuccessionCandidate>(
+                candidates.Count);
+            for (int i = 0; i < candidates.Count; i++)
             {
                 FeudatorySuccessionCandidate candidate = candidates[i];
-                if (candidate.ActorId < 0 || !candidate.Eligible ||
-                    !candidate.SameShiBranch ||
-                    !candidate.DirectTreeDescendant)
-                    continue;
-                if (!best.HasValue || Better(candidate, best.Value))
-                    best = candidate;
+                bool eligible = candidate.Eligible &&
+                                candidate.SameShiBranch &&
+                                candidate.DirectTreeDescendant;
+                mapped.Add(new HereditaryTitleSuccessionCandidate(
+                    candidate.ActorId, eligible, candidate.DirectSon,
+                    candidate.LegitimateBirth, candidate.Adult,
+                    candidate.DirectTreeDescendant, candidate.KinDistance,
+                    candidate.BirthTime));
             }
-            return best?.ActorId ?? -1L;
+            return HereditaryTitleSuccessionRules.SelectSuccessor(mapped);
         }
 
         public static bool ShouldAbolish(bool currentPrinceInvalid,
@@ -88,15 +96,5 @@ namespace AncientWarfare3.core.lineage
             return dyingActorIsPrince || dyingActorIsDesignatedSuccessor;
         }
 
-        private static bool Better(FeudatorySuccessionCandidate left,
-            FeudatorySuccessionCandidate right)
-        {
-            if (left.DirectSon != right.DirectSon) return left.DirectSon;
-            if (!left.DirectSon && left.KinDistance != right.KinDistance)
-                return left.KinDistance < right.KinDistance;
-            int birth = left.BirthTime.CompareTo(right.BirthTime);
-            if (birth != 0) return birth < 0;
-            return left.ActorId < right.ActorId;
-        }
     }
 }

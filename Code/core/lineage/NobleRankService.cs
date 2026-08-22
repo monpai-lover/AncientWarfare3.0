@@ -781,8 +781,13 @@ namespace AncientWarfare3.core.lineage
             if (!Ready || pHolder?.data == null) return;
             NobleTitleSnapshot held = ReadHot(pHolder);
             if (!held.IsActive) return;
-            Actor successor = held.Style == NobleTitleStyle.Male
-                ? FindEldestEligibleSon(pHolder)
+            bool maleLineIdentity = held.Style == NobleTitleStyle.Male;
+            bool canTransferIdentity = HereditaryTitleSuccessionRules
+                .CanTransfer(maleLineIdentity, pHolder.isSexMale(),
+                    maleLineIdentity);
+            Actor successor = canTransferIdentity
+                ? HereditaryTitleSuccessionService.FindSuccessor(
+                    pHolder, FindKingdom(held.KingdomId) ?? pHolder.kingdom)
                 : null;
             Kingdom context = FindKingdom(held.KingdomId) ??
                               pHolder.kingdom ?? successor?.kingdom;
@@ -968,33 +973,6 @@ namespace AncientWarfare3.core.lineage
                                     exception.Message);
             }
             return true;
-        }
-
-        private static Actor FindEldestEligibleSon(Actor pHolder)
-        {
-            var actors = new System.Collections.Generic.Dictionary<long, Actor>();
-            var candidates = new System.Collections.Generic.List<NobleRankCandidate>();
-            try
-            {
-                foreach (Actor child in pHolder.getChildren(false))
-                {
-                    if (child?.data == null || child == pHolder) continue;
-                    bool eligible = child.isSexMale() && child.isAlive() &&
-                                    !child.isRekt() &&
-                                    !child.hasTrait("madness") &&
-                                    !SlaveService.IsSlave(child);
-                    actors[child.data.id] = child;
-                    candidates.Add(new NobleRankCandidate(child.data.id,
-                        eligible, child.data.created_time));
-                }
-            }
-            catch { }
-            long selectedId =
-                NobleRankRules.SelectEldestEligibleId(candidates);
-            return selectedId >= 0 && actors.TryGetValue(selectedId,
-                out Actor selected)
-                ? selected
-                : null;
         }
 
         private static bool ValidTitleForActor(Actor pActor, int pRank,

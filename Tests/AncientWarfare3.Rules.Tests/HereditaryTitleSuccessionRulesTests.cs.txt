@@ -1,0 +1,76 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using AncientWarfare3.core.lineage;
+
+internal static class HereditaryTitleSuccessionRulesTests
+{
+    public static void Run()
+    {
+        Equal(10L, Select(Son(10, 10, true, false),
+                Son(11, 20, true, true)),
+            "a minor legitimate eldest son is not skipped");
+        Equal(11L, Select(Son(10, 10, false, true),
+                Son(11, 20, true, false)),
+            "a legitimate son outranks an older illegitimate son");
+        Equal(10L, Select(Son(10, 10, false, false),
+                Collateral(20, 2, 1, true)),
+            "a living son outranks an adult collateral");
+        Equal(21L, Select(Collateral(20, 2, 1, false),
+                Collateral(21, 3, 2, true)),
+            "collateral heirs must be adults");
+        False(HereditaryTitleSuccessionRules.CanTransfer(true, false, true),
+            "a female holder never transfers a male-line title");
+        False(HereditaryTitleSuccessionRules.CanTransfer(true, true, false),
+            "female-style identities never enter succession");
+
+        string noble = Read("Code/core/lineage/NobleRankService.cs");
+        Contains(noble, "NobleTitleStyle.Princess");
+        Contains(noble, "NobleTitleStyle.SeniorPrincess");
+        Contains(noble, "NobleTitleStyle.GrandPrincess");
+        string virtualService = Read(
+            "Code/core/lineage/VirtualNobleTitleService.cs");
+        Contains(virtualService, "pHolder.isSexMale()");
+    }
+
+    private static long Select(params HereditaryTitleSuccessionCandidate[] p)
+    {
+        return HereditaryTitleSuccessionRules.SelectSuccessor(p);
+    }
+
+    private static HereditaryTitleSuccessionCandidate Son(long id,
+        double birth, bool legitimate, bool adult)
+    {
+        return new HereditaryTitleSuccessionCandidate(id, true, true,
+            legitimate, adult, true, 0, birth);
+    }
+
+    private static HereditaryTitleSuccessionCandidate Collateral(long id,
+        int distance, double birth, bool adult)
+    {
+        return new HereditaryTitleSuccessionCandidate(id, true, false,
+            true, adult, true, distance, birth);
+    }
+
+    private static string Read(string pRelative) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            pRelative.Replace('/', Path.DirectorySeparatorChar)));
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException("missing source guard: " +
+                pNeedle);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage);
+    }
+}

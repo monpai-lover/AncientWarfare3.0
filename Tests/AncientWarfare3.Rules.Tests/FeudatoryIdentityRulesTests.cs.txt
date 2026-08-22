@@ -13,6 +13,17 @@ internal static class FeudatoryIdentityRulesTests
         False(FeudatoryIdentityRules.CanEnslave(
                 ordinaryEligible: false, activePrince: false),
             "feudatory rules do not bypass ordinary exclusions");
+        Equal(10L, FeudatorySuccessionRules.SelectSuccessor(new[]
+        {
+            new FeudatorySuccessionCandidate(10, eligible: true,
+                directSon: true, sameShiBranch: true, kinDistance: 0,
+                birthTime: 10, directTreeDescendant: true,
+                legitimateBirth: true, adult: false),
+            new FeudatorySuccessionCandidate(11, eligible: true,
+                directSon: true, sameShiBranch: true, kinDistance: 0,
+                birthTime: 20, directTreeDescendant: true,
+                legitimateBirth: true, adult: true)
+        }), "the legitimate eldest son remains the feudatory successor");
     }
 
     private static void True(bool value, string name)
@@ -23,5 +34,11 @@ internal static class FeudatoryIdentityRulesTests
     private static void False(bool value, string name)
     {
         if (value) throw new InvalidOperationException(name);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(name);
     }
 }

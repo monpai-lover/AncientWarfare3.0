@@ -395,6 +395,8 @@
     <Compile Include="ArmyMobilizationRulesTests.cs.txt" />
     <Compile Include="VirtualNobleTitleRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\VirtualNobleTitleRules.cs" Link="Production\VirtualNobleTitleRules.cs" />
+    <Compile Include="HereditaryTitleSuccessionRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\HereditaryTitleSuccessionRules.cs" Link="Production\HereditaryTitleSuccessionRules.cs" />
     <Compile Include="CityManpowerRulesTests.cs.txt" />
     <Compile Include="SyntheticLevyRulesTests.cs.txt" />
     <Compile Include="SyntheticMobilizationRulesTests.cs.txt" />

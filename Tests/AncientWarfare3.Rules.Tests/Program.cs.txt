@@ -460,6 +460,7 @@ if (args.Length == 1 &&
 }
 KingdomPolicyInheritanceDiagnosticRulesTests.Run();
 VirtualNobleTitleRulesTests.Run();
+HereditaryTitleSuccessionRulesTests.Run();
 
 if (args.Length == 1 && args[0] == "--actor-manual-name-rules")
 {

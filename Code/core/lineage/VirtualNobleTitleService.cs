@@ -69,9 +69,11 @@ namespace AncientWarfare3.core.lineage
         private static bool Ready => DB != null &&
             LineageArchiveManager.Instance.InitializeSuccessful;
 
-        internal static bool ShouldCreateSuccessor(bool pHereditary)
+        internal static bool ShouldCreateSuccessor(bool pHereditary,
+            bool pHolderMale)
         {
-            return pHereditary;
+            return HereditaryTitleSuccessionRules.CanTransfer(
+                pHereditary, pHolderMale, maleLineIdentity: true);
         }
 
         internal static VirtualNobleTitleGrantResult TryGrant(
@@ -368,7 +370,8 @@ namespace AncientWarfare3.core.lineage
             for (int i = 0; i < titles.Count; i++)
             {
                 VirtualNobleTitleSnapshot title = titles[i];
-                if (!ShouldCreateSuccessor(title.Hereditary))
+                if (!ShouldCreateSuccessor(title.Hereditary,
+                        pHolder.isSexMale()))
                 {
                     Close(title.TitleId, "extinct");
                     ChronicleEvents.OnVirtualNobleTitleExtinct(
@@ -376,7 +379,8 @@ namespace AncientWarfare3.core.lineage
                     Invalidate(title.KingdomId, pHolder.data.id);
                     continue;
                 }
-                Actor successor = FindSuccessor(pHolder, title.KingdomId);
+                Actor successor = HereditaryTitleSuccessionService.FindSuccessor(
+                    pHolder, ResolveKingdom(title.KingdomId));
                 if (successor == null)
                 {
                     Close(title.TitleId, "extinct");
@@ -463,19 +467,6 @@ namespace AncientWarfare3.core.lineage
             Add(command, "@time", LineageService.CurTime());
             Add(command, "@id", pTitleId);
             command.ExecuteNonQuery();
-        }
-
-        private static Actor FindSuccessor(Actor pHolder, long pKingdomId)
-        {
-            Actor best = null;
-            foreach (long childId in LineageQuery.GetChildIds(pHolder.data.id))
-            {
-                Actor child = World.world?.units?.get(childId);
-                if (child?.data == null || child.isRekt() || !child.isAlive() ||
-                    child.kingdom?.id != pKingdomId) continue;
-                if (best == null || child.data.id < best.data.id) best = child;
-            }
-            return best;
         }
 
         private static long FindActiveActorId(long pTitleId, long pKingdomId)
