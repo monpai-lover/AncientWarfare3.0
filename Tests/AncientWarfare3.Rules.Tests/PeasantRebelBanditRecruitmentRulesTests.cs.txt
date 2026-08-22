@@ -44,6 +44,11 @@ internal static class PeasantRebelBanditRecruitmentRulesTests
         if (!value) throw new InvalidOperationException(message);
     }
 
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
     private static void Equal<T>(T expected, T actual, string message)
     {
         if (!Equals(expected, actual))
