@@ -933,6 +933,7 @@
     <Compile Include="..\..\Code\core\performance\AWEnemySearchBackoffRules.cs" Link="Production\AWEnemySearchBackoffRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWIdleBehaviourThrottleRules.cs" Link="Production\AWIdleBehaviourThrottleRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWIdleBehaviourThrottleGate.cs" Link="Production\AWIdleBehaviourThrottleGate.cs" />
+    <Compile Include="..\..\Code\core\performance\AWIdleBehaviourThrottleDiagnostics.cs" Link="Production\AWIdleBehaviourThrottleDiagnostics.cs" />
     <Compile Include="..\..\Code\core\performance\MonthlyAuthorityWorkQueue.cs" Link="Production\MonthlyAuthorityWorkQueue.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathStream.cs" Link="Production\AWPathStream.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWTraversalSnapshot.cs" Link="Production\AWTraversalSnapshot.cs" />

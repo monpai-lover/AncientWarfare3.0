@@ -2,6 +2,14 @@ using AncientWarfare3.core.performance;
 
 internal static class IdleBehaviourThrottleGateTests
 {
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                                                expected + ", actual " +
+                                                actual);
+    }
+
     private static void True(bool value, string name)
     {
         if (!value) throw new InvalidOperationException(name);
@@ -14,54 +22,355 @@ internal static class IdleBehaviourThrottleGateTests
 
     public static void Run()
     {
+        TaskIdsMapOnlyCoveredCosmeticBehaviours();
+        SpeedTiersResolveExactCooldowns();
+        JitterIsStableAndBoundedByHalfASecond();
+        EligibilityExcludesEveryProtectedActorRole();
         ActorAndBehaviourCooldownsAreIndependent();
+        CooldownsResumeExactlyAtTheirDeadline();
+        SleepIsDisabledThroughTwoTimesSpeed();
+        InvalidGateInputsFailOpen();
+        DiagnosticsCountEveryKindAndResetWithTheWorld();
         RemoveActorClearsOnlyTheTargetActor();
         ClearReleasesEveryActor();
+        RuntimeWiringGuardsTheBehaviourBoundary();
+        ProtectedMovementSourcesStayThrottleFree();
+    }
+
+    private static void TaskIdsMapOnlyCoveredCosmeticBehaviours()
+    {
+        Maps("socialize_try_to_start_near_bonfire",
+            AWIdleBehaviourKind.Socialize);
+        Maps("socialize_try_to_start_immediate",
+            AWIdleBehaviourKind.Socialize);
+        Maps("happy_laughing", AWIdleBehaviourKind.EmoteSearch);
+        Maps("singing", AWIdleBehaviourKind.EmoteSearch);
+        Maps("decide_where_to_sleep", AWIdleBehaviourKind.Sleep);
+
+        False(AWIdleBehaviourThrottleRules.TryGetKind("sleep_inside", out _),
+            "sleep execution is not throttled after destination selection");
+        False(AWIdleBehaviourThrottleRules.TryGetKind("go_get_food", out _),
+            "unrelated tasks retain vanilla behaviour");
+        False(AWIdleBehaviourThrottleRules.TryGetKind(null, out _),
+            "missing tasks fail open");
+    }
+
+    private static void SpeedTiersResolveExactCooldowns()
+    {
+        Cooldowns(0d, social: 2d, emote: 1.5d, sleep: 0d);
+        Cooldowns(2d, social: 2d, emote: 1.5d, sleep: 0d);
+        Cooldowns(2.0001d, social: 4d, emote: 3d, sleep: 4d);
+        Cooldowns(4d, social: 4d, emote: 3d, sleep: 4d);
+        Cooldowns(4.0001d, social: 8d, emote: 6d, sleep: 10d);
+        Cooldowns(20d, social: 8d, emote: 6d, sleep: 10d);
+    }
+
+    private static void JitterIsStableAndBoundedByHalfASecond()
+    {
+        double first = AWIdleBehaviourThrottleRules.StableJitterSeconds(
+            12345L, AWIdleBehaviourKind.Socialize);
+        double repeated = AWIdleBehaviourThrottleRules.StableJitterSeconds(
+            12345L, AWIdleBehaviourKind.Socialize);
+        Equal(first, repeated, "actor and kind jitter is stable");
+        True(first >= 0d && first <=
+                AWIdleBehaviourThrottleRules.MaximumJitterSeconds,
+            "stable jitter stays within half a second");
+    }
+
+    private static void EligibilityExcludesEveryProtectedActorRole()
+    {
+        True(AWIdleBehaviourThrottleRules.IsEligibleCivilian(
+                civilian: true, actorAlive: true, actorRekt: false,
+                warrior: false,
+                armyMember: false, king: false, boat: false,
+                militaryMovementOwned: false),
+            "a valid living civilian is eligible");
+        Ineligible(civilian: false, actorAlive: true, actorRekt: false,
+            warrior: false, armyMember: false, king: false, boat: false,
+            militaryMovementOwned: false, "non-civil units");
+        Ineligible(civilian: true, actorAlive: false, actorRekt: false,
+            warrior: false,
+            armyMember: false, king: false, boat: false,
+            militaryMovementOwned: false, "dead actors");
+        Ineligible(civilian: true, actorAlive: true, actorRekt: true,
+            warrior: false,
+            armyMember: false, king: false, boat: false,
+            militaryMovementOwned: false, "rekt actors");
+        Ineligible(civilian: true, actorAlive: true, actorRekt: false,
+            warrior: true,
+            armyMember: false, king: false, boat: false,
+            militaryMovementOwned: false, "warriors");
+        Ineligible(civilian: true, actorAlive: true, actorRekt: false,
+            warrior: false,
+            armyMember: true, king: false, boat: false,
+            militaryMovementOwned: false, "army members");
+        Ineligible(civilian: true, actorAlive: true, actorRekt: false,
+            warrior: false,
+            armyMember: false, king: true, boat: false,
+            militaryMovementOwned: false, "kings");
+        Ineligible(civilian: true, actorAlive: true, actorRekt: false,
+            warrior: false,
+            armyMember: false, king: false, boat: true,
+            militaryMovementOwned: false, "boats");
+        Ineligible(civilian: true, actorAlive: true, actorRekt: false,
+            warrior: false,
+            armyMember: false, king: false, boat: false,
+            militaryMovementOwned: true, "military P0 movement owners");
     }
 
     private static void ActorAndBehaviourCooldownsAreIndependent()
     {
         var gate = new AWIdleBehaviourThrottleGate();
 
-        True(gate.TryBeginScan(11L, AWIdleBehaviourKind.Socialize, 100d),
+        True(gate.TryBeginScan(11L, AWIdleBehaviourKind.Socialize, 100d, 5d),
             "an actor can begin its first socialize scan");
-        True(gate.TryBeginScan(11L, AWIdleBehaviourKind.EmoteSearch, 100d),
+        True(gate.TryBeginScan(11L, AWIdleBehaviourKind.EmoteSearch, 100d, 5d),
             "the same actor has an independent emote cooldown");
-        True(gate.TryBeginScan(12L, AWIdleBehaviourKind.Socialize, 100d),
+        True(gate.TryBeginScan(11L, AWIdleBehaviourKind.Sleep, 100d, 5d),
+            "the same actor has an independent sleep cooldown");
+        True(gate.TryBeginScan(12L, AWIdleBehaviourKind.Socialize, 100d, 5d),
             "different actors have independent socialize cooldowns");
-        False(gate.TryBeginScan(11L, AWIdleBehaviourKind.Socialize, 100d),
+        False(gate.TryBeginScan(11L, AWIdleBehaviourKind.Socialize, 100d, 5d),
             "the original actor remains throttled for socialize");
+    }
+
+    private static void CooldownsResumeExactlyAtTheirDeadline()
+    {
+        const long actorId = 17L;
+        const double now = 50d;
+        const double requestedSpeed = 5d;
+        var gate = new AWIdleBehaviourThrottleGate();
+        double deadline = AWIdleBehaviourThrottleRules.NextEligibleAt(now,
+            actorId, AWIdleBehaviourKind.Sleep, requestedSpeed);
+
+        True(gate.TryBeginScan(actorId, AWIdleBehaviourKind.Sleep, now,
+                requestedSpeed),
+            "the first sleep selection is allowed");
+        False(gate.TryBeginScan(actorId, AWIdleBehaviourKind.Sleep,
+                deadline - 0.000001d, requestedSpeed),
+            "sleep remains deferred immediately before its deadline");
+        True(gate.TryBeginScan(actorId, AWIdleBehaviourKind.Sleep, deadline,
+                requestedSpeed),
+            "sleep resumes exactly at its deadline");
+    }
+
+    private static void SleepIsDisabledThroughTwoTimesSpeed()
+    {
+        var gate = new AWIdleBehaviourThrottleGate();
+        True(gate.TryBeginScan(18L, AWIdleBehaviourKind.Sleep, 80d, 2d),
+            "sleep is allowed at 2x");
+        True(gate.TryBeginScan(18L, AWIdleBehaviourKind.Sleep, 80d, 2d),
+            "sleep has no cooldown at 2x");
+        True(gate.TryBeginScan(18L, AWIdleBehaviourKind.Sleep, 80d, 0d),
+            "sleep has no cooldown while paused");
+    }
+
+    private static void InvalidGateInputsFailOpen()
+    {
+        var gate = new AWIdleBehaviourThrottleGate();
+        True(gate.TryBeginScan(0L, AWIdleBehaviourKind.Socialize, 90d, 5d),
+            "invalid actor IDs fail open");
+        True(gate.TryBeginScan(19L, AWIdleBehaviourKind.None, 90d, 5d),
+            "unknown behaviour kinds fail open");
+        True(gate.TryBeginScan(19L, AWIdleBehaviourKind.Socialize,
+                double.NaN, 5d),
+            "invalid real time fails open");
+        True(gate.TryBeginScan(19L, AWIdleBehaviourKind.Socialize, 90d,
+                double.PositiveInfinity),
+            "invalid requested speed fails open");
+        True(gate.TryBeginScan(19L, AWIdleBehaviourKind.Socialize, 90d, -1d),
+            "negative requested speed fails open");
+    }
+
+    private static void DiagnosticsCountEveryKindAndResetWithTheWorld()
+    {
+        AWIdleBehaviourThrottleDiagnostics.Reset();
+        AWIdleBehaviourThrottleDiagnostics.Record(
+            AWIdleBehaviourKind.Socialize, allowed: true);
+        AWIdleBehaviourThrottleDiagnostics.Record(
+            AWIdleBehaviourKind.Socialize, allowed: false);
+        AWIdleBehaviourThrottleDiagnostics.Record(
+            AWIdleBehaviourKind.EmoteSearch, allowed: true);
+        AWIdleBehaviourThrottleDiagnostics.Record(
+            AWIdleBehaviourKind.EmoteSearch, allowed: false);
+        AWIdleBehaviourThrottleDiagnostics.Record(
+            AWIdleBehaviourKind.Sleep, allowed: true);
+        AWIdleBehaviourThrottleDiagnostics.Record(
+            AWIdleBehaviourKind.Sleep, allowed: false);
+        AWIdleBehaviourThrottleDiagnostics.Record(
+            AWIdleBehaviourKind.None, allowed: false);
+
+        AWIdleBehaviourThrottleDiagnosticSnapshot snapshot =
+            AWIdleBehaviourThrottleDiagnostics.Snapshot();
+        Equal(1L, snapshot.SocializeAllowed,
+            "social allowed attempts are cumulative");
+        Equal(1L, snapshot.SocializeDeferred,
+            "social deferred attempts are cumulative");
+        Equal(1L, snapshot.EmoteAllowed,
+            "emotion allowed attempts are cumulative");
+        Equal(1L, snapshot.EmoteDeferred,
+            "emotion deferred attempts are cumulative");
+        Equal(1L, snapshot.SleepAllowed,
+            "sleep allowed attempts are cumulative");
+        Equal(1L, snapshot.SleepDeferred,
+            "sleep deferred attempts are cumulative");
+
+        AWIdleBehaviourThrottleDiagnostics.Reset();
+        snapshot = AWIdleBehaviourThrottleDiagnostics.Snapshot();
+        Equal(0L, snapshot.SocializeAllowed,
+            "world reset clears social counters");
+        Equal(0L, snapshot.EmoteDeferred,
+            "world reset clears emotion counters");
+        Equal(0L, snapshot.SleepAllowed,
+            "world reset clears sleep counters");
     }
 
     private static void RemoveActorClearsOnlyTheTargetActor()
     {
         var gate = new AWIdleBehaviourThrottleGate();
-        True(gate.TryBeginScan(21L, AWIdleBehaviourKind.Socialize, 200d),
+        True(gate.TryBeginScan(21L, AWIdleBehaviourKind.Socialize, 200d, 5d),
             "the target actor begins before removal");
-        True(gate.TryBeginScan(22L, AWIdleBehaviourKind.Socialize, 200d),
+        True(gate.TryBeginScan(22L, AWIdleBehaviourKind.Socialize, 200d, 5d),
             "the retained actor begins before removal");
 
         gate.RemoveActor(21L);
 
-        True(gate.TryBeginScan(21L, AWIdleBehaviourKind.Socialize, 200d),
+        True(gate.TryBeginScan(21L, AWIdleBehaviourKind.Socialize, 200d, 5d),
             "a removed actor can run immediately");
-        False(gate.TryBeginScan(22L, AWIdleBehaviourKind.Socialize, 200d),
+        False(gate.TryBeginScan(22L, AWIdleBehaviourKind.Socialize, 200d, 5d),
             "removing one actor preserves another actor's cooldown");
     }
 
     private static void ClearReleasesEveryActor()
     {
         var gate = new AWIdleBehaviourThrottleGate();
-        True(gate.TryBeginScan(31L, AWIdleBehaviourKind.Socialize, 300d),
+        True(gate.TryBeginScan(31L, AWIdleBehaviourKind.Socialize, 300d, 5d),
             "the first actor begins before clear");
-        True(gate.TryBeginScan(32L, AWIdleBehaviourKind.EmoteSearch, 300d),
+        True(gate.TryBeginScan(32L, AWIdleBehaviourKind.EmoteSearch, 300d, 5d),
             "the second actor begins before clear");
+        True(gate.TryBeginScan(33L, AWIdleBehaviourKind.Sleep, 300d, 5d),
+            "the sleep actor begins before clear");
 
         gate.Clear();
 
-        True(gate.TryBeginScan(31L, AWIdleBehaviourKind.Socialize, 300d),
+        True(gate.TryBeginScan(31L, AWIdleBehaviourKind.Socialize, 300d, 5d),
             "clear releases the first actor");
-        True(gate.TryBeginScan(32L, AWIdleBehaviourKind.EmoteSearch, 300d),
+        True(gate.TryBeginScan(32L, AWIdleBehaviourKind.EmoteSearch, 300d, 5d),
             "clear releases the second actor");
+        True(gate.TryBeginScan(33L, AWIdleBehaviourKind.Sleep, 300d, 5d),
+            "clear releases the sleep actor");
+    }
+
+    private static void RuntimeWiringGuardsTheBehaviourBoundary()
+    {
+        string patch = Read("Code", "patch",
+            "AW_IdleBehaviourThrottlePatch.cs");
+        string service = Read("Code", "core", "performance",
+            "AWIdleBehaviourThrottleService.cs");
+        Contains(patch, "typeof(BehDecideWhereToSleep)",
+            "sleep selection is intercepted before target and path work");
+        Contains(patch, "AWIdleBehaviourKind.Sleep",
+            "the sleep prefix delegates the explicit shared throttle kind");
+        Contains(patch,
+            "DecideWhereToSleep_Prefix(Actor __0,",
+            "sleep prefix binds the first execute argument positionally");
+        Contains(service,
+            "AWCooperativeSimulationRunner.Instance.RequestedSpeed",
+            "cooldowns use the scheduler's captured requested speed");
+        Contains(service, "ArmyMilitaryMovementPriorityIndex.TryGetKind",
+            "military P0 movement owners fail open");
+        Contains(service, "AWIdleBehaviourThrottleDiagnostics.Record",
+            "eligible attempts feed cumulative diagnostics");
+        Contains(service, "AWIdleBehaviourThrottleDiagnostics.Reset",
+            "world clear resets cumulative diagnostics");
+        string diagnostics = Read("Code", "core", "policy",
+            "RuntimePerformanceDiagnostic.cs");
+        Contains(diagnostics, " idle_social_allowed=",
+            "PERF output reports allowed social attempts");
+        Contains(diagnostics, " idle_social_deferred=",
+            "PERF output reports deferred social attempts");
+        Contains(diagnostics, " idle_emote_allowed=",
+            "PERF output reports allowed emotion attempts");
+        Contains(diagnostics, " idle_emote_deferred=",
+            "PERF output reports deferred emotion attempts");
+        Contains(diagnostics, " idle_sleep_allowed=",
+            "PERF output reports allowed sleep attempts");
+        Contains(diagnostics, " idle_sleep_deferred=",
+            "PERF output reports deferred sleep attempts");
+        False(patch.Contains("Actor.goTo") ||
+              patch.Contains("AWPathMovementBridge") ||
+              service.Contains("Actor.goTo") ||
+              service.Contains("AWPathMovementBridge"),
+            "the cosmetic throttle never intercepts path submission");
+    }
+
+    private static void ProtectedMovementSourcesStayThrottleFree()
+    {
+        string pathBridge = Read("Code", "core", "pathfinding",
+            "AWPathMovementBridge.cs");
+        string globalPathPatch = Read("Code", "patch",
+            "AW_GlobalPathfindingPatch.cs");
+        string rtsController = Read("Code", "core", "lineage",
+            "ArmyRtsControllerService.cs");
+        False(pathBridge.Contains("AWIdleBehaviourThrottle",
+                  StringComparison.Ordinal),
+            "path movement ownership is independent of cosmetic throttling");
+        False(globalPathPatch.Contains("AWIdleBehaviourThrottle",
+                  StringComparison.Ordinal),
+            "Actor.goTo interception is independent of cosmetic throttling");
+        False(rtsController.Contains("AWIdleBehaviourThrottle",
+                  StringComparison.Ordinal),
+            "military route submission is independent of cosmetic throttling");
+    }
+
+    private static void Maps(string taskId, AWIdleBehaviourKind expected)
+    {
+        True(AWIdleBehaviourThrottleRules.TryGetKind(taskId, out var actual),
+            taskId + " is recognized");
+        Equal(expected, actual, taskId + " maps to its cosmetic kind");
+    }
+
+    private static void Cooldowns(double speed, double social,
+        double emote, double sleep)
+    {
+        Equal(social, AWIdleBehaviourThrottleRules.CooldownSeconds(
+            AWIdleBehaviourKind.Socialize, speed),
+            "social cooldown at " + speed + "x");
+        Equal(emote, AWIdleBehaviourThrottleRules.CooldownSeconds(
+            AWIdleBehaviourKind.EmoteSearch, speed),
+            "emotion cooldown at " + speed + "x");
+        Equal(sleep, AWIdleBehaviourThrottleRules.CooldownSeconds(
+            AWIdleBehaviourKind.Sleep, speed),
+            "sleep cooldown at " + speed + "x");
+    }
+
+    private static void Ineligible(bool civilian, bool actorAlive,
+        bool actorRekt, bool warrior, bool armyMember, bool king, bool boat,
+        bool militaryMovementOwned, string name)
+    {
+        False(AWIdleBehaviourThrottleRules.IsEligibleCivilian(civilian,
+                actorAlive, actorRekt, warrior, armyMember, king, boat,
+                militaryMovementOwned), name + " are excluded");
+    }
+
+    private static void Contains(string source, string value, string name)
+    {
+        True(source.Contains(value, StringComparison.Ordinal), name);
+    }
+
+    private static string Read(params string[] pathParts)
+    {
+        string root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "AncientWarfare3.csproj")))
+        {
+            DirectoryInfo parent = Directory.GetParent(root);
+            if (parent == null)
+                throw new InvalidOperationException("repository root missing");
+            root = parent.FullName;
+        }
+        string[] full = new string[pathParts.Length + 1];
+        full[0] = root;
+        Array.Copy(pathParts, 0, full, 1, pathParts.Length);
+        return File.ReadAllText(Path.Combine(full));
     }
 }

@@ -551,6 +551,8 @@ namespace AncientWarfare3.core.policy
             int strategicPathActive = ArmyRouteProviderService.ActiveCount;
             ArmyRtsBenchmarkSnapshot armyRts =
                 ArmyRtsBenchmark.Snapshot();
+            AWIdleBehaviourThrottleDiagnosticSnapshot idleThrottle =
+                AWIdleBehaviourThrottleDiagnostics.Snapshot();
             HistoricalSchoolDiagnosticSnapshot schoolDiagnostics =
                 HistoricalSchoolDiagnostics.Snapshot();
             long frameTicks = Elapsed(_sampleFrameStarted);
@@ -668,6 +670,12 @@ namespace AncientWarfare3.core.policy
                 " actor_task=" + actorTaskId +
                 " actor_task_ms=" + Milliseconds(actorTaskTicks) +
                 " actor_task_calls=" + actorTaskCalls +
+                " idle_social_allowed=" + idleThrottle.SocializeAllowed +
+                " idle_social_deferred=" + idleThrottle.SocializeDeferred +
+                " idle_emote_allowed=" + idleThrottle.EmoteAllowed +
+                " idle_emote_deferred=" + idleThrottle.EmoteDeferred +
+                " idle_sleep_allowed=" + idleThrottle.SleepAllowed +
+                " idle_sleep_deferred=" + idleThrottle.SleepDeferred +
                 " path_smooth_ms=" + Milliseconds(_pathSmoothTicks) +
                 " path_smooth_calls=" + _pathSmoothCalls +
                 " path_smooth_slowest_actor=" + _slowestPathSmoothActorId +

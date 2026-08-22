@@ -26,6 +26,18 @@ namespace AncientWarfare3.patch
         }
 
         [HarmonyPrefix]
+        [HarmonyPatch(typeof(BehDecideWhereToSleep),
+            nameof(BehDecideWhereToSleep.execute))]
+        private static bool DecideWhereToSleep_Prefix(Actor __0,
+            ref BehResult __result)
+        {
+            if (AWIdleBehaviourThrottleService.ShouldRun(__0,
+                    AWIdleBehaviourKind.Sleep)) return true;
+            __result = BehResult.Stop;
+            return false;
+        }
+
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(Actor), nameof(Actor.Dispose))]
         private static void ActorDispose_Prefix(Actor __instance)
         {

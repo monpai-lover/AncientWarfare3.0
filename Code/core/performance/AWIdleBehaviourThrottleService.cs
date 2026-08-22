@@ -12,14 +12,33 @@ namespace AncientWarfare3.core.performance
             if (pActor?.data == null ||
                 !AWIdleBehaviourThrottleRules.TryGetKind(pTaskId,
                     out AWIdleBehaviourKind kind)) return true;
+            return ShouldRun(pActor, kind);
+        }
+
+        public static bool ShouldRun(Actor pActor,
+            AWIdleBehaviourKind pKind)
+        {
+            if (pActor?.data == null || pKind == AWIdleBehaviourKind.None)
+                return true;
             try
             {
+                bool militaryMovementOwned =
+                    ArmyMilitaryMovementPriorityIndex.TryGetKind(
+                        pActor.data.id, out _);
                 if (!AWIdleBehaviourThrottleRules.IsEligibleCivilian(
+                        pActor.asset?.civ == true,
                         pActor.isAlive(), pActor.isRekt(),
                         pActor.is_profession_warrior,
-                        pActor.is_profession_king)) return true;
-                return Gate.TryBeginScan(pActor.data.id, kind,
-                    Time.realtimeSinceStartupAsDouble);
+                        pActor.army != null,
+                        pActor.is_profession_king || pActor.isKing(),
+                        pActor.asset?.is_boat == true,
+                        militaryMovementOwned)) return true;
+                double requestedSpeed =
+                    AWCooperativeSimulationRunner.Instance.RequestedSpeed;
+                bool allowed = Gate.TryBeginScan(pActor.data.id, pKind,
+                    Time.realtimeSinceStartupAsDouble, requestedSpeed);
+                AWIdleBehaviourThrottleDiagnostics.Record(pKind, allowed);
+                return allowed;
             }
             catch
             {
@@ -36,6 +55,7 @@ namespace AncientWarfare3.core.performance
         public static void ClearRuntime()
         {
             Gate.Clear();
+            AWIdleBehaviourThrottleDiagnostics.Reset();
         }
     }
 }
