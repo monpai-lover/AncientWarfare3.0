@@ -1098,9 +1098,17 @@ if (args.Length == 1 && args[0] == "--wartime-frame-budget-only")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--military-front-lane-only")
+{
+    MilitaryFrontLaneRulesTests.Run();
+    Console.WriteLine("Military front lane rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--army-rts")
 {
     WartimeFrameBudgetRulesTests.Run();
+    MilitaryFrontLaneRulesTests.Run();
     ArmyRtsSchedulingRulesTests.Run();
     ArmyRtsExecutionBudgetRulesTests.Run();
     ArmyRtsFullRosterCursorRulesTests.Run();
@@ -9033,6 +9041,7 @@ HistoryLocalizationRulesTests.Run();
 ActiveMilitaryLifecycleRulesTests.Run();
 WartimeMilitaryTaskRulesTests.Run();
 WartimeFrameBudgetRulesTests.Run();
+MilitaryFrontLaneRulesTests.Run();
 WarArmyReturnRulesTests.Run();
 WarRuntimeDisplayRulesTests.Run();
 ArmyLogisticsSustainmentRulesTests.Run();

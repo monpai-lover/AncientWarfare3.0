@@ -1,0 +1,66 @@
+using System;
+using AncientWarfare3.core.performance;
+
+internal static class MilitaryFrontLaneRulesTests
+{
+    internal static void Run()
+    {
+        Equal(0.02d, AWMilitaryFrontLaneRules.FixedStepSeconds, 0.0001d,
+            "military movement uses a fixed native-sized step");
+        Equal(0.4d, AWMilitaryFrontLaneRules.AddDebt(
+                0.39d, 0.02d, 20d), 0.0001d,
+            "military debt is capped to prevent a catch-up spiral");
+        Equal(0.2d, AWMilitaryFrontLaneRules.AddDebt(
+                0d, 0.02d, 10d), 0.0001d,
+            "requested simulation speed determines admitted military debt");
+        Equal(0d, AWMilitaryFrontLaneRules.AddDebt(
+                0.2d, 0.02d, 20d, hasWork: false), 0.0001d,
+            "an empty military queue drops stale debt");
+
+        Equal(false, AWMilitaryFrontLaneRules.HasStepDue(0.019d),
+            "partial debt cannot advance an actor");
+        Equal(true, AWMilitaryFrontLaneRules.HasStepDue(0.02d),
+            "one complete fixed step is executable");
+        Equal(0.03d, AWMilitaryFrontLaneRules.ConsumeCompletedSweep(0.05d),
+            0.0001d,
+            "only a complete queue sweep consumes one fixed step");
+
+        Equal(2, AWMilitaryFrontLaneRules.NormalizeCursor(5, 3),
+            "cursor wraps fairly across the stable snapshot");
+        Equal(0, AWMilitaryFrontLaneRules.NormalizeCursor(5, 0),
+            "an empty snapshot resets the cursor");
+        Equal(3, AWMilitaryFrontLaneRules.ResolveMaximumActors(
+                remainingActors: 3, configuredMaximum: 8),
+            "a slice stops at the snapshot tail");
+        Equal(8, AWMilitaryFrontLaneRules.ResolveMaximumActors(
+                remainingActors: 30, configuredMaximum: 8),
+            "a slice respects its actor cap");
+
+        var cursor = new AWMilitaryFrontLaneCursor(0, 5);
+        cursor = AWMilitaryFrontLaneRules.AdvanceCursor(cursor, 2);
+        Equal(2, cursor.Index,
+            "a partial budget resumes at the next unprocessed actor");
+        Equal(3, cursor.RemainingInSweep,
+            "partial work preserves the unprocessed tail");
+        cursor = AWMilitaryFrontLaneRules.AdvanceCursor(cursor, 3);
+        Equal(0, cursor.Index,
+            "a completed sweep wraps to the first actor");
+        Equal(0, cursor.RemainingInSweep,
+            "a completed sweep is explicitly observable");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected=" +
+                                                expected + " actual=" + actual);
+    }
+
+    private static void Equal(double expected, double actual,
+        double tolerance, string message)
+    {
+        if (Math.Abs(expected - actual) > tolerance)
+            throw new InvalidOperationException(message + ": expected=" +
+                                                expected + " actual=" + actual);
+    }
+}
