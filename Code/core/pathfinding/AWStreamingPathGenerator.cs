@@ -96,20 +96,12 @@ namespace AncientWarfare3.core.pathfinding
                             transportEstimate) });
                 }
 
-                float direct = AWTraversalRules.Distance(start.X, start.Y, target.X, target.Y);
-                bool longRange = direct > _config.ShortRangeTiles;
-                int primaryLimit = longRange ? _config.MaxNodesLong : _config.MaxNodesShort;
-                int searchTargetId = target.Id;
-                AWRegionCorridor corridor = null;
                 // ArmyRouteProvider marks RTS/P0 routes as bounded military
                 // water. Keep those requests on their established A* and
                 // boarding path so actor-path optimizations cannot alter RTS
                 // movement, landing, or return-home behavior.
                 bool useCultiwayActorRouting =
                     !pRequest.Options.BoundedMilitaryWater;
-                if (longRange && useCultiwayActorRouting)
-                    ResolveLongRangeSearch(pRequest, start, target, out searchTargetId,
-                        out corridor);
                 if (useCultiwayActorRouting &&
                     TryBuildStraightSegment(pRequest, start, target,
                         Math.Min(Math.Max(1, pMaximumSteps),
@@ -121,6 +113,18 @@ namespace AncientWarfare3.core.pathfinding
                     return AWPathGenerationResult.Success(straightEnd, straightReachedTarget,
                         straightSteps);
                 }
+                float direct = AWTraversalRules.Distance(start.X, start.Y,
+                    target.X, target.Y);
+                bool longRange = direct > _config.ShortRangeTiles;
+                int primaryLimit = longRange
+                    ? _config.MaxNodesLong
+                    : _config.MaxNodesShort;
+                int searchTargetId = target.Id;
+                AWRegionCorridor corridor = null;
+                if (direct > _config.LongRangeTiles &&
+                    useCultiwayActorRouting)
+                    ResolveLongRangeSearch(pRequest, start, target,
+                        out searchTargetId, out corridor);
                 float heuristicWeight = longRange
                     ? Math.Max(1f, _config.LongRangeHeuristicWeight)
                     : 1f;
