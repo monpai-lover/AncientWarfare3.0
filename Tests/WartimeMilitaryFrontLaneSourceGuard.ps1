@@ -14,6 +14,7 @@ $index = Read-Source 'Code/core/performance/ArmyMilitaryMovementPriorityIndex.cs
 $scheduler = Read-Source 'Code/core/performance/AWMilitaryFrontLaneScheduler.cs'
 $patch = Read-Source 'Code/patch/AW_FramePrioritySchedulerPatch.cs'
 $governor = Read-Source 'Code/core/performance/AWFramePriorityGovernor.cs'
+$controller = Read-Source 'Code/core/lineage/ArmyRtsControllerService.cs'
 
 Require ($post.Contains(
     'internal static void ProcessMilitaryP0Actor(long actorId,')) `
@@ -54,6 +55,12 @@ Require ($governor.Contains('AWWartimeFrameBudgetRules.Advance(')) `
     'governor must use the wartime hysteresis rules'
 Require ($governor.Contains('AWMilitaryFrontLaneScheduler.GetDiagnostics()')) `
     'diagnostics must expose front-lane counters'
+Require ($scheduler.Contains('internal static bool HasWartimeWork')) `
+    'front lane must expose a distinct wartime-pressure signal'
+Require ($governor.Contains('AWMilitaryFrontLaneScheduler.HasWartimeWork')) `
+    'dynamic FPS must follow active war missions, not post-war return movement'
+Require ($controller.Contains('ActiveWartimeArmyIds')) `
+    'controller must retire wartime pressure when a war mission is invalidated'
 foreach ($forbidden in @(
     'CityMilitaryThreatFacts',
     'KingdomWarDirectorService',

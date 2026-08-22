@@ -327,7 +327,7 @@ namespace AncientWarfare3.core.performance
                     AWCooperativeSimulationRunner.Instance;
                 _wartimeBudgetState = AWWartimeFrameBudgetRules.Advance(
                     _wartimeBudgetState,
-                    AWMilitaryFrontLaneScheduler.HasActiveWork,
+                    AWMilitaryFrontLaneScheduler.HasWartimeWork,
                     runner.AdmissionCredits,
                     AWFrameSchedulerRules.CreditCapacity(
                         AWPerformanceSettings.Mode,

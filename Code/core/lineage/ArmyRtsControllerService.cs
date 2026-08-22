@@ -743,6 +743,8 @@ namespace AncientWarfare3.core.lineage
             new Dictionary<long, RuntimeState>();
         private static readonly ArmyRtsMissionIndex MissionIndex =
             new ArmyRtsMissionIndex();
+        private static readonly HashSet<long> ActiveWartimeArmyIds =
+            new HashSet<long>();
         private static readonly Dictionary<long, ArmyRtsStrategicProjection>
             ReplicaProjectionByArmy =
                 new Dictionary<long, ArmyRtsStrategicProjection>();
@@ -1207,6 +1209,10 @@ namespace AncientWarfare3.core.lineage
                 out RuntimeState previousRuntime);
             bool changed = Controllers.AssignMission(pMission);
             MissionIndex.Upsert(pMission);
+            if (IsActiveWartimeMission(pMission.WarId))
+                ActiveWartimeArmyIds.Add(pMission.ArmyId);
+            else
+                ActiveWartimeArmyIds.Remove(pMission.ArmyId);
             ArmyRtsWarLifecycleService.OnMissionAssigned(pArmy, pMission);
             bool controllerPublished = Controllers.TryGet(pArmy.id,
                     out ArmyRtsControllerRecord assignedRecord) &&
@@ -1465,6 +1471,9 @@ namespace AncientWarfare3.core.lineage
 
         public static int PendingReplenishmentArrivalCount =>
             PendingReplenishmentArrivalQueue.Count;
+
+        internal static bool HasActiveWartimeWork =>
+            ActiveWartimeArmyIds.Count > 0;
 
         internal static void TrackReplenishmentArrival(Actor pActor,
             Army pArmy)
@@ -3893,6 +3902,7 @@ namespace AncientWarfare3.core.lineage
             ArmyMissionPersistence.Invalidate(army);
             Controllers.Invalidate(pArmyId);
             MissionIndex.Remove(pArmyId);
+            ActiveWartimeArmyIds.Remove(pArmyId);
             RuntimeByArmy.Remove(pArmyId);
             if (pReleaseActorJobs)
                 RefreshReleasedArmyPeacetimeJobs(army);
@@ -3994,6 +4004,8 @@ namespace AncientWarfare3.core.lineage
                         out ArmyRtsMission mission)) continue;
                 Controllers.AssignMission(mission);
                 MissionIndex.Upsert(mission);
+                if (IsActiveWartimeMission(mission.WarId))
+                    ActiveWartimeArmyIds.Add(mission.ArmyId);
                 ArmyRtsWarLifecycleService.OnMissionAssigned(army, mission);
                 RuntimeByArmy[army.id] = new RuntimeState
                 {
@@ -4041,6 +4053,7 @@ namespace AncientWarfare3.core.lineage
             Controllers.Clear();
             RuntimeByArmy.Clear();
             MissionIndex.Clear();
+            ActiveWartimeArmyIds.Clear();
             ReplicaProjectionByArmy.Clear();
             ArmyFormationService.ClearRuntime();
             ArmyRtsTransportService.Clear();
@@ -6611,6 +6624,13 @@ namespace AncientWarfare3.core.lineage
         {
             try { return World.world?.wars?.get(pWarId); }
             catch { return null; }
+        }
+
+        private static bool IsActiveWartimeMission(long pWarId)
+        {
+            War war = FindWar(pWarId);
+            try { return war?.data != null && !war.hasEnded(); }
+            catch { return false; }
         }
 
         private static Kingdom FindKingdom(long pKingdomId)

@@ -24,6 +24,10 @@ namespace AncientWarfare3.core.performance
             AWPerformanceSettings.Mode == AWSimulationMode.Large &&
             ArmyMilitaryMovementPriorityIndex.RtsMemberCount > 0;
 
+        internal static bool HasWartimeWork =>
+            AWPerformanceSettings.Mode == AWSimulationMode.Large &&
+            ArmyRtsControllerService.HasActiveWartimeWork;
+
         internal static double DebtSeconds => _debtSeconds;
         internal static long Processed => _processed;
         internal static double LastMilliseconds => _lastMilliseconds;
@@ -121,9 +125,10 @@ namespace AncientWarfare3.core.performance
             return string.Format(
                 System.Globalization.CultureInfo.InvariantCulture,
                 "military_front={0}/{1}@{2:0.00}ms delay={3} " +
-                "step={4} debt={5:0.000}",
+                "step={4} debt={5:0.000} wartime={6}",
                 _processed, Snapshot.Count, _lastMilliseconds,
-                _maxDelayFrames, _lastStep, _debtSeconds);
+                _maxDelayFrames, _lastStep, _debtSeconds,
+                HasWartimeWork);
         }
 
         private static bool ShouldRun()

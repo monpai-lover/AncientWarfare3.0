@@ -10,10 +10,8 @@ internal static class CityMilitaryThreatFactsRulesTests
         CacheRotationDoesNotInvalidateAsyncFacts();
 
         var key = new CityMilitaryThreatKey(17L, 9L, 3L);
-        Assert(CityMilitaryThreatFactsRules.CanCache(true, 17L, 9L, 3L),
-            "a valid query inside an authority cycle is cacheable");
-        Assert(!CityMilitaryThreatFactsRules.CanCache(false, 17L, 9L, 3L),
-            "a query outside an authority cycle cannot retain a live fact");
+        Assert(CityMilitaryThreatFactsRules.CanCache(17L, 9L, 3L),
+            "a valid city threat query is cacheable");
         Assert(CityMilitaryThreatFactsRules.KeyMatches(key,
                 new CityMilitaryThreatKey(17L, 9L, 3L)),
             "identical war/city/kingdom facts share one entry");
@@ -30,18 +28,18 @@ internal static class CityMilitaryThreatFactsRulesTests
         Assert(!CityMilitaryThreatFactsRules.ShouldAdvanceRevisionForInvalidation(
                 -1L),
             "an invalid state-change identifier cannot advance a fact revision");
-        Assert(CityMilitaryThreatFactsRules.ShouldReuse(true, 4L, 4L,
+        Assert(CityMilitaryThreatFactsRules.ShouldReuse(4L, 4L,
                 10.20d, 10.00d),
-            "a recent fact from the same revision may be reused across cycles");
-        Assert(!CityMilitaryThreatFactsRules.ShouldReuse(true, 4L, 4L,
+            "a recent fact from the same revision may be reused across callers");
+        Assert(!CityMilitaryThreatFactsRules.ShouldReuse(4L, 4L,
                 10.36d, 10.00d),
             "an expired fact must trigger a fresh physical scan");
-        Assert(!CityMilitaryThreatFactsRules.ShouldReuse(true, 4L, 5L,
+        Assert(!CityMilitaryThreatFactsRules.ShouldReuse(4L, 5L,
                 10.20d, 10.00d),
             "a changed revision must never reuse an old physical scan");
-        Assert(!CityMilitaryThreatFactsRules.ShouldReuse(false, 4L, 4L,
+        Assert(CityMilitaryThreatFactsRules.ShouldReuse(4L, 4L,
                 10.20d, 10.00d),
-            "facts are not reused outside an authority cycle");
+            "facts remain reusable when the query comes from the actor RTS path");
     }
 
     private static void CacheEntryPointIsInstalledWithoutTileClosures()
@@ -68,14 +66,12 @@ internal static class CityMilitaryThreatFactsRulesTests
 
     private static void PresenceSnapshotIsSharedAcrossObservingKingdoms()
     {
-        Assert(CityMilitaryThreatFactsRules.CanCachePresence(true, 17L, 9L),
+        Assert(CityMilitaryThreatFactsRules.CanCachePresence(17L, 9L),
             "a valid war/city presence query is cacheable");
-        Assert(!CityMilitaryThreatFactsRules.CanCachePresence(false, 17L, 9L),
-            "presence snapshots are not reused outside an authority cycle");
-        Assert(CityMilitaryThreatFactsRules.ShouldReusePresence(true, 4L, 4L,
+        Assert(CityMilitaryThreatFactsRules.ShouldReusePresence(4L, 4L,
                 10.20d, 10.00d),
             "one physical presence scan can serve multiple observers");
-        Assert(!CityMilitaryThreatFactsRules.ShouldReusePresence(true, 5L, 4L,
+        Assert(!CityMilitaryThreatFactsRules.ShouldReusePresence(5L, 4L,
                 10.20d, 10.00d),
             "a changed presence revision requires a fresh physical scan");
 

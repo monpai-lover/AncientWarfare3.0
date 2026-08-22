@@ -1013,10 +1013,13 @@ namespace AncientWarfare3.core.lineage
             Kingdom rival = FindKingdom(pRow.RivalKingdomId);
             if (original?.data == null)
             {
-                Close(pRow, pReason + "_original_missing");
+                if (!Close(pRow, pReason + "_original_missing"))
+                    EnqueueCompensation(pRow.DisputeId,
+                        pRow.RivalKingdomId, pRow.WarId,
+                        pReason + "_original_missing_retry");
                 return;
             }
-            ReturnCities(original, rival);
+            bool citiesReturned = ReturnCities(original, rival);
             if (pClaimantWins)
             {
                 Actor claimant = FindActor(pRow.ClaimantActorId);
@@ -1037,13 +1040,24 @@ namespace AncientWarfare3.core.lineage
                     }
                 }
             }
+            if (!citiesReturned)
+            {
+                EnqueueCompensation(pRow.DisputeId, pRow.RivalKingdomId,
+                    pRow.WarId, pReason + "_return_cities");
+                return;
+            }
             ChronicleEvents.OnSuccessionDisputeResolved(original,
                 FindActor(pRow.SuccessorActorId),
                 FindActor(pRow.ClaimantActorId), pClaimantWins,
                 GetDisplayName(original),
                 rival?.data == null ? pRow.OriginalStateName :
                     GetDisplayName(rival));
-            Close(pRow, pReason);
+            if (!Close(pRow, pReason))
+            {
+                EnqueueCompensation(pRow.DisputeId, pRow.RivalKingdomId,
+                    pRow.WarId, pReason + "_close_retry");
+                return;
+            }
             RemoveIfEmpty(rival);
         }
 
@@ -1079,7 +1093,10 @@ namespace AncientWarfare3.core.lineage
             Kingdom rival = FindKingdom(pRow.RivalKingdomId);
             if (original?.data == null)
             {
-                Close(pRow, pReason + "_original_missing");
+                if (!Close(pRow, pReason + "_original_missing"))
+                    EnqueueCompensation(pRow.DisputeId,
+                        pRow.RivalKingdomId, pRow.WarId,
+                        pReason + "_original_missing_retry");
                 return;
             }
             Actor winningRuler = pWinnerKingdomId == pRow.RivalKingdomId
@@ -1089,7 +1106,7 @@ namespace AncientWarfare3.core.lineage
             string rivalDisplay = rival?.data == null
                 ? pRow.OriginalStateName
                 : GetDisplayName(rival);
-            ReturnCities(original, rival);
+            bool citiesReturned = ReturnCities(original, rival);
             if (pWinnerKingdomId == pRow.RivalKingdomId &&
                 PrepareClaimantAccessionMode(pRow, original, winningRuler))
             {
@@ -1109,7 +1126,12 @@ namespace AncientWarfare3.core.lineage
             }
             ChronicleEvents.OnSuccessionReunified(original, winningRuler,
                 originalDisplay, rivalDisplay);
-            Close(pRow, pReason);
+            if (!Close(pRow, pReason))
+            {
+                EnqueueCompensation(pRow.DisputeId, pRow.RivalKingdomId,
+                    pRow.WarId, pReason + "_close_retry");
+                return;
+            }
             RemoveIfEmpty(rival);
         }
 

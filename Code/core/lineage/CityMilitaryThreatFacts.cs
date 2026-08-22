@@ -115,7 +115,7 @@ namespace AncientWarfare3.core.lineage
             if (!TryCreateKey(pWar, pCity, pKingdom, out var key))
                 return false;
             if (!Facts.TryGetValue(key, out FactEntry entry) ||
-                !CityMilitaryThreatFactsRules.ShouldReuse(_cycleActive,
+                !CityMilitaryThreatFactsRules.ShouldReuse(
                     entry.CacheEpoch, _cacheEpoch, RealtimeSeconds(),
                     entry.CachedAt))
                 return false;
@@ -139,8 +139,8 @@ namespace AncientWarfare3.core.lineage
             if (!TryCreatePresenceKey(pWar, pCity, out PresenceKey key) ||
                 !PresenceFacts.TryGetValue(key, out PresenceEntry entry) ||
                 !CityMilitaryThreatFactsRules.ShouldReusePresence(
-                    _cycleActive, entry.CacheEpoch, _cacheEpoch,
-                    RealtimeSeconds(), entry.CachedAt)) return false;
+                    entry.CacheEpoch, _cacheEpoch, RealtimeSeconds(),
+                    entry.CachedAt)) return false;
             pKingdoms = entry.Kingdoms;
             return true;
         }
@@ -231,8 +231,8 @@ namespace AncientWarfare3.core.lineage
             {
                 return false;
             }
-            if (!CityMilitaryThreatFactsRules.CanCache(_cycleActive, warId,
-                    cityId, kingdomId))
+            if (!CityMilitaryThreatFactsRules.CanCache(warId, cityId,
+                    kingdomId))
                 return false;
             pKey = new CityMilitaryThreatKey(warId, cityId, kingdomId);
             return true;
@@ -250,8 +250,8 @@ namespace AncientWarfare3.core.lineage
                 cityId = pCity?.data == null ? -1L : pCity.id;
             }
             catch { return false; }
-            if (!CityMilitaryThreatFactsRules.CanCachePresence(_cycleActive,
-                    warId, cityId)) return false;
+            if (!CityMilitaryThreatFactsRules.CanCachePresence(warId,
+                    cityId)) return false;
             pKey = new PresenceKey(warId, cityId);
             return true;
         }
