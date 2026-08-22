@@ -69,6 +69,7 @@ namespace AncientWarfare3.patch
             {
                 AWCooperativeSimulationRunner runner =
                     AWCooperativeSimulationRunner.Instance;
+                AWFramePriorityGovernor.BeginFrame();
                 bool replicaSession =
                     AW3MultiplayerReplicaScope.IsReplicaSession;
                 if (runner.RequiresControl &&
