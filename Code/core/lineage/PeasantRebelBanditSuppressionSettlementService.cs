@@ -29,8 +29,8 @@ namespace AncientWarfare3.core.lineage
                 !TryResolve(pWar, out Kingdom bandit,
                     out Kingdom suppressor, out WarWinner winner))
                 return false;
-            if (!PeasantRebelBanditStrongholdService.
-                    TryCompleteLeadershipCollapse(bandit, suppressor))
+            if (!PeasantRebelBanditStrongholdService.TryCompleteLeadershipCollapse(
+                    bandit, suppressor))
                 return false;
             if (pWar?.data != null && !pWar.hasEnded())
                 World.world?.wars?.endWar(pWar, winner);

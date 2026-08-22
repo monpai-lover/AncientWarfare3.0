@@ -80,8 +80,7 @@ namespace AncientWarfare3.core.lineage
 
             if (PeasantRebelBanditSuppressionSettlementService.IsReady(war))
             {
-                if (PeasantRebelBanditSuppressionSettlementService.
-                        TryExecuteImmediate(war))
+                if (PeasantRebelBanditSuppressionSettlementService.TryExecuteImmediate(war))
                     FailureCounts.Remove(pWarId);
                 else
                     RecordFailure(pWarId,
