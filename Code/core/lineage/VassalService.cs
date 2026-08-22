@@ -2612,6 +2612,7 @@ namespace AncientWarfare3.core.lineage
 
         private static void DirtyVassalMap()
         {
+            MandateService.InvalidatePowerCandidateCache();
             try { VassalMapModeService.DirtyMapIfActive(); }
             catch { }
             try

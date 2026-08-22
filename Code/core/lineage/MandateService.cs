@@ -105,15 +105,20 @@ namespace AncientWarfare3.core.lineage
             _runtimeMarkerKingdomId = -1L;
             _runtimeMarkerKind = "";
             _coreCityIds = new HashSet<long>();
-            _autoCandidateYear = int.MinValue;
-            _autoCandidateKingdomCount = -1;
-            _autoCandidateKingdomId = -1L;
+            InvalidatePowerCandidateCache();
             _pendingFallenMandateKingdomId = -1L;
             _pendingMandateConquerorKingdomId = -1L;
             _lastProjectionResumeYear = int.MinValue;
             MandateRebelService.ClearRuntime();
             _cacheDirty = true;
             ReadReport();
+        }
+
+        internal static void InvalidatePowerCandidateCache()
+        {
+            _autoCandidateYear = int.MinValue;
+            _autoCandidateKingdomCount = -1;
+            _autoCandidateKingdomId = -1L;
         }
 
         public static int ResumePendingProjections(int pMax = 2)
@@ -1516,6 +1521,7 @@ namespace AncientWarfare3.core.lineage
             if (!MandateAuthorityMutationRules.CanMutate(
                     AW3MultiplayerReplicaScope.IsReplicaSession))
                 return;
+            InvalidatePowerCandidateCache();
             if (pKingdom?.data == null) return;
             if (MandateIslandExileService.IsActive(pKingdom)) return;
             MandateReport report = ReadReport();
