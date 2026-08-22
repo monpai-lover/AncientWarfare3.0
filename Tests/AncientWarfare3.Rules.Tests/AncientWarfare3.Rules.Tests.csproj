@@ -401,6 +401,8 @@
     <Compile Include="SchedulerLoadSafetyRulesTests.cs.txt" />
     <Compile Include="TestArmyRtsSchedulingSettingsStub.cs.txt" />
     <Compile Include="ArmyRtsSchedulingRulesTests.cs.txt" />
+    <Compile Include="WartimeFrameBudgetRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\performance\AWWartimeFrameBudgetRules.cs" Link="Production\AWWartimeFrameBudgetRules.cs" />
     <Compile Include="OperationalPathCadenceRulesTests.cs.txt" />
     <Compile Include="ArmyRtsExecutionBudgetRulesTests.cs.txt" />
     <Compile Include="ArmyRtsFullRosterCursorRulesTests.cs.txt" />

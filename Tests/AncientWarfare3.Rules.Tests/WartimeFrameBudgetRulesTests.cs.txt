@@ -1,0 +1,77 @@
+using System;
+using AncientWarfare3.core.performance;
+
+internal static class WartimeFrameBudgetRulesTests
+{
+    internal static void Run()
+    {
+        var state = new AWWartimeFrameBudgetState();
+        for (int i = 0; i < 120; i++)
+            state = AWWartimeFrameBudgetRules.Advance(
+                state, false, 50d, 50d, 50f);
+        Equal(AWWartimeFrameBudgetTier.Configured, state.Tier,
+            "peace ignores accumulated credits");
+        Equal(50f, state.EffectiveTargetFps,
+            "peace keeps the configured frame target");
+
+        state = new AWWartimeFrameBudgetState();
+        for (int i = 0; i < 120; i++)
+            state = AWWartimeFrameBudgetRules.Advance(
+                state, true, 29d, 50d, 50f);
+        Equal(AWWartimeFrameBudgetTier.Configured, state.Tier,
+            "low wartime backlog keeps the configured tier");
+
+        state = new AWWartimeFrameBudgetState();
+        for (int i = 0; i < 29; i++)
+            state = AWWartimeFrameBudgetRules.Advance(
+                state, true, 35d, 50d, 50f);
+        Equal(AWWartimeFrameBudgetTier.Configured, state.Tier,
+            "a short moderate spike does not lower FPS");
+        state = AWWartimeFrameBudgetRules.Advance(
+            state, true, 35d, 50d, 50f);
+        Equal(AWWartimeFrameBudgetTier.Moderate, state.Tier,
+            "sustained moderate wartime backlog selects 40 FPS");
+        Equal(40f, state.EffectiveTargetFps,
+            "moderate backlog uses the 40 FPS tier");
+
+        state = new AWWartimeFrameBudgetState();
+        for (int i = 0; i < 30; i++)
+            state = AWWartimeFrameBudgetRules.Advance(
+                state, true, 49d, 50d, 50f);
+        Equal(AWWartimeFrameBudgetTier.Severe, state.Tier,
+            "sustained severe wartime backlog selects 35 FPS");
+        Equal(35f, state.EffectiveTargetFps,
+            "severe backlog uses the 35 FPS tier");
+
+        for (int i = 0; i < 89; i++)
+            state = AWWartimeFrameBudgetRules.Advance(
+                state, true, 20d, 50d, 50f);
+        Equal(AWWartimeFrameBudgetTier.Severe, state.Tier,
+            "recovery requires a stable low-backlog window");
+        state = AWWartimeFrameBudgetRules.Advance(
+            state, true, 20d, 50d, 50f);
+        Equal(AWWartimeFrameBudgetTier.Moderate, state.Tier,
+            "severe backlog recovers one tier at a time");
+
+        state = new AWWartimeFrameBudgetState();
+        for (int i = 0; i < 30; i++)
+            state = AWWartimeFrameBudgetRules.Advance(
+                state, true, 49d, 50d, 30f);
+        Equal(30f, state.EffectiveTargetFps,
+            "dynamic tiers never raise a lower configured FPS");
+
+        state = AWWartimeFrameBudgetRules.Advance(
+            state, false, 50d, 50d, 50f);
+        Equal(AWWartimeFrameBudgetTier.Configured, state.Tier,
+            "peace immediately restores the configured tier");
+        Equal("configured", state.Reason,
+            "peace diagnostics report the configured reason");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected=" +
+                                                expected + " actual=" + actual);
+    }
+}

@@ -1091,8 +1091,16 @@ if (args.Length == 1 && args[0] == "--synthetic-population-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--wartime-frame-budget-only")
+{
+    WartimeFrameBudgetRulesTests.Run();
+    Console.WriteLine("Wartime frame budget rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--army-rts")
 {
+    WartimeFrameBudgetRulesTests.Run();
     ArmyRtsSchedulingRulesTests.Run();
     ArmyRtsExecutionBudgetRulesTests.Run();
     ArmyRtsFullRosterCursorRulesTests.Run();
@@ -9024,6 +9032,7 @@ ChronicleTextExportRulesTests.Run();
 HistoryLocalizationRulesTests.Run();
 ActiveMilitaryLifecycleRulesTests.Run();
 WartimeMilitaryTaskRulesTests.Run();
+WartimeFrameBudgetRulesTests.Run();
 WarArmyReturnRulesTests.Run();
 WarRuntimeDisplayRulesTests.Run();
 ArmyLogisticsSustainmentRulesTests.Run();
