@@ -143,7 +143,7 @@ namespace AncientWarfare3.core.court
             bool live = IsCurrentCityLeader(pSeatCity, pKingdom) &&
                 leader?.data != null;
             string office = CustomCourtFixedRoleIds.CommanderyChief;
-            return new CourtPyramidNodeModel(live ? leader.data.id : -1L,
+            var node = new CourtPyramidNodeModel(live ? leader.data.id : -1L,
                 "commandery-chief:" + pKingdom.id + ":" + pRegion.RegionId,
                 CourtPyramidRoleId.Governor, CourtPyramidRules.GovernorRank,
                 0, !live)
@@ -156,6 +156,7 @@ namespace AncientWarfare3.core.court
                 CommandName = pRegion.RegionName ?? string.Empty
             };
             node.IsFixedRole = true;
+            return node;
         }
 
         private static LocalCourtReadModel BuildLocal(Kingdom pKingdom,

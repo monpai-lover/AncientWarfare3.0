@@ -4,6 +4,7 @@ $node = Get-Content -Raw "$PSScriptRoot/../Code/core/court/CourtPyramidRules.cs"
 $view = Get-Content -Raw "$PSScriptRoot/../Code/ui/items/CourtActorNodeView.cs"
 $cache = Get-Content -Raw "$PSScriptRoot/../Code/core/court/RegionalGovernmentAggregationService.cs"
 if ($read -notmatch 'IsFixedRole') { throw 'fixed nodes are not marked' }
+if ($read -match 'return new CourtPyramidNodeModel[\s\S]{0,900}node\.IsFixedRole') { throw 'fixed marker is after return' }
 if ($node -notmatch 'IsFixedRole') { throw 'node model lacks fixed marker' }
 if ($view -notmatch '!pNode\.IsFixedRole') { throw 'fixed vacancy can still be appointed' }
 if ($cache -notmatch 'Invalidate') { throw 'cache invalidation missing' }
