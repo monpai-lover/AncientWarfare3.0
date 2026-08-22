@@ -87,7 +87,6 @@ namespace AncientWarfare3.core.lineage
             Facts = new Dictionary<CityMilitaryThreatKey, FactEntry>();
         private static readonly Dictionary<PresenceKey, PresenceEntry>
             PresenceFacts = new Dictionary<PresenceKey, PresenceEntry>();
-        private static bool _cycleActive;
         private static long _requests;
         private static long _physicalScans;
         private static long _hits;
@@ -99,12 +98,11 @@ namespace AncientWarfare3.core.lineage
 
         internal static void BeginAuthorityCycle()
         {
-            _cycleActive = true;
+            // Cache lifetime is revision- and time-based across authority cycles.
         }
 
         internal static void EndAuthorityCycle()
         {
-            _cycleActive = false;
         }
 
         internal static bool TryGet(War pWar, City pCity,
@@ -205,7 +203,6 @@ namespace AncientWarfare3.core.lineage
         {
             Facts.Clear();
             PresenceFacts.Clear();
-            _cycleActive = false;
             _requests = 0L;
             _physicalScans = 0L;
             _hits = 0L;
