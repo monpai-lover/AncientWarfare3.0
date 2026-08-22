@@ -24,6 +24,7 @@ internal static class IdleBehaviourThrottleGateTests
     {
         TaskIdsMapOnlyCoveredCosmeticBehaviours();
         SpeedTiersResolveExactCooldowns();
+        RequestedSpeedSourceWorksInNativeAndCooperativeModes();
         JitterIsStableAndBoundedByHalfASecond();
         EligibilityExcludesEveryProtectedActorRole();
         ActorAndBehaviourCooldownsAreIndependent();
@@ -63,6 +64,18 @@ internal static class IdleBehaviourThrottleGateTests
         Cooldowns(4d, social: 4d, emote: 3d, sleep: 4d);
         Cooldowns(4.0001d, social: 8d, emote: 6d, sleep: 10d);
         Cooldowns(20d, social: 8d, emote: 6d, sleep: 10d);
+    }
+
+    private static void RequestedSpeedSourceWorksInNativeAndCooperativeModes()
+    {
+        Equal(7d, AWIdleBehaviourThrottleRules.ResolveRequestedSpeed(
+                cooperativeControl: false, capturedSpeed: 0d,
+                nativeSpeed: 7d),
+            "native mode uses the live vanilla requested speed");
+        Equal(5d, AWIdleBehaviourThrottleRules.ResolveRequestedSpeed(
+                cooperativeControl: true, capturedSpeed: 5d,
+                nativeSpeed: 1d),
+            "cooperative mode uses the captured pre-normalization speed");
     }
 
     private static void JitterIsStableAndBoundedByHalfASecond()
@@ -274,9 +287,12 @@ internal static class IdleBehaviourThrottleGateTests
         Contains(patch,
             "DecideWhereToSleep_Prefix(Actor __0,",
             "sleep prefix binds the first execute argument positionally");
-        Contains(service,
-            "AWCooperativeSimulationRunner.Instance.RequestedSpeed",
+        Contains(service, "runner.RequestedSpeed",
             "cooldowns use the scheduler's captured requested speed");
+        Contains(service, "runner.RequiresControl",
+            "the captured speed is selected only while the scheduler owns simulation");
+        Contains(service, "AWWorldTimeRateTracker.GetRequestedSpeed()",
+            "native mode reads the live vanilla requested speed");
         Contains(service, "ArmyMilitaryMovementPriorityIndex.TryGetKind",
             "military P0 movement owners fail open");
         Contains(service, "AWIdleBehaviourThrottleDiagnostics.Record",

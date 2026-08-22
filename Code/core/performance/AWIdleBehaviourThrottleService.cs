@@ -33,8 +33,16 @@ namespace AncientWarfare3.core.performance
                         pActor.is_profession_king || pActor.isKing(),
                         pActor.asset?.is_boat == true,
                         militaryMovementOwned)) return true;
+                AWCooperativeSimulationRunner runner =
+                    AWCooperativeSimulationRunner.Instance;
+                bool cooperativeControl = runner.RequiresControl;
+                double nativeSpeed = cooperativeControl
+                    ? 0d
+                    : AWWorldTimeRateTracker.GetRequestedSpeed();
                 double requestedSpeed =
-                    AWCooperativeSimulationRunner.Instance.RequestedSpeed;
+                    AWIdleBehaviourThrottleRules.ResolveRequestedSpeed(
+                        cooperativeControl, runner.RequestedSpeed,
+                        nativeSpeed);
                 bool allowed = Gate.TryBeginScan(pActor.data.id, pKind,
                     Time.realtimeSinceStartupAsDouble, requestedSpeed);
                 AWIdleBehaviourThrottleDiagnostics.Record(pKind, allowed);

@@ -71,6 +71,12 @@ namespace AncientWarfare3.core.performance
             }
         }
 
+        public static double ResolveRequestedSpeed(bool cooperativeControl,
+            double capturedSpeed, double nativeSpeed)
+        {
+            return cooperativeControl ? capturedSpeed : nativeSpeed;
+        }
+
         public static double StableJitterSeconds(long actorId,
             AWIdleBehaviourKind pKind)
         {
