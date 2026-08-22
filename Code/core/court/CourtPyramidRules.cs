@@ -81,6 +81,9 @@ namespace AncientWarfare3.core.court
         public string SchoolId = "";
         public string SchoolIconPath = "";
         public long CityId = -1L;
+        public long HistoryCityId = -1L;
+        public string HistoryOfficeLayer = "";
+        public string HistoryOfficeId = "";
         public string CityName = "";
         public string CommandName = "";
         public string DisplayTitle = "";
@@ -122,6 +125,9 @@ namespace AncientWarfare3.core.court
                 SchoolId = SchoolId,
                 SchoolIconPath = SchoolIconPath,
                 CityId = CityId,
+                HistoryCityId = HistoryCityId,
+                HistoryOfficeLayer = HistoryOfficeLayer,
+                HistoryOfficeId = HistoryOfficeId,
                 CityName = CityName,
                 CommandName = CommandName,
                 DisplayTitle = DisplayTitle,

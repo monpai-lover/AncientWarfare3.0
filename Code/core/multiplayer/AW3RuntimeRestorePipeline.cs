@@ -195,6 +195,9 @@ namespace AncientWarfare3.core.multiplayer
                     OfficialCareerPersistence.
                         RepairDuplicateFormalAppointments(
                             LineageArchiveManager.Instance?.OperatingDB)),
+                new AW3RestoreStage("legacy_projected_office_repair", () =>
+                    LegacyProjectedOfficeRepairService.Repair(
+                        LineageArchiveManager.Instance?.OperatingDB)),
                 new AW3RestoreStage("official_career_projection",
                     CourtService.RebuildOfficialCareerRuntimeProjections),
                 new AW3RestoreStage("city_tech_zone_cache",
@@ -328,6 +331,9 @@ namespace AncientWarfare3.core.multiplayer
                     OfficialCareerPersistence.
                         RepairDuplicateFormalAppointments(
                             LineageArchiveManager.Instance?.OperatingDB)),
+                new AW3RestoreStage("legacy_projected_office_repair", () =>
+                    LegacyProjectedOfficeRepairService.Repair(
+                        LineageArchiveManager.Instance?.OperatingDB)),
                 new AW3RestoreStage("official_career_projection",
                     CourtService.RebuildOfficialCareerRuntimeProjections),
                 new AW3RestoreStage("city_tech_zone_cache",

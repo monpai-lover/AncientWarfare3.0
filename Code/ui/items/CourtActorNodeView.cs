@@ -241,30 +241,15 @@ namespace AncientWarfare3.ui.items
             Kingdom pKingdom, out string pLayer, out string pOfficeId,
             out long pCityId)
         {
-            pLayer = pNode?.OfficeLayer ?? "";
-            pOfficeId = pNode?.OfficeId ?? "";
-            pCityId = pNode?.CityId ?? -1L;
+            pLayer = pNode?.HistoryOfficeLayer ?? "";
+            pOfficeId = pNode?.HistoryOfficeId ?? "";
+            pCityId = pNode?.HistoryCityId ?? -1L;
             if (pNode == null || pKingdom?.data == null) return false;
-
-            CourtOfficerView officer = CourtService.GetActiveOfficers(
-                    pKingdom, 512)
-                .Where(row => row != null && row.actor_id == pNode.ActorId &&
-                    !string.IsNullOrEmpty(row.office_id) &&
-                    row.office_id != CourtPyramidRoleId.Heir &&
-                    !string.IsNullOrEmpty(row.layer))
-                .OrderBy(row => row.layer == CourtOfficeLayer.Central ? 0 :
-                    row.layer == CourtOfficeLayer.City ? 1 : 2)
-                .ThenBy(row => row.office_id, System.StringComparer.Ordinal)
-                .FirstOrDefault();
-            if (officer != null)
-            {
-                // History is always keyed by the actual appointment. Identity
-                // roles such as heir are display roles and never a history scope.
-                pLayer = officer.layer;
-                pOfficeId = officer.office_id;
-                pCityId = officer.city_id;
-            }
-            return true;
+            if (string.IsNullOrEmpty(pLayer)) pLayer = pNode.OfficeLayer ?? "";
+            if (string.IsNullOrEmpty(pOfficeId)) pOfficeId = pNode.OfficeId ?? "";
+            if (pCityId < 0L) pCityId = pNode.CityId;
+            return !string.IsNullOrEmpty(pLayer) &&
+                   !string.IsNullOrEmpty(pOfficeId);
         }
 
         public bool TryEnsurePortrait()

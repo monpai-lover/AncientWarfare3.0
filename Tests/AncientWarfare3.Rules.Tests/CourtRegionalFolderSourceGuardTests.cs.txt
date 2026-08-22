@@ -19,10 +19,32 @@ internal static class CourtRegionalFolderSourceGuardTests
         Contains(window, "folderRect", "regional link target must be the folder container");
         Contains(window, "aw_court_regional_folder", "court window must use the localized folder label");
         string readModel = Read("Code/core/court/CourtReadModelService.cs");
+        string pyramidModel = Read("Code/core/court/CourtPyramidRules.cs");
+        string actorNode = Read("Code/ui/items/CourtActorNodeView.cs");
+        string historyWindow = Read("Code/ui/windows/CourtOfficeHistoryWindow.cs");
+        string restore = Read("Code/core/multiplayer/AW3RuntimeRestorePipeline.cs");
         Contains(readModel, "City officials are rendered under their regional folder",
             "central court must not add city officials beside the regional folder");
         Contains(readModel, "string.Equals(officer.layer, CourtOfficeLayer.City",
             "city-layer officers must be filtered from the central node pool");
+        Contains(pyramidModel, "public string HistoryOfficeLayer");
+        Contains(pyramidModel, "public string HistoryOfficeId");
+        Contains(pyramidModel, "public long HistoryCityId");
+        Contains(actorNode, "pNode.HistoryOfficeId",
+            "history action uses the card's exact appointment scope");
+        False(actorNode.Contains("GetActiveOfficers(",
+                StringComparison.Ordinal),
+            "history action cannot choose another office by actor identity");
+        False(historyWindow.Contains("EnsureLocalOfficerHistory(",
+                StringComparison.Ordinal),
+            "opening office history cannot write an appointment");
+        False(readModel.Contains("\"regional-chief:\"",
+                StringComparison.Ordinal),
+            "new projections cannot recreate the legacy persisted identity");
+        Contains(readModel, "\"regional-folder:\"",
+            "regional nodes use a presentation-only namespace");
+        Contains(restore, "\"legacy_projected_office_repair\"",
+            "legacy rows are repaired before career projection rebuild");
     }
 
     private static string Read(string pRelative) => File.ReadAllText(
@@ -34,5 +56,15 @@ internal static class CourtRegionalFolderSourceGuardTests
     {
         if (!pText.Contains(pNeedle, StringComparison.Ordinal))
             throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        Contains(pText, pNeedle, "source guard failed");
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
     }
 }
