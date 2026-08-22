@@ -387,7 +387,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         }
     }
 
-    private void ProcessMilitaryP0Actor(long actorId, float cycleElapsed)
+    internal static void ProcessMilitaryP0Actor(long actorId,
+        float cycleElapsed)
     {
         if (ArmyMilitaryMovementPriorityIndex.WasProcessed(actorId))
             return;

@@ -15,8 +15,8 @@ namespace AncientWarfare3.core.performance
         private static readonly Dictionary<long, ArmyMilitaryMovementPriorityKind>
             Entries = new Dictionary<long, ArmyMilitaryMovementPriorityKind>();
         private static readonly List<long> Order = new List<long>();
-        private static readonly HashSet<long> ProcessedThisCycle =
-            new HashSet<long>();
+        private static readonly Dictionary<long, int> ProcessedFrameByActor =
+            new Dictionary<long, int>();
         private static readonly HashSet<long> VanillaTaxiActors =
             new HashSet<long>();
 
@@ -41,7 +41,7 @@ namespace AncientWarfare3.core.performance
                 int index = Order.IndexOf(actorId);
                 if (index >= 0) Order.RemoveAt(index);
             }
-            ProcessedThisCycle.Remove(actorId);
+            ProcessedFrameByActor.Remove(actorId);
             VanillaTaxiActors.Remove(actorId);
         }
 
@@ -103,26 +103,46 @@ namespace AncientWarfare3.core.performance
             return Entries.TryGetValue(actorId, out kind);
         }
 
+        internal static int Count => Entries.Count;
+
         internal static void BeginCycle()
         {
-            ProcessedThisCycle.Clear();
+            BeginFrame(UnityEngine.Time.frameCount);
+        }
+
+        internal static void BeginFrame(int frameId)
+        {
+            _ = frameId;
         }
 
         internal static void MarkProcessed(long actorId)
         {
-            if (actorId >= 0L) ProcessedThisCycle.Add(actorId);
+            MarkProcessed(actorId, UnityEngine.Time.frameCount);
+        }
+
+        internal static void MarkProcessed(long actorId, int frameId)
+        {
+            if (actorId >= 0L) ProcessedFrameByActor[actorId] = frameId;
         }
 
         internal static bool WasProcessed(long actorId)
         {
-            return actorId >= 0L && ProcessedThisCycle.Contains(actorId);
+            return WasProcessed(actorId, UnityEngine.Time.frameCount);
+        }
+
+        internal static bool WasProcessed(long actorId, int frameId)
+        {
+            return actorId >= 0L &&
+                   ProcessedFrameByActor.TryGetValue(actorId,
+                       out int processedFrame) &&
+                   processedFrame == frameId;
         }
 
         internal static void Clear()
         {
             Entries.Clear();
             Order.Clear();
-            ProcessedThisCycle.Clear();
+            ProcessedFrameByActor.Clear();
             VanillaTaxiActors.Clear();
         }
     }
