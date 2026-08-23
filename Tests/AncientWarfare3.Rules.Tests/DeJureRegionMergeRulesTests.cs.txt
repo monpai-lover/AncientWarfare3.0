@@ -26,7 +26,7 @@ internal static class DeJureRegionMergeRulesTests
         Equal(-1, DeJureRegionMergeRules.ComparePrimary(
             100, 20, 50, 90, 4, 7),
             "higher population wins primary tie-break");
-        Equal(1, DeJureRegionMergeRules.ComparePrimary(
+        Equal(-1, DeJureRegionMergeRules.ComparePrimary(
             50, 50, 90, 20, 8, 3),
             "higher economy wins equal-population tie-break");
         Equal(-1, DeJureRegionMergeRules.ComparePrimary(

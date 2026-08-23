@@ -632,6 +632,10 @@ namespace AncientWarfare3.core.lineage
             "aw_policy_ai_last_foreign_appease_year";
         public const string POLICY_AI_LAST_XIA_APPEASE_YEAR =
             "aw_policy_ai_last_xia_appease_year";
+        public const string POLICY_AI_LAST_DEJURE_MERGE_YEAR =
+            "aw_policy_ai_last_dejure_merge_year";
+        public const string POLICY_AI_LAST_DEJURE_MERGE_MONTH =
+            "aw_policy_ai_last_dejure_merge_month";
         public const string COURT_PROFILE_ID = "aw_court_profile_id";
         public const string COURT_MODE = "aw_court_mode";
         public const string COURT_TIER = "aw_court_tier";

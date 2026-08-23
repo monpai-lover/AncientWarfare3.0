@@ -349,6 +349,7 @@ namespace AncientWarfare3.api.multiplayer
         GrantBanditAmnesty = 35,
         CommitDomesticHousehold = 36,
         FillCentralCourtVacancies = 37
+        ,MergeDeJureRegions = 38
     }
 
     public enum AW3CommandStatus : byte
@@ -482,6 +483,13 @@ namespace AncientWarfare3.api.multiplayer
             string decisionId) => Create(
             AW3CommandKind.StartMandateDecision, countryId,
             key: Token(decisionId, nameof(decisionId)));
+
+        public static AW3CommandRequest MergeDeJureRegions(long countryId,
+            long primaryRegionId, long secondaryRegionId) => Create(
+            AW3CommandKind.MergeDeJureRegions, countryId,
+            cityId: Positive(primaryRegionId, nameof(primaryRegionId)),
+            secondaryId: Positive(secondaryRegionId,
+                nameof(secondaryRegionId)));
 
         public static AW3CommandRequest AppointCourtOfficer(long countryId,
             long actorId, string officeId,

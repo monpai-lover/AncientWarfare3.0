@@ -219,7 +219,7 @@ git commit -m "feat: add transactional de jure region merge service"
 - Modify: `Code/core/policy/KingdomPolicyAI.cs`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/DeJureRegionMergeSourceGuardTests.cs.txt`
 
-- [ ] **Step 1: 增加状态键和决策定义**
+- [x] **Step 1: 增加状态键和决策定义**
 
 增加 `POLICY_AI_LAST_DEJURE_MERGE_YEAR` 和 `POLICY_AI_LAST_DEJURE_MERGE_MONTH`；在 `KingdomPolicyDefs` 增加：
 
@@ -238,11 +238,11 @@ Column = 7,
 Row = 1
 ```
 
-- [ ] **Step 2: 增加决策可用性和特殊提示**
+- [x] **Step 2: 增加决策可用性和特殊提示**
 
 让 `GetStatus` 对该 ID 额外要求政治点不少于 `Cost`、冷却通过且 `DeJureRegionMergeService.GetMergeCandidates(pKingdom).Count > 0`；在 `BuildNodeTooltip` 的特殊要求分支显示“没有相邻单城州法理”“政治点不足”或“冷却未结束”。
 
-- [ ] **Step 3: 实现立即执行入口**
+- [x] **Step 3: 实现立即执行入口**
 
 在 `KingdomPolicyService` 增加：
 
@@ -255,11 +255,11 @@ internal static bool TryExecuteDeJureMergeDecision(Kingdom pKingdom,
 
 同时增加 `TryExecuteBestDeJureMergeDecision(Kingdom pKingdom, out string pError)`，读取候选列表的第一项并转调上面的双 RegionId 入口；没有候选时直接返回失败，不扣政治点。
 
-- [ ] **Step 4: 接入 AI**
+- [x] **Step 4: 接入 AI**
 
 在 `KingdomPolicyAI.ShouldAutoStartDecision` 对新 ID 检查冷却和候选；在 `TryStartIfEmpty` 对新 ID 直接调用 `KingdomPolicyService.TryExecuteBestDeJureMergeDecision`（内部使用 `DeJureRegionMergeService.GetMergeCandidates` 的相同排序规则），成功后写入两个冷却键。AI 每月只尝试一次，失败写失败月份键，避免重复扫描。
 
-- [ ] **Step 5: 运行政策规则测试并提交**
+- [x] **Step 5: 运行政策规则测试并提交**
 
 补充源守卫断言：决策 ID、`Cost`、候选门禁、政治点扣除发生在成功事务之后、失败不扣点、AI 使用统一服务。运行规则测试后提交：
 
@@ -277,7 +277,7 @@ git commit -m "feat: expose de jure region merge as policy decision"
 - Modify: `Code/core/multiplayer/commands/AW3AuthoritativeCommandRouter.cs`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/DeJureRegionMergeSourceGuardTests.cs.txt`
 
-- [ ] **Step 1: 增加命令类型和请求工厂**
+- [x] **Step 1: 增加命令类型和请求工厂**
 
 新增 `MergeDeJureRegions` 命令；请求工厂签名为：
 
@@ -288,15 +288,15 @@ public static AW3CommandRequest MergeDeJureRegions(
 
 将两个 RegionId 放入现有 `CityId` 和 `SecondaryId` 数值槽，保持 JSON schema 简单并在命令描述中声明国家上下文。
 
-- [ ] **Step 2: 注册命令描述和权威路由**
+- [x] **Step 2: 注册命令描述和权威路由**
 
 在 `AW3MultiplayerCatalog` 注册 Domestic/Country 命令描述；在 `AW3AuthoritativeCommandRouter` 将命令转发到 `AW3PolicyCommandHandler`。
 
-- [ ] **Step 3: 实现命令处理**
+- [x] **Step 3: 实现命令处理**
 
 处理器必须验证国家有效、两个 RegionId 为正数、区域属于该国候选集合，然后调用 `KingdomPolicyService.TryExecuteDeJureMergeDecision`；成功返回受影响主州 ID，失败返回 `IllegalTarget` 和具体本地化错误键。
 
-- [ ] **Step 4: 运行命令源守卫和规则测试并提交**
+- [x] **Step 4: 运行命令源守卫和规则测试并提交**
 
 断言请求字段、命令枚举、描述、路由和处理器均存在，且处理器不直接写 `MemberCityIds`。运行测试后提交：
 
@@ -313,23 +313,23 @@ git commit -m "feat: authorize de jure merge command"
 - Modify: `Code/ui/windows/KingdomPolicyWindow.cs`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/DeJureRegionMergeSourceGuardTests.cs.txt`
 
-- [ ] **Step 1: 建立窗口骨架和状态**
+- [x] **Step 1: 建立窗口骨架和状态**
 
 复用 `NameDecisionWindow` 的 `AbstractWindow`、`WideWindowChrome`、滚动区域和按钮样式，窗口状态只包含国家 ID、已选主州 ID、已选候选州 ID、实时候选列表、pending 标记和错误文本。不要复制法理数据，也不要在 UI 内计算城市邻接。
 
-- [ ] **Step 2: 实现两级选择交互**
+- [x] **Step 2: 实现两级选择交互**
 
 第一次点击设置主州并刷新右侧候选；第二次点击设置被合并州。候选项显示两州名、唯一城市和成员数；确认按钮文案明确“保留主州并合并”。确认前再次调用 `GetMergeCandidates` 验证所选 pair 仍存在。
 
-- [ ] **Step 3: 接入权威命令和状态刷新**
+- [x] **Step 3: 接入权威命令和状态刷新**
 
 确认时调用 `AW3CommandRequest.MergeDeJureRegions`；`Accepted` 关闭窗口并刷新政策树、法理地图和地方官署；`Pending` 保持 pending；拒绝则显示错误且不清空选择。取消只关闭窗口，不改变政策状态。
 
-- [ ] **Step 4: 从政策节点打开窗口**
+- [x] **Step 4: 从政策节点打开窗口**
 
 在 `KingdomPolicyWindow.BuildNode` 对 `aw_decision_merge_single_city_de_jure` 特判 `DeJureRegionMergeWindow.Open(pKingdom.id)`，不调用普通 `StartPolicyNode`。普通政策节点行为保持不变。
 
-- [ ] **Step 5: 运行 UI 源守卫并提交**
+- [x] **Step 5: 运行 UI 源守卫并提交**
 
 源守卫断言窗口复用现有 `AW_UIStyle`/`WideWindowChrome`/`AW3MultiplayerCommandFacade`、确认使用新命令、没有直接修改 Store。运行规则测试后提交：
 
@@ -344,7 +344,7 @@ git commit -m "feat: add de jure merge selection window"
 - Modify: `Locales/aw3_policy_decisions.csv`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/DeJureRegionMergeSourceGuardTests.cs.txt`
 
-- [ ] **Step 1: 添加完整 CSV 键**
+- [x] **Step 1: 添加完整 CSV 键**
 
 添加以下键的简体中文、英文、繁体中文列：
 
@@ -366,11 +366,11 @@ aw_de_jure_merge_insufficient_points
 aw_de_jure_merge_committing
 ```
 
-- [ ] **Step 2: 加入 CSV 源守卫并验证重复键**
+- [x] **Step 2: 加入 CSV 源守卫并验证重复键**
 
 测试读取 CSV，断言每个键存在且每行至少有三列；使用现有本地化检查脚本或 `rg` 检查同一文件内没有重复键。
 
-- [ ] **Step 3: 提交本地化**
+- [x] **Step 3: 提交本地化**
 
 运行规则测试后提交：
 

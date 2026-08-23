@@ -36,6 +36,10 @@ namespace AncientWarfare3.core.multiplayer.commands
                 case AW3CommandKind.StartMandateDecision:
                     return Result(MandateDecisionService.ForceStart(
                         kingdom, request.Key), kingdom.id);
+                case AW3CommandKind.MergeDeJureRegions:
+                    if (request.CityId <= 0 || request.SecondaryId <= 0)
+                        return IllegalTarget();
+                    return MergeDeJureRegions(kingdom, request);
                 default:
                     return AW3CommandResult.Rejected(
                         AW3CommandError.InvalidRequest,
@@ -52,6 +56,18 @@ namespace AncientWarfare3.core.multiplayer.commands
                 !KingdomPolicyService.SetPolicyAIEnabled(kingdom,
                     request.SecondaryBoolValue)) return IllegalTarget();
             return Accepted(kingdom.id);
+        }
+
+        private static AW3CommandResult MergeDeJureRegions(Kingdom pKingdom,
+            AW3CommandRequest pRequest)
+        {
+            bool changed = KingdomPolicyService.TryExecuteDeJureMergeDecision(
+                pKingdom, pRequest.CityId, pRequest.SecondaryId,
+                out string error);
+            return changed
+                ? Accepted(pKingdom.id)
+                : AW3CommandResult.Rejected(AW3CommandError.IllegalTarget,
+                    "aw_de_jure_merge_" + (error ?? "invalid_target"));
         }
 
         private static AW3CommandResult Result(bool accepted,

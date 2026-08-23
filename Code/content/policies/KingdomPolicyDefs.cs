@@ -1031,6 +1031,21 @@ namespace AncientWarfare3.content.policies
             },
             new KingdomPolicyDef
             {
+                Id = "aw_decision_merge_single_city_de_jure",
+                Kind = PolicyNodeKind.Decision,
+                ProfileIds = CommonProfiles,
+                NameKey = "aw_decision_merge_single_city_de_jure",
+                DescKey = "aw_decision_merge_single_city_de_jure_desc",
+                FallbackName = "合并单城州法理",
+                FallbackDesc = "将同一国家内相邻且各只有一座城市的两个州法理合并，保留主州首府。",
+                IconPath = "ui/icons/iconMap",
+                Cost = 60f,
+                Repeatable = true,
+                Column = 7,
+                Row = 1
+            },
+            new KingdomPolicyDef
+            {
                 Id = "aw_decision_absorb_vassal",
                 Kind = PolicyNodeKind.Decision,
                 ProfileIds = CommonProfiles,

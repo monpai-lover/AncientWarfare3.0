@@ -7,6 +7,14 @@ internal static class DeJureRegionMergeSourceGuardTests
     {
         string store = Read("Code/core/court/DeJureRegionStore.cs");
         string service = Read("Code/core/court/DeJureRegionMergeService.cs");
+        string policy = Read("Code/core/policy/KingdomPolicyService.cs");
+        string ai = Read("Code/core/policy/KingdomPolicyAI.cs");
+        string command = Read("Code/core/multiplayer/commands/AW3PolicyCommandHandler.cs");
+        string router = Read("Code/core/multiplayer/commands/AW3AuthoritativeCommandRouter.cs");
+        string catalog = Read("Code/api/multiplayer/AW3MultiplayerCatalogModels.cs");
+        string ui = Read("Code/ui/windows/KingdomPolicyWindow.cs");
+        string mergeWindow = Read("Code/ui/windows/DeJureRegionMergeWindow.cs");
+        string locale = Read("Locales/aw3_policy_decisions.csv");
         Contains(store, "TryMergeSingleCityRegions");
         Contains(store, "DeJureRegionMerged");
         Contains(store, "DeJureRegionRetired");
@@ -18,6 +26,17 @@ internal static class DeJureRegionMergeSourceGuardTests
         Contains(service, "neighbours_cities");
         DoesNotContain(service, "MemberCityIds.Add");
         DoesNotContain(service, "city.kingdom =");
+        Contains(policy, "TryExecuteDeJureMergeDecision");
+        Contains(policy, "TryExecuteBestDeJureMergeDecision");
+        Contains(policy, "definition.Cost");
+        Contains(ai, "TryExecuteBestDeJureMergeDecision");
+        Contains(command, "MergeDeJureRegions");
+        Contains(router, "MergeDeJureRegions");
+        Contains(catalog, "MergeDeJureRegions");
+        Contains(ui, "DeJureRegionMergeWindow.Open");
+        Contains(mergeWindow, "AW3CommandRequest.MergeDeJureRegions");
+        Contains(locale, "aw_decision_merge_single_city_de_jure");
+        Contains(locale, "aw_de_jure_merge_confirm");
     }
 
     private static string Read(string relative) => File.ReadAllText(

@@ -158,6 +158,8 @@ namespace AncientWarfare3.api.multiplayer
                     AW3WindowContextRequirement.TargetCountry),
                 Command(AW3CommandKind.StartMandateDecision,
                     AW3WindowCategory.Mandate, Country()),
+                Command(AW3CommandKind.MergeDeJureRegions,
+                    AW3WindowCategory.Domestic, Country()),
                 Command(AW3CommandKind.AppointCourtOfficer,
                     AW3WindowCategory.Domestic, Country() |
                     AW3WindowContextRequirement.Actor |

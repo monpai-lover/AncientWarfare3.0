@@ -44,6 +44,8 @@ namespace AncientWarfare3.ui
             "aw_bandit_amnesty_settlement";
         public const string MILITARY_GOVERNORATE =
             "aw_military_governorate_window";
+        public const string DE_JURE_REGION_MERGE =
+            "aw_de_jure_region_merge";
 
         public static void SafeShow(string pWindowId, System.Action pRefreshIfCurrent = null)
         {

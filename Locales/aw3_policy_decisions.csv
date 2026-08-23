@@ -26,3 +26,19 @@ aw_decision_appease_foreign_cities,安抚异族,Appease Foreign Cities,安撫異
 aw_decision_appease_foreign_cities_desc,安抚本国控制的异文化城市并降低占领民怨,Appease controlled foreign-culture cities and reduce occupation unrest,安撫本國控制的異文化城市並降低佔領民怨
 aw_west_decision_consolidate_royal_authority,巩固王权,Consolidate Royal Authority,鞏固王權
 aw_west_decision_consolidate_royal_authority_desc,整合宫廷与王室领地以降低继承争议并提高合法性,Unify court and royal lands to reduce succession disputes and raise legitimacy,整合宮廷與王室領地以降低繼承爭議並提高合法性
+aw_decision_merge_single_city_de_jure,合并单城州法理,Merge Single-City De Jure Regions,合併單城州法理
+aw_decision_merge_single_city_de_jure_desc,将相邻且各只有一座城市的同国州法理合并，保留主州首府与历史记录,Merge two adjacent single-city de jure regions in the same kingdom while preserving the primary seat and history,將相鄰且各只有一座城市的同國州法理合併，保留主州首府與歷史記錄
+aw_de_jure_merge_window,合并单城州法理,Merge Single-City De Jure Regions,合併單城州法理
+aw_de_jure_merge_select_primary,选择保留的主州,Select primary region to keep,選擇保留的主州
+aw_de_jure_merge_select_secondary,选择要并入的州,Select region to merge,選擇要併入的州
+aw_de_jure_merge_confirm,确认合并,Confirm merge,確認合併
+aw_de_jure_merge_cancel,取消,Cancel,取消
+aw_de_jure_merge_no_candidates,没有符合条件的相邻单城州法理,No eligible adjacent single-city regions,沒有符合條件的相鄰單城州法理
+aw_de_jure_merge_invalid_target,目标州法理已失效，请重新选择,The selected region pair is no longer valid,目標州法理已失效，請重新選擇
+aw_de_jure_merge_cross_kingdom,两个州法理不属于同一国家,The regions do not belong to the same kingdom,兩個州法理不屬於同一國家
+aw_de_jure_merge_not_adjacent,两个州法理的城市不相邻,The region cities are not adjacent,兩個州法理的城市不相鄰
+aw_de_jure_merge_not_single_city,两个州法理都必须只有一座城市,Each region must contain exactly one city,兩個州法理都必須只有一座城市
+aw_de_jure_merge_retired,该州法理已经撤销,The region has already been retired,該州法理已經撤銷
+aw_de_jure_merge_cooldown,合并决策仍在冷却中,The merge decision is on cooldown,合併決策仍在冷卻中
+aw_de_jure_merge_insufficient_points,政治点不足,Insufficient political points,政治點不足
+aw_de_jure_merge_committing,正在合并,Committing the region merge,正在合併
