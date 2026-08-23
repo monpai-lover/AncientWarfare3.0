@@ -1,0 +1,19 @@
+using AncientWarfare3.core.court;
+
+internal static class CityBureauRetryRulesTests
+{
+    internal static void Run()
+    {
+        Assert(!CityBureauRetryRules.ShouldRetry(true, 0, 3),
+            "a completed city pass must not retry just because it has a vacancy");
+        Assert(CityBureauRetryRules.ShouldRetry(false, 0, 3),
+            "a failed city write may retry");
+        Assert(!CityBureauRetryRules.ShouldRetry(false, 2, 3),
+            "a failed city write must stop at the retry limit");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

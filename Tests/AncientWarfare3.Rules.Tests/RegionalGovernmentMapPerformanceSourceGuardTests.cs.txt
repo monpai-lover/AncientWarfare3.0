@@ -1,0 +1,31 @@
+using System;
+using System.IO;
+
+internal static class RegionalGovernmentMapPerformanceSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string aggregation = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "court", "RegionalGovernmentAggregationService.cs"));
+        True(aggregation.Contains("Cache.TryGetValue"),
+            "regional aggregation reads the per-kingdom cache");
+        True(aggregation.Contains("RegionByCityCache"),
+            "regional aggregation keeps a city-to-region index");
+        True(aggregation.Contains("TryGetValue(pCityId"),
+            "region lookup uses the city index instead of scanning regions");
+        True(aggregation.IndexOf("Cache.TryGetValue",
+                StringComparison.Ordinal) <
+            aggregation.IndexOf("DeJureRegionReadModelService.Build",
+                StringComparison.Ordinal),
+            "cached legal aggregation is returned before rebuilding");
+        True(aggregation.Contains("RegionByCityCache.Clear()") &&
+             aggregation.Contains("RegionByCityCache.Remove"),
+            "city-to-region index is invalidated with the aggregate cache");
+    }
+
+    private static void True(bool pActual, string pMessage)
+    {
+        if (!pActual) throw new InvalidOperationException(pMessage);
+    }
+}
