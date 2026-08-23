@@ -82,7 +82,17 @@ namespace AncientWarfare3.core.pathfinding
         private int _disposed;
         private AWPathStep[] _cachedRoute;
         private int _cachedRouteOffset;
+        private bool _cachedRouteCompletesRequest;
+        private long _cachedRouteTerrainRevision;
+        private long _cachedRouteWorldGeneration;
+        private bool _cachedRouteHasRevision;
+        private int _cachedRouteExpectedStartTile = -1;
+        private bool _cachedRouteInsideBoat;
         private CachedSegmentView _cachedSegmentView;
+        private long _recoveryTerrainRevision;
+        private long _recoveryWorldGeneration;
+        private int _recoveryTargetId = -1;
+        private bool _recoveryAttempted;
 
         public AWPathRequest(long pActorId, int pStartTileId, int pTargetTileId,
             AWPathRequestOptions pOptions, AWActorTraversalProfile pProfile,
@@ -141,6 +151,8 @@ namespace AncientWarfare3.core.pathfinding
         public AWPathWorkClass WorkClass { get; }
         public bool HighPriority => WorkClass == AWPathWorkClass.Operational;
         public bool PhysicalTransportAvailable { get; }
+        public long TerrainRevision => ReuseKey.TerrainRevision;
+        public bool InsideBoat => ReuseKey.InsideBoat;
         public CancellationTokenSource Cancellation { get; }
         public AWPathStream Stream { get; }
 
@@ -152,6 +164,25 @@ namespace AncientWarfare3.core.pathfinding
         internal bool TryTakeCachedSegment(int pMaximumSteps,
             out IReadOnlyList<AWPathStep> pSteps, out bool pReachedTarget)
         {
+            return TryTakeCachedSegment(pMaximumSteps, TerrainRevision,
+                ReuseKey.WorldGeneration, InsideBoat, out pSteps,
+                out pReachedTarget);
+        }
+
+        internal bool TryTakeCachedSegment(int pMaximumSteps,
+            long pTerrainRevision, long pWorldGeneration, bool pInsideBoat,
+            out IReadOnlyList<AWPathStep> pSteps, out bool pReachedTarget)
+        {
+            if (!IsCachedRouteCurrent(pTerrainRevision, pWorldGeneration,
+                    pInsideBoat) ||
+                (_cachedRouteOffset > 0 &&
+                  _cachedRouteExpectedStartTile != StartTileId))
+            {
+                ClearCachedRoute();
+                pSteps = Array.Empty<AWPathStep>();
+                pReachedTarget = false;
+                return false;
+            }
             AWPathStep[] route = _cachedRoute;
             int offset = _cachedRouteOffset;
             if (route == null || offset >= route.Length)
@@ -167,18 +198,73 @@ namespace AncientWarfare3.core.pathfinding
             _cachedSegmentView.SetCount(count);
             pSteps = _cachedSegmentView;
             _cachedRouteOffset = offset + count;
-            pReachedTarget = _cachedRouteOffset >= route.Length;
-            if (pReachedTarget) _cachedRoute = null;
+            _cachedRouteExpectedStartTile = route[_cachedRouteOffset - 1].TileId;
+            bool routeExhausted = _cachedRouteOffset >= route.Length;
+            pReachedTarget = routeExhausted && _cachedRouteCompletesRequest;
+            if (routeExhausted) ClearCachedRoute();
             return true;
         }
 
         internal void CacheRoute(AWPathStep[] pRoute, int pConsumed)
         {
+            CacheRoute(pRoute, pConsumed, pCompletesRequest: true,
+                TerrainRevision, ReuseKey.WorldGeneration, InsideBoat);
+        }
+
+        internal void CacheRoute(AWPathStep[] pRoute, int pConsumed,
+            bool pCompletesRequest, long pTerrainRevision,
+            long pWorldGeneration, bool pInsideBoat)
+        {
             _cachedRoute = pRoute;
             _cachedRouteOffset = Math.Max(0, Math.Min(pConsumed,
                 pRoute?.Length ?? 0));
+            _cachedRouteCompletesRequest = pCompletesRequest;
+            _cachedRouteTerrainRevision = pTerrainRevision;
+            _cachedRouteWorldGeneration = pWorldGeneration;
+            _cachedRouteHasRevision = pRoute != null && pRoute.Length > 0;
+            _cachedRouteInsideBoat = pInsideBoat;
+            _cachedRouteExpectedStartTile = _cachedRouteOffset > 0 &&
+                pRoute != null && _cachedRouteOffset <= pRoute.Length
+                ? pRoute[_cachedRouteOffset - 1].TileId
+                : -1;
             if (_cachedRouteOffset >= (pRoute?.Length ?? 0))
-                _cachedRoute = null;
+                ClearCachedRoute();
+        }
+
+        internal bool TryBeginRecovery(int pTargetId, long pTerrainRevision,
+            long pWorldGeneration)
+        {
+            if (_recoveryAttempted && _recoveryTargetId == pTargetId &&
+                _recoveryTerrainRevision == pTerrainRevision &&
+                _recoveryWorldGeneration == pWorldGeneration)
+                return false;
+            _recoveryAttempted = true;
+            _recoveryTargetId = pTargetId;
+            _recoveryTerrainRevision = pTerrainRevision;
+            _recoveryWorldGeneration = pWorldGeneration;
+            return true;
+        }
+
+        private bool IsCachedRouteCurrent(long pTerrainRevision,
+            long pWorldGeneration, bool pInsideBoat)
+        {
+            if (_cachedRoute == null || !_cachedRouteHasRevision)
+                return false;
+            return _cachedRouteTerrainRevision == pTerrainRevision &&
+                   _cachedRouteWorldGeneration == pWorldGeneration &&
+                   _cachedRouteInsideBoat == pInsideBoat;
+        }
+
+        private void ClearCachedRoute()
+        {
+            _cachedRoute = null;
+            _cachedRouteOffset = 0;
+            _cachedRouteCompletesRequest = false;
+            _cachedRouteTerrainRevision = 0L;
+            _cachedRouteWorldGeneration = 0L;
+            _cachedRouteHasRevision = false;
+            _cachedRouteExpectedStartTile = -1;
+            _cachedRouteInsideBoat = false;
         }
 
         private sealed class CachedSegmentView : IReadOnlyList<AWPathStep>
