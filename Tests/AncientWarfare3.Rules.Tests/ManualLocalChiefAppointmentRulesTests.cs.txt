@@ -1,0 +1,34 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class ManualLocalChiefAppointmentRulesTests
+{
+    internal static void Run()
+    {
+        True(CourtManualAppointmentRules.IsAuthoritativeLocalChiefScope(
+            CourtOfficeLayer.City, true, true, "governor", "governor"),
+            "resolved city root office uses authoritative appointment");
+        False(CourtManualAppointmentRules.IsAuthoritativeLocalChiefScope(
+            CourtOfficeLayer.Central, true, true, "governor", "governor"),
+            "central office must not replace a city leader");
+        False(CourtManualAppointmentRules.IsAuthoritativeLocalChiefScope(
+            CourtOfficeLayer.City, false, true, "governor", "governor"),
+            "disposed city must not use authoritative appointment");
+        False(CourtManualAppointmentRules.IsAuthoritativeLocalChiefScope(
+            CourtOfficeLayer.City, true, false, "governor", "governor"),
+            "foreign city must not use authoritative appointment");
+        False(CourtManualAppointmentRules.IsAuthoritativeLocalChiefScope(
+            CourtOfficeLayer.City, true, true, "clerk", "governor"),
+            "subordinate local office must not replace a city leader");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+}

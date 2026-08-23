@@ -196,6 +196,15 @@ namespace AncientWarfare3.core.lineage
             return ordinaryResidentAvailable;
         }
 
+        public static int RulerPriority(bool hasRestorationClaim,
+            bool ordinaryResident, bool cityLeader)
+        {
+            if (hasRestorationClaim) return 0;
+            if (ordinaryResident) return 1;
+            if (cityLeader) return 2;
+            return 3;
+        }
+
         public static bool CanUseCityLeaderAsRuler(
             bool cityLeaderAlive, bool cityLeaderAdult,
             bool cityLeaderBelongsToMotherCity)

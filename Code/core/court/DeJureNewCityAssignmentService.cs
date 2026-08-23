@@ -9,8 +9,12 @@ namespace AncientWarfare3.core.court
     internal static class DeJureNewCityAssignmentService
     {
         private const string RetryPrefix = "de_jure_new_city:";
+        private const string WorldRepairRetryKey = "de_jure_world_repair";
+        private const int MaxWorldRepairDeferrals = 600;
         private static readonly HashSet<long> RetryIds = new HashSet<long>();
         private static bool _worldRepairCompleted;
+        private static int _worldRepairDeferrals;
+        private static bool _worldRepairDeferralWarningLogged;
 
         internal static void OnCityFounded(City pCity)
         {
@@ -21,6 +25,8 @@ namespace AncientWarfare3.core.court
         {
             RetryIds.Clear();
             _worldRepairCompleted = false;
+            _worldRepairDeferrals = 0;
+            _worldRepairDeferralWarningLogged = false;
         }
 
         // Existing saves may contain cities created before the automatic
@@ -31,6 +37,14 @@ namespace AncientWarfare3.core.court
             if (_worldRepairCompleted || World.world?.cities == null ||
                 World.world.cities.Count == 0 || !Config.game_loaded ||
                 SmoothLoader.isLoading()) return;
+            // Save loading can expose the city list before native kingdom
+            // ownership has been restored. Do not consume the one-shot repair
+            // in that intermediate state; retry from the deferred runtime lane.
+            if (!IsWorldOwnershipReady())
+            {
+                QueueWorldRepairRetry();
+                return;
+            }
             _worldRepairCompleted = true;
             try
             {
@@ -137,7 +151,6 @@ namespace AncientWarfare3.core.court
                 var members = (region.MemberCityIds ?? new List<long>())
                     .Select(id => World.world?.cities?.get(id))
                     .Where(city => city?.data != null && !city.isRekt() &&
-                        city.kingdom == pKingdom &&
                         DeJureRegionStore.IsEligibleCityId(city.data.id))
                     .ToList();
                 if (members.Count == 0) continue;
@@ -198,6 +211,38 @@ namespace AncientWarfare3.core.court
                     // the native city graph is ready.
                     TryAssign(World.world?.cities?.get(cityId), true);
                 });
+        }
+
+        private static bool IsWorldOwnershipReady()
+        {
+            try
+            {
+                foreach (City city in World.world.cities)
+                {
+                    if (city?.data == null || city.isRekt()) continue;
+                    if (city.kingdom?.data == null) return false;
+                }
+                return true;
+            }
+            catch { return false; }
+        }
+
+        private static void QueueWorldRepairRetry()
+        {
+            if (_worldRepairDeferrals++ >= MaxWorldRepairDeferrals)
+            {
+                if (!_worldRepairDeferralWarningLogged)
+                {
+                    _worldRepairDeferralWarningLogged = true;
+                    ModClass.LogWarning(
+                        "De jure world repair deferred too long; ownership " +
+                        "never became ready.");
+                }
+                return;
+            }
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                WorldRepairRetryKey, DeferredWorkClass.Runtime,
+                RepairUnassignedCities);
         }
     }
 }

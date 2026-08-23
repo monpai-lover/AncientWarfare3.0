@@ -1,5 +1,7 @@
 // Derived from Cultiway-Reborn pathfinding (MIT, Copyright (c) 2025 Inmny).
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Threading;
 
 namespace AncientWarfare3.core.pathfinding
@@ -80,6 +82,7 @@ namespace AncientWarfare3.core.pathfinding
         private int _disposed;
         private AWPathStep[] _cachedRoute;
         private int _cachedRouteOffset;
+        private CachedSegmentView _cachedSegmentView;
 
         public AWPathRequest(long pActorId, int pStartTileId, int pTargetTileId,
             AWPathRequestOptions pOptions, AWActorTraversalProfile pProfile,
@@ -147,7 +150,7 @@ namespace AncientWarfare3.core.pathfinding
         }
 
         internal bool TryTakeCachedSegment(int pMaximumSteps,
-            out AWPathStep[] pSteps, out bool pReachedTarget)
+            out IReadOnlyList<AWPathStep> pSteps, out bool pReachedTarget)
         {
             AWPathStep[] route = _cachedRoute;
             int offset = _cachedRouteOffset;
@@ -158,8 +161,11 @@ namespace AncientWarfare3.core.pathfinding
                 return false;
             }
             int count = Math.Min(Math.Max(1, pMaximumSteps), route.Length - offset);
-            pSteps = new AWPathStep[count];
-            Array.Copy(route, offset, pSteps, 0, count);
+            _cachedSegmentView ??= new CachedSegmentView();
+            _cachedSegmentView.SetCapacity(count);
+            Array.Copy(route, offset, _cachedSegmentView.Buffer, 0, count);
+            _cachedSegmentView.SetCount(count);
+            pSteps = _cachedSegmentView;
             _cachedRouteOffset = offset + count;
             pReachedTarget = _cachedRouteOffset >= route.Length;
             if (pReachedTarget) _cachedRoute = null;
@@ -173,6 +179,44 @@ namespace AncientWarfare3.core.pathfinding
                 pRoute?.Length ?? 0));
             if (_cachedRouteOffset >= (pRoute?.Length ?? 0))
                 _cachedRoute = null;
+        }
+
+        private sealed class CachedSegmentView : IReadOnlyList<AWPathStep>
+        {
+            private AWPathStep[] _buffer = Array.Empty<AWPathStep>();
+            private int _count;
+
+            internal AWPathStep[] Buffer => _buffer;
+
+            internal void SetCapacity(int pCount)
+            {
+                if (_buffer.Length >= pCount) return;
+                int capacity = Math.Max(8, _buffer.Length);
+                while (capacity < pCount) capacity *= 2;
+                Array.Resize(ref _buffer, capacity);
+            }
+
+            internal void SetCount(int pCount) => _count = pCount;
+
+            public int Count => _count;
+
+            public AWPathStep this[int pIndex]
+            {
+                get
+                {
+                    if (pIndex < 0 || pIndex >= _count)
+                        throw new ArgumentOutOfRangeException(nameof(pIndex));
+                    return _buffer[pIndex];
+                }
+            }
+
+            public IEnumerator<AWPathStep> GetEnumerator()
+            {
+                return ((IEnumerable<AWPathStep>)new ArraySegment<AWPathStep>(
+                    _buffer, 0, _count)).GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private static int StartRegion(int pTileId,

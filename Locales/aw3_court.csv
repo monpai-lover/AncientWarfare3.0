@@ -1,4 +1,6 @@
 key,cz,en,ch
+aw_custom_court_office_settings_saved,官职设置已保存,Office settings saved,官職設定已儲存
+aw_custom_court_office_settings_saved,官职设置已保存,Office settings saved,官職設定已儲存
 aw_court_statistics,统计,Statistics,統計
 aw_court_statistics Title,统计,Statistics,統計
 aw_court_statistics_button,统计,Statistics,統計
@@ -296,6 +298,7 @@ aw_hist_nine_bestowments_prefix,制曰：,Edict: ,制曰：
 aw_hist_nine_bestowments_mid,总百揆而功高社稷，今于, holds the chief offices and has rendered eminent service. The court of ,總百揆而功高社稷，今於
 aw_hist_nine_bestowments_suffix,加九锡殊礼，以彰勋望；位极人臣，禅代之势由此而生。, grants the Nine Bestowments in recognition; the minister now stands one step below the throne.,加九錫殊禮，以彰勳望；位極人臣，禪代之勢由此而生。
 aw_hist_event_official_appointment_edict,颁授告身,Appointment Edict,頒授告身
+aw_hist_event_official_rank_promoted,升官,Rank Promotion,升官
 aw_hist_official_edict_prefix,制曰：,Edict: ,制曰：
 aw_hist_official_edict_mid,考绩有闻，宜进, has earned distinction in office and shall advance to ,考績有聞，宜進
 aw_hist_official_rank_grant_mid,始授, is first granted ,始授
@@ -585,6 +588,10 @@ aw_career_end_reason_dead,身故,Died,身故
 aw_career_end_reason_missing,失踪,Missing,失蹤
 aw_career_end_reason_defected,改投他国,Defected,改投他國
 aw_career_end_reason_replaced,被替任,Replaced,被替任
+aw_career_end_reason_promoted_city_leader,升任地方主官,Promoted to city leader,升任地方主官
+aw_career_end_reason_city_leader_mismatch,地方主官更替,City leader changed,地方主官更替
+aw_career_end_reason_term_expired,任期届满,Term completed,任期屆滿
+aw_career_end_reason_local_office_reformed,官署改制,Local office reformed,官署改制
 aw_career_end_reason_removed,被免职,Removed,被免職
 aw_career_end_reason_succession,政权更替,Succession,政權更替
 aw_court_layer_central,中央官场,Central Court,中央官場
@@ -898,6 +905,8 @@ aw_court_history_end_city_destroyed,城池毁灭,City destroyed,城池毀滅
 aw_court_vacancy,空缺,Vacant,空缺
 aw_court_history_end_missing,原因不明,Reason unavailable,原因不明
 aw_court_history_end_invalid,任职失效,Appointment invalid,任職失效
+aw_court_history_end_promoted_city_leader,升任地方主官,Promoted to city leader,升任地方主官
+aw_court_history_end_city_leader_mismatch,地方主官更替,City leader changed,地方主官更替
 aw_court_history_end_local_office_reformed,官署改制,Local office reformed,官署改制
 aw_court_history_end_guest_term_expired,客卿任期届满,Guest term expired,客卿任期屆滿
 aw_court_office_heir,世子,Heir Apparent,世子

@@ -116,7 +116,13 @@ namespace AncientWarfare3.core.lineage
         public const int MaximumRivalCities = 64;
         public const int PermanentSplitYears = 12;
         public const int ReunificationClaimGenerations = 3;
+        public const int MaximumAdvanceAttempts = 8;
         private const float DirectionAxisEpsilon = 0.001f;
+
+        public static bool ShouldRetryAdvance(int pAttempt)
+        {
+            return pAttempt >= 0 && pAttempt < MaximumAdvanceAttempts;
+        }
 
         public static bool CanPrepare(SuccessionClaimantFacts pFacts)
         {

@@ -24,6 +24,7 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         RelocatesOnlyOrdinaryResidents();
         PrefersOrdinaryResidentsForRuler();
         AllowsEligibleCityLeaderFallbackRuler();
+        RestorationClaimantWinsRulerPriority();
         RejectsRulerCandidatesThatCannotPassKingGate();
         TransfersFallenSurvivorsToTheMotherRealm();
         ComposesStrongholdNamesAndTitles();
@@ -243,6 +244,22 @@ internal static class PeasantRebelBanditStrongholdRulesTests
                 cityLeaderAlive: true, cityLeaderAdult: true,
                 cityLeaderBelongsToMotherCity: false),
             "an unrelated city leader cannot be used as the fallback ruler");
+    }
+
+    private static void RestorationClaimantWinsRulerPriority()
+    {
+        Equal(0, PeasantRebelBanditStrongholdRules.RulerPriority(
+                hasRestorationClaim: true, ordinaryResident: true,
+                cityLeader: true),
+            "a restoration claimant is the first bandit ruler choice");
+        Equal(1, PeasantRebelBanditStrongholdRules.RulerPriority(
+                hasRestorationClaim: false, ordinaryResident: true,
+                cityLeader: true),
+            "an ordinary resident is the second bandit ruler choice");
+        Equal(2, PeasantRebelBanditStrongholdRules.RulerPriority(
+                hasRestorationClaim: false, ordinaryResident: false,
+                cityLeader: true),
+            "the city leader is only a fallback ruler choice");
     }
 
     private static void RejectsRulerCandidatesThatCannotPassKingGate()

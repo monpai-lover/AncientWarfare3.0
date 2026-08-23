@@ -135,6 +135,18 @@ namespace AncientWarfare3.core.court
                        StringComparison.Ordinal) && pCityId >= 0L;
         }
 
+        public static bool IsAuthoritativeLocalChiefScope(string pLayer,
+            bool pCityValid, bool pCityOwnedByKingdom, string pOfficeId,
+            string pResolvedCityOffice)
+        {
+            return string.Equals(pLayer, CourtOfficeLayer.City,
+                       StringComparison.Ordinal) &&
+                   pCityValid && pCityOwnedByKingdom &&
+                   !string.IsNullOrEmpty(pOfficeId) &&
+                   string.Equals(pOfficeId, pResolvedCityOffice,
+                       StringComparison.Ordinal);
+        }
+
         public static CourtManualOfficeAction ResolveOfficeAction(
             bool officeInCurrentTier, long incumbentActorId)
         {

@@ -82,14 +82,36 @@ namespace AncientWarfare3.patch
                         AWPathFailureReason.CancelledByNewRequest);
                 return true;
             }
+            // Match the Cultiway admission boundary before a request enters
+            // the deferred batch. Invalid actors/targets must not occupy a
+            // batch slot and later repeat the full submission chain.
+            if (!AWPathMovementBridge.CanAcceptRequest(__instance, pTile))
+            {
+                __result = ExecuteEvent.False;
+                return false;
+            }
             long benchmark = RecentFeatureBenchmark.Begin();
             RuntimePerformanceDiagnostic.ActorRaceScopeToken raceToken =
                 RuntimePerformanceDiagnostic.BeginActorRaceScope(__instance);
             try
             {
-                __result = AWPathMovementBridge.Submit(__instance, pTile,
-                    pPathOnWater, pWalkOnBlocks, pWalkOnLava,
-                    pLimitPathfindingRegions);
+                if (AWDeferredPathRequestBatch.TryCapture(
+                        __instance, pTile, pPathOnWater, pWalkOnBlocks,
+                        pWalkOnLava, pLimitPathfindingRegions))
+                {
+                    __instance.setTileTarget(pTile);
+                    __instance.next_step_position =
+                        __instance.current_tile?.posV3 ??
+                        __instance.next_step_position;
+                    __instance.setNotMoving();
+                    __result = ExecuteEvent.True;
+                }
+                else
+                {
+                    __result = AWPathMovementBridge.Submit(__instance, pTile,
+                        pPathOnWater, pWalkOnBlocks, pWalkOnLava,
+                        pLimitPathfindingRegions);
+                }
             }
             finally
             {

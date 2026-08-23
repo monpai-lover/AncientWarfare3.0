@@ -86,7 +86,7 @@ namespace AncientWarfare3.ui.items
             }
 
             _name.text = pNode.IsVacancy
-                ? OfficeName(pKingdom, pNode.OfficeId) + " - " +
+                ? VacancyOfficeName(pNode, pKingdom) + " - " +
                   AW_L10n.Text("aw_court_no_officer", "Vacant")
                 : pNode.ActorName;
             string roleLine = RoleLine(pNode, pKingdom);
@@ -471,7 +471,7 @@ namespace AncientWarfare3.ui.items
             _tip.enabled = true;
             _tip.type = AW_RawTooltip.TYPE;
             string title = pNode.IsVacancy
-                ? OfficeName(pKingdom, pNode.OfficeId)
+                ? VacancyOfficeName(pNode, pKingdom)
                 : pNode.ActorName;
             string desc = BuildTooltip(pNode, pActor, pKingdom);
             _tip.hoverAction = () => Tooltip.show(gameObject, AW_RawTooltip.TYPE,
@@ -736,6 +736,15 @@ namespace AncientWarfare3.ui.items
                 return AW_L10n.Text("aw_court_office_regional_superior",
                     "Regional Governor");
             return CourtInstitutionService.OfficeName(pKingdom, pOfficeId);
+        }
+
+        private static string VacancyOfficeName(CourtPyramidNodeModel pNode,
+            Kingdom pKingdom)
+        {
+            if (pNode?.RoleId == CourtPyramidRoleId.RegionalGovernor &&
+                !string.IsNullOrWhiteSpace(pNode.DisplayTitle))
+                return pNode.DisplayTitle;
+            return OfficeName(pKingdom, pNode?.OfficeId);
         }
 
         private static string SchoolName(string pSchoolId)

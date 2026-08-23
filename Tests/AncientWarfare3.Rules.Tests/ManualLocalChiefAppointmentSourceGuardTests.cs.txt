@@ -1,0 +1,54 @@
+using System;
+using System.IO;
+
+internal static class ManualLocalChiefAppointmentSourceGuardTests
+{
+    internal static void Run()
+    {
+        string courtService = Read("Code/core/court/CourtService.cs");
+        string service = ReadOptional(
+            "Code/core/court/ManualLocalChiefAppointmentService.cs");
+        string window = Read("Code/ui/windows/CourtAppointmentWindow.cs");
+
+        Contains(courtService, "IsAuthoritativeLocalChiefScope");
+        Contains(courtService,
+            "ManualLocalChiefAppointmentService.TryAppoint");
+        Contains(service, "using (GovernorRotationRuntimeScope.Enter())");
+        Contains(service, "pCandidate.joinCity(pCity)");
+        Contains(service, "pCity.setLeader(pCandidate, pNew: true)");
+        Contains(service, "ReferenceEquals(pCity.leader, pCandidate)");
+        Contains(service, "RestoreRuntimePlacement");
+        Contains(service, "pCity.setLeader(pFormerLeader, pNew: false)");
+        Contains(service, "pCandidate.joinCity(restoreCity)");
+        Contains(service,
+            "CityGovernorPlacementService.OnCommittedAssignment");
+        Contains(service,
+            "CityBureauAnnualWorkService.RequestImmediateReconcile");
+        DoesNotContain(window, ".setLeader(");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            pPath.Replace('/', Path.DirectorySeparatorChar)));
+
+    private static string ReadOptional(string pPath)
+    {
+        string path = Path.Combine(Directory.GetCurrentDirectory(),
+            pPath.Replace('/', Path.DirectorySeparatorChar));
+        return File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+    }
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "missing manual local chief source guard: " + pNeedle);
+    }
+
+    private static void DoesNotContain(string pText, string pNeedle)
+    {
+        if (pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "forbidden manual local chief source: " + pNeedle);
+    }
+}

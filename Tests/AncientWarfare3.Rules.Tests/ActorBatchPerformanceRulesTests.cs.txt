@@ -38,5 +38,11 @@ internal static class ActorBatchPerformanceRulesTests
             !runner.Contains("update_stats"))
             throw new InvalidOperationException(
                 "actor update_stats must keep ObjectContainer commits out of presentation background work");
+
+        if (!runner.Contains("FindNextParallelJobPhase", StringComparison.Ordinal) ||
+            !runner.Contains("FindNextMainThreadBatchIndex", StringComparison.Ordinal) ||
+            !runner.Contains(".parallel." , StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "batch scheduling must expose fine-grained phase names for adaptive large-step budgeting");
     }
 }

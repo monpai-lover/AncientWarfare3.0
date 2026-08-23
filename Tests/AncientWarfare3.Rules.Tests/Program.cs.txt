@@ -118,6 +118,13 @@ if (args.Length == 1 && args[0] == "--frame-priority-confirmation")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--actor-batch-phase-budget")
+{
+    ActorBatchPerformanceRulesTests.Run();
+    Console.WriteLine("Actor batch phase budget rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--custom-local-government")
 {
     CustomLocalGovernmentRulesTests.Run();
@@ -6541,6 +6548,9 @@ Equal(1, OfficialCareerRankRules.ApplyAutomaticRankChange(1, -2),
 True(OfficialCareerBiographyRules.IsCareerEvent(
         "official_appointment_edict"),
     "official rank promotion edicts belong to the career biography timeline");
+True(OfficialCareerBiographyRules.IsCareerEvent(
+        "official_rank_promoted"),
+    "annual merit promotions belong to the career biography timeline");
 True(OfficialCareerBiographyRules.IsCareerEvent("official_evaluation"),
     "official evaluations belong to the career biography timeline");
 True(OfficialCareerBiographyRules.IsCareerEvent("court_officer_appointed") &&

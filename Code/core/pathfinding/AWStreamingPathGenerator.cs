@@ -1,5 +1,6 @@
 // Derived from Cultiway-Reborn pathfinding (MIT, Copyright (c) 2025 Inmny).
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 
@@ -9,6 +10,7 @@ namespace AncientWarfare3.core.pathfinding
     {
         private const float Epsilon = 0.001f;
         [ThreadStatic] private static SearchWorkspace _threadWorkspace;
+        [ThreadStatic] private static ReusablePathSteps _threadStraightPath;
         private readonly AWPathfindingConfig _config;
         private readonly AWRegionRouteCache _regionRouteCache;
 
@@ -55,10 +57,11 @@ namespace AncientWarfare3.core.pathfinding
             {
                 pCancellation.ThrowIfCancellationRequested();
                 if (pRequest.TryTakeCachedSegment(pMaximumSteps,
-                        out AWPathStep[] cachedSteps, out bool cachedComplete))
+                        out IReadOnlyList<AWPathStep> cachedSteps,
+                        out bool cachedComplete))
                 {
-                    int cachedEnd = cachedSteps.Length > 0
-                        ? cachedSteps[cachedSteps.Length - 1].TileId
+                    int cachedEnd = cachedSteps.Count > 0
+                        ? cachedSteps[cachedSteps.Count - 1].TileId
                         : pRequest.StartTileId;
                     return AWPathGenerationResult.Success(cachedEnd,
                         cachedComplete, cachedSteps);
@@ -106,7 +109,7 @@ namespace AncientWarfare3.core.pathfinding
                     TryBuildStraightSegment(pRequest, start, target,
                         Math.Min(Math.Max(1, pMaximumSteps),
                             _config.SegmentTargetSteps), _config,
-                        out AWPathStep[] straightSteps,
+                        out IReadOnlyList<AWPathStep> straightSteps,
                         out int straightEnd))
                 {
                     bool straightReachedTarget = straightEnd == target.Id;
@@ -115,16 +118,26 @@ namespace AncientWarfare3.core.pathfinding
                 }
                 float direct = AWTraversalRules.Distance(start.X, start.Y,
                     target.X, target.Y);
-                bool longRange = direct > _config.ShortRangeTiles;
+                // Cultiway selects routing stages using grid (Manhattan)
+                // distance.  Using Euclidean distance here leaves diagonal
+                // requests in the expensive destination-wide A* stage even
+                // when their grid distance already requires a corridor.
+                int stageDistance = Math.Abs(target.X - start.X) +
+                    Math.Abs(target.Y - start.Y);
+                bool longRange = stageDistance > _config.ShortRangeTiles;
                 int primaryLimit = longRange
                     ? _config.MaxNodesLong
                     : _config.MaxNodesShort;
                 int searchTargetId = target.Id;
                 AWRegionCorridor corridor = null;
-                if (direct > _config.LongRangeTiles &&
+                if (stageDistance > _config.LongRangeTiles &&
                     useCultiwayActorRouting)
                     ResolveLongRangeSearch(pRequest, start, target,
                         out searchTargetId, out corridor);
+                // Match Cultiway's routing weights: accurate short-range A*
+                // and a small long-range heuristic bias. RTS bounded-water
+                // requests stay on this established generator but never use
+                // the ordinary actor corridor or straight-line shortcuts.
                 float heuristicWeight = longRange
                     ? Math.Max(1f, _config.LongRangeHeuristicWeight)
                     : 1f;
@@ -172,20 +185,29 @@ namespace AncientWarfare3.core.pathfinding
                 int stepCount = workspace.BuildPath(result.NodeIndex);
                 int maximumSteps = Math.Max(1, pMaximumSteps);
                 int outputCount = Math.Min(stepCount, maximumSteps);
-                var fullRoute = new AWPathStep[stepCount];
-                for (int i = 0; i < stepCount; i++)
-                    fullRoute[i] = workspace.PathStep(i);
-                var steps = new AWPathStep[outputCount];
-                for (int i = 0; i < outputCount; i++)
+                if (outputCount == stepCount)
                 {
-                    pCancellation.ThrowIfCancellationRequested();
-                    steps[i] = fullRoute[i];
+                    return AWPathGenerationResult.Success(pEndTileId: stepCount > 0
+                            ? workspace.PathStep(stepCount - 1).TileId
+                            : pRequest.StartTileId,
+                        pReachedTarget: result.ReachedTarget &&
+                            searchTargetId == target.Id,
+                        pSteps: workspace.PathView(outputCount));
                 }
                 // A region lookahead is an intermediate objective. Its cached
                 // route must never be reported as completion of the request's
                 // actual target.
-                if (outputCount < stepCount && searchTargetId == target.Id)
+                IReadOnlyList<AWPathStep> steps = workspace.PathView(outputCount);
+                if (searchTargetId == target.Id)
+                {
+                    var fullRoute = new AWPathStep[stepCount];
+                    for (int i = 0; i < stepCount; i++)
+                    {
+                        pCancellation.ThrowIfCancellationRequested();
+                        fullRoute[i] = workspace.PathStep(i);
+                    }
                     pRequest.CacheRoute(fullRoute, outputCount);
+                }
                 int endTileId = outputCount > 0
                     ? steps[outputCount - 1].TileId
                     : pRequest.StartTileId;
@@ -304,10 +326,12 @@ namespace AncientWarfare3.core.pathfinding
         private static bool TryBuildStraightSegment(AWPathRequest pRequest,
             AWTileTraversalSnapshot pStart, AWTileTraversalSnapshot pTarget,
             int pMaximumSteps, AWPathfindingConfig pConfig,
-            out AWPathStep[] pSteps, out int pEndTileId)
+            out IReadOnlyList<AWPathStep> pSteps, out int pEndTileId)
         {
             pMaximumSteps = Math.Max(1, pMaximumSteps);
-            var buffer = new AWPathStep[pMaximumSteps];
+            ReusablePathSteps buffer = _threadStraightPath ??=
+                new ReusablePathSteps(pMaximumSteps);
+            buffer.Clear();
             int count = 0;
             int x = pStart.X, y = pStart.Y;
             int targetX = pTarget.X, targetY = pTarget.Y;
@@ -336,13 +360,13 @@ namespace AncientWarfare3.core.pathfinding
                     : next.Liquid || next.Ocean
                         ? AWMovementMethod.Swim
                         : AWMovementMethod.Walk;
-                buffer[count++] = new AWPathStep(next.Id, method,
-                    estimate, pPlannedTileFlags: AWPathTileFlagsExtensions.FromSnapshot(next));
+                buffer.Add(new AWPathStep(next.Id, method,
+                    estimate, pPlannedTileFlags: AWPathTileFlagsExtensions.FromSnapshot(next)));
+                count++;
                 currentId = next.Id;
             }
             pEndTileId = currentId;
-            pSteps = new AWPathStep[count];
-            Array.Copy(buffer, pSteps, count);
+            pSteps = buffer;
             return count > 0 || pStart.Id == pTarget.Id;
         }
 
@@ -626,12 +650,75 @@ namespace AncientWarfare3.core.pathfinding
             }
         }
 
+        private sealed class ReusablePathSteps : IReadOnlyList<AWPathStep>
+        {
+            private AWPathStep[] _items;
+            private int _count;
+
+            internal ReusablePathSteps(int pCapacity)
+            {
+                _items = new AWPathStep[Math.Max(1, pCapacity)];
+            }
+
+            internal void Clear() => _count = 0;
+
+            internal void EnsureCapacity(int pCount)
+            {
+                if (pCount <= _items.Length) return;
+                int capacity = _items.Length;
+                while (capacity < pCount) capacity *= 2;
+                Array.Resize(ref _items, capacity);
+            }
+
+            internal void SetCount(int pCount)
+            {
+                EnsureCapacity(pCount);
+                _count = Math.Max(0, pCount);
+            }
+
+            internal void Add(AWPathStep pStep)
+            {
+                EnsureCapacity(_count + 1);
+                _items[_count++] = pStep;
+            }
+
+            public int Count => _count;
+
+            public AWPathStep this[int pIndex]
+            {
+                get
+                {
+                    if (pIndex < 0 || pIndex >= _count)
+                        throw new ArgumentOutOfRangeException(nameof(pIndex));
+                    return _items[pIndex];
+                }
+                internal set
+                {
+                    if (pIndex < 0 || pIndex >= _count)
+                        throw new ArgumentOutOfRangeException(nameof(pIndex));
+                    _items[pIndex] = value;
+                }
+            }
+
+            IEnumerator<AWPathStep> IEnumerable<AWPathStep>.GetEnumerator()
+            {
+                return ((IEnumerable<AWPathStep>)new ArraySegment<AWPathStep>(
+                    _items, 0, _count)).GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return ((IEnumerable<AWPathStep>)this).GetEnumerator();
+            }
+        }
+
         private sealed class SearchWorkspace
         {
             private const int InitialNodeCapacity = 256;
             private const int InitialPathCapacity = 64;
             private SearchNode[] _nodes = new SearchNode[InitialNodeCapacity];
-            private AWPathStep[] _path = new AWPathStep[InitialPathCapacity];
+            private readonly ReusablePathSteps _path =
+                new ReusablePathSteps(InitialPathCapacity);
             private int[] _labelKeys = Array.Empty<int>();
             private int[] _labelEpochs = Array.Empty<int>();
             private byte[] _labelCounts = Array.Empty<byte>();
@@ -655,8 +742,16 @@ namespace AncientWarfare3.core.pathfinding
                 Open.Clear();
                 int stride = Math.Max(1, Math.Min(byte.MaxValue,
                     pMaxLabelsPerTile));
+                int requestedNodes = Math.Max(1, pMaxNodes);
+                int nodeCapacity = requestedNodes >
+                    (int.MaxValue - 8) / stride
+                    ? int.MaxValue
+                    : requestedNodes * stride + 8;
+                if (_nodes.Length < nodeCapacity)
+                    Array.Resize(ref _nodes, nodeCapacity);
+                Open.EnsureCapacity(nodeCapacity);
                 int minimumSlots = Math.Max(16,
-                    NextPowerOfTwo(Math.Max(1, pMaxNodes) * 2));
+                    NextPowerOfTwo(requestedNodes * 2));
                 if (_labelKeys.Length < minimumSlots ||
                     _labelStride != stride)
                 {
@@ -761,7 +856,7 @@ namespace AncientWarfare3.core.pathfinding
                     count++;
                     node = _nodes[node.ParentIndex];
                 }
-                EnsurePathCapacity(count);
+                _path.SetCount(count);
                 int write = count;
                 node = _nodes[pNodeIndex];
                 while (node.ParentIndex >= 0)
@@ -775,21 +870,19 @@ namespace AncientWarfare3.core.pathfinding
 
             public AWPathStep PathStep(int pIndex) => _path[pIndex];
 
+            public IReadOnlyList<AWPathStep> PathView(int pCount)
+            {
+                _path.SetCount(pCount);
+                return _path;
+            }
+
             private int AddNode(SearchNode pNode)
             {
                 if (_nodeCount == _nodes.Length)
-                    Array.Resize(ref _nodes, _nodes.Length * 2);
+                    Array.Resize(ref _nodes, Math.Max(1, _nodes.Length * 2));
                 int index = _nodeCount++;
                 _nodes[index] = pNode;
                 return index;
-            }
-
-            private void EnsurePathCapacity(int pCount)
-            {
-                if (pCount <= _path.Length) return;
-                int capacity = _path.Length;
-                while (capacity < pCount) capacity *= 2;
-                Array.Resize(ref _path, capacity);
             }
 
             private int FindSlot(int pTileId, bool pCreate)

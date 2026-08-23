@@ -155,6 +155,32 @@ namespace AncientWarfare3.core.court
             }
         }
 
+        internal static bool SyncSeatName(City pCity, string pCommittedName)
+        {
+            if (pCity?.data == null || pCity.isRekt() ||
+                string.IsNullOrWhiteSpace(pCommittedName)) return false;
+            string regionName = RegionalGovernmentRules.RegionName(pCommittedName,
+                "\u5dde");
+            if (string.IsNullOrWhiteSpace(regionName)) return false;
+
+            EnsureInitialized();
+            lock (Gate)
+            {
+                DeJureRegion region = _store?.Regions?.FirstOrDefault(p =>
+                    p != null && p.Active &&
+                    p.SeatCityId == pCity.data.id);
+                if (region == null || string.Equals(region.RegionName,
+                        regionName, StringComparison.Ordinal)) return false;
+                region.RegionName = regionName;
+                region.Version++;
+                AddChange(region.RegionId, pCity.data.id, region.RegionId,
+                    region.RegionId, "DeJureRegionRenamedFromSeat");
+                _store.StoreRevision++;
+            }
+            RegionalGovernmentAggregationService.Clear();
+            return true;
+        }
+
         internal static bool HasExplicitDeJureRemoval(long pCityId)
         {
             if (pCityId < 0L) return false;

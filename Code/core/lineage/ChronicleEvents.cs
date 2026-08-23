@@ -1388,8 +1388,11 @@ namespace AncientWarfare3.core.lineage
             text += H(pPreviousRank <= OfficialCareerRankRules.Unranked
                 ? "aw_hist_official_rank_grant_suffix"
                 : "aw_hist_official_edict_suffix");
+            string eventType = pPreviousRank <= OfficialCareerRankRules.Unranked
+                ? PersonEvent.OFFICIAL_APPOINTMENT_EDICT
+                : PersonEvent.OFFICIAL_RANK_PROMOTED;
             HistoryWriter.RecordPerson(pActor.data.id, pKingdom,
-                pActor.getName(), PersonEvent.OFFICIAL_APPOINTMENT_EDICT,
+                pActor.getName(), eventType,
                 text, ChronicleCategory.CAREER,
                 HistoryTarget.Kingdom(pKingdom));
         }

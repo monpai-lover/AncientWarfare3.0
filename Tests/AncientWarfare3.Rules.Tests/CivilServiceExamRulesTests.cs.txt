@@ -49,6 +49,7 @@ public static class CivilServiceExamRulesTests
         ExistingOfficialsCannotEnterTheActingGovernorPool();
         GovernorRotationIsAllOrNothing();
         GovernorRotationRuntimeScopeIsNestedAndExceptionSafe();
+        AnnualEvaluationPromotionWritesBiography();
         CrossLayerPromotionReleasesThePriorCityLeader();
         DurableOfficerRowsRecoverRuntimeProjectionBeforeDismissal();
         GuestOfficeEndReadsAuthoritativeStateBeforeRetirement();
@@ -1232,6 +1233,20 @@ public static class CivilServiceExamRulesTests
                     hasQualification: true,
                     alreadyRecorded: false),
             "acting appointments do not count as formal entry");
+    }
+
+    private static void AnnualEvaluationPromotionWritesBiography()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "court",
+            "OfficialCareerStateService.cs"));
+        int evaluation = source.IndexOf(
+            "private static void RecordEvaluation(",
+            StringComparison.Ordinal);
+        True(evaluation >= 0 && source.IndexOf(
+                "ChronicleEvents.OnOfficialRankPromoted(", evaluation,
+                StringComparison.Ordinal) >= 0,
+            "a successful annual evaluation records rank promotion in the biography");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

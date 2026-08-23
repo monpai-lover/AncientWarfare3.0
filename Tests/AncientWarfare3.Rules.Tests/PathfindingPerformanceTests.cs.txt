@@ -12,6 +12,10 @@ internal static class PathfindingPerformanceTests
         ActorPostEnemyCacheKeepsPreparationAndCommitBoundaries();
         SpatialMembershipKeepsRepairAndVanillaFallbacks();
         PathRuntimeDiagnosticsAreReadOnly();
+        DeferredPathBatchIsConnectedToActorGoTo();
+        DeferredFlushBoundsAmbientBurst();
+        PathGeneratorReusesWorkerPathBuffers();
+        CultiwayRoutingStagesMatchReference();
         WorkClassesPreserveOperationalCapacityWithFairness();
         RuntimeSubmittersClassifyPathWorkExplicitly();
         RequestKeysMatchWithoutAllocating();
@@ -248,6 +252,147 @@ internal static class PathfindingPerformanceTests
                deferred.Contains("internal static void Clear()",
                    StringComparison.Ordinal),
             "deferred path requests keep latest-per-actor order and teardown clearing");
+    }
+
+    private static void DeferredPathBatchIsConnectedToActorGoTo()
+    {
+        string patch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_GlobalPathfindingPatch.cs"));
+        int goToStart = patch.IndexOf(
+            "private static bool GoTo_Prefix(", StringComparison.Ordinal);
+        int goToEnd = patch.IndexOf(
+            "private static void RejectNativeMilitaryMovement(",
+            goToStart < 0 ? 0 : goToStart, StringComparison.Ordinal);
+        string goTo = goToStart >= 0 && goToEnd > goToStart
+            ? patch.Substring(goToStart, goToEnd - goToStart)
+            : string.Empty;
+
+        int transportBypass = goTo.IndexOf(
+            "ArmyRtsTransportService.OwnsTransportBoat(__instance)",
+            StringComparison.Ordinal);
+        int militaryBypass = goTo.IndexOf(
+            "ShouldUseNativeMilitaryPath(__instance)",
+            StringComparison.Ordinal);
+        int capture = goTo.IndexOf(
+            "AWDeferredPathRequestBatch.TryCapture(",
+            StringComparison.Ordinal);
+        int directSubmit = goTo.IndexOf(
+            "AWPathMovementBridge.Submit(__instance, pTile",
+            StringComparison.Ordinal);
+
+        Assert(transportBypass >= 0 && militaryBypass > transportBypass,
+            "RTS transport and native military movement retain their direct path bypasses");
+        Assert(capture > militaryBypass,
+            "ordinary Actor.goTo requests enter the deferred path batch after military bypasses");
+        Assert(directSubmit > capture,
+            "only uncaptured Actor.goTo requests submit directly to the path bridge");
+        Assert(goTo.Contains("__instance.setTileTarget(pTile);",
+                   StringComparison.Ordinal) &&
+               goTo.Contains("__instance.next_step_position =",
+                   StringComparison.Ordinal) &&
+               goTo.Contains("__instance.setNotMoving();",
+                   StringComparison.Ordinal) &&
+               goTo.Contains("__result = ExecuteEvent.True;",
+                   StringComparison.Ordinal),
+            "captured Actor.goTo requests preserve their target and waiting movement state");
+        Assert(goTo.Contains("CanAcceptRequest(__instance, pTile)",
+                   StringComparison.Ordinal),
+            "ordinary Actor.goTo validates the actor and target before deferred capture");
+
+        string bridge = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathMovementBridge.cs"));
+        Assert(bridge.Contains("internal static bool CanAcceptRequest(",
+                   StringComparison.Ordinal) &&
+               bridge.Contains("pActor.asset.is_boat && !pTarget.isGoodForBoat()",
+                   StringComparison.Ordinal),
+            "path admission rejects invalid actors and impossible boat targets at the boundary");
+    }
+
+    private static void PathGeneratorReusesWorkerPathBuffers()
+    {
+        string generator = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWStreamingPathGenerator.cs"));
+        Assert(generator.Contains("[ThreadStatic]", StringComparison.Ordinal) &&
+               generator.Contains("ReusablePathSteps", StringComparison.Ordinal),
+            "path generation keeps a thread-local reusable output buffer");
+        Assert(generator.Contains(
+                "out IReadOnlyList<AWPathStep> pSteps",
+                StringComparison.Ordinal) &&
+               !generator.Contains(
+                   "var buffer = new AWPathStep[pMaximumSteps];",
+                   StringComparison.Ordinal),
+            "straight path generation does not allocate a temporary array per request");
+        Assert(generator.Contains("PathView(outputCount)",
+                   StringComparison.Ordinal),
+            "A* path generation exposes the workspace path view without copying complete routes");
+    }
+
+    private static void CultiwayRoutingStagesMatchReference()
+    {
+        string config = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathfindingConfig.cs"));
+        Assert(!config.Contains("FastPathHeuristicWeight", StringComparison.Ordinal) &&
+               config.Contains("LongRangeHeuristicWeight", StringComparison.Ordinal),
+            "ordinary actor routing keeps only Cultiway's accurate heuristic weights");
+
+        string generator = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWStreamingPathGenerator.cs"));
+        Assert(!generator.Contains("fastHeuristicWeight", StringComparison.Ordinal) &&
+               generator.Contains("float heuristicWeight = longRange", StringComparison.Ordinal),
+            "ordinary actor routing uses short-range 1f and long-range Cultiway weight");
+        Assert(generator.Contains("!pRequest.Options.BoundedMilitaryWater",
+                   StringComparison.Ordinal),
+            "ordinary actor routing excludes bounded military water paths");
+
+        string finder = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathFinder.cs"));
+        Assert(finder.Contains("private const int SegmentStepBudget = 24;",
+                   StringComparison.Ordinal),
+            "streamed path workers match Cultiway's 24-step segment budget");
+        Assert(finder.Contains("Priority = ThreadPriority.BelowNormal",
+                   StringComparison.Ordinal),
+            "path workers yield CPU priority to the simulation thread during request waves");
+        int partialPath = generator.IndexOf(
+            "var steps = new AWPathStep[outputCount];", StringComparison.Ordinal);
+        int routeCopy = generator.IndexOf(
+            "var fullRoute = new AWPathStep[stepCount];", StringComparison.Ordinal);
+        Assert(partialPath >= 0 && routeCopy > partialPath &&
+               generator.IndexOf("if (searchTargetId == target.Id)", routeCopy,
+                   StringComparison.Ordinal) > routeCopy,
+            "intermediate region segments avoid copying an unused full route");
+    }
+
+    private static void DeferredFlushBoundsAmbientBurst()
+    {
+        string rules = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWDeferredPathRequestBatchRules.cs"));
+        string batch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWDeferredPathRequestBatch.cs"));
+        string bridge = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathMovementBridge.cs"));
+        Assert(rules.Contains("MaximumAmbientFlushPerFrame",
+                   StringComparison.Ordinal) &&
+               rules.Contains("ShouldDeferAmbientFlush", StringComparison.Ordinal),
+            "deferred path rules expose a bounded ambient flush budget");
+        Assert(batch.Contains("ShouldDeferAmbientFlush", StringComparison.Ordinal) &&
+               batch.Contains("Pending.RemoveRange", StringComparison.Ordinal),
+            "ambient deferred requests remain queued instead of being discarded");
+        Assert(bridge.Contains("IsOperationalPath", StringComparison.Ordinal) &&
+               bridge.Contains("IsEssentialPath", StringComparison.Ordinal),
+            "path bridge exposes operational and essential classifications to the flush boundary");
+        Assert(batch.Contains("AWPathMovementBridge.ClassifyPathWork(item.Actor)",
+                   StringComparison.Ordinal) &&
+               !batch.Contains("IsOperationalPath(item.Actor) ||", StringComparison.Ordinal),
+            "ambient flush classifies each pending actor once");
     }
 
     private static void RuntimeSubmittersClassifyPathWorkExplicitly()
@@ -507,6 +652,15 @@ internal static class PathfindingPerformanceTests
         Assert(finder.Contains("SemaphoreSlim") &&
                finder.Contains("_queueSignal.Release()"),
             "each scheduled path segment preserves a worker wakeup under burst load");
+
+        int workerLoop = finder.IndexOf("private void RunWorkerLoop()",
+            StringComparison.Ordinal);
+        int take = finder.IndexOf("if (!TryTakeWork(out AWScheduledPathWork work))",
+            workerLoop < 0 ? 0 : workerLoop, StringComparison.Ordinal);
+        int wait = finder.IndexOf("_queueSignal.Wait();",
+            workerLoop < 0 ? 0 : workerLoop, StringComparison.Ordinal);
+        Assert(workerLoop >= 0 && take >= 0 && wait >= 0 && take < wait,
+            "path workers drain queued work before blocking again");
     }
 
     private static void LongRangeStreamingCachesSolvedRouteAcrossSegments()

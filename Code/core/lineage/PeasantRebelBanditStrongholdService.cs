@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ai;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
@@ -566,27 +567,74 @@ namespace AncientWarfare3.core.lineage
         private static Actor SelectDirectRuler(City pMother)
         {
             Kingdom origin = pMother?.kingdom;
-            Actor ordinary = pMother?.units?.Where(actor =>
-                    IsOrdinaryResident(actor, origin))
-                .OrderBy(actor => actor.getID()).FirstOrDefault();
-            if (PeasantRebelBanditStrongholdRules.ShouldPreferOrdinaryRuler(
-                    ordinary != null))
-                return ordinary;
-
-            Actor cityLeader = pMother?.leader;
-            bool alive = false;
-            bool adult = false;
+            Actor selected = null;
+            int selectedPriority = int.MaxValue;
+            int selectedAbility = int.MinValue;
+            long selectedId = long.MaxValue;
             try
             {
-                alive = cityLeader != null && cityLeader.isAlive() &&
-                    !cityLeader.isRekt();
-                adult = alive && cityLeader.isAdult();
+                foreach (Actor actor in pMother?.units ?? new List<Actor>())
+                {
+                    if (!CanUseDirectRulerCandidate(actor, pMother))
+                        continue;
+                    bool hasClaim = HasDormantRestorationClaim(actor);
+                    bool ordinary = IsOrdinaryResident(actor, origin);
+                    bool cityLeader = actor == pMother.leader;
+                    int priority = PeasantRebelBanditStrongholdRules.
+                        RulerPriority(hasClaim, ordinary, cityLeader);
+                    if (priority > 2) continue;
+                    int ability = RulerAbility(actor);
+                    long actorId = actor.getID();
+                    if (selected != null &&
+                        (priority > selectedPriority ||
+                         priority == selectedPriority &&
+                         (ability < selectedAbility ||
+                          ability == selectedAbility && actorId >= selectedId)))
+                        continue;
+                    selected = actor;
+                    selectedPriority = priority;
+                    selectedAbility = ability;
+                    selectedId = actorId;
+                }
             }
             catch { }
-            return PeasantRebelBanditStrongholdRules.CanUseCityLeaderAsRuler(
-                    alive, adult, cityLeader?.city == pMother)
-                ? cityLeader
-                : null;
+            return selected;
+        }
+
+        private static bool CanUseDirectRulerCandidate(Actor pActor,
+            City pMother)
+        {
+            if (pActor?.data == null || pMother?.data == null ||
+                pActor.city != pMother || pActor.isRekt() ||
+                !pActor.isAlive() || !pActor.isAdult() ||
+                !pActor.isSexMale() || pActor.hasTrait("madness"))
+                return false;
+            return pActor == pMother.leader ||
+                   IsOrdinaryResident(pActor, pMother.kingdom) ||
+                   (RoyalClaimService.IsAvailableRestorationLeader(pActor) &&
+                    HasDormantRestorationClaim(pActor));
+        }
+
+        private static bool HasDormantRestorationClaim(Actor pActor)
+        {
+            if (pActor?.data == null ||
+                !RoyalClaimService.IsAvailableRestorationLeader(pActor))
+                return false;
+            return RoyalClaimService.FindBestDormantClaimIdForActor(
+                pActor.data.id) >= 0L;
+        }
+
+        private static int RulerAbility(Actor pActor)
+        {
+            try
+            {
+                return (int)Math.Max(0f,
+                    (pActor.stats?["diplomacy"] ?? 0f) +
+                    (pActor.stats?["warfare"] ?? 0f) +
+                    (pActor.stats?["stewardship"] ?? 0f) +
+                    (pActor.stats?["intelligence"] ?? 0f));
+            }
+            catch { return 0; }
         }
 
         private static bool EnsureDirectBanditKing(Kingdom pBandit,

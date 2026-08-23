@@ -1325,14 +1325,24 @@ namespace AncientWarfare3.core.court
 
             string school = SchoolMembershipService.GetSchool(actor.data.id);
             City city = pCityId >= 0 ? World.world?.cities?.get(pCityId) : null;
-            bool committed = incumbent?.data != null
+            Func<bool> persistAppointment = () => incumbent?.data != null
                 ? ReplaceOfficer(incumbent, actor, kingdom, pLayer, pOfficeId,
                     school, city)
-                : SetOfficer(actor, kingdom, pLayer,
-                    pOfficeId, school, city,
+                : SetOfficer(actor, kingdom, pLayer, pOfficeId, school, city,
                     pVacancyPromotion: true,
                     pAllowLocalLowerQualification:
                         pLayer == CourtOfficeLayer.City);
+            bool authoritativeLocalChief =
+                CourtManualAppointmentRules.IsAuthoritativeLocalChiefScope(
+                    pLayer, city?.data != null && !city.isRekt(),
+                    city?.kingdom == kingdom, pOfficeId,
+                    city?.data == null
+                        ? null
+                        : ResolveCityOffice(kingdom, city));
+            bool committed = authoritativeLocalChief
+                ? ManualLocalChiefAppointmentService.TryAppoint(kingdom, city,
+                    actor, persistAppointment)
+                : persistAppointment();
             if (!committed)
                 return CourtManualAppointmentResult.PersistenceFailed;
             CourtAristocraticGroupService.Refresh(kingdom, GetActiveOfficers(kingdom, 96));

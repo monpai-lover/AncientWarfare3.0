@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.naming;
 using AncientWarfare3.core.policy;
@@ -24,9 +25,13 @@ namespace AncientWarfare3.patch
         {
             if (__instance is City city)
             {
-                if (!string.Equals(__state, city.data?.name,
+                string committedCityName = city.data?.name ?? pName ?? "";
+                if (!string.Equals(__state, committedCityName,
                         StringComparison.Ordinal))
+                {
+                    DeJureRegionStore.SyncSeatName(city, committedCityName);
                     HierarchicalVassalMapModeService.MarkCityDirty(city);
+                }
                 return;
             }
             if (__instance is not Kingdom kingdom) return;

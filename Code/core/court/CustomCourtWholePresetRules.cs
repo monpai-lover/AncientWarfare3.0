@@ -27,13 +27,6 @@ namespace AncientWarfare3.core.court
 
     public static class CustomCourtWorkflowLayoutRules
     {
-        public static float VisibleCanvasHeight(float viewportHeight,
-            float rootOffsetY, float canvasOffsetY)
-        {
-            return Math.Max(1f, viewportHeight - 2f * Math.Abs(
-                rootOffsetY + canvasOffsetY));
-        }
-
         public static CustomCourtWorkflowLayout Resolve(float contentWidth,
             float viewportHeight, float toolbarWidth, float toolbarScale,
             float scrollbarWidth)

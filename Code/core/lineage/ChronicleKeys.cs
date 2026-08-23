@@ -52,6 +52,7 @@ namespace AncientWarfare3.core.lineage
         public const string OFFICIAL_EVALUATION = "official_evaluation";
         public const string OFFICIAL_APPOINTMENT_EDICT =
             "official_appointment_edict";
+        public const string OFFICIAL_RANK_PROMOTED = "official_rank_promoted";
         public const string MINISTERIAL_POWER = "ministerial_power";
         public const string NINE_BESTOWMENTS = "nine_bestowments";
         public const string ROYAL_MEDICAL_CURE = "royal_medical_cure";
