@@ -197,7 +197,8 @@ namespace AncientWarfare3.core.policy
             catch { }
         }
 
-        internal static bool NeedsProcessFrame => false;
+        internal static bool NeedsProcessFrame =>
+            HierarchicalVassalMapLabelRuntime.NeedsProcessFrame;
 
         internal static int RuntimeNodeCountForDiagnostics =>
             RuntimeNodes.Count;
@@ -243,6 +244,7 @@ namespace AncientWarfare3.core.policy
                 {
                     SetRootActive(false);
                 }
+                HierarchicalVassalMapLabelRuntime.ProcessFrame();
             }
             catch (Exception error)
             {

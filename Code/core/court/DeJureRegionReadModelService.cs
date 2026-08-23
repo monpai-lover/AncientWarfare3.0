@@ -51,7 +51,7 @@ namespace AncientWarfare3.core.court
                     SeatCityId = legal.SeatCityId,
                     LegalSeatCityId = legal.SeatCityId,
                     EffectiveSeatCityId = effectiveSeatId,
-                    RegionName = legal.RegionName ?? string.Empty,
+                    RegionName = DeJureRegionStore.ResolveDisplayName(legal),
                     RegionTitle = pRegionTitle ?? string.Empty,
                     GovernorTitle = pGovernorTitle ?? string.Empty,
                     LocalLevelTitle = pLocalLevelTitle ?? string.Empty,

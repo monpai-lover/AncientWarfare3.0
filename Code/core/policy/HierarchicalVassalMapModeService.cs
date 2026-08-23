@@ -741,7 +741,7 @@ namespace AncientWarfare3.core.policy
                     SeatCityId = legal.SeatCityId,
                     LegalSeatCityId = legal.SeatCityId,
                     EffectiveSeatCityId = legal.SeatCityId,
-                    RegionName = legal.RegionName ?? string.Empty,
+                    RegionName = DeJureRegionStore.ResolveDisplayName(legal),
                     RegionTitle = regionTitle,
                     MemberCityIds = members.Select(city => city.id).Distinct()
                         .ToList(),
@@ -1148,11 +1148,6 @@ namespace AncientWarfare3.core.policy
                     out RegionalGovernmentReadModel region)) return false;
             if (!CityAdministrationState.PushKingdom(pCity.kingdom.id))
                 return false;
-            if (!CityAdministrationState.PushRegion(region.SeatCityId))
-            {
-                CityAdministrationState.PopKingdom();
-                return false;
-            }
             RefreshView();
             return true;
         }

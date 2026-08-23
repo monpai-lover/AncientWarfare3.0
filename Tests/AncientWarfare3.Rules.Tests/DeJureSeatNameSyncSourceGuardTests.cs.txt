@@ -1,0 +1,32 @@
+using System;
+using System.IO;
+
+internal static class DeJureSeatNameSyncSourceGuardTests
+{
+    internal static void Run()
+    {
+        string store = Read("Code/core/court/DeJureRegionStore.cs");
+        string readModel = Read("Code/core/court/DeJureRegionReadModelService.cs");
+        string mapMode = Read("Code/core/policy/HierarchicalVassalMapModeService.cs");
+
+        Contains(store, "private static bool SyncRegionNameFromSeatLocked(");
+        Contains(store, "private static bool SyncAllRegionNamesLocked()");
+        Contains(store, "SyncRegionNameFromSeatLocked(current);");
+        Contains(store, "SyncRegionNameFromSeatLocked(target);");
+        Contains(store, "SyncRegionNameFromSeatLocked(region);");
+        Contains(store, "SyncAllRegionNamesLocked();");
+        Contains(readModel, "DeJureRegionStore.ResolveDisplayName(legal)");
+        Contains(mapMode, "DeJureRegionStore.ResolveDisplayName(legal)");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            pPath.Replace('/', Path.DirectorySeparatorChar)));
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "missing de-jure seat name sync source guard: " + pNeedle);
+    }
+}

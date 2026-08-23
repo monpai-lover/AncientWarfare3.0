@@ -39,6 +39,7 @@ namespace AncientWarfare3.core.court
                 _nextChangeId = 1L;
                 RepairEmptyRegionsLocked();
                 EnsureAllKingdomCapitalSeatsLocked();
+                SyncAllRegionNamesLocked();
             }
             DeJureNewCityAssignmentService.ClearRuntime();
         }
@@ -111,6 +112,7 @@ namespace AncientWarfare3.core.court
             EnsureInitialized();
             lock (Gate)
             {
+                SyncAllRegionNamesLocked();
                 return (_store?.Regions ?? new List<DeJureRegion>())
                     .Where(p => p != null && p.Active &&
                                 p.MemberCityIds != null &&
@@ -155,6 +157,21 @@ namespace AncientWarfare3.core.court
             }
         }
 
+        internal static string ResolveDisplayName(DeJureRegion pRegion)
+        {
+            if (pRegion == null) return string.Empty;
+            try
+            {
+                City seat = World.world?.cities?.get(pRegion.SeatCityId);
+                string derived = RegionalGovernmentRules.RegionName(
+                    seat?.data?.name ?? string.Empty, string.Empty);
+                return string.IsNullOrWhiteSpace(derived)
+                    ? (pRegion.RegionName ?? string.Empty)
+                    : derived;
+            }
+            catch { return pRegion.RegionName ?? string.Empty; }
+        }
+
         internal static bool SyncSeatName(City pCity, string pCommittedName)
         {
             if (pCity?.data == null || pCity.isRekt() ||
@@ -169,8 +186,9 @@ namespace AncientWarfare3.core.court
                 DeJureRegion region = _store?.Regions?.FirstOrDefault(p =>
                     p != null && p.Active &&
                     p.SeatCityId == pCity.data.id);
-                if (region == null || string.Equals(region.RegionName,
-                        regionName, StringComparison.Ordinal)) return false;
+                if (region == null) return false;
+                if (string.Equals(region.RegionName, regionName,
+                        StringComparison.Ordinal)) return false;
                 region.RegionName = regionName;
                 region.Version++;
                 AddChange(region.RegionId, pCity.data.id, region.RegionId,
@@ -281,6 +299,7 @@ namespace AncientWarfare3.core.court
                     target.MemberCityIds = target.MemberCityIds.Distinct().ToList();
                     if (pCity.kingdom?.capital == pCity)
                         target.SeatCityId = pCity.data.id;
+                    SyncRegionNameFromSeatLocked(target);
                     AddChange(target.RegionId, pCity.data.id, fromRegionId,
                         target.RegionId, "DeJureCityTransferred");
                     _store.StoreRevision++;
@@ -356,6 +375,7 @@ namespace AncientWarfare3.core.court
                     target.MemberCityIds = target.MemberCityIds.Distinct().ToList();
                     if (pCity.kingdom?.capital == pCity)
                         target.SeatCityId = pCity.data.id;
+                    SyncRegionNameFromSeatLocked(target);
                     target.Version++;
                     AddChange(target.RegionId, pCity.data.id, -1L,
                         target.RegionId, pReason ?? "city_created_auto_assign");
@@ -615,6 +635,7 @@ namespace AncientWarfare3.core.court
                 if (current.SeatCityId != capital.data.id)
                 {
                     current.SeatCityId = capital.data.id;
+                    SyncRegionNameFromSeatLocked(current);
                     current.Version++;
                     AddChange(current.RegionId, capital.data.id,
                         current.RegionId, current.RegionId,
@@ -703,6 +724,7 @@ namespace AncientWarfare3.core.court
                     // otherwise the legacy fallback can accidentally turn
                     // every city into its own independent state.
                     EnsureAllKingdomCapitalSeatsLocked();
+                    SyncAllRegionNamesLocked();
                     Migrate(_store);
                     _migrationCompleted = true;
                 }
@@ -711,6 +733,7 @@ namespace AncientWarfare3.core.court
                 {
                     RepairEmptyRegionsLocked();
                     EnsureAllKingdomCapitalSeatsLocked();
+                    SyncAllRegionNamesLocked();
                 }
             }
             if (_store != null && HasLiveWorld() && Config.game_loaded &&
@@ -894,6 +917,7 @@ namespace AncientWarfare3.core.court
             if (current.SeatCityId == pCityId && current.MemberCityIds.Count > 0)
             {
                 current.SeatCityId = ChooseSeat(current.MemberCityIds);
+                SyncRegionNameFromSeatLocked(current);
                 current.Version++;
                 AddChange(current.RegionId, pCityId, current.RegionId,
                     current.RegionId, "DeJureSeatChanged");
@@ -936,6 +960,37 @@ namespace AncientWarfare3.core.court
                 .ThenByDescending(SafePopulation)
                 .ThenBy(p => p.data.id)
                 .Select(p => p.data.id).DefaultIfEmpty(-1L).First();
+        }
+
+        private static bool SyncRegionNameFromSeatLocked(DeJureRegion pRegion)
+        {
+            if (pRegion == null || !pRegion.Active) return false;
+            City seat = World.world?.cities?.get(pRegion.SeatCityId);
+            if (!IsLiveCity(seat)) return false;
+            string derived = RegionalGovernmentRules.RegionName(
+                seat.data.name ?? string.Empty, string.Empty);
+            if (string.IsNullOrWhiteSpace(derived) ||
+                string.Equals(pRegion.RegionName, derived,
+                    StringComparison.Ordinal)) return false;
+            pRegion.RegionName = derived;
+            pRegion.Version++;
+            AddChange(pRegion.RegionId, seat.data.id, pRegion.RegionId,
+                pRegion.RegionId, "DeJureRegionRenamedFromSeat");
+            return true;
+        }
+
+        private static bool SyncAllRegionNamesLocked()
+        {
+            if (_store?.Regions == null) return false;
+            bool changed = false;
+            foreach (DeJureRegion region in _store.Regions)
+                changed |= SyncRegionNameFromSeatLocked(region);
+            if (!changed) return false;
+            _store.StoreRevision++;
+            RegionalGovernmentAggregationService.Clear();
+            HierarchicalVassalMapModeService.MarkHierarchyDirty();
+            HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
+            return true;
         }
 
         private static void AddChange(long pRegionId, long pCityId,
