@@ -36,6 +36,7 @@ if (args.Length == 1 && args[0] == "--court-history-localization")
     ManualLocalChiefAppointmentSourceGuardTests.Run();
     DeJureSeatRenameSourceGuardTests.Run();
     DeJureSeatNameSyncSourceGuardTests.Run();
+    GlobalDeJureEmptyClickSourceGuardTests.Run();
     return;
 }
 

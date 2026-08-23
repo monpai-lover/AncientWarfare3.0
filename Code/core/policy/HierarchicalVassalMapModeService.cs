@@ -1121,7 +1121,19 @@ namespace AncientWarfare3.core.policy
                 RefreshView();
                 return true;
             }
-            if (IsCityLayer) return false;
+            if (IsCityLayer)
+            {
+                // An empty/water tile is not a navigation action. The native
+                // zone redraw can clear the world-space labels, so keep the
+                // current global state view and requeue its label batch.
+                if (IsCityGlobalRegionLayer)
+                {
+                    HierarchicalVassalMapModeLabelLayer.RequestRefresh();
+                    RequestNativeRedraw();
+                    return true;
+                }
+                return false;
+            }
             if (State.IsRoot) return false;
             State.Reset();
             RefreshView();

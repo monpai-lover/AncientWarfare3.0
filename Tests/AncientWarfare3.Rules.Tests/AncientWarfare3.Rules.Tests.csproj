@@ -120,6 +120,7 @@
     <Compile Include="ManualLocalChiefAppointmentSourceGuardTests.cs.txt" />
     <Compile Include="DeJureSeatRenameSourceGuardTests.cs.txt" />
     <Compile Include="DeJureSeatNameSyncSourceGuardTests.cs.txt" />
+    <Compile Include="GlobalDeJureEmptyClickSourceGuardTests.cs.txt" />
     <Compile Include="CourtImmediateVacancyModeRulesTests.cs.txt" />
     <Compile Include="CourtAppointmentFailureBackoffRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CourtAppointmentFailureBackoffRules.cs" Link="Production\CourtAppointmentFailureBackoffRules.cs" />
