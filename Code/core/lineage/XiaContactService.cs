@@ -18,6 +18,10 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pKingdom.isRekt() || pKingdom.isNeutral() || !pKingdom.isCiv()) return;
             if (LineageService.IsXiaKingdom(pKingdom)) return;
+            if (!XiaizationAnnualRules.ShouldRunAnnualWork(
+                    isNativeXiaKingdom: false,
+                    xiaizationLevel: XiaizationService.GetLevel(pKingdom)))
+                return;
 
             int year = Date.getCurrentYear();
             pKingdom.data.get(LineageKeys.XIA_CONTACT_LAST_YEAR, out int lastYear, int.MinValue);

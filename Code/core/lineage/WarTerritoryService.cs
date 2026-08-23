@@ -2011,14 +2011,30 @@ namespace AncientWarfare3.core.lineage
             string pReason)
         {
             if (pAttacker?.data == null) return;
+            string reason = LocalizeGoalFailureReason(pReason);
             HistoryText target = pCity?.data != null
                 ? HistoryText.City(pCity, pAttacker)
                 : HistoryText.Kingdom(pDefender, pGoal.target_kingdom_name);
             HistoryWriter.RecordKingdom(pAttacker, "war_goal_failed",
                 HistoryText.Kingdom(pAttacker) + H("aw_hist_war_goal_failed_mid") +
                 HistoryText.PlainText(GoalLabel(pGoal.goal_type)) + " " + target +
-                H("aw_hist_paren_open") + HistoryText.PlainText(pReason) + H("aw_hist_paren_close"),
+                H("aw_hist_paren_open") + HistoryText.PlainText(reason) + H("aw_hist_paren_close"),
                 pCity?.data != null ? HistoryTarget.City(pCity) : HistoryTarget.Kingdom(pDefender));
+        }
+
+        private static string LocalizeGoalFailureReason(string pReason)
+        {
+            switch (pReason ?? "")
+            {
+                case "negotiated_goal_not_enforced":
+                    return T("aw_hist_goal_negotiated_goal_not_enforced");
+                case "defender_victory":
+                    return T("aw_hist_goal_defender_win");
+                case "white_peace":
+                    return T("aw_hist_goal_peace_unresolved");
+                default:
+                    return pReason ?? "";
+            }
         }
 
         private static void MarkGoalResolved(long pGoalId, string pResult)

@@ -57,6 +57,7 @@ namespace AncientWarfare3.core.policy
             KingdomFoodReliefService.ClearRuntime();
             AsyncKingdomStrategyService.ClearRuntime();
             CityBureauAnnualWorkService.ClearRuntime();
+            NobleRemarriageService.ClearRuntimeState();
             BanditGreatUprisingService.ClearRuntime();
             PeasantRebelBanditIslandMigrationService.ClearRuntime();
         }

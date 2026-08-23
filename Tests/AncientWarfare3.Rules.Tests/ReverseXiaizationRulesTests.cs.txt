@@ -14,6 +14,15 @@ internal static class ReverseXiaizationRulesTests
             "an active city stops at forty percent");
         Equal(false, ReverseXiaizationRules.ShouldRemainActive(true, 0.10f, false),
             "a city without a non-Xia target cannot continue");
+        Equal(false, XiaizationAnnualRules.ShouldRunAnnualWork(
+                isNativeXiaKingdom: true, xiaizationLevel: 5),
+            "native Xia kingdoms skip annual Xiaization work");
+        Equal(false, XiaizationAnnualRules.ShouldRunAnnualWork(
+                isNativeXiaKingdom: false, xiaizationLevel: 5),
+            "fully Xiaized foreign kingdoms skip annual Xiaization work");
+        Equal(true, XiaizationAnnualRules.ShouldRunAnnualWork(
+                isNativeXiaKingdom: false, xiaizationLevel: 3),
+            "partially Xiaized foreign kingdoms retain annual Xiaization work");
 
         Equal(0.05f, ReverseXiaizationRules.YearlyRate(0.149f),
             "cities below fifteen percent use the accelerated rate");

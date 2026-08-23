@@ -20,6 +20,8 @@ namespace AncientWarfare3.core.court
         private static readonly Dictionary<string, CandidateScanState>
             CandidateScans = new Dictionary<string, CandidateScanState>(
                 StringComparer.Ordinal);
+        private static readonly Dictionary<string, int> AppointmentFailures =
+            new Dictionary<string, int>(StringComparer.Ordinal);
 
         private sealed class ActiveLocalOfficer
         {
@@ -94,21 +96,34 @@ namespace AncientWarfare3.core.court
             if (!string.IsNullOrEmpty(rootOffice) && pCity.leader?.data != null)
             {
                 retainedCounts.TryGetValue(rootOffice, out int rootCount);
-                if (rootCount == 0 && CourtService.TryAssignLocalOfficer(
-                        pCity.leader, pKingdom, pCity, rootOffice))
-                    retainedCounts[rootOffice] = 1;
+                if (rootCount == 0 && ShouldAttempt(rootOffice, pKingdom,
+                        pCity, pYear))
+                {
+                    bool committed = CourtService.TryAssignLocalOfficer(
+                        pCity.leader, pKingdom, pCity, rootOffice);
+                    if (committed)
+                    {
+                        ClearFailure(rootOffice, pKingdom, pCity);
+                        retainedCounts[rootOffice] = 1;
+                    }
+                    else
+                        RecordFailure(rootOffice, pKingdom, pCity, pYear);
+                }
             }
 
-            List<Actor> candidates = LoadAllCandidates(pKingdom, pCity,
-                LoadCandidates(pKingdom, pCity));
+            List<Actor> candidates = null;
             long leaderNativeCityId = NativeCityId(pCity.leader);
             for (int seatIndex = 1; seatIndex < desiredSeats.Count; seatIndex++)
             {
                 string officeId = desiredSeats[seatIndex];
+                if (!ShouldAttempt(officeId, pKingdom, pCity, pYear))
+                    continue;
                 int requiredBefore = desiredSeats.Take(seatIndex + 1)
                     .Count(id => id == officeId);
                 retainedCounts.TryGetValue(officeId, out int current);
                 if (current >= requiredBefore) continue;
+                candidates ??= LoadAllCandidates(pKingdom, pCity,
+                    LoadCandidates(pKingdom, pCity));
                 Actor candidate = SelectCandidate(candidates, pKingdom,
                     pCity, leaderNativeCityId, officeId,
                     pAllowVacancyPromotion: false);
@@ -118,9 +133,22 @@ namespace AncientWarfare3.core.court
                         pCity, leaderNativeCityId, officeId,
                         pAllowVacancyPromotion: true);
                 if (candidate == null) continue;
-                if (CourtService.TryAssignLocalOfficer(candidate, pKingdom,
-                        pCity, officeId, vacancyFallback))
+                bool committed = CourtService.TryAssignLocalOfficer(candidate,
+                    pKingdom, pCity, officeId, vacancyFallback);
+                if (committed)
+                {
+                    ClearFailure(officeId, pKingdom, pCity);
                     retainedCounts[officeId] = current + 1;
+                }
+                else
+                {
+                    RecordFailure(officeId, pKingdom, pCity, pYear);
+                    // A failed persistence transaction is commonly caused by
+                    // a stale duplicate row. Trying another candidate in the
+                    // same pass only repeats the expensive transaction and
+                    // can amplify a frame spike.
+                    break;
+                }
                 candidates.Remove(candidate);
             }
 
@@ -312,6 +340,35 @@ namespace AncientWarfare3.core.court
         internal static void ClearRuntime()
         {
             CandidateScans.Clear();
+            AppointmentFailures.Clear();
+        }
+
+        private static string FailureKey(string pOfficeId, Kingdom pKingdom,
+            City pCity)
+        {
+            return (pKingdom?.id ?? -1L) + ":" +
+                   (pCity?.data?.id ?? -1L) + ":" + (pOfficeId ?? "");
+        }
+
+        private static bool ShouldAttempt(string pOfficeId, Kingdom pKingdom,
+            City pCity, int pYear)
+        {
+            return !AppointmentFailures.TryGetValue(
+                FailureKey(pOfficeId, pKingdom, pCity), out int failureYear) ||
+                CourtAppointmentFailureBackoffRules.ShouldAttempt(
+                    failureYear, pYear);
+        }
+
+        private static void RecordFailure(string pOfficeId, Kingdom pKingdom,
+            City pCity, int pYear)
+        {
+            AppointmentFailures[FailureKey(pOfficeId, pKingdom, pCity)] = pYear;
+        }
+
+        private static void ClearFailure(string pOfficeId, Kingdom pKingdom,
+            City pCity)
+        {
+            AppointmentFailures.Remove(FailureKey(pOfficeId, pKingdom, pCity));
         }
 
         private static Actor SelectCandidate(IReadOnlyList<Actor> pCandidates,

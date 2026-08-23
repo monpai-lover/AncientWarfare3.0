@@ -68,18 +68,19 @@ namespace AncientWarfare3.core.court
                 kingdom.isRekt() || city.isRekt() || city.kingdom != kingdom)
                 return;
             bool hasVacancy;
-            if (ProcessCity(kingdom, city, 0f, Date.getCurrentYear(),
-                    out hasVacancy))
+            bool completed = ProcessCity(kingdom, city, 0f,
+                Date.getCurrentYear(), out hasVacancy);
+            if (completed)
             {
                 string completedKey = VacancyKey(pKingdomId, pCityId);
                 if (!hasVacancy)
                     PendingVacancyRetries.Remove(completedKey);
                 else
                     PendingVacancyRetries.Add(completedKey);
-                if (!hasVacancy || pAttempt + 1 >= MaximumWriteAttempts)
-                    return;
+                return;
             }
-            if (pAttempt + 1 >= MaximumWriteAttempts) return;
+            if (!CityBureauRetryRules.ShouldRetry(completed, pAttempt,
+                    MaximumWriteAttempts)) return;
             string key = "city-bureau-vacancy:" + pKingdomId + ":" +
                          pCityId;
             DeferredRuntimeWorkService.EnqueueCoalesced(key,

@@ -11,6 +11,9 @@ namespace AncientWarfare3.core.court
         private static readonly Dictionary<long,
             IReadOnlyList<RegionalGovernmentReadModel>> Cache =
             new Dictionary<long, IReadOnlyList<RegionalGovernmentReadModel>>();
+        private static readonly Dictionary<long,
+            Dictionary<long, RegionalGovernmentReadModel>> RegionByCityCache =
+            new Dictionary<long, Dictionary<long, RegionalGovernmentReadModel>>();
 
         internal static IReadOnlyList<RegionalGovernmentReadModel> Build(
             Kingdom pKingdom, string pRegionTitle = null,
@@ -26,12 +29,15 @@ namespace AncientWarfare3.core.court
                 pRegionTitle = configuredRegionTitle;
             if (string.IsNullOrWhiteSpace(pGovernorTitle))
                 pGovernorTitle = configuredGovernorTitle;
+            if (Cache.TryGetValue(pKingdom.id,
+                    out IReadOnlyList<RegionalGovernmentReadModel> cached))
+                return cached;
             IReadOnlyList<RegionalGovernmentReadModel> legal =
                 DeJureRegionReadModelService.Build(pKingdom, pRegionTitle,
                     pGovernorTitle, configuredLocalLevelTitle);
             if (legal.Count > 0)
             {
-                Cache[pKingdom.id] = legal;
+                SetCached(pKingdom.id, legal);
                 return legal;
             }
             if (!DeJureRegionRetirementRules.ShouldUseInferredRegions(
@@ -41,11 +47,9 @@ namespace AncientWarfare3.core.court
             {
                 IReadOnlyList<RegionalGovernmentReadModel> empty =
                     Array.Empty<RegionalGovernmentReadModel>();
-                Cache[pKingdom.id] = empty;
+                SetCached(pKingdom.id, empty);
                 return empty;
             }
-            if (Cache.TryGetValue(pKingdom.id, out IReadOnlyList<
-                    RegionalGovernmentReadModel> cached)) return cached;
 
             var cities = new List<City>();
             var facts = new List<RegionalGovernmentCityFact>();
@@ -113,7 +117,7 @@ namespace AncientWarfare3.core.court
                 });
             }
             cached = result.OrderBy(region => region.SeatCityId).ToArray();
-            Cache[pKingdom.id] = cached;
+            SetCached(pKingdom.id, cached);
             return cached;
         }
 
@@ -121,23 +125,40 @@ namespace AncientWarfare3.core.court
             out RegionalGovernmentReadModel pRegion)
         {
             pRegion = null;
-            foreach (RegionalGovernmentReadModel region in Build(pKingdom))
-                if (region.MemberCityIds.Contains(pCityId))
-                {
-                    pRegion = region;
-                    return true;
-                }
-            return false;
+            if (pKingdom?.data == null || pCityId < 0L) return false;
+            Build(pKingdom);
+            return RegionByCityCache.TryGetValue(pKingdom.id,
+                    out Dictionary<long, RegionalGovernmentReadModel> index) &&
+                index.TryGetValue(pCityId, out pRegion);
         }
 
         internal static void Invalidate(Kingdom pKingdom)
         {
-            if (pKingdom?.data != null) Cache.Remove(pKingdom.id);
+            if (pKingdom?.data == null) return;
+            Cache.Remove(pKingdom.id);
+            RegionByCityCache.Remove(pKingdom.id);
         }
 
         internal static void Clear()
         {
             Cache.Clear();
+            RegionByCityCache.Clear();
+        }
+
+        private static void SetCached(long pKingdomId,
+            IReadOnlyList<RegionalGovernmentReadModel> pRegions)
+        {
+            Cache[pKingdomId] = pRegions ??
+                Array.Empty<RegionalGovernmentReadModel>();
+            var index = new Dictionary<long, RegionalGovernmentReadModel>();
+            foreach (RegionalGovernmentReadModel region in Cache[pKingdomId])
+            {
+                if (region?.MemberCityIds == null) continue;
+                foreach (long cityId in region.MemberCityIds)
+                    if (cityId >= 0L && !index.ContainsKey(cityId))
+                        index[cityId] = region;
+            }
+            RegionByCityCache[pKingdomId] = index;
         }
 
         private static int SafePopulation(City pCity)

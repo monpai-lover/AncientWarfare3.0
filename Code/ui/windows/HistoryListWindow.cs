@@ -1276,6 +1276,9 @@ namespace AncientWarfare3.ui.windows
                 ? pEntry.content_rich
                 : HistoryColors.EscapeRich(pEntry.content);
             content = NormalizeLegacyCareerKeys(content);
+            content = WarDisplayLabelRules.NormalizeHistoryContent(
+                pEntry.event_type, content,
+                HistoryLocalizationRules.CurrentLanguage());
             return year + WarDisplayLabelRules.NormalizeEmbeddedKeys(content);
         }
 
@@ -1313,6 +1316,9 @@ namespace AncientWarfare3.ui.windows
                 ? pEntry.content_rich
                 : HistoryColors.EscapeRich(pEntry.content);
             content = NormalizeLegacyCareerKeys(content);
+            content = WarDisplayLabelRules.NormalizeHistoryContent(
+                pEntry.event_type, content,
+                HistoryLocalizationRules.CurrentLanguage());
             content = WarDisplayLabelRules.NormalizeEmbeddedKeys(content);
             if (pEntry.event_type == KingdomEvent.POSTHUMOUS && pEntry.target_type == "actor" && pEntry.target_id >= 0)
             {

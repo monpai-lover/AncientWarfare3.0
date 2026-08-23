@@ -1209,9 +1209,56 @@ namespace AncientWarfare3.core.lineage
                 PersonEvent.COURT_OFFICER_APPOINTED, text, ChronicleCategory.CAREER,
                 HistoryTarget.Kingdom(pKingdom));
 
-            if (ChronicleGate.IsImportant(pActor))
+            pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
+            City officeCity = ResolveCourtOfficeCity(pActor);
+            bool regionalGovernor = IsRegionalGovernor(pActor, pKingdom);
+            bool localAppointment = layer == CourtOfficeLayer.City &&
+                                    !regionalGovernor;
+            if (localAppointment && officeCity?.data != null)
+            {
+                HistoryWriter.RecordCity(officeCity, pKingdom,
+                    CityEvent.COURT_OFFICER_APPOINTED, text,
+                    HistoryTarget.Actor(pActor));
+            }
+            else if (regionalGovernor || ChronicleGate.IsImportant(pActor))
                 HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COURT_OFFICER_APPOINTED, text,
                     HistoryTarget.Actor(pActor));
+        }
+
+        private static City ResolveCourtOfficeCity(Actor pActor)
+        {
+            if (pActor?.data == null) return null;
+            // The persisted appointment city is authoritative. An officer may
+            // temporarily travel away from the seat before the chronicle event
+            // is emitted, so actor.city can otherwise misattribute the entry.
+            pActor.data.get(LineageKeys.COURT_CITY_ID, out long cityId, -1L);
+            if (cityId >= 0L)
+            {
+                try
+                {
+                    City appointedCity = World.world?.cities?.get(cityId);
+                    if (appointedCity?.data != null && !appointedCity.isRekt())
+                        return appointedCity;
+                }
+                catch { }
+            }
+            if (pActor.city?.data != null && !pActor.city.isRekt())
+                return pActor.city;
+            return null;
+        }
+
+        private static bool IsRegionalGovernor(Actor pActor, Kingdom pKingdom)
+        {
+            if (pActor?.data == null || pKingdom?.data == null) return false;
+            try
+            {
+                foreach (RegionalGovernmentReadModel region in
+                         RegionalGovernmentAggregationService.Build(pKingdom))
+                    if (region?.GovernorActorId == pActor.data.id)
+                        return true;
+            }
+            catch { }
+            return false;
         }
 
         public static void OnCivilServiceExamOpened(Kingdom pKingdom,

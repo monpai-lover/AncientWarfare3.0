@@ -1309,13 +1309,29 @@ namespace AncientWarfare3.core.lineage
                     terms.TributeRate, KingdomPolicyService.GetPoliticalPoints(vassal),
                     KingdomPolicyService.GetPoliticalPoints(pSuzerain),
                     VassalFiscalRules.MaximumPoliticalBalance);
-                politicalTransferred += KingdomPolicyService.TransferPoliticalPoints(
-                    vassal, pSuzerain, requestedPolitical);
+                float relationPoliticalTransferred =
+                    KingdomPolicyService.TransferPoliticalPoints(
+                        vassal, pSuzerain, requestedPolitical);
+                politicalTransferred += relationPoliticalTransferred;
 
                 int availableGold = GetCapitalGold(vassal);
                 int requestedGold = VassalFiscalRules.GoldTribute(
                     annualTax, terms.TributeRate, availableGold);
-                goldTransferred += TransferCapitalGold(vassal, pSuzerain, requestedGold);
+                int relationGoldTransferred =
+                    TransferCapitalGold(vassal, pSuzerain, requestedGold);
+                goldTransferred += relationGoldTransferred;
+
+                // Formal vassals offer a consort only after this relation
+                // actually paid its annual obligation. Keep the trigger
+                // relation-scoped so one payer cannot trigger another one's
+                // offering.
+                if (relationPoliticalTransferred > 0f ||
+                    relationGoldTransferred > 0)
+                {
+                    TributaryHouseholdOfferingService.TryOffer(
+                        vassal, pSuzerain, relation.relation_id, year,
+                        "vassal_offering");
+                }
             }
 
             if (politicalTransferred <= 0f && goldTransferred <= 0) return;

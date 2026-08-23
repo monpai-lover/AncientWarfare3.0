@@ -55,6 +55,10 @@ aw_war_goal_force_tributary,叩关纳贡,Compel Tribute,叩關納貢
 aw_war_force_tributary,叩关纳贡,Compel Tribute,叩關納貢
 aw_war_force_tributary_desc,迫使接壤弱国岁时纳贡但不纳入附庸体系,Compel a weaker neighboring realm to pay annual tribute without entering the vassal hierarchy,迫使接壤弱國歲時納貢但不納入附庸體系
 aw_hist_label_tributary_war,叩关战争,Tributary War,叩關戰爭
+aw_hist_label_de_jure_war,法理战争,De Jure War,法理戰爭
+aw_hist_goal_defender_win,守方胜利,Defender Victory,守方勝利
+aw_hist_goal_peace_unresolved,议和未决,Peace Unresolved,議和未決
+aw_hist_goal_negotiated_goal_not_enforced,谈判目标未执行,Negotiated War Goal Not Enforced,談判目標未執行
 aw_hist_goal_force_tributary,叩关纳贡,Compel Tribute,叩關納貢
 aw_hist_event_tributary_set,称臣纳贡,Tributary Submission,稱臣納貢
 aw_hist_event_tributary_get,受贡册封,Tributary Received,受貢冊封

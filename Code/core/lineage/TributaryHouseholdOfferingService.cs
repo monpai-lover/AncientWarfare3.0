@@ -11,7 +11,8 @@ namespace AncientWarfare3.core.lineage
         private const int MaximumRecipientCandidates = 12;
 
         internal static string TryOffer(Kingdom tributary, Kingdom suzerain,
-            long relationId, int tributeYear)
+            long relationId, int tributeYear,
+            string pSourceKind = "tributary_offering")
         {
             try
             {
@@ -46,7 +47,7 @@ namespace AncientWarfare3.core.lineage
                 bool committed = RulerHouseholdService
                     .TryCommitTributaryConsort(tributary, suzerain, owner,
                         candidate, role, relationId, tributeYear,
-                        recipient.Capacity, out string reason);
+                        recipient.Capacity, out string reason, pSourceKind);
                 if (committed) return "offered";
                 return string.Equals(reason, "duplicate",
                     StringComparison.Ordinal) ? "duplicate" :

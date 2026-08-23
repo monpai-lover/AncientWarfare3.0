@@ -176,6 +176,14 @@ namespace AncientWarfare3.core.lineage
                         1, 1, false));
                 return true;
             }
+            if (!guarded && WarTerminalSettlementRules.IsDecisiveScore(
+                    snapshot.Score))
+            {
+                pDecision = WarTerminalSettlementRules.Resolve(
+                    new WarTerminalSettlementFacts(false, snapshot.Score,
+                        attackers, defenders, false));
+                return pDecision.IsTerminal;
+            }
             bool affordableGoal = !guarded &&
                 WarGoalSettlementRuntimeService.HasAffordableGoal(pWar);
             pDecision = WarTerminalSettlementRules.Resolve(

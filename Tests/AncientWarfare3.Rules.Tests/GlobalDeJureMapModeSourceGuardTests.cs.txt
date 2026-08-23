@@ -8,6 +8,8 @@ internal static class GlobalDeJureMapModeSourceGuardTests
         string service = Read("Code/core/policy/HierarchicalVassalMapModeService.cs");
         string state = Read("Code/core/policy/CityAdministrationMapModeRules.cs");
         string runtime = Read("Code/core/policy/HierarchicalVassalMapLabelRuntime.cs");
+        string layer = Read(
+            "Code/core/policy/HierarchicalVassalMapModeLabelLayer.cs");
         string store = Read("Code/core/court/DeJureRegionStore.cs");
         string assignment = Read(
             "Code/core/court/DeJureNewCityAssignmentService.cs");
@@ -23,6 +25,14 @@ internal static class GlobalDeJureMapModeSourceGuardTests
             "region label jobs receive an explicit seat anchor");
         True(runtime.Contains("RegionId", StringComparison.Ordinal),
             "region source registration keeps a region identity for deduplication");
+        True(layer.Contains("HierarchicalVassalMapLabelRuntime.NeedsProcessFrame",
+                 StringComparison.Ordinal) &&
+             !layer.Contains("internal static bool NeedsProcessFrame => false",
+                 StringComparison.Ordinal),
+            "map label layer forwards the runtime work queue state");
+        True(layer.Contains("HierarchicalVassalMapLabelRuntime.ProcessFrame();",
+                 StringComparison.Ordinal),
+            "map label layer advances the asynchronous label pipeline");
         True(!service.Contains("else if (IsCityGlobalRegionLayer) PublishNativeCityLabels();",
                  StringComparison.Ordinal),
             "global region overview does not publish duplicate native labels");
@@ -45,6 +55,19 @@ internal static class GlobalDeJureMapModeSourceGuardTests
             "legacy repair selects the highest-development city when capital is missing");
         True(store.Contains("region_capacity", StringComparison.Ordinal),
             "automatic writes enforce the six-city cap at the storage boundary");
+        int globalClick = service.IndexOf(
+            "private static bool HandleGlobalCityRegionClick",
+            StringComparison.Ordinal);
+        int globalClickEnd = globalClick < 0 ? -1 : service.IndexOf(
+            "        internal static bool IsCityInFocusedRegion",
+            globalClick, StringComparison.Ordinal);
+        True(globalClick >= 0 && globalClickEnd > globalClick &&
+             !service.Substring(globalClick, globalClickEnd - globalClick)
+                 .Contains("PushRegion", StringComparison.Ordinal),
+            "global region click stops at the domestic region overview");
+        True(runtime.Contains("IsCityGlobalRegionLayer", StringComparison.Ordinal) &&
+             runtime.Contains("Vector2?)null", StringComparison.Ordinal),
+            "global region labels use the territory centroid anchor");
     }
 
     private static string Read(string pPath)

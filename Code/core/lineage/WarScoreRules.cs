@@ -234,6 +234,20 @@ namespace AncientWarfare3.core.lineage
                 Math.Min(MaximumScore, total));
         }
 
+        public static int ResolveStickyDecisiveScore(int pExistingDecisive,
+            int pComposedScore)
+        {
+            if (pExistingDecisive >= MaximumScore)
+                return MaximumScore;
+            if (pExistingDecisive <= -MaximumScore)
+                return -MaximumScore;
+            if (pComposedScore >= MaximumScore)
+                return MaximumScore;
+            if (pComposedScore <= -MaximumScore)
+                return -MaximumScore;
+            return 0;
+        }
+
         public static int ResolveDecisiveOccupationScore(int pBaseScore,
             WarScoreSide pHomeSide, WarScoreSide pControllerSide,
             bool isOnlyLiveCity, bool captureComplete)

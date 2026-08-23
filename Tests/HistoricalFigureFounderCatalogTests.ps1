@@ -180,6 +180,8 @@ $expectedRows = @'
 86|76|aw_figure_liu_shouguang|刘守光|刘|刘|守光|燕|燕|911
 87|77|aw_figure_yelu_abaoji|耶律阿保机|耶律|耶律|阿保机|辽|辽|916
 88|83|aw_figure_duan_siping|段思平|段|段|思平|大理|大理|937
+89|90|aw_figure_li_zicheng|李自成|李|李|自成|大顺|大顺|1644
+90|89|aw_figure_nurhaci|努尔哈赤|爱新觉罗|爱新觉罗|努尔哈赤|后金|后金|1616
 '@ -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
     ForEach-Object {
         $parts = $_ -split '\|'

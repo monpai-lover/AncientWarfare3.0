@@ -1,4 +1,10 @@
 key,cz,en,ch
+aw_hist_tributary_settlement_to,→,→,→
+aw_hist_tributary_settlement_political,，政治点,political points,，政治點
+aw_hist_tributary_settlement_gold,，黄金,gold,，黃金
+aw_hist_tributary_settlement_factor,，缴纳比例,payment factor,，繳納比例
+aw_hist_tributary_settlement_outcome,，结果,outcome,，結果
+aw_hist_tributary_settlement_offering,，进贡,offering,，進貢
 aw_diplomacy_failure_war_target_option_changed,战争依据已变化，请重新选择,The basis for this war goal changed; select it again,戰爭依據已變化，請重新選擇
 aw_diplomacy_failure_invalid_participants,当前国家或目标国家已经无效,One of the realms is no longer valid,當前國家或目標國家已經無效
 aw_diplomacy_failure_invalid,当前双方不能互相宣战,These realms cannot declare war on each other,當前雙方不能互相宣戰

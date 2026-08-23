@@ -357,8 +357,10 @@ namespace AncientWarfare3.core.lineage
                     UpdatedTime = pWorldTime
                 };
                 WarScoreSnapshot next = current.CloneCanonical();
-                next.DecisiveScore = ResolveDecisiveScore(next, controls,
+                int decisiveCandidate = ResolveDecisiveScore(next, controls,
                     key, control);
+                next.DecisiveScore = WarScoreRules.ResolveStickyDecisiveScore(
+                    current.DecisiveScore, decisiveCandidate);
                 RecalculateLossesAndExhaustion(next);
                 RawScoreTotals raw = CalculateRawTotals(next, controls, key,
                     control);
@@ -416,8 +418,10 @@ namespace AncientWarfare3.core.lineage
                 if (!controls.TryGetValue(key, out WarScoreControlState state) ||
                     state.Kind != "city") return false;
                 WarScoreSnapshot next = current.CloneCanonical();
-                next.DecisiveScore = ResolveDecisiveScore(next, controls,
+                int decisiveCandidate = ResolveDecisiveScore(next, controls,
                     key, pReplacement: null);
+                next.DecisiveScore = WarScoreRules.ResolveStickyDecisiveScore(
+                    current.DecisiveScore, decisiveCandidate);
                 RecalculateLossesAndExhaustion(next);
                 RawScoreTotals raw = CalculateRawTotalsWithout(next,
                     controls, key);
@@ -1010,6 +1014,20 @@ namespace AncientWarfare3.core.lineage
             int composed = WarScoreRules.ComposeSignedScore(
                 pSnapshot.CityScore, pSnapshot.BattleScore,
                 pSnapshot.GoalScore, pSnapshot.LossScore);
+            int previousDecisive = pSnapshot.DecisiveScore;
+            pSnapshot.DecisiveScore = WarScoreRules.ResolveStickyDecisiveScore(
+                previousDecisive, composed);
+            if (previousDecisive == 0 && pSnapshot.DecisiveScore != 0)
+            {
+                try
+                {
+                    AncientWarfare3.ModClass.LogInfo(
+                        "War score terminal latch war=" + pSnapshot.WarId +
+                        " score=" + pSnapshot.DecisiveScore +
+                        " composed=" + composed);
+                }
+                catch { }
+            }
             pSnapshot.Score = pSnapshot.DecisiveScore == 0
                 ? composed
                 : pSnapshot.DecisiveScore;

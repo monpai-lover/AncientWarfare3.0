@@ -50,6 +50,15 @@ internal static class WarScoreBudgetRulesTests
             "casualties above the baseline remain capped");
         Equal(0, WarScoreRules.CasualtyExhaustion(10, 0),
             "a missing legacy baseline cannot invent exhaustion");
+
+        Equal(100, WarScoreRules.ResolveStickyDecisiveScore(0, 100),
+            "a score reaching the positive terminal cap is latched");
+        Equal(-100, WarScoreRules.ResolveStickyDecisiveScore(0, -100),
+            "a score reaching the negative terminal cap is latched");
+        Equal(100, WarScoreRules.ResolveStickyDecisiveScore(100, -20),
+            "a latched winner cannot be undone by a later score update");
+        Equal(0, WarScoreRules.ResolveStickyDecisiveScore(0, 99),
+            "a sub-terminal score does not latch");
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pName)

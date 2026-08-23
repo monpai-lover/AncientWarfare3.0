@@ -15,6 +15,11 @@ namespace AncientWarfare3.core.lineage
         internal static void OnKingdomYear(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return;
+            if (LineageService.IsXiaKingdom(pKingdom)) return;
+            if (!XiaizationAnnualRules.ShouldRunAnnualWork(
+                    isNativeXiaKingdom: false,
+                    xiaizationLevel: XiaizationService.GetLevel(pKingdom)))
+                return;
             int year = Date.getCurrentYear();
             string sourceMask = ReadString(pKingdom,
                 LineageKeys.XIA_CONTACT_LAST_SOURCE_MASK);

@@ -58,6 +58,30 @@ internal static class HistoricalFigureSpawnRulesTests
                 "Western Han", "Han"),
             "directional historical labels project to the pure state name");
 
+        HistoricalFigureDef liZicheng = HistoricalFigureDef.Get(89);
+        Equal("aw_figure_li_zicheng", liZicheng.Id,
+            "Li Zicheng is appended without changing legacy slots");
+        Equal("李自成", liZicheng.Key,
+            "Li Zicheng keeps the canonical Chinese name");
+        Equal(1644, liZicheng.FoundingYear,
+            "Li Zicheng founding year is recorded");
+        Equal(5000, liZicheng.CombatHealth,
+            "new historical figures use the uniform elite health package");
+        True(liZicheng.CombatTraits.Contains("regeneration"),
+            "new historical figures receive regeneration");
+        HistoricalFigureDef nurhaci = HistoricalFigureDef.Get(90);
+        Equal("aw_figure_nurhaci", nurhaci.Id,
+            "Nurhaci is appended without changing legacy slots");
+        Equal("努尔哈赤", nurhaci.Key,
+            "Nurhaci keeps the canonical Chinese name");
+        Equal(1616, nurhaci.FoundingYear,
+            "Nurhaci founding year is recorded");
+        Equal(liZicheng.CombatHealth, nurhaci.CombatHealth,
+            "the two new figures share the same elite health package");
+        Equal(string.Join(",", liZicheng.CombatTraits),
+            string.Join(",", nurhaci.CombatTraits),
+            "the two new figures share the same elite trait package");
+
         string root = Directory.GetCurrentDirectory();
         string service = File.ReadAllText(Path.Combine(root, "Code",
             "content", "figures", "HistoricalFigureService.cs"));
@@ -117,5 +141,10 @@ internal static class HistoricalFigureSpawnRulesTests
         if (!Equals(expected, actual))
             throw new InvalidOperationException(name + ": expected " +
                                                 expected + ", got " + actual);
+    }
+
+    private static void True(bool expected, string name)
+    {
+        if (!expected) throw new InvalidOperationException(name);
     }
 }
