@@ -39,7 +39,7 @@
 - Create: `Tests/AncientWarfare3.Rules.Tests/DeJureRegionMergeRulesTests.cs.txt`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在测试文件中加入以下可执行断言：
 
@@ -74,13 +74,13 @@ False(DeJureRegionMergeRules.CooldownAllows(100, 105),
     "same short cooldown window rejects execution");
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 运行：`dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj`
 
 预期：编译失败，提示 `DeJureRegionMergeRules` 尚不存在。
 
-- [ ] **Step 3: 实现最小纯规则**
+- [x] **Step 3: 实现最小纯规则**
 
 实现公开的无 Unity 依赖 API：
 
@@ -115,11 +115,11 @@ namespace AncientWarfare3.core.court
 }
 ```
 
-- [ ] **Step 4: 注册生产文件和测试文件**
+- [x] **Step 4: 注册生产文件和测试文件**
 
 在 `.csproj` 中加入两个 `Compile Include`，生产规则使用 `Link="Production\DeJureRegionMergeRules.cs"`。
 
-- [ ] **Step 5: 运行测试确认通过并提交**
+- [x] **Step 5: 运行测试确认通过并提交**
 
 运行同一 `dotnet run` 命令，预期新增规则测试通过；提交：
 

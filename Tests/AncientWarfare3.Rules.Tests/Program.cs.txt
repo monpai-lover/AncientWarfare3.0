@@ -201,6 +201,13 @@ if (args.Length == 1 && args[0] == "--de-jure-eligibility")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--de-jure-merge-rules")
+{
+    DeJureRegionMergeRulesTests.Run();
+    Console.WriteLine("De jure merge rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--court-statistics")
 {
     CourtStatisticsRulesTests.Run();
