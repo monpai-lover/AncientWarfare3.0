@@ -1,0 +1,76 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
+
+internal static class WarPeaceCessionPriorityRulesTests
+{
+    internal static void Run()
+    {
+        var candidates = new List<WarPeaceDefaultTermCandidate>
+        {
+            Candidate(WarPeaceTermKind.ForceVassal, 30, 100),
+            Candidate(WarPeaceTermKind.Reparations, 20, 60),
+            Candidate(WarPeaceTermKind.CedeCity, 20, 1, cityId: 7)
+        };
+
+        IReadOnlyList<WarPeaceSettlementTermDraft> cessionFirst =
+            WarPeaceDefaultOfferRules.SelectTerms(
+                signedWarScore: 100,
+                mode: WarPeaceDefaultOfferMode.Surrender,
+                candidates: candidates,
+                sourceCityCount: 5);
+        Equal(1, cessionFirst.Count,
+            "an affordable cession is the only primary settlement demand");
+        Equal(WarPeaceTermKind.CedeCity, cessionFirst[0].Kind,
+            "territory is selected before vassalage or payments");
+
+        IReadOnlyList<WarPeaceSettlementTermDraft> exhaustionCessionFirst =
+            WarPeaceDefaultOfferRules.SelectTerms(
+                signedWarScore: 100,
+                mode: WarPeaceDefaultOfferMode.ExhaustionMaximumBenefit,
+                candidates: candidates,
+                sourceCityCount: 5);
+        Equal(1, exhaustionCessionFirst.Count,
+            "maximum-benefit settlement does not mix subjects into cessions");
+        Equal(WarPeaceTermKind.CedeCity, exhaustionCessionFirst[0].Kind,
+            "maximum-benefit settlement keeps territory first");
+
+        IReadOnlyList<WarPeaceSettlementTermDraft> fallback =
+            WarPeaceDefaultOfferRules.SelectTerms(
+                signedWarScore: 80,
+                mode: WarPeaceDefaultOfferMode.Surrender,
+                candidates: new List<WarPeaceDefaultTermCandidate>
+                {
+                    Candidate(WarPeaceTermKind.ForceVassal, 30, 100),
+                    Candidate(WarPeaceTermKind.CedeCity, 90, 1, cityId: 8)
+                },
+                sourceCityCount: 5);
+        True(fallback.Count > 0 &&
+             fallback[0].Kind == WarPeaceTermKind.ForceVassal,
+            "unaffordable territory falls back to other settlement terms");
+    }
+
+    private static WarPeaceDefaultTermCandidate Candidate(
+        WarPeaceTermKind kind, int cost, int priority, long cityId = -1L)
+    {
+        return new WarPeaceDefaultTermCandidate(
+            new WarPeaceSettlementTermDraft
+            {
+                Kind = kind,
+                RequestedCost = cost,
+                CityId = cityId
+            }, false, priority, true);
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}
