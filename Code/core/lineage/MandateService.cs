@@ -2860,6 +2860,9 @@ namespace AncientWarfare3.core.lineage
                 case "kingdom_fell": return T("aw_hist_mandate_end_kingdom_fell");
                 case "replaced": return T("aw_hist_mandate_end_replaced");
                 case "player_grant_replaced": return T("aw_hist_mandate_end_player_grant");
+                case "chaos_timeout": return T("aw_hist_mandate_end_chaos_timeout");
+                case "zhulu_age_entered": return T("aw_hist_mandate_end_zhulu_age_entered");
+                case "island_exile_handoff": return T("aw_hist_mandate_end_island_exile_handoff");
                 default: return string.IsNullOrEmpty(pReason) ? T("aw_hist_mandate_end_generic") : pReason;
             }
         }

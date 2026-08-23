@@ -166,6 +166,11 @@ namespace AncientWarfare3.core.lineage
                 case "school_guest_service": return T("aw_hist_event_school_guest_service", pLanguage);
                 default:
                     if (TryWarOrDecisionLabel(pKey, pLanguage, out string label)) return label;
+                    string eventKey = "aw_hist_event_" + (pKey ?? "");
+                    string localizedEvent = T(eventKey, pLanguage);
+                    if (!string.Equals(localizedEvent, eventKey,
+                            System.StringComparison.Ordinal))
+                        return localizedEvent;
                     return string.IsNullOrEmpty(pKey) ? T("aw_hist_event_unknown", pLanguage) : pKey;
             }
         }
