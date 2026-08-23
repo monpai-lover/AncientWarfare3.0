@@ -455,6 +455,14 @@ namespace AncientWarfare3.core.court
                     WarGoalPersistence.InvalidateOpenDeJureRegionGoals(
                         LineageArchiveManager.Instance?.OperatingDB,
                         secondary.RegionId);
+                    HierarchicalVassalMapModeService.MarkHierarchyDirty(pKingdom);
+                    HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
+                    ModClass.LogInfo("De jure single-city region merge committed: " +
+                        "kingdom=" + pKingdom.data.id +
+                        ", primaryRegion=" + primary.RegionId +
+                        ", retiredRegion=" + secondary.RegionId +
+                        ", secondaryCity=" + secondaryCity.data.id +
+                        ", revision=" + _store.StoreRevision);
                     return true;
                 }
                 catch (Exception error)

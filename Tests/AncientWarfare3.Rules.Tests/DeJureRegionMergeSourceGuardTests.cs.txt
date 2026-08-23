@@ -21,6 +21,9 @@ internal static class DeJureRegionMergeSourceGuardTests
         Contains(store, "CloneStore(_store)");
         Contains(store, "_store = snapshot");
         Contains(store, "WarGoalPersistence.InvalidateOpenDeJureRegionGoals");
+        Contains(store, "HierarchicalVassalMapModeService.MarkHierarchyDirty");
+        Contains(store, "RefreshAfterDeJureMutation");
+        Contains(store, "De jure single-city region merge committed");
         Contains(service, "GetMergeCandidates");
         Contains(service, "TryMerge(Kingdom");
         Contains(service, "neighbours_cities");
