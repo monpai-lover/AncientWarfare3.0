@@ -965,6 +965,7 @@
     <Compile Include="..\..\Code\core\lineage\FeudatorySuccessionRules.cs" Link="Production\FeudatorySuccessionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DynasticTitleRules.cs" Link="Production\DynasticTitleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DynasticReproductionRules.cs" Link="Production\DynasticReproductionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DynasticMaleLineContinuityRules.cs" Link="Production\DynasticMaleLineContinuityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\NobleRankRules.cs" Link="Production\NobleRankRules.cs" />
     <Compile Include="..\..\Code\core\lineage\NobleIdentityRules.cs" Link="Production\NobleIdentityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaContactRules.cs" Link="Production\XiaContactRules.cs" />
