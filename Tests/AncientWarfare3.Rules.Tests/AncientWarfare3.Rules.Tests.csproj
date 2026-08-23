@@ -19,6 +19,7 @@
     <Compile Include="Program.cs.txt" />
     <Compile Include="ReverseXiaizationRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\ReverseXiaizationRules.cs" Link="Production\ReverseXiaizationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\XiaizationAnnualRules.cs" Link="Production\XiaizationAnnualRules.cs" />
     <Compile Include="CustomCourtTemplateRulesTests.cs.txt" />
     <Compile Include="CustomCourtTemplateCodecTests.cs.txt" />
     <Compile Include="CustomLocalGovernmentRulesTests.cs.txt" />
@@ -30,6 +31,7 @@
     <Compile Include="RegionalGovernmentTemplateRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CustomCourtRegionalLayerLayoutRules.cs" Link="Production\CustomCourtRegionalLayerLayoutRules.cs" />
     <Compile Include="RegionalGovernmentCourtRulesTests.cs.txt" />
+    <Compile Include="RegionalGovernmentMapPerformanceSourceGuardTests.cs.txt" />
     <Compile Include="CityAdministrationMapModeRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\policy\CityAdministrationMapModeRules.cs" Link="Production\CityAdministrationMapModeRules.cs" />
     <Compile Include="RegionalGovernmentNineRankRulesTests.cs.txt" />
@@ -37,6 +39,7 @@
     <Compile Include="DeJureRegionEligibilityRulesTests.cs.txt" />
     <Compile Include="DeJureRegionMergeRulesTests.cs.txt" />
     <Compile Include="DeJureRegionMergeSourceGuardTests.cs.txt" />
+    <Compile Include="GlobalDeJureMapModeSourceGuardTests.cs.txt" />
     <Compile Include="CourtStatisticsRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CourtStatisticsRules.cs" Link="Production\CourtStatisticsRules.cs" />
     <Compile Include="CityLeaderCandidateScoringRulesTests.cs.txt" />
@@ -117,6 +120,10 @@
     <Compile Include="ManualLocalChiefAppointmentSourceGuardTests.cs.txt" />
     <Compile Include="DeJureSeatRenameSourceGuardTests.cs.txt" />
     <Compile Include="CourtImmediateVacancyModeRulesTests.cs.txt" />
+    <Compile Include="CourtAppointmentFailureBackoffRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CourtAppointmentFailureBackoffRules.cs" Link="Production\CourtAppointmentFailureBackoffRules.cs" />
+    <Compile Include="CityBureauRetryRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CityBureauRetryRules.cs" Link="Production\CityBureauRetryRules.cs" />
     <Compile Include="LocalLowOfficeVacancyRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\LocalLowOfficeVacancyRules.cs" Link="Production\LocalLowOfficeVacancyRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtImmediateVacancyModeRules.cs" Link="Production\CourtImmediateVacancyModeRules.cs" />

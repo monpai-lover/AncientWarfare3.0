@@ -1,0 +1,59 @@
+using System;
+using System.IO;
+
+internal static class GlobalDeJureMapModeSourceGuardTests
+{
+    internal static void Run()
+    {
+        string service = Read("Code/core/policy/HierarchicalVassalMapModeService.cs");
+        string state = Read("Code/core/policy/CityAdministrationMapModeRules.cs");
+        string runtime = Read("Code/core/policy/HierarchicalVassalMapLabelRuntime.cs");
+        string store = Read("Code/core/court/DeJureRegionStore.cs");
+        string assignment = Read(
+            "Code/core/court/DeJureNewCityAssignmentService.cs");
+        True(state.Contains("IsGlobalRegionOverview", StringComparison.Ordinal),
+            "city layer exposes an explicit global region overview state");
+        True(service.Contains("IsCityGlobalRegionLayer", StringComparison.Ordinal),
+            "city layer root uses the global region state");
+        True(service.Contains("FindCity(region.SeatCityId)", StringComparison.Ordinal),
+            "region labels are anchored at the legal seat city");
+        True(runtime.Contains("source.RegionAnchor", StringComparison.Ordinal) &&
+             runtime.Contains("CreateFromZones(source.EntityId, source.DisplayName,\n                            source.Zones, !source.Country, source.RegionAnchor)",
+                 StringComparison.Ordinal),
+            "region label jobs receive an explicit seat anchor");
+        True(runtime.Contains("RegionId", StringComparison.Ordinal),
+            "region source registration keeps a region identity for deduplication");
+        True(!service.Contains("else if (IsCityGlobalRegionLayer) PublishNativeCityLabels();",
+                 StringComparison.Ordinal),
+            "global region overview does not publish duplicate native labels");
+        True(service.Contains("BuildGlobalDeJureRegionSources", StringComparison.Ordinal) &&
+             service.Contains("pKingdomId < 0L", StringComparison.Ordinal),
+            "global city layer discovers regions without a kingdom focus");
+        True(runtime.Contains("IsCityRegionLayer", StringComparison.Ordinal) &&
+             runtime.Contains("_batchFocus", StringComparison.Ordinal),
+            "global region labels use an unscoped focus key");
+        True(service.Contains("HandleGlobalCityRegionClick", StringComparison.Ordinal),
+            "clicking a global region enters the existing detail path");
+        True(store.Contains("sameKingdomMember", StringComparison.Ordinal) ||
+             store.Contains("EnsureAllKingdomCapitalSeatsLocked", StringComparison.Ordinal),
+            "save repair retains capital and same-kingdom guards");
+        True(assignment.Contains("MaximumRegionCityCount", StringComparison.Ordinal),
+            "new-city assignment enforces the six-city region cap");
+        True(assignment.Contains("allMembers.Count", StringComparison.Ordinal),
+            "region capacity counts live legal members rather than stale IDs");
+        True(store.Contains("SelectHighestDevelopmentAnchor", StringComparison.Ordinal),
+            "legacy repair selects the highest-development city when capital is missing");
+        True(store.Contains("region_capacity", StringComparison.Ordinal),
+            "automatic writes enforce the six-city cap at the storage boundary");
+    }
+
+    private static string Read(string pPath)
+    {
+        return File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(), pPath));
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+}

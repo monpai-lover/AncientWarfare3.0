@@ -333,6 +333,14 @@ namespace AncientWarfare3.core.policy
                     pair.Value.SetActive(false);
         }
 
+        internal static void HideNativeLabelsExcept(ISet<string> pActiveKeys)
+        {
+            foreach (KeyValuePair<string, LabelNode> pair in RuntimeNodes)
+                if (TryParseNativeLabelKey(pair.Key, out _, out _, out _) &&
+                    (pActiveKeys == null || !pActiveKeys.Contains(pair.Key)))
+                    pair.Value.SetActive(false);
+        }
+
         internal static bool ShowRuntimeLabel(string pKey)
         {
             if (string.IsNullOrWhiteSpace(pKey) ||

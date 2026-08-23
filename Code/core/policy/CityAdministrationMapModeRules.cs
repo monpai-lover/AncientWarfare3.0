@@ -91,6 +91,12 @@ namespace AncientWarfare3.core.policy
                 pLevel + ":" + pSeatCityId + ":" + pEntityId;
         }
 
+        internal static bool IsGlobalRegionOverview(bool pCityLayer,
+            bool pCountryLevel)
+        {
+            return pCityLayer && pCountryLevel;
+        }
+
         internal static IReadOnlyList<long> OrderedMembers(
             IEnumerable<long> pCityIds)
         {

@@ -165,6 +165,13 @@ if (args.Length == 1 && args[0] == "--regional-government-court")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--regional-government-map-performance")
+{
+    RegionalGovernmentMapPerformanceSourceGuardTests.Run();
+    Console.WriteLine("Regional government map performance source guard passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--city-administration-mapmode")
 {
     CityAdministrationMapModeRulesTests.Run();
@@ -220,6 +227,20 @@ if (args.Length == 1 && args[0] == "--court-immediate-vacancies")
 {
     CourtImmediateVacancyModeRulesTests.Run();
     Console.WriteLine("Court immediate vacancy rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--court-appointment-failure-backoff")
+{
+    CourtAppointmentFailureBackoffRulesTests.Run();
+    Console.WriteLine("Court appointment failure backoff rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--city-bureau-retry")
+{
+    CityBureauRetryRulesTests.Run();
+    Console.WriteLine("City bureau retry rules passed.");
     return;
 }
 
@@ -1115,6 +1136,20 @@ if (args.Length == 1 && args[0] == "--ruler-household-only")
 {
     RulerHouseholdRulesTests.Run();
     Console.WriteLine("Ruler household rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--historical-figure-catalog")
+{
+    HistoricalFigureSpawnRulesTests.Run();
+    Console.WriteLine("Historical figure catalog rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--global-dejure-map")
+{
+    GlobalDeJureMapModeSourceGuardTests.Run();
+    Console.WriteLine("Global de jure map source guards passed.");
     return;
 }
 

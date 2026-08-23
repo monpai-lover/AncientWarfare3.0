@@ -320,7 +320,31 @@ namespace AncientWarfare3.core.court
                         pError = "invalid_target";
                         return false;
                     }
+                    // Automatic assignment may only join a region that still
+                    // has a live member owned by the new city's kingdom.  A
+                    // global nearest-region scan must never merge countries.
+                    bool sameKingdomMember = target.MemberCityIds != null &&
+                        target.MemberCityIds.Any(id =>
+                        {
+                            City member = World.world?.cities?.get(id);
+                            return member?.data != null && !member.isRekt() &&
+                                member.kingdom == pCity.kingdom;
+                        });
+                    if (!sameKingdomMember)
+                    {
+                        pError = "invalid_target_kingdom";
+                        return false;
+                    }
                     if (target.MemberCityIds.Contains(pCity.data.id)) return true;
+                    int liveMemberCount = (target.MemberCityIds ??
+                        new List<long>()).Count(id =>
+                        IsDeJureEligibleCity(World.world?.cities?.get(id)));
+                    if (liveMemberCount >= RegionalGovernmentRules.
+                        MaximumRegionCityCount)
+                    {
+                        pError = "region_capacity";
+                        return false;
+                    }
                     if (_store.Regions.Any(p => p != null && p.Active &&
                         p.MemberCityIds != null &&
                         p.MemberCityIds.Contains(pCity.data.id)))
@@ -581,7 +605,7 @@ namespace AncientWarfare3.core.court
         private static void EnsureKingdomCapitalSeatLocked(Kingdom pKingdom,
             string pReason)
         {
-            City capital = pKingdom?.capital;
+            City capital = SelectHighestDevelopmentAnchor(pKingdom);
             if (!IsDeJureEligibleCity(capital)) return;
             DeJureRegion current = _store.Regions.FirstOrDefault(p =>
                 p != null && p.Active && p.MemberCityIds != null &&
@@ -621,6 +645,32 @@ namespace AncientWarfare3.core.court
             _store.StoreRevision++;
         }
 
+        private static City SelectHighestDevelopmentAnchor(Kingdom pKingdom)
+        {
+            bool hasKingdomRegion = _store?.Regions?.Any(region =>
+                region != null && region.Active &&
+                (region.MemberCityIds ?? new List<long>()).Any(id =>
+                {
+                    City member = World.world?.cities?.get(id);
+                    return IsDeJureEligibleCity(member) &&
+                        member.kingdom == pKingdom;
+                })) == true;
+            if (hasKingdomRegion && pKingdom?.capital != null &&
+                IsDeJureEligibleCity(pKingdom.capital))
+                return pKingdom.capital;
+            try
+            {
+                IEnumerable<City> cities = pKingdom?.getCities();
+                return (cities ?? Enumerable.Empty<City>())
+                    .Where(IsDeJureEligibleCity)
+                    .OrderByDescending(DevelopmentMapModeService.GetCityScore)
+                    .ThenByDescending(SafePopulation)
+                    .ThenBy(city => city.data.id)
+                    .FirstOrDefault();
+            }
+            catch { return null; }
+        }
+
         private static bool HasExplicitDeJureRemovalLocked(long pCityId)
         {
             DeJureRegionChange latest = _store?.ChangeHistory?
@@ -645,9 +695,14 @@ namespace AncientWarfare3.core.court
                     RepairEmptyRegionsLocked();
                 }
                 if (_store != null && !_migrationCompleted &&
-                    _store.Regions.Count == 0 && HasLiveWorld() &&
+                    HasLiveWorld() &&
                     Config.game_loaded && !SmoothLoader.isLoading())
                 {
+                    // Migration has one authoritative anchor per kingdom.
+                    // Establish those seats before assigning any other city;
+                    // otherwise the legacy fallback can accidentally turn
+                    // every city into its own independent state.
+                    EnsureAllKingdomCapitalSeatsLocked();
                     Migrate(_store);
                     _migrationCompleted = true;
                 }
@@ -683,13 +738,24 @@ namespace AncientWarfare3.core.court
 
         private static void Migrate(DeJureAdministrationStore pStore)
         {
-            var cities = new List<City>();
+            if (pStore?.Regions == null || World.world?.cities == null) return;
+
+            // At migration time the capital regions have already been created
+            // by EnsureAllKingdomCapitalSeatsLocked. Keep the legacy grouping
+            // shape for multi-city states, but never use a city as an implicit
+            // state seat merely because it was left over from that grouping.
+            var assigned = new HashSet<long>(pStore.Regions
+                .Where(region => region != null && region.Active)
+                .SelectMany(region => region.MemberCityIds ??
+                    new List<long>()));
+            var cities = new Dictionary<long, City>();
             var facts = new List<RegionalGovernmentCityFact>();
-            if (World.world?.cities == null) return;
             foreach (City city in World.world.cities)
             {
-                if (!IsDeJureEligibleCity(city)) continue;
-                cities.Add(city);
+                if (!IsDeJureEligibleCity(city) || city.kingdom?.data == null)
+                    continue;
+                cities[city.data.id] = city;
+                if (assigned.Contains(city.data.id)) continue;
                 var neighbors = new List<long>();
                 if (city.neighbours_cities_kingdom != null)
                     foreach (City neighbor in city.neighbours_cities_kingdom)
@@ -698,7 +764,7 @@ namespace AncientWarfare3.core.court
                             neighbors.Add(neighbor.data.id);
                 facts.Add(new RegionalGovernmentCityFact
                 {
-                    KingdomId = city.kingdom?.data?.id ?? -1L,
+                    KingdomId = city.kingdom.data.id,
                     CityId = city.data.id,
                     CityName = city.data.name ?? string.Empty,
                     Development = DevelopmentMapModeService.GetCityScore(city),
@@ -706,40 +772,114 @@ namespace AncientWarfare3.core.court
                     NeighborCityIds = neighbors.Distinct().ToArray()
                 });
             }
-            foreach (RegionalGovernmentFact group in RegionalGovernmentRules.
-                     Build(facts, "州"))
+
+            var deferredSingles = new List<RegionalGovernmentFact>();
+            foreach (IGrouping<long, RegionalGovernmentCityFact> kingdomFacts in
+                     facts.GroupBy(fact => fact.KingdomId))
             {
-                var region = new DeJureRegion
+                foreach (RegionalGovernmentFact group in RegionalGovernmentRules
+                         .Build(kingdomFacts, "州"))
                 {
-                    RegionId = pStore.NextRegionId++,
-                    RegionName = RegionalGovernmentRules.RegionName(
-                        group.SeatCityName, "州"),
-                    SeatCityId = group.SeatCityId,
-                    CreatedYear = SafeYear(),
-                    CreatedByKind = "legacy_migration",
-                    CreatedByKingdomId = group.KingdomId,
-                    MemberCityIds = group.MemberCityIds.Distinct().ToList()
-                };
-                pStore.Regions.Add(region);
+                    if (group.MemberCityIds == null ||
+                        group.MemberCityIds.Count < 2)
+                    {
+                        deferredSingles.Add(group);
+                        continue;
+                    }
+                    var region = new DeJureRegion
+                    {
+                        RegionId = pStore.NextRegionId++,
+                        RegionName = RegionalGovernmentRules.RegionName(
+                            group.SeatCityName, "州"),
+                        SeatCityId = group.SeatCityId,
+                        CreatedYear = SafeYear(),
+                        CreatedByKind = "legacy_migration",
+                        CreatedByKingdomId = group.KingdomId,
+                        MemberCityIds = group.MemberCityIds.Distinct().ToList()
+                    };
+                    pStore.Regions.Add(region);
+                    assigned.UnionWith(region.MemberCityIds);
+                }
             }
-            var assigned = new HashSet<long>(pStore.Regions.SelectMany(p =>
-                p.MemberCityIds ?? new List<long>()));
-            foreach (City city in cities)
+
+            // Prefer attaching one-city clusters to an adjacent-seat region,
+            // then the nearest same-kingdom region with free capacity. Only
+            // an isolated cluster with no compatible capacity becomes a new
+            // one-city region, preventing cities from being dropped entirely.
+            foreach (RegionalGovernmentFact singleton in deferredSingles)
             {
-                if (assigned.Contains(city.data.id)) continue;
-                pStore.Regions.Add(new DeJureRegion
+                if (singleton?.MemberCityIds == null ||
+                    singleton.MemberCityIds.Count == 0) continue;
+                City city = cities.TryGetValue(singleton.MemberCityIds[0],
+                    out City resolved) ? resolved : null;
+                if (city == null) continue;
+                DeJureRegion target = FindMigrationTargetLocked(pStore, city);
+                if (target == null)
                 {
-                    RegionId = pStore.NextRegionId++,
-                    RegionName = RegionalGovernmentRules.RegionName(
-                        city.data.name ?? string.Empty, "州"),
-                    SeatCityId = city.data.id,
-                    CreatedYear = SafeYear(),
-                    CreatedByKind = "legacy_single_city",
-                    CreatedByKingdomId = city.kingdom?.data?.id ?? -1L,
-                    MemberCityIds = new List<long> { city.data.id }
-                });
+                    target = new DeJureRegion
+                    {
+                        RegionId = pStore.NextRegionId++,
+                        RegionName = RegionalGovernmentRules.RegionName(
+                            city.data.name ?? string.Empty, "州"),
+                        SeatCityId = city.data.id,
+                        CreatedYear = SafeYear(),
+                        CreatedByKind = "legacy_migration_isolated",
+                        CreatedByKingdomId = city.kingdom.data.id,
+                        MemberCityIds = new List<long> { city.data.id }
+                    };
+                    pStore.Regions.Add(target);
+                    AddChange(target.RegionId, city.data.id, -1L,
+                        target.RegionId, "legacy_migration_isolated");
+                    assigned.Add(city.data.id);
+                    continue;
+                }
+                target.MemberCityIds ??= new List<long>();
+                target.MemberCityIds.Add(city.data.id);
+                target.MemberCityIds = target.MemberCityIds.Distinct().ToList();
+                target.Version++;
+                assigned.Add(city.data.id);
             }
             Normalize(pStore);
+        }
+
+        private static DeJureRegion FindMigrationTargetLocked(
+            DeJureAdministrationStore pStore, City pCity)
+        {
+            if (pStore?.Regions == null || pCity?.kingdom?.data == null)
+                return null;
+            City capital = pCity.kingdom.capital;
+            return pStore.Regions.Where(region => region != null &&
+                    region.Active && region.MemberCityIds != null &&
+                    region.MemberCityIds.Count < RegionalGovernmentRules.
+                        MaximumRegionCityCount &&
+                    region.MemberCityIds.Any(id =>
+                    {
+                        City member = World.world?.cities?.get(id);
+                        return IsDeJureEligibleCity(member) &&
+                            member.kingdom == pCity.kingdom;
+                    }))
+                .OrderByDescending(region => AreAdjacent(pCity,
+                    World.world?.cities?.get(region.SeatCityId)))
+                .ThenBy(region => DistanceSquared(pCity,
+                    World.world?.cities?.get(region.SeatCityId)))
+                .ThenByDescending(region => region.SeatCityId ==
+                    capital?.data?.id)
+                .ThenBy(region => region.RegionId)
+                .FirstOrDefault();
+        }
+
+        private static long DistanceSquared(City pFirst, City pSecond)
+        {
+            if (pFirst?.getTile()?.pos == null || pSecond?.getTile()?.pos == null)
+                return long.MaxValue;
+            try
+            {
+                double dx = pFirst.getTile().pos.x - pSecond.getTile().pos.x;
+                double dy = pFirst.getTile().pos.y - pSecond.getTile().pos.y;
+                double value = dx * dx + dy * dy;
+                return value >= long.MaxValue ? long.MaxValue : (long)value;
+            }
+            catch { return long.MaxValue; }
         }
 
         private static void RemoveFromCurrent(long pCityId, string pReason,

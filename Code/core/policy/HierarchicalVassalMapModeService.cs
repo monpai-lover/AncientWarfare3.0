@@ -207,11 +207,16 @@ namespace AncientWarfare3.core.policy
         public static bool IsCityLayer =>
             GetSelectedLayer() == HierarchicalVassalMapModeLayer.Cities;
 
+        internal static bool IsCityGlobalRegionLayer => IsCityLayer &&
+            CityAdministrationMapModeRules.IsGlobalRegionOverview(
+                IsCityLayer, CityAdministrationState.IsCountryLevel);
+
         internal static bool IsCityCountryLayer => IsCityLayer &&
-            CityAdministrationState.IsCountryLevel;
+            CityAdministrationState.IsCountryLevel &&
+            !IsCityGlobalRegionLayer;
 
         internal static bool IsCityRegionLayer => IsCityLayer &&
-            CityAdministrationState.IsRegionLevel;
+            (IsCityGlobalRegionLayer || CityAdministrationState.IsRegionLevel);
 
         internal static bool IsCityMemberLayer => IsCityLayer &&
             CityAdministrationState.IsCityLevel;
@@ -254,8 +259,9 @@ namespace AncientWarfare3.core.policy
             {
                 EnsureHierarchyIndex();
                 long regionKingdomId = _hierarchyIndex?.ResolveRepresentative(
-                    pPhysicalKingdom.id) ?? -1L;
-                if (regionKingdomId != CityAdministrationState.FocusKingdomId)
+                    pPhysicalKingdom.id) ?? pPhysicalKingdom.id;
+                if (!IsCityGlobalRegionLayer &&
+                    regionKingdomId != CityAdministrationState.FocusKingdomId)
                 {
                     Kingdom outsideKingdom = GetKingdom(regionKingdomId);
                     return IsValidKingdom(outsideKingdom)
@@ -264,7 +270,8 @@ namespace AncientWarfare3.core.policy
                 if (!RegionalGovernmentAggregationService.TryFindRegion(
                         pPhysicalKingdom, pCity.data.id,
                         out RegionalGovernmentReadModel region)) return null;
-                City seat = FindCity(pPhysicalKingdom, region.SeatCityId);
+                City seat = FindCity(region.SeatCityId) ??
+                    FindCity(pPhysicalKingdom, region.SeatCityId);
                 return GetCityRegionMeta(region, seat ?? pCity);
             }
             if (IsCityCountryLayer || IsCityMemberLayer)
@@ -309,11 +316,13 @@ namespace AncientWarfare3.core.policy
             {
                 City city = cached.City;
                 if (city?.data == null || city.isRekt() ||
-                    !IsCityInFocusedKingdom(city) ||
+                    (!IsCityGlobalRegionLayer &&
+                     !IsCityInFocusedKingdom(city)) ||
                     !RegionalGovernmentAggregationService.TryFindRegion(
                         city.kingdom, city.id,
                         out RegionalGovernmentReadModel region)) return;
-                City seat = FindCity(city.kingdom, region.SeatCityId) ?? city;
+                City seat = FindCity(region.SeatCityId) ??
+                    FindCity(city.kingdom, region.SeatCityId) ?? city;
                 if (!NativeCityLabels.TryGetValue(seat.id,
                         out NativeCityLabelEntry regionEntry))
                 {
@@ -360,10 +369,15 @@ namespace AncientWarfare3.core.policy
                 {
                     if (IsCityCountryLayer) PublishNativeCountryLabels();
                     else if (IsCityMemberLayer) PublishNativeCityLabels();
-                    else if (IsCityRegionLayer) PublishNativeCityLabels();
-                    else PublishNativeCountryLabels();
+                    else if (IsCityRegionLayer && !IsCityGlobalRegionLayer)
+                        PublishNativeCityLabels();
+                    else if (!IsCityGlobalRegionLayer)
+                        PublishNativeCountryLabels();
                     published = true;
                 }
+                if (IsCityGlobalRegionLayer)
+                    HierarchicalVassalMapModeLabelLayer.
+                        HideNativeLabelsExcept(null);
             }
             catch (Exception error)
             {
@@ -656,6 +670,8 @@ namespace AncientWarfare3.core.policy
             BuildCityAdministrationRegionSources(IReadOnlyList<City> pCities,
                 long pKingdomId = -1L)
         {
+            if (pKingdomId < 0L)
+                return BuildGlobalDeJureRegionSources(pCities);
             var result = new List<HierarchicalVassalMapLabelRegionSource>();
             foreach (IGrouping<long, City> group in (pCities ??
                      Array.Empty<City>()).Where(city =>
@@ -686,6 +702,57 @@ namespace AncientWarfare3.core.policy
                 }
             }
             return result.OrderBy(source => source.Region.SeatCityId).ToArray();
+        }
+
+        private static IReadOnlyList<HierarchicalVassalMapLabelRegionSource>
+            BuildGlobalDeJureRegionSources(IReadOnlyList<City> pCities)
+        {
+            var available = (pCities ?? Array.Empty<City>())
+                .Where(city => city?.data != null && !city.isRekt())
+                .GroupBy(city => city.id)
+                .ToDictionary(group => group.Key, group => group.First());
+            var result = new List<HierarchicalVassalMapLabelRegionSource>();
+            foreach (DeJureRegion legal in DeJureRegionStore.ActiveRegions())
+            {
+                if (legal?.MemberCityIds == null) continue;
+                City seat = FindCity(legal.SeatCityId);
+                if (seat?.data == null || seat.isRekt()) continue;
+                var members = legal.MemberCityIds
+                    .Select(id => available.TryGetValue(id, out City city)
+                        ? city : FindCity(id))
+                    .Where(city => city?.data != null && !city.isRekt() &&
+                        !PeasantRebelBanditStrongholdService.IsStrongholdCity(
+                            city))
+                    .ToList();
+                if (members.Count == 0) continue;
+                var zones = new List<TileZone>();
+                var zoneIds = new HashSet<int>();
+                foreach (City city in members)
+                    foreach (TileZone zone in city.zones ??
+                             new List<TileZone>())
+                        if (zone?.id >= 0 && zoneIds.Add(zone.id))
+                            zones.Add(zone);
+                if (!zones.Any(zone => zone.tiles_with_ground > 0)) continue;
+                CustomCourtRuntime.RegionalTitles(seat.kingdom,
+                    out string regionTitle, out _);
+                var model = new RegionalGovernmentReadModel
+                {
+                    RegionId = legal.RegionId,
+                    SeatCityId = legal.SeatCityId,
+                    LegalSeatCityId = legal.SeatCityId,
+                    EffectiveSeatCityId = legal.SeatCityId,
+                    RegionName = legal.RegionName ?? string.Empty,
+                    RegionTitle = regionTitle,
+                    MemberCityIds = members.Select(city => city.id).Distinct()
+                        .ToList(),
+                    LocalGovernmentCityIds = members.Select(city => city.id)
+                        .Distinct().ToList()
+                };
+                result.Add(new HierarchicalVassalMapLabelRegionSource(
+                    model, seat, zones, zoneIds, true));
+            }
+            return result.OrderBy(source => source.Region.SeatCityId)
+                .ThenBy(source => source.Region.RegionId).ToArray();
         }
 
         internal static bool IsLabelDiscoveryKingdom(Kingdom pKingdom) =>
@@ -963,6 +1030,8 @@ namespace AncientWarfare3.core.policy
                 City city = clickedZone.city;
                 if (city?.data == null || city.isRekt())
                     return ReturnToRootFromUnmappedClick();
+                if (IsCityGlobalRegionLayer)
+                    return HandleGlobalCityRegionClick(city);
                 if (IsCityRegionLayer)
                 {
                     EnsureHierarchyIndex();
@@ -1067,6 +1136,23 @@ namespace AncientWarfare3.core.policy
                     out RegionalGovernmentReadModel region) ||
                 !CityAdministrationState.PushRegion(region.SeatCityId))
                 return false;
+            RefreshView();
+            return true;
+        }
+
+        private static bool HandleGlobalCityRegionClick(City pCity)
+        {
+            if (pCity?.kingdom == null ||
+                !RegionalGovernmentAggregationService.TryFindRegion(
+                    pCity.kingdom, pCity.id,
+                    out RegionalGovernmentReadModel region)) return false;
+            if (!CityAdministrationState.PushKingdom(pCity.kingdom.id))
+                return false;
+            if (!CityAdministrationState.PushRegion(region.SeatCityId))
+            {
+                CityAdministrationState.PopKingdom();
+                return false;
+            }
             RefreshView();
             return true;
         }
@@ -1533,6 +1619,17 @@ namespace AncientWarfare3.core.policy
             {
                 return pKingdom.getCities()?.FirstOrDefault(city =>
                     city?.data?.id == pCityId && !city.isRekt());
+            }
+            catch { return null; }
+        }
+
+        private static City FindCity(long pCityId)
+        {
+            if (pCityId < 0L || World.world?.cities == null) return null;
+            try
+            {
+                City city = World.world.cities.get(pCityId);
+                return city?.data != null && !city.isRekt() ? city : null;
             }
             catch { return null; }
         }

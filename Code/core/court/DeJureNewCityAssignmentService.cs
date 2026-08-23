@@ -148,9 +148,14 @@ namespace AncientWarfare3.core.court
             var facts = new List<DeJureNewCityRegionCandidate>();
             foreach (DeJureRegion region in DeJureRegionStore.ActiveRegions())
             {
-                var members = (region.MemberCityIds ?? new List<long>())
+                var allMembers = (region.MemberCityIds ?? new List<long>())
                     .Select(id => World.world?.cities?.get(id))
                     .Where(city => city?.data != null && !city.isRekt() &&
+                        DeJureRegionStore.IsEligibleCityId(city.data.id))
+                    .ToList();
+                var members = allMembers
+                    .Where(city =>
+                        city.kingdom == pKingdom &&
                         DeJureRegionStore.IsEligibleCityId(city.data.id))
                     .ToList();
                 if (members.Count == 0) continue;
@@ -163,7 +168,9 @@ namespace AncientWarfare3.core.court
                 long seatDistance = Distance(cityTile, seat?.getTile());
                 facts.Add(new DeJureNewCityRegionCandidate(region.RegionId,
                     adjacentSeat, adjacentSeat ? 1 : 0, nearest,
-                    seatDistance, true));
+                    seatDistance,
+                    allMembers.Count < RegionalGovernmentRules.
+                        MaximumRegionCityCount));
             }
             return DeJureNewCityAssignmentRules.Select(facts,
                 StableSelector(pCity.data.id));

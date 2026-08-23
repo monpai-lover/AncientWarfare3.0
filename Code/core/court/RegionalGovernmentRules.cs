@@ -6,7 +6,10 @@ namespace AncientWarfare3.core.court
 {
     internal static class RegionalGovernmentRules
     {
-        public const int MaximumNeighborMembers = 4;
+        // A de jure prefecture has one seat plus at most five adjacent
+        // counties/cities: six cities total.
+        public const int MaximumRegionCityCount = 6;
+        public const int MaximumNeighborMembers = MaximumRegionCityCount - 1;
         public const string DefaultRegionTitle = "州";
 
         public static IReadOnlyList<RegionalGovernmentFact> Build(

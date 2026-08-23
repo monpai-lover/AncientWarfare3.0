@@ -54,8 +54,8 @@ internal static class RegionalGovernmentRulesTests
             RegionalGovernmentRules.Build(capped, "郡");
         RegionalGovernmentFact cappedSeat = cappedRegions.Single(
             region => region.SeatCityId == 100);
-        Equal(5, cappedSeat.MemberCityIds.Count,
-            "a region contains at most the seat and four neighbors");
+        Equal(6, cappedSeat.MemberCityIds.Count,
+            "a region contains at most six cities");
         Equal(false, cappedSeat.MemberCityIds.Contains(107),
             "cross-kingdom neighbors are excluded");
         Equal(1, RegionalGovernmentRules.Build(new[] {
