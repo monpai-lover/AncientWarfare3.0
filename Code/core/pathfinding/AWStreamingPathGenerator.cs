@@ -56,7 +56,23 @@ namespace AncientWarfare3.core.pathfinding
             try
             {
                 pCancellation.ThrowIfCancellationRequested();
+                long currentTerrainRevision;
+                long currentWorldGeneration;
+#if AW3_RULES_TESTS
+                // Rule tests intentionally link only the pure pathfinding
+                // model. The request snapshot is the authoritative revision
+                // in that environment; production uses the live world state.
+                currentTerrainRevision = pRequest.TerrainRevision;
+                currentWorldGeneration = pRequest.ReuseKey.WorldGeneration;
+#else
+                currentTerrainRevision = AWPathfindingBootstrap.Cache?.
+                    SourceRevision ?? pRequest.TerrainRevision;
+                currentWorldGeneration =
+                    AncientWarfare3.core.asyncwork.AWAsyncRuntime.WorldGeneration;
+#endif
                 if (pRequest.TryTakeCachedSegment(pMaximumSteps,
+                        currentTerrainRevision, currentWorldGeneration,
+                        pRequest.InsideBoat,
                         out IReadOnlyList<AWPathStep> cachedSteps,
                         out bool cachedComplete))
                 {
@@ -148,7 +164,11 @@ namespace AncientWarfare3.core.pathfinding
 #if !AW3_RULES_TESTS
                 AWPathfindingBootstrap.PathDiagnostics.AddExpandedNodes(result.ExpandedNodes);
 #endif
-                if (!result.Success && corridor != null)
+                bool recoveryAllowed = useCultiwayActorRouting &&
+                    !result.Success &&
+                    pRequest.TryBeginRecovery(target.Id,
+                        currentTerrainRevision, currentWorldGeneration);
+                if (recoveryAllowed && corridor != null)
                 {
                     AWRegionCorridor widened = corridor.Expand();
                     result = Search(pRequest, start, target, searchTargetId,
@@ -159,7 +179,8 @@ namespace AncientWarfare3.core.pathfinding
 #endif
                     if (result.Success) corridor = widened;
                 }
-                if (!result.Success && result.HitNodeLimit && longRange)
+                if (!result.Success && result.HitNodeLimit && longRange &&
+                    recoveryAllowed)
                 {
 #if !AW3_RULES_TESTS
                     AWPathfindingBootstrap.PathDiagnostics.OnFallback();
@@ -197,17 +218,20 @@ namespace AncientWarfare3.core.pathfinding
                 // A region lookahead is an intermediate objective. Its cached
                 // route must never be reported as completion of the request's
                 // actual target.
-                IReadOnlyList<AWPathStep> steps = workspace.PathView(outputCount);
-                if (searchTargetId == target.Id)
+                var fullRoute = new AWPathStep[stepCount];
+                for (int i = 0; i < stepCount; i++)
                 {
-                    var fullRoute = new AWPathStep[stepCount];
-                    for (int i = 0; i < stepCount; i++)
-                    {
-                        pCancellation.ThrowIfCancellationRequested();
-                        fullRoute[i] = workspace.PathStep(i);
-                    }
-                    pRequest.CacheRoute(fullRoute, outputCount);
+                    pCancellation.ThrowIfCancellationRequested();
+                    fullRoute[i] = workspace.PathStep(i);
                 }
+                // Cache every route that is split across segments. A region
+                // waypoint is deliberately marked non-terminal; after its
+                // cached steps are consumed the next segment searches toward
+                // the actual request target.
+                pRequest.CacheRoute(fullRoute, outputCount,
+                    searchTargetId == target.Id, currentTerrainRevision,
+                    currentWorldGeneration, pRequest.InsideBoat);
+                IReadOnlyList<AWPathStep> steps = workspace.PathView(outputCount);
                 int endTileId = outputCount > 0
                     ? steps[outputCount - 1].TileId
                     : pRequest.StartTileId;
