@@ -1277,16 +1277,16 @@ namespace AncientWarfare3.core.policy
                 return false;
             }
 
-            if (!IsSpecialRequirementMet(pKingdom, definition))
-            {
-                pError = "decision_requirements_missing";
-                return false;
-            }
-
             float points = GetPoliticalPoints(pKingdom);
             if (points + 0.001f < definition.Cost)
             {
                 pError = "insufficient_points";
+                return false;
+            }
+
+            if (!IsSpecialRequirementMet(pKingdom, definition))
+            {
+                pError = "decision_requirements_missing";
                 return false;
             }
 
