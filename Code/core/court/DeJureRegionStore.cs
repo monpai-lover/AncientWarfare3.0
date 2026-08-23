@@ -397,6 +397,78 @@ namespace AncientWarfare3.core.court
             }
         }
 
+        internal static bool TryMergeSingleCityRegions(Kingdom pKingdom,
+            long pPrimaryRegionId, long pSecondaryRegionId,
+            out string pError)
+        {
+            pError = string.Empty;
+            if (pKingdom?.data == null || pKingdom.isRekt())
+            {
+                pError = "invalid_kingdom";
+                return false;
+            }
+
+            EnsureInitialized();
+            lock (Gate)
+            {
+                DeJureAdministrationStore snapshot = CloneStore(_store);
+                long changeId = _nextChangeId;
+                try
+                {
+                    DeJureRegion primary = _store?.Regions?.FirstOrDefault(
+                        p => p != null && p.Active &&
+                             p.RegionId == pPrimaryRegionId);
+                    DeJureRegion secondary = _store?.Regions?.FirstOrDefault(
+                        p => p != null && p.Active &&
+                             p.RegionId == pSecondaryRegionId);
+                    City primaryCity = SingleMemberCity(primary);
+                    City secondaryCity = SingleMemberCity(secondary);
+                    if (primary == null || secondary == null ||
+                        primary == secondary || primaryCity == null ||
+                        secondaryCity == null || primaryCity.kingdom != pKingdom ||
+                        secondaryCity.kingdom != pKingdom ||
+                        !AreAdjacent(primaryCity, secondaryCity) ||
+                        !IsDeJureEligibleCity(primaryCity) ||
+                        !IsDeJureEligibleCity(secondaryCity))
+                    {
+                        pError = "invalid_target";
+                        return false;
+                    }
+
+                    primary.MemberCityIds.Add(secondaryCity.data.id);
+                    primary.MemberCityIds = primary.MemberCityIds
+                        .Distinct().ToList();
+                    primary.Version++;
+                    secondary.MemberCityIds.Clear();
+                    secondary.Active = false;
+                    secondary.Version++;
+                    AddChange(primary.RegionId, secondaryCity.data.id,
+                        secondary.RegionId, primary.RegionId,
+                        "DeJureRegionMerged");
+                    AddChange(secondary.RegionId, secondaryCity.data.id,
+                        secondary.RegionId, -1L, "DeJureRegionRetired");
+                    _store.StoreRevision++;
+                    RegionalGovernmentAggregationService.Clear();
+                    WarGoalPersistence.InvalidateOpenDeJureRegionGoals(
+                        LineageArchiveManager.Instance?.OperatingDB,
+                        primary.RegionId);
+                    WarGoalPersistence.InvalidateOpenDeJureRegionGoals(
+                        LineageArchiveManager.Instance?.OperatingDB,
+                        secondary.RegionId);
+                    return true;
+                }
+                catch (Exception error)
+                {
+                    _store = snapshot;
+                    _nextChangeId = changeId;
+                    pError = error.Message;
+                    ModClass.LogError("De jure single-city region merge failed: " +
+                                      error.Message);
+                    return false;
+                }
+            }
+        }
+
         internal static bool RetireState(City pSelectedCity,
             out string pError)
         {
@@ -685,6 +757,27 @@ namespace AncientWarfare3.core.court
                 AddChange(current.RegionId, pCityId, current.RegionId, -1L,
                     "DeJureRegionRetired");
             }
+        }
+
+        private static City SingleMemberCity(DeJureRegion pRegion)
+        {
+            if (pRegion?.MemberCityIds == null ||
+                pRegion.MemberCityIds.Count != 1) return null;
+            try { return World.world?.cities?.get(pRegion.MemberCityIds[0]); }
+            catch { return null; }
+        }
+
+        private static bool AreAdjacent(City pLeft, City pRight)
+        {
+            if (pLeft?.data == null || pRight?.data == null) return false;
+            try
+            {
+                return pLeft.neighbours_cities != null &&
+                       pRight.neighbours_cities != null &&
+                       pLeft.neighbours_cities.Contains(pRight) &&
+                       pRight.neighbours_cities.Contains(pLeft);
+            }
+            catch { return false; }
         }
 
         private static long ChooseSeat(IEnumerable<long> pCityIds)

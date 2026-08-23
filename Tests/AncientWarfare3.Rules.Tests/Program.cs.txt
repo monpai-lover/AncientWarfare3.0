@@ -204,6 +204,7 @@ if (args.Length == 1 && args[0] == "--de-jure-eligibility")
 if (args.Length == 1 && args[0] == "--de-jure-merge-rules")
 {
     DeJureRegionMergeRulesTests.Run();
+    DeJureRegionMergeSourceGuardTests.Run();
     Console.WriteLine("De jure merge rules passed.");
     return;
 }

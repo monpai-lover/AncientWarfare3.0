@@ -1,0 +1,39 @@
+using System;
+using System.IO;
+
+internal static class DeJureRegionMergeSourceGuardTests
+{
+    internal static void Run()
+    {
+        string store = Read("Code/core/court/DeJureRegionStore.cs");
+        string service = Read("Code/core/court/DeJureRegionMergeService.cs");
+        Contains(store, "TryMergeSingleCityRegions");
+        Contains(store, "DeJureRegionMerged");
+        Contains(store, "DeJureRegionRetired");
+        Contains(store, "CloneStore(_store)");
+        Contains(store, "_store = snapshot");
+        Contains(store, "WarGoalPersistence.InvalidateOpenDeJureRegionGoals");
+        Contains(service, "GetMergeCandidates");
+        Contains(service, "TryMerge(Kingdom");
+        Contains(service, "neighbours_cities");
+        DoesNotContain(service, "MemberCityIds.Add");
+        DoesNotContain(service, "city.kingdom =");
+    }
+
+    private static string Read(string relative) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            relative.Replace('/', Path.DirectorySeparatorChar)))
+        .Replace("\r\n", "\n");
+
+    private static void Contains(string text, string needle)
+    {
+        if (!text.Contains(needle, StringComparison.Ordinal))
+            throw new InvalidOperationException("source guard failed: " + needle);
+    }
+
+    private static void DoesNotContain(string text, string needle)
+    {
+        if (text.Contains(needle, StringComparison.Ordinal))
+            throw new InvalidOperationException("source guard found: " + needle);
+    }
+}

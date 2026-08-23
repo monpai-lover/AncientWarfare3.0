@@ -137,13 +137,13 @@ git commit -m "test: define de jure region merge rules"
 - Modify: `Tests/AncientWarfare3.Rules.Tests/DeJureRegionMergeSourceGuardTests.cs.txt`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj`
 
-- [ ] **Step 1: 写源代码守卫测试**
+- [x] **Step 1: 写源代码守卫测试**
 
 测试必须读取上述三个生产文件并断言存在 `GetMergeCandidates`、`TryMergeSingleCityRegions`、`DeJureRegionMerged`、快照恢复和 `WarGoalPersistence.InvalidateOpenDeJureRegionGoals`，同时断言没有直接删除 `DeJureRegion` 对象的代码路径。
 
 将 `DeJureRegionMergeSourceGuardTests.cs.txt` 及其引用的纯规则文件加入测试项目，确保守卫在每次 `dotnet run` 中执行。
 
-- [ ] **Step 2: 定义候选和结果模型**
+- [x] **Step 2: 定义候选和结果模型**
 
 在 `DeJureRegionModels.cs` 增加运行时模型，不序列化到存档：
 
@@ -159,15 +159,15 @@ internal sealed class DeJureRegionMergeCandidate
 }
 ```
 
-- [ ] **Step 3: 实现实际城市边界相接判断**
+- [x] **Step 3: 实现实际城市边界相接判断**
 
 在 `DeJureRegionMergeService` 中读取两个唯一成员城市，使用原版 `City.neighbours_cities` 作为城市区域边界邻接索引，并做双向检查；禁止使用中心点距离或寻路可达性。城市无效、死亡、匪巢或邻接集合读取异常时返回不可用。
 
-- [ ] **Step 4: 实现候选解析器**
+- [x] **Step 4: 实现候选解析器**
 
 实现 `GetMergeCandidates(Kingdom pKingdom)`：只遍历 `DeJureRegionStore.ActiveRegions()`，按成员数、城市国家、匪巢资格和邻接关系筛选；同一对区域只产生一次，使用 `DeJureRegionMergeRules.ComparePrimary` 稳定决定主州，并按主州/次州 `RegionId` 排序。
 
-- [ ] **Step 5: 实现锁内快照事务**
+- [x] **Step 5: 实现锁内快照事务**
 
 在 `DeJureRegionStore` 增加 `TryMergeSingleCityRegions(Kingdom pKingdom, long pPrimaryRegionId, long pSecondaryRegionId, out string pError)`：
 
@@ -197,11 +197,11 @@ catch (Exception error)
 
 保留主州的 `RegionId`、`RegionName`、`SeatCityId`、创建元数据和颜色来源；绝不修改城市国家归属、人口、官员或官职历史。退休州保留对象和历史但不再出现在 `ActiveRegions()`。
 
-- [ ] **Step 6: 实现服务门面和失败原因**
+- [x] **Step 6: 实现服务门面和失败原因**
 
 在 `DeJureRegionMergeService` 提供 `TryMerge(Kingdom, long, long, out string)`，负责国家/冷却/候选检查后调用 Store 事务；UI、命令和 AI 只能调用这个门面，不直接修改 Store。
 
-- [ ] **Step 7: 运行源代码守卫和规则测试并提交**
+- [x] **Step 7: 运行源代码守卫和规则测试并提交**
 
 运行：`dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj`。预期新增源守卫和现有法理退休/新城分配测试通过；提交：
 

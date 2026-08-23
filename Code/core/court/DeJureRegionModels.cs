@@ -40,4 +40,14 @@ namespace AncientWarfare3.core.court
         public long ActorId { get; set; } = -1L;
         public int Version { get; set; } = 1;
     }
+
+    internal sealed class DeJureRegionMergeCandidate
+    {
+        public long PrimaryRegionId { get; set; }
+        public long SecondaryRegionId { get; set; }
+        public long PrimaryCityId { get; set; }
+        public long SecondaryCityId { get; set; }
+        public string PrimaryName { get; set; } = string.Empty;
+        public string SecondaryName { get; set; } = string.Empty;
+    }
 }

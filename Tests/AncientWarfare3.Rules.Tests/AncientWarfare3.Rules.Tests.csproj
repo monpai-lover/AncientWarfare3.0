@@ -36,6 +36,7 @@
     <Compile Include="LocalGovernorIdentityRulesTests.cs.txt" />
     <Compile Include="DeJureRegionEligibilityRulesTests.cs.txt" />
     <Compile Include="DeJureRegionMergeRulesTests.cs.txt" />
+    <Compile Include="DeJureRegionMergeSourceGuardTests.cs.txt" />
     <Compile Include="CourtStatisticsRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CourtStatisticsRules.cs" Link="Production\CourtStatisticsRules.cs" />
     <Compile Include="CityLeaderCandidateScoringRulesTests.cs.txt" />
