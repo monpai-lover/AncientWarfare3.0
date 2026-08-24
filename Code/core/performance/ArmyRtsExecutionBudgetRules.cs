@@ -87,5 +87,12 @@ namespace AncientWarfare3.core.performance
             if (pMode == AWSimulationMode.Large) return pending;
             return Math.Min(pending, Math.Max(0, pNativeCap));
         }
+
+        public static bool ShouldBackfillActiveControllers(
+            int activeMissionControllers, int pendingControllers)
+        {
+            return Math.Max(0, activeMissionControllers) >
+                   Math.Max(0, pendingControllers);
+        }
     }
 }

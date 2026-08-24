@@ -367,6 +367,16 @@ namespace AncientWarfare3.core.lineage
         public int PendingCount => _queuedIds.Count +
                                    _priorityQueuedIds.Count;
 
+        public int EnsureAllQueued()
+        {
+            if (!ArmyRtsExecutionBudgetRules.ShouldBackfillActiveControllers(
+                    _records.Count, PendingCount)) return 0;
+            int added = 0;
+            foreach (long armyId in _records.Keys)
+                if (Requeue(armyId)) added++;
+            return added;
+        }
+
         public bool AssignMission(ArmyRtsMission pMission)
         {
             if (pMission == null || pMission.ArmyId < 0L ||
@@ -1496,6 +1506,13 @@ namespace AncientWarfare3.core.lineage
 
         public static int PendingControllerCount =>
             Controllers.PendingCount;
+
+        internal static int EnsureMissionControllersQueued()
+        {
+            if (ArmyRtsRuntimeMode.Current == ArmyRtsMode.Off ||
+                ArmyRtsWarDoctrine.IsAbstractDecisive) return 0;
+            return Controllers.EnsureAllQueued();
+        }
 
         public static int PendingReplenishmentArrivalCount =>
             PendingReplenishmentArrivalQueue.Count;

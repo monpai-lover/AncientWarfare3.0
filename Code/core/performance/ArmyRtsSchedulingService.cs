@@ -67,6 +67,7 @@ namespace AncientWarfare3.core.performance
                 Config.game_loaded, SmoothLoader.isLoading(), pPaused,
                 AW3MultiplayerReplicaScope.IsReplicaSession);
             if (!SharedGate.TryEnter(pOwner, pCycleToken, allowed)) return;
+            ArmyRtsControllerService.EnsureMissionControllersQueued();
             ArmyRtsExecutionBudget budget =
                 ArmyRtsExecutionBudgetRules.Capture(pSimulationMode,
                     CapturePendingWork());

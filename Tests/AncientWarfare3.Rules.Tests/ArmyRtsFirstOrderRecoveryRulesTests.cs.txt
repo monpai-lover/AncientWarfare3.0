@@ -11,6 +11,7 @@ internal static class ArmyRtsFirstOrderRecoveryRulesTests
         TerminalResultsReleaseTheDeduplicationKey();
         RemovingWarClearsInflightOrders();
         RetryDoesNotStarveRegularPlanning();
+        FirstOrderSelectionSkipsOnlyBusyArmies();
 
         var queue = new KingdomWarFirstOrderQueue();
         queue.EnqueueWar(7L, new[] { 10L, 11L }, new[] { 20L, 21L });
@@ -60,6 +61,17 @@ internal static class ArmyRtsFirstOrderRecoveryRulesTests
                 "EnqueueFirstOrderForKingdom(pKingdom)",
                 StringComparison.Ordinal),
             "a newly created army wakes a previously consumed first order");
+        int firstOrderStart = director.IndexOf(
+            "private static WarFirstOrderResult TryAssignFirstOrderMission(",
+            StringComparison.Ordinal);
+        int firstOrderEnd = director.IndexOf(
+            "private static bool TryTakeWarIdBatch(", firstOrderStart,
+            StringComparison.Ordinal);
+        string firstOrderBody = director.Substring(firstOrderStart,
+            firstOrderEnd - firstOrderStart);
+        Assert(!firstOrderBody.Contains("HasActiveMissionForKingdom",
+                StringComparison.Ordinal),
+            "one active army cannot suppress first-order assignment for the kingdom");
 
         string lifecycle = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsWarLifecycleService.cs"));
@@ -103,6 +115,19 @@ internal static class ArmyRtsFirstOrderRecoveryRulesTests
             "KingdomWarDirectorService.cs"));
         Assert(director.Contains("assigned++", StringComparison.Ordinal),
             "first-order processing counts published missions, not attempts");
+    }
+
+    private static void FirstOrderSelectionSkipsOnlyBusyArmies()
+    {
+        Equal(true, KingdomWarDirectorRules.ShouldSelectFirstOrderArmy(
+                eligible: true, hasMission: false),
+            "an eligible army without a mission can receive a first order");
+        Equal(false, KingdomWarDirectorRules.ShouldSelectFirstOrderArmy(
+                eligible: true, hasMission: true),
+            "one busy army must not be selected again for the kingdom");
+        Equal(false, KingdomWarDirectorRules.ShouldSelectFirstOrderArmy(
+                eligible: false, hasMission: false),
+            "ineligible armies remain excluded from first-order selection");
     }
 
     private static void RetryKeepsTheFirstOrderAlive()
