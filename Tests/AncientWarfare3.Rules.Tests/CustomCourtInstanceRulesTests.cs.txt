@@ -18,6 +18,16 @@ internal static class CustomCourtInstanceRulesTests
             "a current saved snapshot can be used");
         False(CustomCourtInstanceRules.CanUseSavedSnapshot(false, false),
             "a missing snapshot cannot be used");
+        RuntimeCacheCanBeClearedBetweenWorlds();
+    }
+
+    private static void RuntimeCacheCanBeClearedBetweenWorlds()
+    {
+        CustomCourtInstanceService service =
+            new CustomCourtInstanceService();
+        service.Clear();
+        False(service.TryGet("kingdom_1", out _),
+            "runtime court cache starts empty after world reset");
     }
 
     private static void True(bool actual, string message)

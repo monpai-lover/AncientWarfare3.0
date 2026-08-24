@@ -35,5 +35,10 @@ namespace AncientWarfare3.core.court
         {
             return kingdomId != null && _instances.Remove(kingdomId);
         }
+
+        public void Clear()
+        {
+            _instances.Clear();
+        }
     }
 }

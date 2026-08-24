@@ -598,10 +598,17 @@ namespace AncientWarfare3.core.lineage
                 bool mandateTributary =
                     VassalService.GetTributarySuzerain(pNeighbour) ==
                     pMandate;
+                bool rebelKingdom = MandateRebelService.IsRebelKingdom(
+                    pNeighbour);
+                bool banditKingdom = PeasantRebelRouteService.
+                    IsBanditOrEntering(pNeighbour);
+                bool guiyiKingdom = PeasantRebelGuiyiService.IsGuiyi(
+                    pNeighbour);
                 bool target = MandateBorderWallRules.ShouldFortifyKingdom(
                     true, !pNeighbour.isRekt(), pNeighbour.isNeutral(),
-                    sameSystem, sameAlliance, mandateTributary);
-                if (!target || !pPoorRelationOnly) return target;
+                    sameSystem, sameAlliance, mandateTributary,
+                    rebelKingdom, banditKingdom, guiyiKingdom);
+                if (!target) return false;
                 try
                 {
                     int opinion = World.world.diplomacy.

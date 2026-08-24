@@ -1434,7 +1434,7 @@ namespace AncientWarfare3.ui.windows
                 CustomLocalCourtTemplate local = ActiveLocalTemplate;
                 if (local == null) return false;
                 pDocument = CustomCourtTemplateDocumentRules
-                    .CreateLocalDocument(local);
+                    .CreateLocalDocument(local, _template?.Revision ?? 1);
                 return true;
             }
             pDocument = CustomCourtTemplateDocumentRules

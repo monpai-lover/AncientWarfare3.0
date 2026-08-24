@@ -18,6 +18,11 @@ namespace AncientWarfare3.core.court
         public static readonly CourtDefinitionResolver Resolver =
             new CourtDefinitionResolver(Instances);
 
+        internal static void ClearRuntime()
+        {
+            Instances.Clear();
+        }
+
         public static string KingdomKey(Kingdom kingdom)
         {
             return kingdom == null

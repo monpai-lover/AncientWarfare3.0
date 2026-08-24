@@ -97,6 +97,11 @@ namespace AncientWarfare3.core.court
             {
                 template = JsonConvert.DeserializeObject<CustomCourtTemplate>(
                     json, Settings);
+                if (template == null)
+                {
+                    error = CustomCourtTemplateValidationError.InvalidTemplateId;
+                    return false;
+                }
                 template = CustomLocalCourtTemplateRules.UpgradeLegacy(
                     template);
                 if (!Enum.IsDefined(typeof(CustomCourtTemplateScope),

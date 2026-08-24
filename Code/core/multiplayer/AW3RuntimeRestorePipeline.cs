@@ -413,6 +413,8 @@ namespace AncientWarfare3.core.multiplayer
                 new AW3RestoreStage("virtual_titles", VirtualNobleTitleService.ClearRuntime),
                 new AW3RestoreStage("court_aristocratic_groups",
                     CourtAristocraticGroupService.ClearRuntime),
+                new AW3RestoreStage("custom_court_instances",
+                    CustomCourtRuntime.ClearRuntime),
                 new AW3RestoreStage("court_peace",
                     CourtPeaceService.ClearRuntime),
                 new AW3RestoreStage("conferred_posthumous_titles",

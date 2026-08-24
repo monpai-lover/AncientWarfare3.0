@@ -147,6 +147,12 @@ namespace AncientWarfare3.core.lineage
                         reserved, pCarveRoadPassages: true,
                         out IReadOnlyList<CultiwayWallPoint> planned))
                 {
+                    var plannedSet = new HashSet<CultiwayWallPoint>(planned);
+                    planned = planned.Where(point =>
+                        MandateBorderWallRefreshRules.
+                            ShouldKeepHorizontalSegment(point.X, point.Y,
+                                (x, y) => plannedSet.Contains(
+                                    new CultiwayWallPoint(x, y)))).ToList();
                     var manifest = new MandateBorderCityWallManifest
                     {
                         CityId = pCityId,
