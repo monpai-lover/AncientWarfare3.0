@@ -88,16 +88,18 @@ namespace AncientWarfare3.core.court
             if (!examinationSystem && !nineRankSystem) return true;
             if (IsAppointmentExempt(pActor, pKingdom, pLayer, pOfficeId))
                 return true;
-            if (pAllowLocalLowerQualification &&
-                pLayer == CourtOfficeLayer.City && pActor.isCityLeader())
-                return true;
             int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
                 pKingdom, pLayer, pOfficeId, pCity);
+            bool regionalGovernor = OfficialCareerStateService.
+                IsRegionalGovernorSeat(pKingdom, pLayer, pOfficeId, pCity);
+            bool localLeaderQualificationBypass = pAllowLocalLowerQualification &&
+                pLayer == CourtOfficeLayer.City && pActor.isCityLeader();
             int currentRank = OfficialCareerStateService.ReadRankFast(pActor);
             bool hasCareerRank = nineRankSystem && currentRank >
                 OfficialCareerRankRules.Unranked;
             if (!hasCareerRank && !HistoricalSchoolEducationService.CanAppoint(
-                    pActor, pKingdom, pLayer, pOfficeId)) return false;
+                    pActor, pKingdom, pLayer, pOfficeId) &&
+                !localLeaderQualificationBypass) return false;
             bool allowUnqualifiedLocalFallback =
                 LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
                     pLayer == CourtOfficeLayer.City, officeGrade,
@@ -119,7 +121,7 @@ namespace AncientWarfare3.core.court
                     pActor, pKingdom, pLayer, pOfficeId);
             bool appointmentQualificationEligible = hasFormalQualification ||
                 hasLegacyCredential || hasCareerRank ||
-                allowUnqualifiedLocalFallback;
+                allowUnqualifiedLocalFallback || localLeaderQualificationBypass;
             if (!appointmentQualificationEligible)
                 return false;
 
@@ -128,7 +130,7 @@ namespace AncientWarfare3.core.court
                     ? OfficialCareerRankRules.ResolveInitialLocalAppointmentRank(
                         OfficialCareerRankRules.Unranked, officeGrade,
                         hasNineRankSystem: true, hasFormalQualification: true,
-                        qualification?.EntryBonus ?? 0)
+                        qualification?.EntryBonus ?? 0, regionalGovernor)
                     : OfficialCareerRankRules.ResolveInitialAppointmentRank(
                         OfficialCareerRankRules.Unranked, officeGrade,
                         hasNineRankSystem: true, hasFormalQualification: true,
@@ -142,7 +144,8 @@ namespace AncientWarfare3.core.court
             bool passingEvaluation = evaluation >= 0 && evaluation <= 2;
             bool rankEligible = pLayer == CourtOfficeLayer.City
                 ? currentRank >= OfficialCareerRankRules.
-                    RequiredRankForLocalOfficeGrade(officeGrade)
+                    RequiredRankForLocalOfficeGrade(officeGrade,
+                        regionalGovernor)
                 : currentRank >= OfficialCareerRankRules.
                     RequiredRankForOfficeGrade(officeGrade);
             bool strictEligible = rankEligible &&

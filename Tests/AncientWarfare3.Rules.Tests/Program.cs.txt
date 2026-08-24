@@ -6711,10 +6711,10 @@ Near(1.17f, OfficialCareerRankRules.InfluenceMultiplier(18), 0.0001f,
     "special-grant officials use the highest influence band");
 Equal(14, OfficialCareerRankRules.RequiredRankForOfficeGrade(10),
     "chief court offices require principal third rank");
-Equal(10, OfficialCareerRankRules.RequiredRankForOfficeGrade(20),
-    "middle court offices require principal fifth rank");
-Equal(6, OfficialCareerRankRules.RequiredRankForOfficeGrade(30),
-    "specialist offices require principal seventh rank");
+Equal(12, OfficialCareerRankRules.RequiredRankForOfficeGrade(20),
+    "middle court offices require fourth rank");
+Equal(11, OfficialCareerRankRules.RequiredRankForOfficeGrade(30),
+    "specialist offices require fourth rank");
 Near(8f, OfficialCareerRankRules.OfficeRankMatchScore(14, 10), 0.0001f,
     "an exact rank-to-office match receives the best score");
 True(OfficialCareerRankRules.OfficeRankMatchScore(8, 10) < 0f,

@@ -7,15 +7,27 @@ internal static class RegionalGovernmentNineRankRulesTests
     {
         Equal(1, OfficialCareerRankRules.RequiredRankForLocalOfficeGrade(30),
             "lowest local office opens at ninth rank");
-        Equal(6, OfficialCareerRankRules.RequiredRankForLocalOfficeGrade(20),
-            "middle local office keeps a higher floor");
-        Equal(12, OfficialCareerRankRules.RequiredRankForLocalOfficeGrade(10),
-            "local leader keeps the senior floor");
-        Equal(6, OfficialCareerRankRules.RequiredRankForOfficeGrade(30),
-            "central office compatibility remains unchanged");
+        Equal(1, OfficialCareerRankRules.RequiredRankForLocalOfficeGrade(20),
+            "secondary local office starts at ninth rank");
+        Equal(5, OfficialCareerRankRules.RequiredRankForLocalOfficeGrade(10),
+            "ordinary commandery governor starts at seventh rank");
+        Equal(7, OfficialCareerRankRules.RequiredRankForLocalOfficeGrade(10,
+            regionalGovernor: true),
+            "a prefecture seat uses the governor sixth-rank floor");
+        Equal(7, OfficialCareerRankRules.RequiredRankForLocalOfficeGrade(30,
+            regionalGovernor: true),
+            "a custom seat office cannot lower the governor floor");
+        Equal(11, OfficialCareerRankRules.RequiredRankForOfficeGrade(30),
+            "lowest central office still requires fourth rank");
+        Equal(12, OfficialCareerRankRules.RequiredRankForOfficeGrade(20),
+            "middle central office keeps a fourth-rank floor");
         Equal(2, OfficialCareerRankRules.ResolveInitialLocalAppointmentRank(
             OfficialCareerRankRules.Unranked, 30, true, true, 0),
-            "local entry does not require central sixth-rank floor");
+            "local entry does not require a central floor");
+        Equal(7, OfficialCareerRankRules.ResolveInitialLocalAppointmentRank(
+            OfficialCareerRankRules.Unranked, 10, true, true, 0,
+            regionalGovernor: true),
+            "regional governor appointment uses the governor floor");
         Equal(true, CivilServiceExamRules.ShouldUseVacancyFallback(
                 officeVacant: true, strictCandidateFound: false,
                 appointmentQualificationEligible: true),
@@ -32,18 +44,28 @@ internal static class RegionalGovernmentNineRankRulesTests
                 officeVacant: true, strictCandidateFound: false,
                 appointmentQualificationEligible: false),
             "vacancy fallback never bypasses appointment qualification");
-        Equal(10, OfficialCareerRankRules.ResolveVacancyPromotionRank(
-                currentRank: 0, officeGrade: 20,
-                hasNineRankSystem: true, hasFormalQualification: true,
-                vacancyPromotion: true),
+        Equal(12, OfficialCareerRankRules.ResolveVacancyPromotionRank(
+            currentRank: 0, officeGrade: 20,
+            hasNineRankSystem: true, hasFormalQualification: true,
+            vacancyPromotion: true),
             "central fallback grants the target office rank floor");
-        Equal(6, OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
-                currentRank: 0, officeGrade: 20,
-                hasNineRankSystem: true, hasFormalQualification: true,
-                vacancyPromotion: true),
+        Equal(5, OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
+            currentRank: 0, officeGrade: 10,
+            hasNineRankSystem: true, hasFormalQualification: true,
+            vacancyPromotion: true),
+            "local governor fallback grants the commandery floor");
+        Equal(7, OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
+            currentRank: 0, officeGrade: 10,
+            hasNineRankSystem: true, hasFormalQualification: true,
+            vacancyPromotion: true, regionalGovernor: true),
+            "regional governor fallback grants the governor floor");
+        Equal(1, OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
+            currentRank: 0, officeGrade: 20,
+            hasNineRankSystem: true, hasFormalQualification: true,
+            vacancyPromotion: true),
             "local fallback grants the target office rank floor");
         Equal(8, OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
-                currentRank: 8, officeGrade: 20,
+            currentRank: 8, officeGrade: 20,
                 hasNineRankSystem: true, hasFormalQualification: true,
                 vacancyPromotion: true),
             "vacancy fallback preserves an already superior rank");

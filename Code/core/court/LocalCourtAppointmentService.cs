@@ -12,7 +12,8 @@ namespace AncientWarfare3.core.court
     {
         // Vacancy repair is retried with a rotating cursor. Keep each pass
         // small enough that qualification queries cannot create a frame spike.
-        private const int CandidateScanLimit = 32;
+        private const int CandidateScanLimit =
+            CourtCandidateBudgetRules.MaximumScanSize;
         private static SQLiteConnection DB =>
             LineageArchiveManager.Instance?.OperatingDB;
         private sealed class CandidateScanState
@@ -329,7 +330,7 @@ namespace AncientWarfare3.core.court
             }
             int start = scan.Cursor % units.Count;
             int inspected = pFullScan ? units.Count :
-                Math.Min(CandidateScanLimit, units.Count);
+                CourtCandidateBudgetRules.ResolveScanSize(units.Count);
             for (int offset = 0; offset < inspected; offset++)
             {
                 Actor actor = units[(start + offset) % units.Count];
@@ -437,6 +438,9 @@ namespace AncientWarfare3.core.court
             int bestTier = int.MaxValue;
             int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
                 pKingdom, CourtOfficeLayer.City, pOfficeId, pCity);
+            bool regionalGovernor = OfficialCareerStateService.
+                IsRegionalGovernorSeat(pKingdom, CourtOfficeLayer.City,
+                    pOfficeId, pCity);
             bool lowOffice = LocalLowOfficeVacancyRules.IsLowestLocalGrade(
                 officeGrade);
             foreach (Actor actor in pCandidates)
@@ -472,7 +476,8 @@ namespace AncientWarfare3.core.court
                             LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
                                 isCityLayer: true, officeGrade: officeGrade,
                                 vacancyPromotion: true),
-                            vacancyPromotion: true);
+                            vacancyPromotion: true,
+                            regionalGovernor: regionalGovernor);
                     score += Math.Max(0, resolvedRank);
                 }
                 if (best == null || tier < bestTier ||

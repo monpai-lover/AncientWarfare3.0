@@ -1579,6 +1579,8 @@ namespace AncientWarfare3.core.court
             {
                 int appointmentOfficeGrade = OfficeGradeForOffice(pKingdom,
                     pLayer, pOfficeId, pCity);
+                bool regionalGovernorSeat = IsRegionalGovernorSeat(pKingdom,
+                    pLayer, pOfficeId, pCity);
                 return pLayer == CourtOfficeLayer.City
                     ? pVacancyPromotion
                         ? OfficialCareerRankRules.
@@ -1586,12 +1588,14 @@ namespace AncientWarfare3.core.court
                                 appointmentOfficeGrade,
                                 hasNineRankSystem: true,
                                 hasFormalQualification: true,
-                                vacancyPromotion: true)
+                                vacancyPromotion: true,
+                                regionalGovernor: regionalGovernorSeat)
                         : OfficialCareerRankRules.
                             ResolveInitialLocalAppointmentRank(existingRank,
                                 appointmentOfficeGrade,
                                 hasNineRankSystem: true,
-                                hasFormalQualification: true, entryBonus: 0)
+                                hasFormalQualification: true, entryBonus: 0,
+                                regionalGovernor: regionalGovernorSeat)
                     : pVacancyPromotion
                         ? OfficialCareerRankRules.ResolveVacancyPromotionRank(
                             existingRank, appointmentOfficeGrade,
@@ -1628,6 +1632,8 @@ namespace AncientWarfare3.core.court
                 HasUsableCredential(pActor, pKingdom, pLayer, pOfficeId);
             int officeGrade = OfficeGradeForOffice(pKingdom, pLayer,
                 pOfficeId, pCity);
+            bool regionalGovernor = IsRegionalGovernorSeat(pKingdom, pLayer,
+                pOfficeId, pCity);
             bool allowUnqualifiedLocalFallback =
                 LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
                     localOffice, officeGrade,
@@ -1643,7 +1649,8 @@ namespace AncientWarfare3.core.court
                             officeGrade, hasNineRankSystem: true,
                             hasAppointmentQualification,
                             vacancyPromotion: true,
-                            qualification?.EntryBonus ?? 0);
+                            qualification?.EntryBonus ?? 0,
+                            regionalGovernor);
                 return OfficialCareerRankRules.ResolveVacancyPromotionRank(
                     existingRank, officeGrade, hasNineRankSystem: true,
                     hasAppointmentQualification, vacancyPromotion: true,
@@ -1653,7 +1660,7 @@ namespace AncientWarfare3.core.court
                 ? OfficialCareerRankRules.ResolveInitialLocalAppointmentRank(
                     existingRank, officeGrade, hasNineRankSystem: true,
                     hasAppointmentQualification,
-                    qualification?.EntryBonus ?? 0)
+                    qualification?.EntryBonus ?? 0, regionalGovernor)
                 : OfficialCareerRankRules.ResolveInitialAppointmentRank(
                     existingRank, officeGrade, hasNineRankSystem: true,
                     hasAppointmentQualification,
@@ -1900,6 +1907,20 @@ namespace AncientWarfare3.core.court
                 pKingdom, pOfficeId) ??
                 CourtProfileRegistry.FindOfficeAcrossProfiles(pOfficeId);
             return definition?.Grade ?? 30;
+        }
+
+        internal static bool IsRegionalGovernorSeat(Kingdom pKingdom,
+            string pLayer, string pOfficeId, City pCity)
+        {
+            if (pLayer != CourtOfficeLayer.City || pKingdom?.data == null ||
+                pCity?.data == null || pCity.kingdom != pKingdom ||
+                string.IsNullOrEmpty(pOfficeId)) return false;
+            if (!string.Equals(CourtService.ResolveCityOffice(pKingdom, pCity),
+                    pOfficeId, StringComparison.Ordinal)) return false;
+            if (!RegionalGovernmentAggregationService.TryFindRegion(pKingdom,
+                    pCity.data.id, out RegionalGovernmentReadModel region))
+                return false;
+            return region.EffectiveSeatCityId == pCity.data.id;
         }
 
         private static bool IsMilitaryOffice(string pLayer, string pOfficeId)
