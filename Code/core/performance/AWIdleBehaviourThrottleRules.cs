@@ -100,6 +100,15 @@ namespace AncientWarfare3.core.performance
             return cooperativeControl ? capturedSpeed : nativeSpeed;
         }
 
+        public static double ResolveRequestedSpeed(AWSimulationMode pMode,
+            bool schedulerOwnsSimulation, double capturedSpeed,
+            double nativeSpeed)
+        {
+            bool cooperativeControl = pMode != AWSimulationMode.Native &&
+                                       schedulerOwnsSimulation;
+            return cooperativeControl ? capturedSpeed : nativeSpeed;
+        }
+
         public static double StableJitterSeconds(long actorId,
             AWIdleBehaviourKind pKind)
         {

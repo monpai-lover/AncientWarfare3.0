@@ -37,13 +37,14 @@ namespace AncientWarfare3.core.performance
                         militaryMovementOwned)) return true;
                 AWCooperativeSimulationRunner runner =
                     AWCooperativeSimulationRunner.Instance;
-                bool cooperativeControl = runner.RequiresControl;
-                double nativeSpeed = cooperativeControl
-                    ? 0d
-                    : AWWorldTimeRateTracker.GetRequestedSpeed();
+                AWSimulationMode mode = AWPerformanceSettings.Mode;
+                bool schedulerOwnsSimulation =
+                    mode != AWSimulationMode.Native &&
+                    runner.RequiresControl;
+                double nativeSpeed = AWWorldTimeRateTracker.GetRequestedSpeed();
                 double requestedSpeed =
                     AWIdleBehaviourThrottleRules.ResolveRequestedSpeed(
-                        cooperativeControl, runner.RequestedSpeed,
+                        mode, schedulerOwnsSimulation, runner.RequestedSpeed,
                         nativeSpeed);
                 bool allowed = Gate.TryBeginScan(pActor.data.id, pKind,
                     Time.realtimeSinceStartupAsDouble, requestedSpeed);

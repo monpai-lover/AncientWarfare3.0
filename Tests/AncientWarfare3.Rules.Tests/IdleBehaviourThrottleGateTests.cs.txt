@@ -77,6 +77,14 @@ internal static class IdleBehaviourThrottleGateTests
                 cooperativeControl: true, capturedSpeed: 5d,
                 nativeSpeed: 1d),
             "cooperative mode uses the captured pre-normalization speed");
+        Equal(7d, AWIdleBehaviourThrottleRules.ResolveRequestedSpeed(
+                AWSimulationMode.Native, schedulerOwnsSimulation: true,
+                capturedSpeed: 0d, nativeSpeed: 7d),
+            "native mode ignores stale cooperative ownership");
+        Equal(5d, AWIdleBehaviourThrottleRules.ResolveRequestedSpeed(
+                AWSimulationMode.Large, schedulerOwnsSimulation: true,
+                capturedSpeed: 5d, nativeSpeed: 1d),
+            "large mode uses captured scheduler speed");
     }
 
     private static void JitterIsStableAndBoundedByHalfASecond()
@@ -292,6 +300,8 @@ internal static class IdleBehaviourThrottleGateTests
             "cooldowns use the scheduler's captured requested speed");
         Contains(service, "runner.RequiresControl",
             "the captured speed is selected only while the scheduler owns simulation");
+        Contains(service, "mode != AWSimulationMode.Native",
+            "native mode cannot select stale cooperative speed");
         Contains(service, "AWWorldTimeRateTracker.GetRequestedSpeed()",
             "native mode reads the live vanilla requested speed");
         Contains(service, "ArmyMilitaryMovementPriorityIndex.TryGetKind",
