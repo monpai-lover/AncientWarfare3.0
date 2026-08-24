@@ -223,6 +223,23 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        public static bool IsValidBanditKing(bool banditKingdom,
+            bool kingAlive, bool kingBelongsToKingdom,
+            bool kingBelongsToKingdomCity)
+        {
+            return banditKingdom && kingAlive &&
+                   kingBelongsToKingdom && kingBelongsToKingdomCity;
+        }
+
+        public static bool CanPromoteBanditKingCandidate(bool actorAlive,
+            bool actorAdult, bool actorMale, bool actorBelongsToKingdom,
+            bool actorCityBelongsToKingdom, bool actorIsBoat)
+        {
+            return actorAlive && actorAdult && actorMale &&
+                   actorBelongsToKingdom && actorCityBelongsToKingdom &&
+                   !actorIsBoat;
+        }
+
         public static bool ShouldTransferFallenSurvivor(
             bool actorAlive, bool actorBelongsToBanditKingdom,
             bool destinationKingdomValid, bool destinationIsBanditKingdom)

@@ -60,6 +60,18 @@ namespace AncientWarfare3.core.lineage
                 : phase;
         }
 
+        public static bool ShouldReconcileRestoredState(bool mandateActive,
+            MandatePhase phase, string originType, bool activeClaimants,
+            bool activeZhuluWars)
+        {
+            bool restored = string.Equals(originType, "self_restoration",
+                               StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(originType, "feudatory_restoration",
+                               StringComparison.OrdinalIgnoreCase);
+            return mandateActive && restored && phase == MandatePhase.Chaos &&
+                   !activeClaimants && !activeZhuluWars;
+        }
+
         public static MandatePhase PhaseAfterMandateEstablished(
             bool pHadPreviousMandate)
         {

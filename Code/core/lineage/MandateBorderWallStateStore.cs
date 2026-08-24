@@ -68,6 +68,9 @@ namespace AncientWarfare3.core.lineage
                 }
                 manifest.CityId = id;
                 manifest.WallTypeId ??= "";
+                if (manifest.BuiltYear == int.MinValue)
+                    manifest.BuiltYear = Date.getCurrentYear() -
+                        MandateBorderWallRefreshRules.WallLifespanYears;
                 manifest.Points ??= new List<MandateBorderWallPointState>();
                 foreach (MandateBorderWallPointState point in manifest.Points)
                     if (point != null) point.OriginalTopTypeId ??= "";

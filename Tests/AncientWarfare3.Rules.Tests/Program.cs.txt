@@ -16,6 +16,21 @@ if (args.Length == 1 && args[0] == "--army-rts-succession")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--warrior-army-membership")
+{
+    WarriorArmyMembershipRulesTests.Run();
+    WarriorArmyMembershipSourceGuardTests.Run();
+    Console.WriteLine("Warrior army membership rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--actor-load-city-safety")
+{
+    ActorLoadCitySafetyRulesTests.Run();
+    Console.WriteLine("Actor load city safety rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--diplomacy-tributary-details")
 {
     DiplomacyTributaryDetailsRulesTests.Run();
@@ -51,6 +66,35 @@ if (args.Length == 1 && args[0] == "--court-history-localization")
     DeJureSeatRenameSourceGuardTests.Run();
     DeJureSeatNameSyncSourceGuardTests.Run();
     GlobalDeJureEmptyClickSourceGuardTests.Run();
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--mandate-capital-transfer")
+{
+    MandateCapitalTransferRulesTests.Run();
+    MandatePhaseRulesTests.Run();
+    Console.WriteLine("Mandate capital transfer rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--war-type-ownership-matrix")
+{
+    WarTypeOwnershipMatrixTests.Run();
+    Console.WriteLine("War type ownership matrix passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--army-replenishment-operation")
+{
+    ArmyReplenishmentOperationRulesTests.Run();
+    Console.WriteLine("Army replenishment operation rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--central-court-vacancy")
+{
+    CentralCourtVacancySourceGuardTests.Run();
+    Console.WriteLine("Central court vacancy source guard passed.");
     return;
 }
 
@@ -250,6 +294,7 @@ if (args.Length == 1 && args[0] == "--court-immediate-vacancies")
 if (args.Length == 1 && args[0] == "--court-appointment-failure-backoff")
 {
     CourtAppointmentFailureBackoffRulesTests.Run();
+    CentralCourtVacancySourceGuardTests.Run();
     Console.WriteLine("Court appointment failure backoff rules passed.");
     return;
 }
@@ -424,6 +469,7 @@ if (args.Length == 1 && args[0] == "--bandit-outlaw-names")
 if (args.Length == 1 && args[0] == "--peasant-rebel-routes")
 {
     PeasantRebelRouteRulesTests.Run();
+    PeasantRebelStateNameRulesTests.Run();
     Console.WriteLine("Peasant rebel route rules passed.");
     return;
 }
@@ -1079,6 +1125,7 @@ if (args.Length == 1 && args[0] == "--zhulu-war-slice")
 {
     ZhuluWarRulesTests.Run();
     ZhuluAgeRulesTests.Run();
+    MandateMilitaryStrengthRulesTests.Run();
     Console.WriteLine("Zhulu war rules passed.");
     return;
 }
@@ -3417,6 +3464,16 @@ Equal(-4, MandateCoreTransferRules.AllowedAnnualLossDelta(
 Equal(0, MandateCoreTransferRules.AllowedAnnualLossDelta(
         pCurrentAnnualLoss: -12, pRequestedDelta: -2),
     "a consumed annual city-loss budget blocks further loss");
+True(MandateCoreTransferRules.ShouldTransferCapitalRing(
+        pMandateWar: true, pAttackersWon: true,
+        pCapitalCaptured: true, pCityOwnedByFormerMandate: false,
+        pAlreadyTransferred: false),
+    "a captured Mandate capital transfers its adjacent legal ring once");
+Equal(false, MandateCoreTransferRules.ShouldTransferCapitalRing(
+        pMandateWar: true, pAttackersWon: true,
+        pCapitalCaptured: true, pCityOwnedByFormerMandate: false,
+        pAlreadyTransferred: true),
+    "a repeated Mandate end callback cannot transfer the ring twice");
 Equal(-4, MandateDeclineRules.WarDefeatDelta(false, false),
     "ordinary defeat costs four mandate");
 Equal(-7, MandateDeclineRules.WarDefeatDelta(true, false),
@@ -9076,7 +9133,10 @@ SamePeopleWarIntentRulesTests.Run();
 DiplomaticWarAvailabilityRulesTests.Run();
 DiplomaticWarDeclarationLockRulesTests.Run();
 ZhuluWarRulesTests.Run();
+MandateConquestDirectTransferRulesTests.Run();
+BanditFormerKingSourceGuardTests.Run();
 ZhuluAgeRulesTests.Run();
+MandateMilitaryStrengthRulesTests.Run();
 XiaizationStatusDisplayRulesTests.Run();
 WarGoalSettlementRulesTests.Run();
 DeJureWarGoalSettlementRulesTests.Run();

@@ -10,7 +10,9 @@ namespace AncientWarfare3.core.court
 {
     internal static class LocalCourtAppointmentService
     {
-        private const int CandidateScanLimit = 96;
+        // Vacancy repair is retried with a rotating cursor. Keep each pass
+        // small enough that qualification queries cannot create a frame spike.
+        private const int CandidateScanLimit = 32;
         private static SQLiteConnection DB =>
             LineageArchiveManager.Instance?.OperatingDB;
         private sealed class CandidateScanState
@@ -314,16 +316,8 @@ namespace AncientWarfare3.core.court
                 result.Add(actor);
             }
 
-            List<Actor> units;
-            try
-            {
-                units = pKingdom.getUnits()?.Where(actor => actor?.data != null)
-                    .ToList() ?? new List<Actor>();
-            }
-            catch
-            {
-                units = new List<Actor>();
-            }
+            List<Actor> units = OfficerCandidateCatalog.GetOrBuild(
+                pKingdom, Date.getCurrentYear());
             if (units.Count == 0) return result;
 
             string scanKey = pKingdom.id + ":" + (pCity?.data?.id ?? -1L);
@@ -362,7 +356,7 @@ namespace AncientWarfare3.core.court
             if (candidate == null)
             {
                 List<Actor> candidates = LoadAllCandidates(pKingdom, pCity,
-                    LoadCandidates(pKingdom, pCity), pFullScan: true);
+                    LoadCandidates(pKingdom, pCity), pFullScan: false);
                 candidate = SelectCandidate(candidates, pKingdom, pCity,
                     NativeCityId(pCity.leader), pRootOffice,
                     pAllowVacancyPromotion: true);
@@ -401,6 +395,7 @@ namespace AncientWarfare3.core.court
 
         internal static void ClearRuntime()
         {
+            OfficerCandidateCatalog.ClearRuntime();
             CandidateScans.Clear();
             AppointmentFailures.Clear();
         }

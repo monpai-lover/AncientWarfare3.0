@@ -212,6 +212,10 @@ internal static class SyntheticLevyRulesTests
                 "SyntheticMobilizationLedgerService.OnSyntheticRemoved(",
                 StringComparison.Ordinal),
             "synthetic removal releases unified ledger membership");
+        Equal(true, source.Contains(
+                "WorldTile spawnTile = pSpawnTile ?? city?.getTile();",
+                StringComparison.Ordinal),
+            "frontline synthetic creation falls back to the source city tile when the captain has no tile");
     }
 
     private static void FormalWarReplenishmentUsesSyntheticReserveOnly()

@@ -5,6 +5,16 @@ namespace AncientWarfare3.core.lineage
 {
     public static class MandateBorderWallRefreshRules
     {
+        public const int WallLifespanYears = 50;
+
+        public static bool HasExpired(int pCurrentYear, int pBuiltYear,
+            int pLifespanYears = WallLifespanYears)
+        {
+            if (pLifespanYears <= 0 || pBuiltYear == int.MinValue ||
+                pCurrentYear < pBuiltYear) return false;
+            return pCurrentYear - pBuiltYear >= pLifespanYears;
+        }
+
         public static bool ShouldRefresh(bool activated,
             bool cityEligible)
         {

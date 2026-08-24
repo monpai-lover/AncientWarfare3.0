@@ -34,6 +34,8 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomYear(Kingdom pKingdom)
         {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return;
+            MandateBorderWallRefreshService.OnKingdomYear(pKingdom);
             // 年度自动整备已改为天朝决议槽推进，保留空钩子避免旧 patch 调用报错。
         }
 

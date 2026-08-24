@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.performance;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -203,7 +204,8 @@ namespace AncientWarfare3.core.lineage
             // and returns zero until a complete generation is published;
             // exposing that transient value makes synthetic reserves appear
             // exhausted immediately after a levy is created.
-            if (ResolveMobilizationPhase(kingdom) == ArmyMobilizationPhase.War)
+            if (AWPerformanceSettings.EnableSyntheticMobilization &&
+                ResolveMobilizationPhase(kingdom) == ArmyMobilizationPhase.War)
                 return CountWartimeReplacement(city, kingdom);
             KingdomEstimate state = State(kingdom);
             EnsureGeneration(kingdom, state);
@@ -249,6 +251,14 @@ namespace AncientWarfare3.core.lineage
             bool allowArmyCreation, List<Actor> destination,
             out bool confirmedExhausted)
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization)
+            {
+                // This method is only an AW3 synthetic-reserve adapter. A
+                // disabled adapter must not claim that vanilla residents are
+                // exhausted; native recruitment remains authoritative.
+                confirmedExhausted = false;
+                return 0;
+            }
             // AW3 never leases real residents. Vanilla owns ordinary
             // recruitment and the synthetic ledger owns wartime spawns.
             confirmedExhausted = true;

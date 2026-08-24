@@ -1,0 +1,58 @@
+using System;
+using System.IO;
+
+internal static class WarriorArmyMembershipSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string service = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "WarriorArmyMembershipService.cs"));
+        string enlist = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_EnlistPatch.cs"));
+        string safety = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_ArmySafetyPatch.cs"));
+        string load = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_ActorKingdomSafetyPatch.cs"));
+
+        False(service.Contains("World.world.cities"),
+            "warrior repair must not scan all cities");
+        False(service.Contains("SeedCitiesOnce"),
+            "warrior repair must not seed a periodic world scan");
+        False(service.Contains("ProcessCities"),
+            "warrior repair must not process city populations periodically");
+        False(service.Contains("World.world.armies"),
+            "warrior repair must not scan all armies every authority cycle");
+        int cycleStart = service.IndexOf(
+            "public static void ProcessAuthorityCycle()");
+        int cycleEnd = service.IndexOf(
+            "public static void ClearRuntime()", cycleStart);
+        if (cycleStart < 0 || cycleEnd <= cycleStart)
+            throw new InvalidOperationException(
+                "warrior authority-cycle boundary is missing");
+        string cycle = service.Substring(cycleStart, cycleEnd - cycleStart);
+        False(cycle.Contains("foreach"),
+            "warrior authority cycle must not enumerate all armies");
+        False(service.Contains("BuildTargetArmyIndex"),
+            "warrior repair targets must come from lifecycle-maintained indexes");
+        Contains(service, "NotifyArmyAvailable",
+            "army creation must wake waiting orphan warriors");
+        Contains(enlist, "WarriorArmyMembershipService.Enqueue(__instance)",
+            "profession changes must enqueue warriors directly");
+        Contains(safety, "WarriorArmyMembershipService.NotifyArmyAvailable",
+            "native army creation must wake orphan warriors");
+        Contains(load, "WarriorArmyMembershipService.Enqueue(__result)",
+            "loaded warriors must enter the event-driven repair queue");
+    }
+
+    private static void Contains(string text, string needle, string message)
+    {
+        if (!text.Contains(needle))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+}

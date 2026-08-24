@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -44,6 +45,85 @@ namespace AncientWarfare3.core.lineage
 
     internal static class ZhuluWarService
     {
+        private sealed class ActiveWarEntry
+        {
+            internal War War;
+            internal long AttackerId;
+            internal long DefenderId;
+        }
+
+        private static readonly Dictionary<long, ActiveWarEntry> ActiveWarIndex =
+            new Dictionary<long, ActiveWarEntry>();
+        private static bool _activeWarIndexReady;
+
+        internal static void RebuildActiveWarIndex()
+        {
+            ActiveWarIndex.Clear();
+            try
+            {
+                if (World.world?.wars == null)
+                {
+                    _activeWarIndexReady = true;
+                    return;
+                }
+                foreach (War war in World.world.wars)
+                    AddActiveWar(war);
+            }
+            catch { }
+            _activeWarIndexReady = true;
+        }
+
+        internal static void OnWarStarted(War pWar)
+        {
+            if (!IsZhuluWar(pWar, requireActive: false)) return;
+            if (!_activeWarIndexReady) RebuildActiveWarIndex();
+            AddActiveWar(pWar);
+        }
+
+        internal static void OnWarEnded(War pWar)
+        {
+            if (pWar?.data == null) return;
+            ActiveWarIndex.Remove(pWar.data.id);
+        }
+
+        internal static bool CanOpenNewWar(Kingdom pRealm)
+        {
+            if (pRealm?.data == null) return false;
+            if (!_activeWarIndexReady) RebuildActiveWarIndex();
+            int forRealm = 0;
+            foreach (ActiveWarEntry entry in ActiveWarIndex.Values)
+                if (entry.AttackerId == pRealm.id ||
+                    entry.DefenderId == pRealm.id) forRealm++;
+            return ZhuluAgeRules.CanOpenNewWar(
+                ActiveWarIndex.Count, forRealm);
+        }
+
+        private static void AddActiveWar(War pWar)
+        {
+            if (!IsZhuluWar(pWar, requireActive: false) ||
+                pWar?.data == null) return;
+            Kingdom attacker = null;
+            Kingdom defender = null;
+            try
+            {
+                attacker = pWar.getMainAttacker();
+                defender = pWar.getMainDefender();
+            }
+            catch { }
+            ActiveWarIndex[pWar.data.id] = new ActiveWarEntry
+            {
+                War = pWar,
+                AttackerId = attacker?.data?.id ?? -1L,
+                DefenderId = defender?.data?.id ?? -1L
+            };
+        }
+
+        internal static void ClearRuntime()
+        {
+            ActiveWarIndex.Clear();
+            _activeWarIndexReady = false;
+        }
+
         public static bool CanDeclare(Kingdom attacker, Kingdom defender,
             out string reason)
         {
@@ -64,6 +144,11 @@ namespace AncientWarfare3.core.lineage
             bool ageOverride = ZhuluAgeRules.ShouldUseWarOverride(
                 pZhuluAgeOverride,
                 currentAgeId);
+            if (ageOverride && !CanOpenNewWar(attacker))
+            {
+                reason = "zhulu_active_war_limit";
+                return false;
+            }
             Kingdom attackerRoot = VassalService.GetRootSuzerain(attacker);
             Kingdom defenderRoot = VassalService.GetRootSuzerain(defender);
             bool sameRoot = attackerRoot?.data != null &&
@@ -171,7 +256,25 @@ namespace AncientWarfare3.core.lineage
                 defender?.data != null
                     ? HistoryColors.FromKingdom(defender)
                     : "");
+            long capitalId = -1L;
+            try { capitalId = defender?.capital?.data?.id ?? -1L; }
+            catch { }
+            if (capitalId >= 0L)
+                pWar.data.set(LineageKeys.ZHULU_WAR_START_CAPITAL_ID,
+                    capitalId);
             return true;
+        }
+
+        internal static long ReadWarStartCapitalId(War pWar)
+        {
+            if (!IsZhuluWar(pWar, requireActive: false)) return -1L;
+            try
+            {
+                pWar.data.get(LineageKeys.ZHULU_WAR_START_CAPITAL_ID,
+                    out long capitalId, -1L);
+                return capitalId;
+            }
+            catch { return -1L; }
         }
 
         public static bool TryGetDeclaredDefenderId(War pWar,
@@ -233,11 +336,16 @@ namespace AncientWarfare3.core.lineage
                 return false;
             try
             {
-                if (World.world?.wars == null) return false;
-                foreach (War war in World.world.wars)
+                // Capture is a hot path.  Do not rescan every native and AW3
+                // war for each city tick; the active Zhulu index is rebuilt
+                // on load and updated at war start/end.
+                if (!_activeWarIndexReady) RebuildActiveWarIndex();
+                foreach (ActiveWarEntry entry in ActiveWarIndex.Values)
                 {
-                    if (!IsZhuluWar(war)) continue;
-                    if (war.isInWarWith(capturer, oldOwner)) return true;
+                    War war = entry?.War;
+                    if (!IsZhuluWar(war) || !war.isInWarWith(capturer,
+                            oldOwner)) continue;
+                    return true;
                 }
             }
             catch { }
@@ -248,9 +356,15 @@ namespace AncientWarfare3.core.lineage
         {
             try
             {
-                if (World.world?.wars == null) return false;
-                foreach (War war in World.world.wars)
-                    if (IsZhuluWar(war)) return true;
+                if (!_activeWarIndexReady) RebuildActiveWarIndex();
+                var stale = new List<long>();
+                foreach (KeyValuePair<long, ActiveWarEntry> pair in ActiveWarIndex)
+                {
+                    if (IsZhuluWar(pair.Value?.War)) return true;
+                    stale.Add(pair.Key);
+                }
+                for (int i = 0; i < stale.Count; i++)
+                    ActiveWarIndex.Remove(stale[i]);
             }
             catch { }
             return false;

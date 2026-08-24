@@ -106,22 +106,25 @@ namespace AncientWarfare3.patch
         public static void NewWar_Postfix(War __result)
         {
             if (__result?.data == null) return;
-            PeasantRebelRouteService.OnWarStarted(__result);
-            SpecialGovernmentWarParticipationService.OnWarStarted(__result);
+            Kingdom mainAttacker = __result.getMainAttacker();
+            Kingdom mainDefender = __result.getMainDefender();
             if (ZhuluWarService.IsZhuluWar(__result,
                     requireActive: false))
             {
                 if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
+                VassalService.BreakDirectVassalRelationForWar(
+                    mainAttacker, mainDefender);
                 ZhuluWarService.PersistDeclaredDefender(__result,
                     ZhuluWarDeclarationScope.CurrentDefenderId);
+                ZhuluWarService.OnWarStarted(__result);
                 WarRecordWriter.OnWarStart(__result);
                 RecordNativeZhuluStart(__result);
+                return;
             }
-            else
-            {
-                WarRecordWriter.OnWarStart(__result);
-                RecordMainBelligerents(__result);
-            }
+            PeasantRebelRouteService.OnWarStarted(__result);
+            SpecialGovernmentWarParticipationService.OnWarStarted(__result);
+            WarRecordWriter.OnWarStart(__result);
+            RecordMainBelligerents(__result);
             WarScoreService.StartWar(__result);
             SyntheticMobilizationLedgerService.OnWarStarted(__result);
             CityReservePoolService.OnWarStarted(__result);
@@ -159,6 +162,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(War), nameof(War.increaseDeathsAttackers))]
         public static void IncreaseDeathsAttackers_Postfix(War __instance)
         {
+            if (ZhuluWarService.IsZhuluWar(__instance,
+                    requireActive: false)) return;
             WarScoreService.RecordDeath(__instance,
                 casualtyWasAttacker: true);
         }
@@ -167,6 +172,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(War), nameof(War.increaseDeathsDefenders))]
         public static void IncreaseDeathsDefenders_Postfix(War __instance)
         {
+            if (ZhuluWarService.IsZhuluWar(__instance,
+                    requireActive: false)) return;
             WarScoreService.RecordDeath(__instance,
                 casualtyWasAttacker: false);
         }
@@ -225,6 +232,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(War), nameof(War.update))]
         private static bool Update_Prefix(War __instance)
         {
+            if (ZhuluWarService.IsZhuluWar(__instance,
+                    requireActive: false)) return true;
             return WarRosterIntegrityService.PrepareForUpdate(__instance);
         }
 
@@ -293,9 +302,8 @@ namespace AncientWarfare3.patch
             if (ZhuluWarService.IsZhuluWar(pWar,
                     requireActive: false))
             {
+                ZhuluWarService.OnWarEnded(pWar);
                 if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
-                CleanupLegacyZhuluRuntime(pWar);
-                DiplomaticWarDeclarationService.OnWarEnded(pWar);
                 WarRecordWriter.OnWarEnd(pWar, pWinner);
                 DiplomacyConversationService.RecordWarEnded(pWar, pWinner);
                 RecordNativeZhuluEnd(pWar, pWinner);
@@ -427,24 +435,6 @@ namespace AncientWarfare3.patch
             return HistoryText.Reference(name, color, "kingdom", defenderId);
         }
 
-        private static void CleanupLegacyZhuluRuntime(War pWar)
-        {
-            if (pWar?.data == null) return;
-            WarParticipantEntrySourceService.Instance.
-                TryEndAllActiveSourcesForWar(pWar.data.id,
-                    LineageService.CurTime());
-            ArmyReplenishmentOperationService.OnWarEnded(pWar);
-            KingdomWarDirectorService.OnWarEnded(pWar);
-            ArmyRtsWarLifecycleService.OnWarEnded(pWar);
-            CoalitionWarTaskService.OnWarEnded(pWar);
-            WarMilitaryFactsService.OnWarEnded(pWar);
-            ArmyLogisticsService.OnWarEnded(pWar);
-            ArmyStallWatchdogService.OnWarEnded(pWar);
-            ArmyRtsPlanSnapshotService.OnWarEnded(pWar);
-            WarTerritoryService.ResolveLegacyZhuluGoals(pWar.data.id,
-                "legacy_zhulu_closed");
-        }
-
         private static void OnKingdomLeftWar(War pWar, Kingdom pKingdom)
         {
             ArmyRtsControllerService.InvalidateWarParticipant(
@@ -551,7 +541,19 @@ namespace AncientWarfare3.patch
                 return;
             }
             if (!pState.WasOnSide)
+            {
+                Kingdom opponent = null;
+                try
+                {
+                    opponent = pDefender
+                        ? pWar.getMainAttacker()
+                        : pWar.getMainDefender();
+                }
+                catch { }
+                VassalService.BreakDirectVassalRelationForWar(
+                    pKingdom, opponent);
                 OnKingdomJoinedWar(pWar, pKingdom, pDefender);
+            }
         }
 
         private static bool TryRollbackJoin(War pWar, Kingdom pKingdom,

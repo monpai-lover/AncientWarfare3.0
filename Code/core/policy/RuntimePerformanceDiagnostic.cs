@@ -665,18 +665,10 @@ namespace AncientWarfare3.core.policy
                 Milliseconds(schedulerStages.UnaccountedTicks) +
                 " scheduler_host_unaccounted_ms=" +
                 Milliseconds(schedulerStages.HostUnaccountedTicks) +
-                " simulation_coordinator=" +
-                AWSimulationCoordinatorThread.Instance.GetDiagnostics() +
+                 " simulation_coordinator=master_batch_runner" +
                 " simulation_workers=" +
                 AWSimulationWorkerPool.Instance.GetDiagnostics() +
-                " spatial_zones_incremental=" +
-                AWIncrementalSimObjectZoneUnits.GetDiagnostics() +
-                " spatial_zones_parallel=" +
-                AWParallelSimObjectZoneUnits.GetDiagnostics() +
-                " nearby_status=" +
-                AWNearbyStatusTargetIndex.GetDiagnostics() +
-                " status_scheduler=" +
-                AWStatusSimulationScheduler.GetDiagnostics() +
+                 " status_scheduler=vanilla_master_lifecycle" +
                 " stack_effects=" +
                 AWActiveStackEffectsUpdater.GetDiagnostics() +
                 " inside_boat=" +
@@ -700,8 +692,7 @@ namespace AncientWarfare3.core.policy
                 " enemy_search_candidates=" +
                 actorPostDiagnostics.Candidates +
                 " enemy_search_empty=" + actorPostDiagnostics.Empty +
-                " enemy_presence_cache=" +
-                AWEnemyPresenceCache.GetDiagnostics() +
+                 " enemy_presence_cache=disabled" +
                 " actor_ai_ms=" + Milliseconds(_actorAiTicks) +
                 " actor_ai_calls=" + _actorAiCalls +
                 " actor_task=" + actorTaskId +

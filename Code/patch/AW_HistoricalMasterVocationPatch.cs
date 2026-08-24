@@ -14,6 +14,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.checkCanMakeWarrior))]
         private static void CheckCanMakeWarrior_Postfix(Actor pActor, ref bool __result)
         {
+            if (MilitaryRecruitmentScope.IsMandateEmergency) return;
             if (__result && !HistoricalMasterVocationService.CanEnter(pActor,
                     HistoricalMasterMilitaryContext.OrdinaryWarrior))
                 __result = false;
@@ -24,6 +25,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.makeWarrior))]
         private static bool MakeWarrior_Prefix(Actor pActor)
         {
+            if (MilitaryRecruitmentScope.IsMandateEmergency) return true;
             return HistoricalMasterVocationService.CanEnter(pActor,
                 HistoricalMasterMilitaryContext.OrdinaryWarrior);
         }

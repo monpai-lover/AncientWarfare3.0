@@ -1,0 +1,23 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class PeasantRebelStateNameRulesTests
+{
+    public static void Run()
+    {
+        Equal("Han", PeasantRebelStateNameRules.ResolvePreferredName(
+            "Han", "Outlaw"), "family state name wins");
+        Equal("Outlaw", PeasantRebelStateNameRules.ResolvePreferredName(
+            "", "Outlaw"), "fallback root is used without family state name");
+        Equal("", PeasantRebelStateNameRules.ResolvePreferredName(
+            "", ""), "empty inputs remain empty");
+    }
+
+    private static void Equal(string expected, string actual,
+        string message)
+    {
+        if (!string.Equals(expected, actual, StringComparison.Ordinal))
+            throw new InvalidOperationException(message +
+                ": expected " + expected + ", got " + actual);
+    }
+}

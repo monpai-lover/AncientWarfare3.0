@@ -519,8 +519,13 @@ namespace AncientWarfare3.core.lineage
             int bestScore = int.MinValue;
             WarTerritoryService.WarTargetOption noCbFallback = null;
             int noCbFallbackScore = int.MinValue;
+            WarTerritoryService.WarTargetOption preferredMandateConquest = null;
             WarAiPeopleRelation relation = ResolvePeopleRelation(
                 pKingdom, pTarget);
+            bool preferMandateConquest = MandateConquestRules.ShouldPreferAiGoal(
+                MandateService.GetCurrentMandateKingdom() == pKingdom,
+                MandateService.GetCurrentMandateKingdom() == pTarget) &&
+                WarTerritoryService.CanUseMandateConquest(pKingdom, pTarget);
             SamePeopleWarRoute route = SamePeopleWarIntentRules.Resolve(
                 relation, pKingdom.id, pTarget.id, Date.getCurrentYear(),
                 WarClaimPreparationService.IsLockedTo(pKingdom, pTarget));
@@ -541,6 +546,9 @@ namespace AncientWarfare3.core.lineage
                     option.goal_type, option.score, relation, context,
                     ObjectiveUrgency(option));
                 if (strategicScore == int.MinValue) continue;
+                if (preferMandateConquest && option.goal_type ==
+                    WarTerritoryService.GOAL_MANDATE_CONQUEST)
+                    preferredMandateConquest = option;
                 if (option.goal_type == WarTerritoryService.GOAL_NO_CB)
                 {
                     if (strategicScore <= noCbFallbackScore) continue;
@@ -552,7 +560,7 @@ namespace AncientWarfare3.core.lineage
                 bestScore = strategicScore;
                 best = option;
             }
-            return best ?? noCbFallback;
+            return preferredMandateConquest ?? best ?? noCbFallback;
         }
 
         private static bool ShouldPrepareTerritorialClaim(Kingdom pSource,

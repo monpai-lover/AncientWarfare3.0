@@ -60,11 +60,11 @@ namespace AncientWarfare3.core.lineage
 
         private static bool ShouldQueue(War pWar)
         {
+            if (WarTerritoryService.HasOpenMandateConquestGoal(pWar))
+                return false;
             if (PeasantRebelBanditSuppressionSettlementService.IsReady(pWar))
                 return true;
-            if (ZhuluWarService.IsZhuluWar(pWar))
-                return WarForceEliminationSettlementService
-                    .TryGetConfirmedDecision(pWar, out _);
+            if (ZhuluWarService.IsZhuluWar(pWar)) return false;
             return TryReadDecision(pWar, out _, out _);
         }
 
@@ -78,6 +78,9 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
+            if (WarTerritoryService.HasOpenMandateConquestGoal(war))
+                return;
+
             if (PeasantRebelBanditSuppressionSettlementService.IsReady(war))
             {
                 if (PeasantRebelBanditSuppressionSettlementService.TryExecuteImmediate(war))
@@ -85,18 +88,6 @@ namespace AncientWarfare3.core.lineage
                 else
                     RecordFailure(pWarId,
                         "bandit_leadership_collapse_failed");
-                return;
-            }
-
-            if (ZhuluWarService.IsZhuluWar(war))
-            {
-                WarForceSpecialSettlementResult zhulu =
-                    WarForceSpecialSettlementService
-                        .TrySettleZhuluZeroForce(war);
-                if (zhulu == WarForceSpecialSettlementResult.Failed)
-                    RecordFailure(pWarId, "special_zhulu_settlement_failed");
-                else if (zhulu == WarForceSpecialSettlementResult.Handled)
-                    FailureCounts.Remove(pWarId);
                 return;
             }
 

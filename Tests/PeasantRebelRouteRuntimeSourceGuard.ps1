@@ -338,8 +338,8 @@ RequireOrder $bandit 'CanEvaluateWeakOriginTransition' `
     'Transition randomness must run only after eligibility checks.'
 Require $route 'RenameForRoute(' `
     'Route names must use the shared kingdom projection boundary.'
-Require $route 'EnsureCanonicalName(kingdom, resolvedRoute);' `
-    'Restore must migrate legacy suffixed kingdom names to the canonical root.'
+Require $route 'string.IsNullOrWhiteSpace(kingdom.name)' `
+    'Restore must preserve persisted rebel names and only repair empty names.'
 Require $rulerProjection 'PeasantRebelOutlawNameRules.ComposeName(' `
     'Rebel nameplates must project the route suffix outside Kingdom.name.'
 Require $rulerProjection 'ComposeCeremonialTitle(pKingdom, false)' `

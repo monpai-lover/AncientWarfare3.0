@@ -91,10 +91,13 @@ namespace AncientWarfare3.core.court
             if (pAllowLocalLowerQualification &&
                 pLayer == CourtOfficeLayer.City && pActor.isCityLeader())
                 return true;
-            if (!HistoricalSchoolEducationService.CanAppoint(pActor,
-                    pKingdom, pLayer, pOfficeId)) return false;
             int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
                 pKingdom, pLayer, pOfficeId, pCity);
+            int currentRank = OfficialCareerStateService.ReadRankFast(pActor);
+            bool hasCareerRank = nineRankSystem && currentRank >
+                OfficialCareerRankRules.Unranked;
+            if (!hasCareerRank && !HistoricalSchoolEducationService.CanAppoint(
+                    pActor, pKingdom, pLayer, pOfficeId)) return false;
             bool allowUnqualifiedLocalFallback =
                 LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
                     pLayer == CourtOfficeLayer.City, officeGrade,
@@ -115,11 +118,11 @@ namespace AncientWarfare3.core.court
                 CivilServiceLegacyTransitionService.HasUsableCredential(
                     pActor, pKingdom, pLayer, pOfficeId);
             bool appointmentQualificationEligible = hasFormalQualification ||
-                hasLegacyCredential || allowUnqualifiedLocalFallback;
+                hasLegacyCredential || hasCareerRank ||
+                allowUnqualifiedLocalFallback;
             if (!appointmentQualificationEligible)
                 return false;
 
-            int currentRank = OfficialCareerStateService.ReadRankFast(pActor);
             if (currentRank <= OfficialCareerRankRules.Unranked)
                 currentRank = pLayer == CourtOfficeLayer.City
                     ? OfficialCareerRankRules.ResolveInitialLocalAppointmentRank(

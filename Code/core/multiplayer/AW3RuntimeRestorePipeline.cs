@@ -220,6 +220,9 @@ namespace AncientWarfare3.core.multiplayer
                     ZhuluWarMigrationService.RebuildRuntime),
                 new AW3RestoreStage("special_armies",
                     AWArmyService.RepairSpecialArmiesAfterLoad),
+                new AW3RestoreStage("warrior_army_index",
+                    () => WarriorArmyMembershipService.RebuildAfterLoad(
+                        World.world?.armies)),
                 new AW3RestoreStage("army_strategic_index",
                     ArmyStrategicIndexService.RebuildRuntime),
                 new AW3RestoreStage("coalition_war_tasks",
@@ -352,6 +355,9 @@ namespace AncientWarfare3.core.multiplayer
                     CivilServiceQualificationService.RebuildRuntimeProjections),
                 new AW3RestoreStage("succession_disputes",
                     SuccessionDisputeService.RebuildRuntime),
+                new AW3RestoreStage("warrior_army_index",
+                    () => WarriorArmyMembershipService.RebuildAfterLoad(
+                        World.world?.armies)),
                 new AW3RestoreStage("army_strategic_index",
                     ArmyStrategicIndexService.RebuildRuntime),
                 new AW3RestoreStage("kingdom_war_director",

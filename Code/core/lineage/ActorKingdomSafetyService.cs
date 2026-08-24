@@ -54,8 +54,16 @@ namespace AncientWarfare3.core.lineage
                         pActor?.data != null, pActor?.isAlive() == true,
                         pActor == null || pActor.isRekt()))
                     return true;
-                City city = pActor?.city;
+                City city = pActor?.city ?? ResolvePersistedCity(pActor);
                 Kingdom cityKingdom = city?.kingdom;
+
+                // Actor.loadFromSave can skip setCity when City.isNeutral()
+                // sees an unresolved kingdom.  Once the city relation is
+                // valid, restore that persisted membership before choosing a
+                // fallback kingdom for the actor.
+                RestorePersistedCityAssociation(pActor, city, cityKingdom);
+                city = pActor?.city ?? city;
+                cityKingdom = city?.kingdom;
                 bool cityKingdomIsRekt = city?.data == null ||
                                           city.isRekt() ||
                                           cityKingdom?.data == null ||
@@ -133,6 +141,47 @@ namespace AncientWarfare3.core.lineage
                        pCity?.data?.id ?? -1L))
             {
                 pActor.joinKingdom(pTarget);
+            }
+        }
+
+        private static City ResolvePersistedCity(Actor pActor)
+        {
+            try
+            {
+                long cityId = pActor?.data?.cityID ?? -1L;
+                return cityId >= 0L
+                    ? World.world?.cities?.get(cityId)
+                    : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static void RestorePersistedCityAssociation(Actor pActor,
+            City pCity, Kingdom pCityKingdom)
+        {
+            if (pActor?.city != null || pCity == null) return;
+
+            bool canRestore = ActorLoadCitySafetyRules.
+                CanRestorePersistedCity(
+                    cityExists: true,
+                    cityKingdomExists: pCityKingdom != null,
+                    cityKingdomAssetExists: pCityKingdom?.asset != null,
+                    actorKingdomExists: pActor.kingdom != null,
+                    sameKingdom: pActor.kingdom == pCityKingdom);
+            if (!canRestore) return;
+
+            try
+            {
+                pActor.setCity(pCity);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "Persisted actor city association restore failed: " +
+                    error.Message);
             }
         }
 

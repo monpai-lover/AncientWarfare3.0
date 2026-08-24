@@ -391,6 +391,10 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_DECISION_LAST_SUCCESS_PREFIX =
             "aw_mandate_decision_last_success_";
         public const string MANDATE_SUCCESSION_CRISIS_YEAR = "aw_mandate_succession_crisis_year";
+        public const string MANDATE_CAPITAL_RING_TRANSFERRED =
+            "aw_mandate_capital_ring_transferred";
+        public const string MANDATE_WAR_START_CAPITAL_ID =
+            "aw_mandate_war_start_capital_id";
         public const string CITY_TECH_LAST_YEAR = "aw_city_tech_last_year";
         public const string CITY_ECONOMY_LAST_YEAR = "aw_city_economy_last_year";
         public const string CITY_ECONOMY_MAJOR_TAX_YEAR = "aw_city_economy_major_tax_year";
@@ -948,6 +952,8 @@ namespace AncientWarfare3.core.lineage
             "aw_zhulu_declared_defender_color";
         public const string ZHULU_CAPITAL_BREAKTHROUGH_KEYS =
             "aw_zhulu_capital_breakthrough_keys";
+        public const string ZHULU_WAR_START_CAPITAL_ID =
+            "aw_zhulu_war_start_capital_id";
     }
 
     internal static class SuccessionMode

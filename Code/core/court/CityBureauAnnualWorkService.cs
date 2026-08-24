@@ -52,11 +52,15 @@ namespace AncientWarfare3.core.court
             if (pKingdom?.data == null || pKingdom.isRekt() ||
                 pCityId < 0L || !CourtService.HasOfficialCourt(pKingdom))
                 return;
-            string key = "city-bureau-vacancy:" + pKingdom.id + ":" +
+            // The deferred callback may run after the Kingdom object has
+            // been replaced or torn down. Capture its stable id now instead
+            // of dereferencing the mutable object inside the closure.
+            long kingdomId = pKingdom.id;
+            string key = "city-bureau-vacancy:" + kingdomId + ":" +
                          pCityId;
             DeferredRuntimeWorkService.EnqueueCoalesced(key,
                 DeferredWorkClass.Persistent,
-                () => ProcessImmediate(pKingdom.id, pCityId, 0));
+                () => ProcessImmediate(kingdomId, pCityId, 0));
         }
 
         private static void ProcessImmediate(long pKingdomId, long pCityId,

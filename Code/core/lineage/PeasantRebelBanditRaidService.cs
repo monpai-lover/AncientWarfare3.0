@@ -134,7 +134,7 @@ namespace AncientWarfare3.core.lineage
                 case BanditRaidStage.Outbound:
                 {
                     City target = ResolveCity(pState.Raid.TargetCityId);
-                    if (!IsValidTarget(pKingdom, stronghold, target))
+                    if (!IsValidTarget(pKingdom, target))
                     {
                         BeginReturn(pKingdom, pState, stronghold, survivors);
                         return;
@@ -190,20 +190,20 @@ namespace AncientWarfare3.core.lineage
         {
             var targets = new Dictionary<long, City>();
             pCandidates = new List<BanditRaidCandidate>();
-            if (World.world?.cities == null) return targets;
+            City capital = pBandit?.capital;
+            if (capital?.data == null || capital.isRekt() ||
+                capital.neighbours_cities == null) return targets;
             WorldTile origin = pStronghold.getTile();
-            foreach (City city in World.world.cities.ToList())
+            foreach (City city in capital.neighbours_cities)
             {
                 if (city?.data == null || city.isRekt() ||
                     city == pStronghold || city.kingdom?.data == null ||
                     city.kingdom == pBandit) continue;
-                bool islandBandit = PeasantRebelBanditStateStore.TryRead(
-                    pBandit, out PeasantRebelBanditStrongholdState banditState) &&
-                    banditState.StrongholdKind == BanditStrongholdKind.Island;
-                bool coastal = !islandBandit || IsCoastalCity(city);
-                bool reachable = false;
-                try { reachable = city.reachableFrom(pStronghold); }
-                catch { }
+                // City adjacency is already maintained by the vanilla city
+                // graph. It is the bounded reachability fact for this raid;
+                // do not fall back to a world-city, zone, or path scan here.
+                bool coastal = true;
+                bool reachable = true;
                 bool allied = IsAllied(pBandit, city.kingdom);
                 bool stronghold = IsActiveStronghold(city);
                 int stealable = PeasantRebelBanditRaidRules.StealableFood(
@@ -219,23 +219,6 @@ namespace AncientWarfare3.core.lineage
                 targets[city.getID()] = city;
             }
             return targets;
-        }
-
-        private static bool IsCoastalCity(City pCity)
-        {
-            if (pCity?.data == null) return false;
-            try
-            {
-                foreach (TileZone zone in pCity.zones)
-                foreach (WorldTile tile in zone?.tiles ??
-                         Array.Empty<WorldTile>())
-                foreach (WorldTile neighbour in tile?.neighboursAll ??
-                         Array.Empty<WorldTile>())
-                    if (neighbour?.data != null && !neighbour.Type.ground)
-                        return true;
-            }
-            catch { }
-            return false;
         }
 
         private static List<Actor> SelectParty(Kingdom pKingdom,
@@ -560,16 +543,25 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private static bool IsValidTarget(Kingdom pBandit,
-            City pStronghold, City pTarget)
+        private static bool IsValidTarget(Kingdom pBandit, City pTarget)
         {
             if (pTarget?.data == null || pTarget.isRekt() ||
                 pTarget.kingdom?.data == null ||
                 pTarget.kingdom == pBandit || IsAllied(pBandit,
                     pTarget.kingdom) || IsActiveStronghold(pTarget))
                 return false;
-            try { return pTarget.reachableFrom(pStronghold); }
-            catch { return false; }
+            return IsCapitalAdjacent(pBandit, pTarget);
+        }
+
+        private static bool IsCapitalAdjacent(Kingdom pBandit,
+            City pTarget)
+        {
+            City capital = pBandit?.capital;
+            if (capital?.data == null || capital.neighbours_cities == null ||
+                pTarget?.data == null) return false;
+            foreach (City adjacent in capital.neighbours_cities)
+                if (adjacent == pTarget) return true;
+            return false;
         }
 
         private static bool IsAllied(Kingdom pKingdom, Kingdom pOther)

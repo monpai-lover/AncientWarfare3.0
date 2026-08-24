@@ -13,28 +13,39 @@ internal static class VanillaLookupOptimizationSourceGuardTests
                 "repository root missing");
             root = parent.FullName;
         }
-        string source = File.ReadAllText(Path.Combine(root, "Code", "patch",
-            "AW_VanillaLookupOptimizationPatch.cs"));
-        Require(source, "[HarmonyPriority(Priority.Last)]");
-        Require(source, "AWChunkWindowIndex.Get");
-        Require(source, "AWFreeTileSearchIndex.TryFind");
-        Require(source, "return true;");
-        Require(source, "BehFindBuilding");
-        Require(source, "BehFindMeatSource");
-        Require(source, "BehFindTargetForHunter");
-        Require(source, "BehFindLover");
-        Require(source, "BehTryToSocialize");
-        Require(source, "Finder.findTileInChunk");
-        if (source.Contains("AWPathMovementBridge", StringComparison.Ordinal) ||
-            source.Contains("ArmyRtsControllerService", StringComparison.Ordinal) ||
-            source.Contains("Actor.goTo", StringComparison.Ordinal))
+        string patchPath = Path.Combine(root, "Code", "patch",
+            "AW_VanillaLookupOptimizationPatch.cs");
+        if (File.Exists(patchPath))
             throw new InvalidOperationException(
-                "vanilla lookup patch must not own military movement");
-    }
+                "experimental vanilla lookup patch must remain removed");
 
-    private static void Require(string source, string value)
-    {
-        if (!source.Contains(value, StringComparison.Ordinal))
-            throw new InvalidOperationException("missing source guard: " + value);
+        string productionRoot = Path.Combine(root, "Code");
+        foreach (string sourcePath in Directory.EnumerateFiles(
+                     productionRoot, "*.cs", SearchOption.AllDirectories))
+        {
+            string source = File.ReadAllText(sourcePath);
+            foreach (string symbol in new[]
+                     {
+                         "AWChunkWindowIndex", "AWFreeTileSearchIndex",
+                         "AWEnemyPresenceCache",
+                         "AWDeferredPathRequestBatch",
+                         "AWStatusSimulationScheduler",
+                         "AWSimulationCoordinatorThread"
+                     })
+            {
+                if (source.Contains(symbol, StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        "removed experimental symbol remains: " + symbol);
+            }
+        }
+
+        string actorPost = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWCooperativeActorPostRunner.cs"));
+        if (!actorPost.Contains("case PostStage.MilitaryP0:",
+                StringComparison.Ordinal) ||
+            !actorPost.Contains("ArmyRtsTransportService.ProcessMilitaryP0",
+                StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "RTS MilitaryP0 actor-post stage was removed");
     }
 }

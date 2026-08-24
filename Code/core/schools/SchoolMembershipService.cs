@@ -825,9 +825,82 @@ namespace AncientWarfare3.core.schools
             if (nextStanding == current.Standing) return;
             SchoolMembershipRecord next =
                 current.WithStanding(nextStanding);
-            if (!HistoricalSchoolStore.UpdateMembershipStanding(
-                    current, next, WorldTime())) return;
-            AdoptCommittedStanding(current, nextStanding);
+            HistoricalSchoolWriteBufferService.TryEnqueue(
+                new StandingPromotionWriteOperation(current, next, WorldTime(), pYear));
+        }
+
+        private sealed class StandingPromotionWriteOperation :
+            IHistoricalSchoolWriteOperation, IHistoricalSchoolAsyncWriteOperation
+        {
+            private readonly SchoolMembershipRecord _current;
+            private readonly SchoolMembershipRecord _next;
+            private readonly double _worldTime;
+
+            public StandingPromotionWriteOperation(SchoolMembershipRecord pCurrent,
+                SchoolMembershipRecord pNext, double pWorldTime, int pYear)
+            {
+                _current = pCurrent;
+                _next = pNext;
+                _worldTime = pWorldTime;
+                OperationKey = "school-standing-promotion:v1:" +
+                    (_current?.ActorId ?? -1L) + ":" +
+                    (_current?.MembershipId ?? -1L) + ":" + pYear + ":" +
+                    (_next?.Standing.ToString() ?? "");
+            }
+
+            public string OperationKey { get; }
+
+            public HistoricalSchoolTeachingPersistenceOutcome Execute(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction)
+            {
+                return DetachBackgroundWrite().Execute(pDb, pTransaction);
+            }
+
+            public IHistoricalSchoolBackgroundWrite DetachBackgroundWrite()
+            {
+                return new StandingPromotionBackgroundWrite(_current, _next,
+                    _worldTime);
+            }
+
+            public void AfterCommit(
+                HistoricalSchoolTeachingPersistenceOutcome pOutcome)
+            {
+                if (pOutcome != HistoricalSchoolTeachingPersistenceOutcome.Committed &&
+                    pOutcome != HistoricalSchoolTeachingPersistenceOutcome.Replayed)
+                    return;
+                if (!AdoptCommittedStanding(_current, _next.Standing))
+                    throw new InvalidOperationException(
+                        "committed school standing projection failed");
+            }
+
+            public void OnCleanFailure()
+            {
+            }
+        }
+
+        private sealed class StandingPromotionBackgroundWrite :
+            IHistoricalSchoolBackgroundWrite
+        {
+            private readonly SchoolMembershipRecord _current;
+            private readonly SchoolMembershipRecord _next;
+            private readonly double _worldTime;
+
+            public StandingPromotionBackgroundWrite(SchoolMembershipRecord pCurrent,
+                SchoolMembershipRecord pNext, double pWorldTime)
+            {
+                _current = pCurrent;
+                _next = pNext;
+                _worldTime = pWorldTime;
+            }
+
+            public HistoricalSchoolTeachingPersistenceOutcome Execute(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction)
+            {
+                return HistoricalSchoolStore.UpdateMembershipStandingInTransaction(
+                    pDb, pTransaction, _current, _next, _worldTime);
+            }
         }
 
         internal static bool TryPromoteContinuityTeacher(long pActorId, int pYear)
@@ -899,6 +972,11 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolStanding pStanding)
         {
             if (pExpected == null) return false;
+            SchoolMembershipRecord current = Memberships.GetActive(pExpected.ActorId);
+            if (current == null || current.MembershipId != pExpected.MembershipId ||
+                current.Standing != pExpected.Standing)
+                return current?.MembershipId == pExpected.MembershipId &&
+                       current?.Standing == pStanding;
             return AdoptCommittedStanding(pExpected.ActorId, pStanding);
         }
 

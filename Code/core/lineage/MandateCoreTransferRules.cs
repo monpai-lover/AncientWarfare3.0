@@ -23,5 +23,13 @@ namespace AncientWarfare3.core.lineage
             int requested = Math.Max(0, -pRequestedDelta);
             return -Math.Min(requested, 12 - current);
         }
+
+        public static bool ShouldTransferCapitalRing(bool pMandateWar,
+            bool pAttackersWon, bool pCapitalCaptured,
+            bool pCityOwnedByFormerMandate, bool pAlreadyTransferred)
+        {
+            return pMandateWar && pAttackersWon && pCapitalCaptured &&
+                   !pAlreadyTransferred;
+        }
     }
 }

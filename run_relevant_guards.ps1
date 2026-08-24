@@ -5,7 +5,7 @@ $guards = @(
   'ArmyRtsSchedulingSourceGuardTests','ArmyRtsSourceGuardTests','ArmyRtsTransportRouteChoiceSourceGuard',
   'ArmyRtsTransportSourceGuardTests','ArmySharedCaptainPathSourceGuardTests','AsyncHistoricalReadSourceGuardTests',
   'AsyncPerformanceSourceGuardTests','CityArmyReinforcementSourceGuard','CityReserveRecruitmentSourceGuardTests',
-  'CultiwayPerfSchedulerCompletionSourceGuard','CultiwayPerfSchedulerMaintenanceSourceGuard','DynastyAppellationProjectionSourceGuard',
+  'CultiwayPerfSchedulerCompletionSourceGuard','DynastyAppellationProjectionSourceGuard',
   'FamilyTreeBranchProjectionSourceGuardTests','FamilyTreeDedicatedRevisionSourceGuardTests','FamilyTreeInlineBranchExpansionTests',
   'FamilyTreeMaterializationLifecycleTests','FamilyTreeStructureRefreshSourceGuardTests','FamilyTreeUiIntegration.Tests',
   'FamilyTreeWorldResetSourceGuardTests','KingdomWarDirectorPerformanceSourceGuard','KingdomWarDirectorTargetOrderingTests',
@@ -16,7 +16,17 @@ $guards = @(
   'XiaExpansionAndCivMonkeyNamingTests','AWDockTransportDiagnosticSourceGuard',
   'AWTemporaryShoreTransportSourceGuard','ArmyRtsTransportRetrySourceGuard',
   'RtsPathRequestDeduplicationSourceGuard','FramePriorityRecoverySourceGuard',
+  'MilitaryPriorityRefreshSourceGuard',
   'RtsTransportDiagnosticsSourceGuard'
+  ,'PathFinderSubmitNewSourceGuard'
+  ,'PathTransportRouteReuseSourceGuard'
+  ,'PathFinderWorkerLoopSourceGuard'
+  ,'SlaveStateAsyncPersistenceSourceGuard'
+  ,'SlaveStateBatchPersistenceSourceGuard'
+  ,'SchoolStandingPromotionAsyncSourceGuard'
+  ,'CityLeaderVacancyBoundedScanSourceGuard'
+  ,'CityLeaderVacancyScanBudgetSourceGuard'
+  ,'CityBureauImmediateReconcileCaptureSourceGuard'
 )
 $fail = @()
 foreach ($g in $guards) {

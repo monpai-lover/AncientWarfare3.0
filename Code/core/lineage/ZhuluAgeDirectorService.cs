@@ -129,9 +129,12 @@ namespace AncientWarfare3.core.lineage
 
                 bool hasAllianceTarget = false;
                 bool hasNonAllianceTarget = false;
+                int targetChecks = 0;
                 for (int targetIndex = 0;
                      targetIndex < kingdoms.Count; targetIndex++)
                 {
+                    if (targetChecks++ >= ZhuluAgeRules.
+                            MaximumAllianceTargetChecksPerRealm) break;
                     Kingdom target = kingdoms[targetIndex];
                     if (!IsPotentialUnificationTarget(source, target,
                             out bool sameAlliance)) continue;

@@ -56,6 +56,8 @@ namespace AncientWarfare3.patch
             if (__instance?.kingdom == __state.Kingdom) return;
             ArmyMembershipReconciliationService.Enqueue(__state.Army);
             ArmyMembershipReconciliationService.Enqueue(__instance?.army);
+            if (__instance?.isWarrior() == true)
+                WarriorArmyMembershipService.Enqueue(__instance);
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             WarNoticeService.QueueArmyChanged(__state.Kingdom,
                 __instance.army);

@@ -89,6 +89,7 @@ namespace AncientWarfare3.core.lineage
                 pBandit?.data == null || pBandit.isRekt() ||
                 pOrigin?.data == null || pOrigin.isRekt() ||
                 pRuler?.data == null || pRuler.isRekt() ||
+                pRuler.city != pMother || pRuler.kingdom != pMother.kingdom ||
                 World.world?.cities == null ||
                 TopTileLibrary.wall_wild == null) return false;
             if (pMother.kingdom != pBandit && pMother.kingdom != pOrigin)
@@ -428,6 +429,8 @@ namespace AncientWarfare3.core.lineage
                         "after_make_new_kingdom"))
                     throw new InvalidOperationException(
                         "native kingdom creation did not install bandit king");
+                try { ReignRecordWriter.OpenReign(bandit, ruler); }
+                catch { }
                 bandit.copyMetasFromOtherKingdom(origin);
                 MandateRebelService.MarkRebelKingdom(bandit, ruler,
                     origin);
@@ -482,6 +485,10 @@ namespace AncientWarfare3.core.lineage
                         "after_stronghold_creation"))
                     throw new InvalidOperationException(
                         "bandit king was lost during stronghold creation");
+                if (!EnsureBanditKingIdentity(bandit,
+                        "after_stronghold_creation_identity"))
+                    throw new InvalidOperationException(
+                        "bandit king is not a local stronghold resident");
                 return true;
             }
             catch (Exception e)
@@ -523,6 +530,23 @@ namespace AncientWarfare3.core.lineage
         internal static bool IsStrongholdKingdom(Kingdom pKingdom)
         {
             return HasActiveStronghold(pKingdom);
+        }
+
+        internal static Actor ResolveRecordedRuler(Kingdom pBandit)
+        {
+            if (pBandit?.data == null ||
+                !PeasantRebelBanditStateStore.TryRead(pBandit,
+                    out PeasantRebelBanditStrongholdState state)) return null;
+            long rulerId = state.LeaderActorId;
+            if (rulerId < 0L) rulerId = state.Migration?.LeaderActorId ?? -1L;
+            if (rulerId < 0L) return null;
+            try { return World.world?.units?.get(rulerId); }
+            catch { return null; }
+        }
+
+        internal static bool IsRecordedRuler(Kingdom pBandit, Actor pActor)
+        {
+            return pActor?.data != null && ResolveRecordedRuler(pBandit) == pActor;
         }
 
         internal static bool IsStrongholdCity(City pCity)
@@ -606,6 +630,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null || pMother?.data == null ||
                 pActor.city != pMother || pActor.isRekt() ||
+                pActor.kingdom != pMother.kingdom ||
                 !pActor.isAlive() || !pActor.isAdult() ||
                 !pActor.isSexMale() || pActor.hasTrait("madness"))
                 return false;
@@ -642,9 +667,12 @@ namespace AncientWarfare3.core.lineage
         {
             if (pBandit?.data == null || pRuler?.data == null ||
                 pBandit.isRekt() || pRuler.isRekt()) return false;
-            if (pBandit.king == pRuler) return true;
+            if (pBandit.king == pRuler && pRuler.kingdom == pBandit)
+                return true;
             try
             {
+                if (pRuler.kingdom != pBandit)
+                    pRuler.joinKingdom(pBandit);
                 using (EnterDirectBanditKingInstallationScope())
                     pBandit.setKing(pRuler);
             }
@@ -654,13 +682,153 @@ namespace AncientWarfare3.core.lineage
                                     pPhase + ": " + e.Message);
                 return false;
             }
-            bool installed = pBandit.king == pRuler;
+            bool installed = pBandit.king == pRuler &&
+                pRuler.kingdom == pBandit;
             if (!installed)
                 ModClass.LogWarning("Bandit king installation was rejected at " +
                                     pPhase + "; kingdom=" +
                                     pBandit.getID() + "; ruler=" +
                                     pRuler.getID());
             return installed;
+        }
+
+        internal static bool EnsureBanditKingIdentity(Kingdom pBandit,
+            string pPhase)
+        {
+            if (pBandit?.data == null || pBandit.isRekt() ||
+                pBandit.isNeutral()) return false;
+
+            Actor current = null;
+            try { current = pBandit.king; }
+            catch { }
+            if (IsValidBanditKingResident(pBandit, current)) return true;
+
+            Actor candidate = ResolveRecordedRuler(pBandit);
+            if (!CanPromoteBanditKingCandidate(pBandit, candidate))
+                candidate = SelectBanditKingCandidate(pBandit);
+            if (!CanPromoteBanditKingCandidate(pBandit, candidate))
+            {
+                ModClass.LogWarning("Bandit king identity repair found no " +
+                    "local adult ruler: kingdom=" + pBandit.getID() +
+                    ", phase=" + (pPhase ?? "unknown"));
+                return false;
+            }
+
+            try
+            {
+                using (EnterDirectBanditKingInstallationScope())
+                    pBandit.setKing(candidate);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Bandit king identity repair failed at " +
+                    (pPhase ?? "unknown") + ": " + error.Message);
+                return false;
+            }
+
+            bool installed = pBandit.king == candidate &&
+                IsValidBanditKingResident(pBandit, candidate);
+            if (!installed)
+            {
+                ModClass.LogWarning("Bandit king identity repair was rejected " +
+                    "at " + (pPhase ?? "unknown") + "; kingdom=" +
+                    pBandit.getID() + "; candidate=" + candidate.getID());
+                return false;
+            }
+
+            candidate.data.set(LineageKeys.MANDATE_REBEL_LEADER, true);
+            if (!candidate.hasTrait("rebel")) candidate.addTrait("rebel");
+            if (PeasantRebelBanditStateStore.TryRead(pBandit,
+                    out PeasantRebelBanditStrongholdState state) &&
+                state.LeaderActorId != candidate.data.id)
+            {
+                state.LeaderActorId = candidate.data.id;
+                PeasantRebelBanditStateStore.Write(pBandit, state);
+            }
+            return true;
+        }
+
+        private static Actor SelectBanditKingCandidate(Kingdom pBandit)
+        {
+            Actor selected = null;
+            int selectedPriority = int.MinValue;
+            int selectedAbility = int.MinValue;
+            long selectedId = long.MaxValue;
+            try
+            {
+                foreach (City city in pBandit.getCities())
+                {
+                    if (city?.data == null || city.isRekt() ||
+                        city.kingdom != pBandit) continue;
+                    foreach (Actor actor in city.units ?? new List<Actor>())
+                    {
+                        if (!CanPromoteBanditKingCandidate(pBandit, actor))
+                            continue;
+                        int priority = actor == city.leader ? 2 :
+                            (actor.isWarrior() ? 1 : 0);
+                        int ability = RulerAbility(actor);
+                        long actorId = actor.getID();
+                        if (selected != null &&
+                            (priority < selectedPriority ||
+                             priority == selectedPriority &&
+                             (ability < selectedAbility ||
+                              ability == selectedAbility && actorId >=
+                                  selectedId))) continue;
+                        selected = actor;
+                        selectedPriority = priority;
+                        selectedAbility = ability;
+                        selectedId = actorId;
+                    }
+                }
+            }
+            catch { }
+            return selected;
+        }
+
+        private static bool IsValidBanditKingResident(Kingdom pBandit,
+            Actor pActor)
+        {
+            if (pBandit?.data == null || pActor?.data == null ||
+                pActor.isRekt() || !pActor.isAlive()) return false;
+            City city = null;
+            try { city = pActor.city; }
+            catch { }
+            return PeasantRebelBanditStrongholdRules.IsValidBanditKing(
+                banditKingdom: true,
+                kingAlive: true,
+                kingBelongsToKingdom: pActor.kingdom == pBandit,
+                kingBelongsToKingdomCity: city?.data != null &&
+                    !city.isRekt() && city.kingdom == pBandit);
+        }
+
+        private static bool CanPromoteBanditKingCandidate(Kingdom pBandit,
+            Actor pActor)
+        {
+            if (pBandit?.data == null || pActor?.data == null ||
+                pActor.isRekt()) return false;
+            City city = null;
+            bool adult = false;
+            bool male = false;
+            bool alive = false;
+            bool boat = false;
+            try
+            {
+                city = pActor.city;
+                adult = pActor.isAdult();
+                male = pActor.isSexMale();
+                alive = pActor.isAlive();
+                boat = pActor.asset?.is_boat == true;
+            }
+            catch { return false; }
+            return PeasantRebelBanditStrongholdRules.
+                CanPromoteBanditKingCandidate(
+                    actorAlive: alive,
+                    actorAdult: adult,
+                    actorMale: male,
+                    actorBelongsToKingdom: pActor.kingdom == pBandit,
+                    actorCityBelongsToKingdom: city?.data != null &&
+                        !city.isRekt() && city.kingdom == pBandit,
+                    actorIsBoat: boat);
         }
 
         internal static City ResolveStronghold(Kingdom pKingdom)
@@ -1652,6 +1820,7 @@ namespace AncientWarfare3.core.lineage
             {
                 Phase = pPhase,
                 StrongholdCityId = pStrongholdCityId,
+                LeaderActorId = plan.Context.Ruler?.data?.id ?? -1L,
                 MotherCityId = plan.Context.Mother.getID(),
                 OriginKingdomId = plan.Context.Origin.getID(),
                 PressureTargetCityId = plan.Context.Mother.getID(),

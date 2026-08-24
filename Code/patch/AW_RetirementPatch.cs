@@ -113,6 +113,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.checkCanMakeWarrior))]
         public static void CheckCanMakeWarrior_Postfix(City __instance, Actor pActor, ref bool __result)
         {
+            if (MilitaryRecruitmentScope.IsMandateEmergency) return;
             if (!__result) return;
             if (!SoldierRetirementRules.IsOrdinaryServiceAgeAllowed(
                     pActor?.getAge() ?? SoldierRetirementRules.HardRetirementAge))

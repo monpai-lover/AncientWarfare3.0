@@ -1278,6 +1278,8 @@ namespace AncientWarfare3.core.lineage
             Kingdom defender = pWar.getMainDefender();
             if (attacker?.data == null || defender?.data == null) return;
 
+            BreakDirectVassalRelationForWar(attacker, defender);
+
             if (type == "independence_war")
             {
                 BeginIndependenceSuspension(pWar, attacker, defender);
@@ -1300,6 +1302,26 @@ namespace AncientWarfare3.core.lineage
                 attackers: true, relations, pAllowNewDecisions: true);
             JoinObligatedNetwork(pWar, defenderRoot ?? defender, defender, attacker,
                 attackers: false, relations, pAllowNewDecisions: true);
+        }
+
+        internal static void BreakDirectVassalRelationForWar(
+            Kingdom pAttacker, Kingdom pDefender)
+        {
+            if (pAttacker?.data == null || pDefender?.data == null ||
+                pAttacker == pDefender) return;
+            try
+            {
+                if (GetSuzerain(pAttacker) == pDefender)
+                    EndVassal(pAttacker, "war_against_suzerain");
+                if (GetSuzerain(pDefender) == pAttacker)
+                    EndVassal(pDefender, "war_against_suzerain");
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "VassalService war relation break failed: " +
+                    error.Message);
+            }
         }
 
         public static void OnWarEnded(War pWar, WarWinner pWinner)

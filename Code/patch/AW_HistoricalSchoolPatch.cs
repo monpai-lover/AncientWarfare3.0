@@ -332,6 +332,14 @@ namespace AncientWarfare3.patch
         }
 
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(Actor), "setKingdom", new[] { typeof(Kingdom) })]
+        private static void ActorSetKingdom_Postfix(Actor __instance,
+            Kingdom pKingdomToSet)
+        {
+            OfficerCandidateCatalog.Invalidate(pKingdomToSet);
+        }
+
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(BehGoToTileTarget), nameof(BehGoToTileTarget.execute))]
         private static void GoToTileTarget_Postfix(Actor pActor, BehResult __result)
         {

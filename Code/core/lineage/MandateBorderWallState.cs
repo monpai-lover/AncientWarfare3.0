@@ -4,7 +4,7 @@ namespace AncientWarfare3.core.lineage
 {
     internal sealed class MandateBorderWallState
     {
-        internal const int CurrentSchemaVersion = 1;
+        internal const int CurrentSchemaVersion = 2;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public bool Activated { get; set; }
@@ -18,6 +18,7 @@ namespace AncientWarfare3.core.lineage
     {
         public long CityId { get; set; }
         public string WallTypeId { get; set; } = "";
+        public int BuiltYear { get; set; } = int.MinValue;
         public List<MandateBorderWallPointState> Points { get; set; } =
             new List<MandateBorderWallPointState>();
     }

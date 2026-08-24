@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.api.multiplayer;
 using HarmonyLib;
 
@@ -58,6 +59,7 @@ namespace AncientWarfare3.patch
         private static void NewArmy_Postfix(Army __result)
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
+            WarriorArmyMembershipService.NotifyArmyAvailable(__result);
             ArmyStrategicIndexService.OnArmyRegistered(__result);
         }
 
@@ -107,6 +109,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.checkCanMakeWarrior))]
         private static bool CheckCanMakeWarrior_Prefix(City __instance, Actor pActor, ref bool __result)
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization &&
+                !MilitaryRecruitmentScope.IsMandateEmergency) return true;
             if (!MilitaryRecruitmentScope.BypassesWarriorCapacity) return true;
             __result = PassesOriginalEligibilityWithoutCapacity(__instance, pActor);
             return false;
@@ -116,6 +120,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.checkIfWarriorStillOk))]
         private static bool CheckIfWarriorStillOk_Prefix(City __instance, Actor pActor, ref bool __result)
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization) return true;
             if (SyntheticLevyService.IsSynthetic(pActor) ||
                 WartimeGarrisonService.IsActive(pActor) ||
                 TemporarySlaveVanguardService.IsMember(pActor) ||
@@ -132,6 +137,7 @@ namespace AncientWarfare3.patch
         private static void IsOkToSendArmy_Postfix(City __instance,
             ref bool __result)
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization) return;
             if (__result || __instance?.data == null ||
                 __instance.kingdom?.data == null || !__instance.hasArmy())
                 return;

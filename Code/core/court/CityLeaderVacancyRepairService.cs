@@ -4,7 +4,10 @@ namespace AncientWarfare3.core.court
 {
     internal static class CityLeaderVacancyRepairService
     {
-        private const int MaximumAttempts = 2;
+        // Candidate qualification can touch durable court state. Spread a
+        // vacancy search across bounded catalog windows instead of scanning a
+        // whole kingdom in one deferred-work item.
+        private const int MaximumAttempts = 8;
 
         internal static void Request(City pCity)
         {

@@ -125,6 +125,7 @@
     <Compile Include="GlobalDeJureEmptyClickSourceGuardTests.cs.txt" />
     <Compile Include="CourtImmediateVacancyModeRulesTests.cs.txt" />
     <Compile Include="CourtAppointmentFailureBackoffRulesTests.cs.txt" />
+    <Compile Include="CentralCourtVacancySourceGuardTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CourtAppointmentFailureBackoffRules.cs" Link="Production\CourtAppointmentFailureBackoffRules.cs" />
     <Compile Include="CityBureauRetryRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CityBureauRetryRules.cs" Link="Production\CityBureauRetryRules.cs" />
@@ -187,6 +188,8 @@
     <Compile Include="..\..\Code\core\lineage\MandateBorderDecisionRules.cs" Link="Production\MandateBorderDecisionRules.cs" />
     <Compile Include="PeasantRebelOutlawNameRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelOutlawNameRules.cs" Link="Production\PeasantRebelOutlawNameRules.cs" />
+    <Compile Include="PeasantRebelStateNameRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\PeasantRebelStateNameRules.cs" Link="Production\PeasantRebelStateNameRules.cs" />
     <Compile Include="ActorVisualRoleRulesTests.cs.txt" />
     <Compile Include="XiaBanditHeadRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\presentation\XiaBanditHeadRules.cs" Link="Production\XiaBanditHeadRules.cs" />
@@ -311,6 +314,9 @@
     <Compile Include="NameSystemRulesTests.cs.txt" />
     <Compile Include="LineageGivenNameNormalizationRulesTests.cs.txt" />
     <Compile Include="ArmyMembershipOwnershipRulesTests.cs.txt" />
+    <Compile Include="WarriorArmyMembershipRulesTests.cs.txt" />
+    <Compile Include="WarriorArmyMembershipSourceGuardTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\WarriorArmyMembershipRules.cs" Link="Production\WarriorArmyMembershipRules.cs" />
     <Compile Include="XiaExpansionAndCivMonkeyNamingRulesTests.cs.txt" />
     <Compile Include="NativeSiniticNamingRulesTests.cs.txt" />
     <Compile Include="HistoryDynastyAssignmentRulesTests.cs.txt" />
@@ -412,6 +418,8 @@
     <Compile Include="PathfindingRuntimeModeRulesTests.cs.txt" />
     <Compile Include="ActorRacePerformanceRulesTests.cs.txt" />
     <Compile Include="ActorBatchPerformanceRulesTests.cs.txt" />
+    <Compile Include="ActorLoadCitySafetyRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\ActorLoadCitySafetyRules.cs" Link="Production\ActorLoadCitySafetyRules.cs" />
     <Compile Include="ArmyRtsControllerPerformanceRulesTests.cs.txt" />
     <Compile Include="ArmyMobilizationRulesTests.cs.txt" />
     <Compile Include="VirtualNobleTitleRulesTests.cs.txt" />
@@ -491,7 +499,15 @@
     <Compile Include="DiplomaticWarAvailabilityRulesTests.cs.txt" />
     <Compile Include="DiplomaticWarDeclarationLockRulesTests.cs.txt" />
     <Compile Include="ZhuluWarRulesTests.cs.txt" />
+    <Compile Include="MandateConquestDirectTransferRulesTests.cs.txt" />
+    <Compile Include="BanditFormerKingSourceGuardTests.cs.txt" />
     <Compile Include="ZhuluAgeRulesTests.cs.txt" />
+    <Compile Include="MandateMilitaryStrengthRulesTests.cs.txt" />
+    <Compile Include="MandateCapitalTransferRulesTests.cs.txt" />
+    <Compile Include="MandatePhaseRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\MandatePhaseRules.cs" Link="Production\MandatePhaseRules.cs" />
+    <Compile Include="WarTypeOwnershipMatrixTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\MandateMilitaryStrengthRules.cs" Link="Production\MandateMilitaryStrengthRules.cs" />
     <Compile Include="XiaizationStatusDisplayRulesTests.cs.txt" />
     <Compile Include="WarGoalSettlementRulesTests.cs.txt" />
     <Compile Include="WarExhaustionSettlementRulesTests.cs.txt" />
@@ -659,6 +675,7 @@
     <Compile Include="..\..\Code\core\asyncwork\AWAsyncDiagnostics.cs" Link="Production\AWAsyncDiagnostics.cs" />
     <Compile Include="..\..\Code\core\asyncwork\AWAsyncWorkCoordinator.cs" Link="Production\AWAsyncWorkCoordinator.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateConquestRules.cs" Link="Production\MandateConquestRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateConquestDirectTransferRules.cs" Link="Production\MandateConquestDirectTransferRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateWarAiRules.cs" Link="Production\MandateWarAiRules.cs" />
     <Compile Include="..\..\Code\core\court\WarCourtMultiplierRules.cs" Link="Production\WarCourtMultiplierRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RitualDiplomacyOpinionRules.cs" Link="Production\RitualDiplomacyOpinionRules.cs" />
@@ -1110,7 +1127,6 @@
       BeforeTargets="Build">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\CultiwayPerfSchedulerNonRegressionSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\CultiwayPerfSchedulerCompletionSourceGuard.ps1&quot;" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\CultiwayAdvancedPerformanceExtractionSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\RoyalLineageSuccessionGateSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\KingDeathSuccessionPerformanceSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\ActionLandedPostJobSafetySourceGuard.ps1&quot;" />

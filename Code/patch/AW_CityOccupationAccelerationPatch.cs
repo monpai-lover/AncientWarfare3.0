@@ -23,17 +23,26 @@ namespace AncientWarfare3.patch
     {
         public RebellionDirectCaptureState(Kingdom pOldOwner,
             Kingdom pCapturer, long pWarId, bool pDirect)
+            : this(pOldOwner, pCapturer, pWarId, pDirect, false)
+        {
+        }
+
+        public RebellionDirectCaptureState(Kingdom pOldOwner,
+            Kingdom pCapturer, long pWarId, bool pDirect,
+            bool pMandateConquest)
         {
             OldOwner = pOldOwner;
             Capturer = pCapturer;
             WarId = pWarId;
             Direct = pDirect;
+            MandateConquest = pMandateConquest;
         }
 
         public Kingdom OldOwner { get; }
         public Kingdom Capturer { get; }
         public long WarId { get; }
         public bool Direct { get; }
+        public bool MandateConquest { get; }
     }
 
     [HarmonyPatch]
@@ -221,6 +230,14 @@ namespace AncientWarfare3.patch
                     pNewKingdom, rebellionWar.data.id, pDirect: true);
                 return true;
             }
+            if (WarTerritoryService.TryResolveMandateConquestDirect(
+                    __instance, pNewKingdom, out War mandateWar))
+            {
+                __state = new RebellionDirectCaptureState(oldOwner,
+                    pNewKingdom, mandateWar.data.id, pDirect: true,
+                    pMandateConquest: true);
+                return true;
+            }
             Kingdom hostileParticipant = pNewKingdom;
             pNewKingdom = VassalCaptureService.ResolveCaptureRecipient(
                 __instance, pNewKingdom);
@@ -286,6 +303,16 @@ namespace AncientWarfare3.patch
                 if (__state.Direct && __instance?.kingdom ==
                     __state.Capturer)
                 {
+                    if (__state.MandateConquest)
+                    {
+                        War mandateWar = WarPeaceSettlementWorld.FindWar(
+                            __state.WarId);
+                        if (mandateWar?.data != null &&
+                            !mandateWar.hasEnded())
+                            World.world?.wars?.endWar(mandateWar,
+                                WarWinner.Attackers);
+                        return;
+                    }
                     WarScoreService.ClearDirectRebellionTransferState(
                         __state.WarId, __instance.id);
                     War war = WarPeaceSettlementWorld.FindWar(__state.WarId);
@@ -327,6 +354,8 @@ namespace AncientWarfare3.patch
             if (ZhuluWarService.IsOpposingZhuluCapture(__instance,
                     pNewSetKingdom)) return true;
             if (RebellionDirectTerritoryTransferService.TryResolve(
+                    __instance, pNewSetKingdom, out _)) return true;
+            if (WarTerritoryService.TryResolveMandateConquestDirect(
                     __instance, pNewSetKingdom, out _)) return true;
             pNewSetKingdom = VassalCaptureService.ResolveCaptureRecipient(
                 __instance, pNewSetKingdom);

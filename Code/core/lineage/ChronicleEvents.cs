@@ -1550,7 +1550,9 @@ namespace AncientWarfare3.core.lineage
             if (!KingdomArchiveWriter.IsArchivable(pKingdom)) return;
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.DESTROYED,
                 HistoryText.Kingdom(pKingdom) + H("aw_hist_kingdom_destroyed_suffix"));
-            Actor king = pKingdom.king;
+            Actor king = pKingdom.king ??
+                         PeasantRebelBanditStrongholdService.
+                             ResolveRecordedRuler(pKingdom);
             bool wasMandateKingdom = MandateService.IsMandateKingdom(pKingdom);
             FormerKingService.OnKingdomDestroyed(pKingdom, king, wasMandateKingdom);
             KingdomArchiveWriter.EnsureRow(pKingdom);

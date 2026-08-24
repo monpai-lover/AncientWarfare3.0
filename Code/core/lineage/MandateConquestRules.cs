@@ -24,5 +24,11 @@ namespace AncientWarfare3.core.lineage
             if (pNeighbor) score += 110;
             return score;
         }
+
+        public static bool ShouldPreferAiGoal(bool pSourceIsCurrentMandate,
+            bool pTargetIsCurrentMandate)
+        {
+            return pSourceIsCurrentMandate && !pTargetIsCurrentMandate;
+        }
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.performance;
 using Newtonsoft.Json;
 
 namespace AncientWarfare3.core.lineage
@@ -162,10 +163,12 @@ namespace AncientWarfare3.core.lineage
         private static bool _warEnrollmentScanActive;
         private static bool _warEnrollmentScanRequested;
         private static int _warEnrollmentScanCursor;
+        private static bool _generationDisabledApplied;
 
         internal static void OnWarStarted(War pWar)
         {
-            if (AW3MultiplayerReplicaScope.IsReplicaSession ||
+            if (!AWPerformanceSettings.EnableSyntheticMobilization ||
+                AW3MultiplayerReplicaScope.IsReplicaSession ||
                 !ZhuluWarService.ShouldEnrollInAw3Systems(pWar)) return;
             EndedWars.Remove(pWar.data.id);
             EnqueueWarParticipants(pWar.data.id);
@@ -173,7 +176,8 @@ namespace AncientWarfare3.core.lineage
 
         internal static void OnKingdomJoinedWar(War pWar, Kingdom pKingdom)
         {
-            if (AW3MultiplayerReplicaScope.IsReplicaSession ||
+            if (!AWPerformanceSettings.EnableSyntheticMobilization ||
+                AW3MultiplayerReplicaScope.IsReplicaSession ||
                 pWar?.data == null || pWar.hasEnded()) return;
             EnqueueParticipant(pWar.data.id, pKingdom?.data?.id ?? -1L);
         }
@@ -221,7 +225,8 @@ namespace AncientWarfare3.core.lineage
         internal static void OnCityKingdomChanged(City pCity,
             Kingdom pPreviousKingdom, Kingdom pCurrentKingdom)
         {
-            if (AW3MultiplayerReplicaScope.IsReplicaSession ||
+            if (!AWPerformanceSettings.EnableSyntheticMobilization ||
+                AW3MultiplayerReplicaScope.IsReplicaSession ||
                 pCity?.data == null || pPreviousKingdom == pCurrentKingdom)
                 return;
             EnqueueCityRecordWork(pCity.id);
@@ -231,6 +236,14 @@ namespace AncientWarfare3.core.lineage
         internal static void ProcessAuthorityCycle()
         {
             if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
+            if (!AWPerformanceSettings.EnableSyntheticMobilization)
+            {
+                if (!_generationDisabledApplied)
+                    DisableSyntheticGeneration();
+                ProcessRecordWork();
+                return;
+            }
+            _generationDisabledApplied = false;
             ProcessLoadActorReconciliation();
             if (!SyntheticMobilizationRules.ShouldDeferOrphanScan(
                     _loadActorReconciliationPending))
@@ -243,9 +256,51 @@ namespace AncientWarfare3.core.lineage
             ProcessRecordWork();
         }
 
+        internal static void DisableSyntheticGeneration()
+        {
+            _generationDisabledApplied = true;
+            PendingCities.Clear();
+            PendingCityKeys.Clear();
+            PendingParticipantWorks.Clear();
+            PendingParticipantWorkKeys.Clear();
+            PendingParticipantWorkByKey.Clear();
+            PendingWarRecordWorks.Clear();
+            PendingCityRecordWorks.Clear();
+            PendingCityRecordWorkKeys.Clear();
+            PendingCityRecordWorkByKey.Clear();
+            _warEnrollmentScanActive = false;
+            _warEnrollmentScanRequested = false;
+            var demobilizingKeys = new List<string>();
+            foreach (string key in RecordWork)
+                if (Records.TryGetValue(key,
+                        out SyntheticMobilizationRecord queued) &&
+                    queued.Phase == SyntheticMobilizationPhase.Demobilizing)
+                    demobilizingKeys.Add(key);
+            RecordWork.Clear();
+            QueuedRecordKeys.Clear();
+            for (int i = 0; i < demobilizingKeys.Count; i++)
+            {
+                RecordWork.Enqueue(demobilizingKeys[i]);
+                QueuedRecordKeys.Add(demobilizingKeys[i]);
+            }
+            foreach (SyntheticMobilizationRecord record in Records.Values)
+            {
+                if (record.Phase != SyntheticMobilizationPhase.Demobilizing &&
+                    record.Phase != SyntheticMobilizationPhase.Complete)
+                {
+                    record.ReplacementRemaining = 0;
+                    record.InitialCreated = record.Quota;
+                    record.Phase = SyntheticMobilizationPhase.Active;
+                }
+            }
+        }
+
         internal static int TryReserveReplacement(long pWarId,
             long pCityId, int pRequested)
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization)
+                return 0;
+            EnsureRecordForCity(pWarId, pCityId);
             if (pRequested <= 0 || EndedWars.Contains(pWarId) ||
                 !Records.TryGetValue(Key(pWarId, pCityId),
                     out SyntheticMobilizationRecord record) ||
@@ -284,6 +339,9 @@ namespace AncientWarfare3.core.lineage
 
         internal static int AvailableReplacement(long pWarId, long pCityId)
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization)
+                return 0;
+            EnsureRecordForCity(pWarId, pCityId);
             return Records.TryGetValue(Key(pWarId, pCityId),
                        out SyntheticMobilizationRecord record) &&
                    record.Phase != SyntheticMobilizationPhase.Demobilizing &&
@@ -737,18 +795,26 @@ namespace AncientWarfare3.core.lineage
         {
             if (PendingCities.Count == 0) return;
             PendingCity pending = PendingCities.Dequeue();
-            string key = Key(pending.WarId, pending.CityId);
-            PendingCityKeys.Remove(key);
-            if (EndedWars.Contains(pending.WarId) ||
-                Records.ContainsKey(key)) return;
+            PendingCityKeys.Remove(Key(pending.WarId, pending.CityId));
+            EnsureRecordForCity(pending.WarId, pending.CityId);
+        }
 
-            Kingdom kingdom = ResolveKingdom(pending.KingdomId);
-            City city = ResolveCity(pending.CityId);
-            if (!IsActiveParticipant(pending.WarId, kingdom) ||
-                !IsControlledCity(city, kingdom))
-                return;
+        // Replacement requests can arrive before the bounded participant
+        // queue reaches a city. Create that one city-war record on demand so
+        // a freshly declared war does not expose a false zero reserve.
+        private static bool EnsureRecordForCity(long pWarId, long pCityId)
+        {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization ||
+                pWarId < 0L || pCityId < 0L || EndedWars.Contains(pWarId))
+                return false;
+            string key = Key(pWarId, pCityId);
+            if (Records.ContainsKey(key)) return true;
+            City city = ResolveCity(pCityId);
+            Kingdom kingdom = city?.kingdom;
+            if (!IsActiveParticipant(pWarId, kingdom) ||
+                !IsControlledCity(city, kingdom)) return false;
 
-            int knownSynthetic = KnownSyntheticForCity(pending.CityId);
+            int knownSynthetic = KnownSyntheticForCity(pCityId);
             int population = Math.Max(0, city.getPopulationPeople());
             int percent = CourtConscriptionLawRules.ReservePercent(
                 CourtAuxiliaryLawService.GetConscriptionLaw(kingdom));
@@ -756,9 +822,9 @@ namespace AncientWarfare3.core.lineage
                 knownSynthetic, percent);
             StoreRecord(key, new SyntheticMobilizationRecord
             {
-                WarId = pending.WarId,
-                KingdomId = pending.KingdomId,
-                CityId = pending.CityId,
+                WarId = pWarId,
+                KingdomId = kingdom.id,
+                CityId = pCityId,
                 PopulationSnapshot = population,
                 LawPercent = percent,
                 Quota = quota,
@@ -768,8 +834,9 @@ namespace AncientWarfare3.core.lineage
                     : SyntheticMobilizationPhase.Active
             });
             CityReservePoolService.OnSyntheticLedgerChanged(
-                pending.CityId, pending.KingdomId);
+                pCityId, kingdom.id);
             if (quota > 0) EnqueueRecord(key);
+            return true;
         }
 
         private static void ProcessRecordWork()

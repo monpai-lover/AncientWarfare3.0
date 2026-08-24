@@ -1300,6 +1300,72 @@ namespace AncientWarfare3.core.schools
             }
         }
 
+        internal static HistoricalSchoolTeachingPersistenceOutcome
+            UpdateMembershipStandingInTransaction(SQLiteConnection pDb,
+                SQLiteTransaction pTransaction, SchoolMembershipRecord pCurrent,
+                SchoolMembershipRecord pNext, double pTime)
+        {
+            if (pDb == null || pTransaction == null || pCurrent == null ||
+                pNext == null || !pCurrent.IsValid || !pNext.IsValid ||
+                pCurrent.MembershipId != pNext.MembershipId ||
+                pCurrent.ActorId != pNext.ActorId || !pCurrent.Active ||
+                !pNext.Active)
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            if (pCurrent.Standing == pNext.Standing)
+                return HistoricalSchoolTeachingPersistenceOutcome.Replayed;
+            try
+            {
+                string standing = null;
+                int loyaltyUntilYear = 0;
+                bool active = false;
+                using (var read = new SQLiteCommand(pDb) { Transaction = pTransaction })
+                {
+                    read.CommandText = "SELECT ACTIVE,STANDING,LOYALTY_UNTIL_YEAR FROM " +
+                        MembershipTable +
+                        " WHERE MEMBERSHIP_ID=@id AND ACTOR_ID=@actor";
+                    read.Parameters.AddWithValue("@id", pCurrent.MembershipId);
+                    read.Parameters.AddWithValue("@actor", pCurrent.ActorId);
+                    using SQLiteDataReader reader = read.ExecuteReader();
+                    if (!reader.Read())
+                        return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+                    active = Convert.ToInt32(reader[0]) != 0;
+                    standing = reader.IsDBNull(1) ? "" : reader.GetString(1);
+                    loyaltyUntilYear = reader.IsDBNull(2)
+                        ? 0
+                        : Convert.ToInt32(reader[2]);
+                }
+                if (!active || loyaltyUntilYear != pCurrent.LoyaltyUntilYear)
+                    return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+                if (standing == pNext.Standing.ToString())
+                    return HistoricalSchoolTeachingPersistenceOutcome.Replayed;
+                if (standing != pCurrent.Standing.ToString())
+                    return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+
+                using (var update = new SQLiteCommand(pDb) { Transaction = pTransaction })
+                {
+                    update.CommandText = "UPDATE " + MembershipTable +
+                        " SET STANDING=@next,UPDATED_TIME=@time" +
+                        " WHERE MEMBERSHIP_ID=@id AND ACTOR_ID=@actor AND ACTIVE=1" +
+                        " AND STANDING=@current AND LOYALTY_UNTIL_YEAR=@loyalty";
+                    update.Parameters.AddWithValue("@next", pNext.Standing.ToString());
+                    update.Parameters.AddWithValue("@time", FiniteNonNegative(pTime));
+                    update.Parameters.AddWithValue("@id", pCurrent.MembershipId);
+                    update.Parameters.AddWithValue("@actor", pCurrent.ActorId);
+                    update.Parameters.AddWithValue("@current", pCurrent.Standing.ToString());
+                    update.Parameters.AddWithValue("@loyalty", pCurrent.LoyaltyUntilYear);
+                    return update.ExecuteNonQuery() == 1
+                        ? HistoricalSchoolTeachingPersistenceOutcome.Committed
+                        : HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+                }
+            }
+            catch (Exception error)
+            {
+                ModClass.LogError("HistoricalSchoolStore async standing update failed: " +
+                                  error.Message);
+                return HistoricalSchoolTeachingPersistenceOutcome.Unknown;
+            }
+        }
+
         public static bool UpdateSchoolLeader(
             string pSchoolId,
             long pLeaderActorId,

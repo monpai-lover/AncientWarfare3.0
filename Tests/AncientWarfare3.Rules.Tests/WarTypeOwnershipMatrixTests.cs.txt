@@ -1,0 +1,39 @@
+using System;
+using System.IO;
+
+internal static class WarTypeOwnershipMatrixTests
+{
+    internal static void Run()
+    {
+        string warPatch = Read("Code/patch/AW_WarPatch.cs");
+        string terminal = Read("Code/core/lineage/WarTerminalSettlementCoordinator.cs");
+        string occupation = Read("Code/patch/AW_CityOccupationAccelerationPatch.cs");
+        Contains(warPatch, "if (ZhuluWarService.IsZhuluWar(__result",
+            "Zhulu start must have an isolated native branch");
+        Contains(warPatch, "return;\n            }\n            PeasantRebelRouteService.OnWarStarted",
+            "Zhulu start must return before AW3 lifecycle services");
+        Contains(warPatch, "if (ZhuluWarService.IsZhuluWar(pWar",
+            "Zhulu end must have an isolated native branch");
+        Contains(terminal, "if (ZhuluWarService.IsZhuluWar(pWar)) return false",
+            "Zhulu settlement must remain on native termination");
+        Contains(occupation, "ZhuluWarService.IsOpposingZhuluCapture",
+            "occupation acceleration must consult the native Zhulu gate");
+        False(warPatch.Contains("ArmyRtsWarLifecycleService.OnWarStarted(__result);\n            }\n            WarRecordWriter",
+                StringComparison.Ordinal),
+            "Zhulu start cannot enter the RTS lifecycle before native return");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(), pPath));
+
+    private static void Contains(string pText, string pNeedle, string pMessage)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+}

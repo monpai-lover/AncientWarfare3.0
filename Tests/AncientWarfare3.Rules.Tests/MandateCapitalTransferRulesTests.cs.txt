@@ -1,0 +1,27 @@
+using AncientWarfare3.core.lineage;
+
+internal static class MandateCapitalTransferRulesTests
+{
+    internal static void Run()
+    {
+        True(MandateCoreTransferRules.ShouldTransferCapitalRing(
+                true, true, true, false, false),
+            "a captured Mandate capital opens the ring transfer");
+        False(MandateCoreTransferRules.ShouldTransferCapitalRing(
+                true, false, true, false, false),
+            "a defender victory cannot transfer the Mandate ring");
+        False(MandateCoreTransferRules.ShouldTransferCapitalRing(
+                true, true, true, false, true),
+            "an already processed war cannot transfer its ring twice");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new System.InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new System.InvalidOperationException(message);
+    }
+}

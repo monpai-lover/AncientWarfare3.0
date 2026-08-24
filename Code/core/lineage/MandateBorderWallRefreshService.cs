@@ -144,13 +144,14 @@ namespace AncientWarfare3.core.lineage
                 if (wall != null && CultiwayStyleCityWallService.
                         TryPlanFrontier(city, WallWidth,
                         pIsFortificationTarget,
-                        reserved, pCarveRoadPassages: false,
+                        reserved, pCarveRoadPassages: true,
                         out IReadOnlyList<CultiwayWallPoint> planned))
                 {
                     var manifest = new MandateBorderCityWallManifest
                     {
                         CityId = pCityId,
-                        WallTypeId = wall.id
+                        WallTypeId = wall.id,
+                        BuiltYear = Date.getCurrentYear()
                     };
                     foreach (CultiwayWallPoint point in planned)
                     {
@@ -172,6 +173,34 @@ namespace AncientWarfare3.core.lineage
                 }
             }
             MandateBorderWallStateStore.Write(pMandate, state);
+            return changed;
+        }
+
+        internal static int OnKingdomYear(Kingdom pMandate)
+        {
+            if (!CanMutate() || pMandate?.data == null ||
+                !IsActivated(pMandate)) return 0;
+            MandateBorderWallState state =
+                MandateBorderWallStateStore.Read(pMandate);
+            int currentYear = Date.getCurrentYear();
+            int changed = 0;
+            var remove = new List<long>();
+            foreach (KeyValuePair<long, MandateBorderCityWallManifest> entry
+                     in state.Cities)
+            {
+                MandateBorderCityWallManifest manifest = entry.Value;
+                City city = ResolveCity(entry.Key);
+                bool ownershipLost = city == null || city.isRekt() ||
+                    city.kingdom != pMandate;
+                bool expired = MandateBorderWallRefreshRules.HasExpired(
+                    currentYear, manifest?.BuiltYear ?? int.MinValue);
+                if (!ownershipLost && !expired) continue;
+                changed += RestoreManifest(manifest);
+                remove.Add(entry.Key);
+            }
+            foreach (long cityId in remove) state.Cities.Remove(cityId);
+            if (remove.Count > 0)
+                MandateBorderWallStateStore.Write(pMandate, state);
             return changed;
         }
 

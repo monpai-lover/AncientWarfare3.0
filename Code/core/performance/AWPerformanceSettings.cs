@@ -6,6 +6,7 @@ namespace AncientWarfare3.core.performance
     {
         private static bool _configSchedulerEnabled;
         private static bool _configArmyRtsEnabled = true;
+        private static bool _configSyntheticMobilizationEnabled;
         private static int _configArmyRtsWarResolutionMode;
         private static bool _configShowArmyRtsVisuals;
         private static bool _configShowArmyMapInformation;
@@ -33,6 +34,8 @@ namespace AncientWarfare3.core.performance
         public static bool EnableAsyncShadowChecks { get; private set; }
         public static bool ArmyRtsDiagnosticsEnabled { get; private set; }
         public static bool EnableArmyRts => _configArmyRtsEnabled;
+        public static bool EnableSyntheticMobilization =>
+            _configSyntheticMobilizationEnabled;
         public static int ArmyRtsWarResolutionModeIndex =>
             _configArmyRtsWarResolutionMode;
         public static bool ShowArmyRtsVisuals =>
@@ -99,6 +102,22 @@ namespace AncientWarfare3.core.performance
         public static void SwitchArmyRts(bool pValue)
         {
             _configArmyRtsEnabled = pValue;
+        }
+
+        public static void SwitchSyntheticMobilization(bool pValue)
+        {
+            _configSyntheticMobilizationEnabled = pValue;
+            if (!pValue)
+            {
+                AncientWarfare3.core.lineage.
+                    SyntheticMobilizationLedgerService.
+                    DisableSyntheticGeneration();
+                AncientWarfare3.core.lineage.
+                    ArmyReplenishmentOperationService.
+                    DisableSyntheticReplenishment();
+                AncientWarfare3.core.lineage.
+                    TemporaryLevyService.ClearRuntime();
+            }
         }
 
         public static void SetArmyRtsWarResolutionMode(int pValue)

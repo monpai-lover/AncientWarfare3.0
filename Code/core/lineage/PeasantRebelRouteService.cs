@@ -355,7 +355,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
                 out string root, "");
             return string.Equals(pKingdom.name,
-                PeasantRebelRouteRules.ComposeName(root, pRoute),
+                ResolveRouteName(pKingdom, pRoute, root),
                 StringComparison.Ordinal);
         }
 
@@ -365,12 +365,27 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             pKingdom.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
                 out string root, "");
-            string canonical = PeasantRebelRouteRules.ComposeName(
-                root, pRoute);
+            string canonical = ResolveRouteName(pKingdom, pRoute, root);
             if (string.IsNullOrWhiteSpace(canonical) ||
                 string.Equals(pKingdom.name, canonical,
                     StringComparison.Ordinal)) return;
             TryApplyRouteName(pKingdom, canonical);
+        }
+
+        private static string ResolveRouteName(Kingdom pKingdom,
+            string pRoute, string pFallbackRoot)
+        {
+            string fallback = PeasantRebelRouteRules.ComposeName(
+                pFallbackRoot, pRoute);
+            if (!string.Equals(pRoute, PeasantRebelRouteIds.Founding,
+                    StringComparison.Ordinal)) return fallback;
+            Actor king = pKingdom?.king;
+            if (king?.data == null) return fallback;
+            king.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            if (shiId < 0L) return fallback;
+            string familyStateName = StateNameService.GetBoundStateName(shiId);
+            return PeasantRebelStateNameRules.ResolvePreferredName(
+                familyStateName, fallback);
         }
 
         internal static void OnWarStarted(War pWar)
@@ -532,7 +547,9 @@ namespace AncientWarfare3.core.lineage
                         resolvedRoute);
                 if (resolvedRoute.Length == 0) continue;
                 RuntimeByKingdom[kingdom.getID()] = resolvedRoute;
-                if (authority)
+                // Restore must preserve a persisted/custom kingdom name. Only
+                // repair legacy saves whose display name is actually empty.
+                if (authority && string.IsNullOrWhiteSpace(kingdom.name))
                     EnsureCanonicalName(kingdom, resolvedRoute);
                 RulerAppellationService.RefreshLivingProjection(kingdom);
                 PeasantRebelAppearanceService.OnProjectionChanged(kingdom);

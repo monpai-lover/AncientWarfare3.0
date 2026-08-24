@@ -13,6 +13,12 @@
       "Callback": "AWPerformanceSettings:SwitchArmyRts"
     },
     {
+      "Id": "AW3_ENABLE_SYNTHETIC_MOBILIZATION",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchSyntheticMobilization"
+    },
+    {
       "Id": "AW3_ARMY_RTS_WAR_RESOLUTION_MODE",
       "Type": "SELECT",
       "IntVal": 0,

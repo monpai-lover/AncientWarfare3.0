@@ -1,6 +1,7 @@
 using AncientWarfare3.content;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -16,6 +17,11 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.makeWarrior))]
         public static bool MakeWarrior_Asylum_Prefix(Actor pActor)
         {
+            if (MilitaryRecruitmentScope.IsMandateEmergency) return true;
+            if (SyntheticMobilizationRules.
+                ShouldBypassAw3RecruitmentRestrictions(
+                    AWPerformanceSettings.EnableSyntheticMobilization))
+                return true;
             if (SyntheticLevySpawnScope.IsActive &&
                 SyntheticLevyService.IsSynthetic(pActor)) return true;
             return pActor?.data != null &&
@@ -48,6 +54,14 @@ namespace AncientWarfare3.patch
                 return true;
             }
             __state = MilitaryProfessionState.Capture(__instance);
+            if (pType == UnitProfession.Warrior &&
+                MilitaryRecruitmentScope.IsMandateEmergency)
+                return true;
+            if (pType == UnitProfession.Warrior &&
+                SyntheticMobilizationRules.
+                    ShouldBypassAw3RecruitmentRestrictions(
+                        AWPerformanceSettings.EnableSyntheticMobilization))
+                return true;
             if (pType == UnitProfession.Warrior &&
                 SyntheticLevySpawnScope.IsActive &&
                 SyntheticLevyService.IsSynthetic(__instance)) return true;
@@ -90,6 +104,7 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__instance?.data == null) return;
             bool warrior = __instance.isWarrior();
+            if (warrior) WarriorArmyMembershipService.Enqueue(__instance);
             bool becomingKing = pType == UnitProfession.King;
             bool becomingLeader = pType == UnitProfession.Leader;
             bool authorityRole = becomingKing || becomingLeader;
@@ -176,6 +191,7 @@ namespace AncientWarfare3.patch
         public static void MakeWarrior_Postfix(City __instance, Actor pActor)
         {
             if (pActor?.data == null || !pActor.isWarrior()) return;
+            WarriorArmyMembershipService.Enqueue(pActor);
             KingdomMilitaryReadinessService.ObserveCity(__instance);
             WarNoticeService.QueueArmyChanged(__instance?.kingdom ?? pActor.kingdom,
                 pActor.army, pRosterExpanded: true);
@@ -185,6 +201,10 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), nameof(Actor.stopBeingWarrior))]
         public static bool StopBeingWarrior_Prefix(Actor __instance)
         {
+            if (SyntheticMobilizationRules.
+                ShouldBypassAw3RecruitmentRestrictions(
+                    AWPerformanceSettings.EnableSyntheticMobilization))
+                return true;
             if (__instance?.data == null || !__instance.isWarrior()) return true;
             if (!RoyalGuardOfficeRules.CanLeaveMilitaryService(
                     RoyalGuardService.IsRoyalGuard(__instance),

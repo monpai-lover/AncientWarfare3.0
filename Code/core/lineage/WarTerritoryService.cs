@@ -287,6 +287,58 @@ namespace AncientWarfare3.core.lineage
                    WarGoalSettlementRuntimeService.QueueIfReady(war);
         }
 
+        /// <summary>
+        /// Mandate conquest is a direct-transfer war.  Its persisted goal is
+        /// still used as the authoritative target, but it must never enter
+        /// the ordinary negotiated settlement path.
+        /// </summary>
+        internal static bool HasOpenMandateConquestGoal(War pWar)
+        {
+            if (pWar?.data == null || pWar.hasEnded() || !Ready) return false;
+            foreach (GoalRow goal in ReadOpenGoals(pWar.data.id))
+                if (goal.goal_type == GOAL_MANDATE_CONQUEST) return true;
+            return false;
+        }
+
+        internal static bool TryResolveMandateConquestDirect(City pCity,
+            Kingdom pCapturingKingdom, out War pWar)
+        {
+            pWar = null;
+            if (pCity?.data == null || pCity.kingdom?.data == null ||
+                pCapturingKingdom?.data == null || !Ready) return false;
+            try
+            {
+                foreach (War war in pCapturingKingdom.getWars())
+                {
+                    if (war?.data == null || war.hasEnded()) continue;
+                    foreach (GoalRow goal in ReadOpenGoals(war.data.id))
+                    {
+                        bool targetMatches = goal.target_city_id == pCity.data.id ||
+                                              goal.target_city_id == pCity.id;
+                        Kingdom attacker = FindKingdom(goal.attacker_kingdom_id) ??
+                                            war.getMainAttacker();
+                        Kingdom defender = FindKingdom(goal.defender_kingdom_id) ??
+                                            war.getMainDefender();
+                        bool onAttackerSide = IsOnAttackerSideOrSystem(
+                            war, pCapturingKingdom, attacker);
+                        bool ownedByDefender = defender?.data != null &&
+                                               pCity.kingdom == defender;
+                        if (!MandateConquestDirectTransferRules.
+                                ShouldDirectTransfer(true, targetMatches,
+                                    onAttackerSide, ownedByDefender)) continue;
+                        pWar = war;
+                        return true;
+                    }
+                }
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Mandate conquest direct lookup failed: " +
+                                    error.Message);
+            }
+            return false;
+        }
+
         private static War FindControlledSettlementWar(City pCity,
             Kingdom pCapturingKingdom)
         {
