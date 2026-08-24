@@ -1,0 +1,58 @@
+using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
+
+internal static class WarBorderTargetRulesTests
+{
+    public static void Run()
+    {
+        var source = new KingdomStrategyFacts(1L, 200f, .7f, .2f,
+            .8f, 1L);
+        var remote = new StrategyTargetFacts(2L, 100f, -60,
+            neighbor: false, atWar: false, warBlocked: false,
+            preferredKind: WarStrategyCandidateKind.Zhulu,
+            sameRoot: false, vassalBlocked: false,
+            fabricationAvailable: false, sameAlliance: false,
+            sourceAlliancePower: 200f, targetAlliancePower: 100f,
+            mandateValue: 0, mandateCoreControl: 1f,
+            zhuluEligible: true, capitalDistance: 10f,
+            zhuluAge: true);
+        var border = new StrategyTargetFacts(3L, 100f, -10,
+            neighbor: true, atWar: false, warBlocked: false,
+            preferredKind: WarStrategyCandidateKind.Zhulu,
+            sameRoot: false, vassalBlocked: false,
+            fabricationAvailable: false, sameAlliance: false,
+            sourceAlliancePower: 200f, targetAlliancePower: 100f,
+            mandateValue: 0, mandateCoreControl: 1f,
+            zhuluEligible: true, capitalDistance: 100f,
+            zhuluAge: true);
+
+        IReadOnlyList<WarStrategyCandidate> preferred =
+            WarStrategyCandidateRules.RankCandidates(source,
+                new[] { remote, border });
+        Equal(1, preferred.Count,
+            "an eligible border target excludes remote targets");
+        Equal(3L, preferred[0].TargetKingdomId,
+            "the border target remains selectable");
+
+        var remoteOnly = new StrategyTargetFacts(4L, 100f, -10,
+            neighbor: false, atWar: false, warBlocked: false,
+            preferredKind: WarStrategyCandidateKind.Zhulu,
+            sameRoot: false, vassalBlocked: false,
+            fabricationAvailable: false, sameAlliance: false,
+            sourceAlliancePower: 200f, targetAlliancePower: 100f,
+            mandateValue: 0, mandateCoreControl: 1f,
+            zhuluEligible: true, capitalDistance: 100f,
+            zhuluAge: true);
+        IReadOnlyList<WarStrategyCandidate> fallback =
+            WarStrategyCandidateRules.RankCandidates(source,
+                new[] { remoteOnly });
+        Equal(1, fallback.Count,
+            "a remote target remains available when no border target exists");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new System.Exception(message);
+    }
+}

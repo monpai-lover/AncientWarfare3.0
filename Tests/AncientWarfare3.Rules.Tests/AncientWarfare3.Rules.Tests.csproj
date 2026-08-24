@@ -507,6 +507,7 @@
     <Compile Include="MandatePhaseRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\MandatePhaseRules.cs" Link="Production\MandatePhaseRules.cs" />
     <Compile Include="WarTypeOwnershipMatrixTests.cs.txt" />
+    <Compile Include="WarBorderTargetRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\MandateMilitaryStrengthRules.cs" Link="Production\MandateMilitaryStrengthRules.cs" />
     <Compile Include="XiaizationStatusDisplayRulesTests.cs.txt" />
     <Compile Include="WarGoalSettlementRulesTests.cs.txt" />

@@ -1124,6 +1124,7 @@ if (args.Length == 1 &&
 if (args.Length == 1 && args[0] == "--zhulu-war-slice")
 {
     ZhuluWarRulesTests.Run();
+    WarBorderTargetRulesTests.Run();
     ZhuluAgeRulesTests.Run();
     MandateMilitaryStrengthRulesTests.Run();
     Console.WriteLine("Zhulu war rules passed.");
@@ -9133,6 +9134,7 @@ SamePeopleWarIntentRulesTests.Run();
 DiplomaticWarAvailabilityRulesTests.Run();
 DiplomaticWarDeclarationLockRulesTests.Run();
 ZhuluWarRulesTests.Run();
+WarBorderTargetRulesTests.Run();
 MandateConquestDirectTransferRulesTests.Run();
 BanditFormerKingSourceGuardTests.Run();
 ZhuluAgeRulesTests.Run();

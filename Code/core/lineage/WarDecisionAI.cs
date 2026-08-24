@@ -259,10 +259,12 @@ namespace AncientWarfare3.core.lineage
                     break;
                 }
             if (!foundTargetFacts || !WarStrategyCandidateRules.TryEvaluate(
-                    sourceFacts, selectedTargetFacts,
-                    out WarStrategyCandidate liveCandidate) ||
+                sourceFacts, selectedTargetFacts,
+                out WarStrategyCandidate liveCandidate) ||
                 !WarStrategyCandidateRules.MatchesKind(pPlan.WarKind,
-                    liveCandidate.Kind))
+                    liveCandidate.Kind) ||
+                !WarStrategyCandidateRules.IsPreferredTarget(sourceFacts,
+                    targetFacts, target.id, liveCandidate.Kind))
                 return false;
             if (pShadowOnly) return false;
             bool shouldIssue = pPlan.WarKind ==
@@ -453,7 +455,7 @@ namespace AncientWarfare3.core.lineage
             bool blocked = sameRoot || vassalBlocked || warBlocked;
             bool sameAlliance = false;
             float targetAlliancePower = 0f;
-            bool neighbor = false;
+            bool neighbor = AreNeighbors(pSource, pTarget);
             float capitalDistance = CapitalDistance(pSource, pTarget);
             int opinion = 0;
             bool needsFabrication = preferredKind ==
@@ -462,14 +464,12 @@ namespace AncientWarfare3.core.lineage
             if (preferredKind == WarStrategyCandidateKind.Normal &&
                 !targetAtWar && !blocked)
             {
-                neighbor = AreNeighbors(pSource, pTarget);
                 opinion = Opinion(pSource, pTarget);
             }
             if (preferredKind == WarStrategyCandidateKind.MandateConquest)
             {
                 if (!blocked && !targetAtWar)
                 {
-                    neighbor = AreNeighbors(pSource, pTarget);
                     sameAlliance = WarTerritoryService.AreInSameAlliance(
                         pSource, pTarget);
                     targetAlliancePower = WarTerritoryService
@@ -488,7 +488,6 @@ namespace AncientWarfare3.core.lineage
             }
             if (preferredKind == WarStrategyCandidateKind.Zhulu)
             {
-                neighbor = AreNeighbors(pSource, pTarget);
                 sameAlliance = WarTerritoryService.AreInSameAlliance(
                     pSource, pTarget);
             }
