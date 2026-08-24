@@ -55,9 +55,17 @@ namespace AncientWarfare3.core.lineage
             switch (pFacts.Kind)
             {
                 case ArmyRtsProposalKind.Attack:
+                    // During a city assault the attacker can become the
+                    // temporary controller before the capture transaction is
+                    // finalized. Keep the attack mission alive while that
+                    // city is an open defense objective; otherwise the
+                    // director invalidates the mission mid-siege and the
+                    // army falls back to "awaiting orders".
                     return pFacts.TargetKingdomInWar &&
-                           !pFacts.TargetFriendly &&
-                           pFacts.Objective == ArmyRtsObjectiveState.OpenAttack
+                           ((!pFacts.TargetFriendly &&
+                             pFacts.Objective == ArmyRtsObjectiveState.OpenAttack) ||
+                            (pFacts.TargetFriendly &&
+                             pFacts.Objective == ArmyRtsObjectiveState.OpenDefense))
                         ? ArmyRtsMissionTargetDecision.Accept()
                         : ArmyRtsMissionTargetDecision.Reject(
                             "attack_target_not_open_enemy");

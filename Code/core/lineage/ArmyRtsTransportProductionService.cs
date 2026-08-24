@@ -202,6 +202,7 @@ namespace AncientWarfare3.core.lineage
                     return false;
                 }
                 TemporaryBoatIds[boatActor.data.id] = boatActor;
+                ArmyRtsTransportDiagnostics.RecordTemporaryBoatCreated();
                 boat.taxi_request = pRequest;
                 pRequest.assign(boat);
                 boatActor.setTask("boat_transport_go_load", pClean: true,
@@ -261,6 +262,21 @@ namespace AncientWarfare3.core.lineage
                         }
                     }
                 }
+                else if (pRoute.Source == AWTransportRouteSource.ShoreFallback)
+                {
+                    // ShoreFallback deliberately skips dock construction. The
+                    // transport is spawned on the validated pickup sea tile.
+                    string transportId = ownerCity.getActorAsset()?
+                        .architecture_asset?.actor_asset_id_transport;
+                    if (!string.IsNullOrEmpty(transportId))
+                    {
+                        ActorAsset transport = AssetManager.actor_library.
+                            get(transportId);
+                        if (transport != null)
+                            boatActor = World.world?.units?.createNewUnit(
+                                transport.id, pickupSea);
+                    }
+                }
                 if (boatActor?.data == null)
                 {
                     string transportId = ownerCity.getActorAsset()?
@@ -284,6 +300,7 @@ namespace AncientWarfare3.core.lineage
                 }
                 boat.taxi_request = null;
                 TemporaryBoatIds[boatActor.data.id] = boatActor;
+                ArmyRtsTransportDiagnostics.RecordTemporaryBoatCreated();
                 pBoatActor = boatActor;
                 return true;
             }
@@ -373,6 +390,7 @@ namespace AncientWarfare3.core.lineage
                 {
                     TemporaryBoatIds.Remove(pBoatId);
                     PendingTemporaryBoatRemovalIds.Remove(pBoatId);
+                    ArmyRtsTransportDiagnostics.RecordTemporaryBoatDestroyed();
                 }
             }
         }

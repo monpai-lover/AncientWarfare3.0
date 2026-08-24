@@ -121,6 +121,8 @@ namespace AncientWarfare3.core.lineage
                    FindTile(state.TargetTileId)?.data != null;
         }
 
+        internal static bool HasAnyActiveVoyage => States.Count > 0;
+
         internal static ArmyRtsTransportPhase GetPhase(Army pArmy)
         {
             if (pArmy?.data == null ||
@@ -147,9 +149,12 @@ namespace AncientWarfare3.core.lineage
             Actor captain = SafeCaptain(pArmy);
             WorldTile start = captain?.current_tile;
             if (pArmy?.data == null || start?.data == null ||
-                pTarget?.data == null ||
-                !AWDockTransportService.TryResolveRoute(start, pTarget,
-                    out AWDockRouteCandidate route)) return false;
+                pTarget?.data == null) return false;
+            AWDockRouteCandidate route;
+            if (!AWDockTransportService.TryResolveRoute(start, pTarget,
+                    out route) &&
+                !AWDockTransportService.TryResolveEmergencyShoreRoute(
+                    start, pTarget, out route, out _)) return false;
             pEstimate = new ArmyRtsTransportEstimate(
                 pPickupCost: 0f, pQueueCost: ProductionQueueCost,
                 pSeaCost: Math.Max(1f, route.EstimatedRouteTiles) *
@@ -217,10 +222,16 @@ namespace AncientWarfare3.core.lineage
                     pActor.is_inside_boat,
                     SameIsland(pActor.current_tile, pTarget),
                     forceTransport: pForceTransport);
-                if (!pMayBegin || !owns ||
-                    !AWDockTransportService.TryResolveRoute(
-                        pActor.current_tile, pTarget,
-                        out AWDockRouteCandidate route)) return false;
+                if (!pMayBegin || !owns) return false;
+                AWDockRouteCandidate route;
+                if (!AWDockTransportService.TryResolveRoute(
+                        pActor.current_tile, pTarget, out route))
+                {
+                    if (!AWDockTransportService.TryResolveEmergencyShoreRoute(
+                            pActor.current_tile, pTarget, out route, out _))
+                        return false;
+                    ArmyRtsTransportDiagnostics.RecordEmergencyShoreRoute();
+                }
                 state = Begin(army, pTarget, route);
                 if (state == null) return false;
             }
@@ -233,9 +244,17 @@ namespace AncientWarfare3.core.lineage
                         IsCaptain(pActor, army), pForceTransport,
                         HasEmbarkedMembers(army)))
                 {
+                    AWDockRouteCandidate route;
                     if (!AWDockTransportService.TryResolveRoute(
-                            pActor.current_tile, pTarget,
-                            out AWDockRouteCandidate route)) return false;
+                            pActor.current_tile, pTarget, out route))
+                    {
+                        if (!AWDockTransportService.
+                                TryResolveEmergencyShoreRoute(
+                                    pActor.current_tile, pTarget,
+                                    out route, out _)) return false;
+                        ArmyRtsTransportDiagnostics.
+                            RecordEmergencyShoreRoute();
+                    }
                     ReleaseArmy(army);
                     state = Begin(army, pTarget, route);
                     if (state == null) return false;

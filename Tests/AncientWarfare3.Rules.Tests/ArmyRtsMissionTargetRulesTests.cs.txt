@@ -11,9 +11,12 @@ internal static class ArmyRtsMissionTargetRulesTests
         False(Validate(ArmyRtsProposalKind.Attack,
                 ArmyRtsObjectiveState.OpenAttack, true, true, true),
             "attack rejects a friendly target");
+        True(Validate(ArmyRtsProposalKind.Attack,
+                ArmyRtsObjectiveState.OpenDefense, true, true, true),
+            "an attack mission survives the temporary open-defense state during capture");
         False(Validate(ArmyRtsProposalKind.Attack,
-                ArmyRtsObjectiveState.OpenDefense, false, true, true),
-            "attack rejects a defense objective");
+                ArmyRtsObjectiveState.ClosedOccupied, true, true, true),
+            "attack still releases after the objective is closed");
         True(Validate(ArmyRtsProposalKind.Defend,
                 ArmyRtsObjectiveState.OpenDefense, true, true, true),
             "defense accepts an open friendly objective");

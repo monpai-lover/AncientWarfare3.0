@@ -122,8 +122,9 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldEnrollInAw3WarSystems(string pWarType,
             bool active)
         {
-            return active && !string.Equals(pWarType, WarTypeId,
-                StringComparison.Ordinal);
+            // Zhulu uses special declaration and settlement rules, but its
+            // armies still need the normal AW3 mission/lifecycle pipeline.
+            return active;
         }
 
         public static bool RequiresLegacyRosterMigration(string pWarType,

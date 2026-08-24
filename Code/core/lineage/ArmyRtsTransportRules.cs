@@ -379,8 +379,15 @@ namespace AncientWarfare3.core.lineage
             bool activeVoyage, bool liveArmy, bool missionValid,
             bool targetComplete)
         {
-            return activeVoyage && liveArmy && missionValid &&
-                   !targetComplete;
+            // Director planning is incremental. A publish can temporarily
+            // omit an otherwise valid army while its war/front batches are
+            // being rebuilt. Releasing the controller here clears the
+            // persisted mission and leaves the captain in "awaiting orders".
+            // Keep every live, unfinished strategic mission until the next
+            // complete snapshot can replace it; ended/invalid/completed
+            // missions still go through the normal invalidation path.
+            _ = activeVoyage;
+            return liveArmy && missionValid && !targetComplete;
         }
 
         public static bool ShouldRetainActiveVoyageMission(

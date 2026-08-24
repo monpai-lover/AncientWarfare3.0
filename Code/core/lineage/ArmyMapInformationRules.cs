@@ -64,6 +64,14 @@ namespace AncientWarfare3.core.lineage
                    Math.Max(0, reserveSupply);
         }
 
+        public static int CombineReserveSupply(int cityReserve,
+            int armyReserve)
+        {
+            long total = (long)Math.Max(0, cityReserve) +
+                         Math.Max(0, armyReserve);
+            return total >= int.MaxValue ? int.MaxValue : (int)total;
+        }
+
         public static string ComposeManpowerText(string shortageLabel,
             string reserveSupplyLabel, int shortage, int reserveSupply)
         {
@@ -163,6 +171,14 @@ namespace AncientWarfare3.core.lineage
             bool royalGuardArmy)
         {
             return !royalGuardArmy;
+        }
+
+        public static bool ShouldDisplayReserveManpower(
+            bool royalGuardArmy, bool hasMission,
+            bool hasReplenishmentOperation)
+        {
+            return !royalGuardArmy &&
+                   (hasMission || hasReplenishmentOperation);
         }
     }
 }

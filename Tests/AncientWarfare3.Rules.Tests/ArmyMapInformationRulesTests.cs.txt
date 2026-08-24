@@ -10,6 +10,15 @@ internal static class ArmyMapInformationRulesTests
         Equal("0 / 5", ArmyMapInformationRules.ComposeManpowerText(
                 shortage: -3, reserveSupply: 5),
             "display clamps invalid counts");
+        Equal(27, ArmyMapInformationRules.CombineReserveSupply(
+                cityReserve: 27, armyReserve: 0),
+            "city reserve remains visible when no army-specific reserve exists");
+        Equal(35, ArmyMapInformationRules.CombineReserveSupply(
+                cityReserve: 27, armyReserve: 8),
+            "army conquest reserve is added to the shared city reserve");
+        Equal(int.MaxValue, ArmyMapInformationRules.CombineReserveSupply(
+                cityReserve: int.MaxValue, armyReserve: 8),
+            "combined reserve supply saturates instead of overflowing");
         Equal(ArmyRtsState.March,
             ArmyMapInformationRules.ResolvePendingState(
                 hasProjection: true,
@@ -89,8 +98,29 @@ internal static class ArmyMapInformationRulesTests
                 royalGuardArmy: false),
             "ordinary army labels display shortage and reserve supply");
         Equal(false, ArmyMapInformationRules.ShouldDisplayReserveManpower(
-                royalGuardArmy: true),
+            royalGuardArmy: true),
             "royal guard labels omit ordinary reserve-pool fields");
+        Equal(false, ArmyMapInformationRules.ShouldDisplayReserveManpower(
+            royalGuardArmy: false, hasMission: false,
+            hasReplenishmentOperation: false),
+            "a notice-only deployment does not claim that a replenishment operation is running");
+        Equal(true, ArmyMapInformationRules.ShouldDisplayReserveManpower(
+            royalGuardArmy: false, hasMission: true,
+            hasReplenishmentOperation: false),
+            "an active RTS mission keeps the manpower fields visible");
+        Equal(true, ArmyMapInformationRules.ShouldDisplayReserveManpower(
+            royalGuardArmy: false, hasMission: false,
+            hasReplenishmentOperation: true),
+            "a persisted replenishment operation keeps the manpower fields visible");
+        Equal(true, ArmyDeploymentRules.ShouldObserveFormation(
+            useFormationMovement: true, anchorValid: true),
+            "formation deployment observes the roster before releasing the captain");
+        Equal(false, ArmyDeploymentRules.ShouldObserveFormation(
+            useFormationMovement: false, anchorValid: true),
+            "vanilla deployment does not enter the formation observer");
+        Equal(false, ArmyDeploymentRules.ShouldObserveFormation(
+            useFormationMovement: true, anchorValid: false),
+            "deployment cannot observe a missing anchor");
         Equal("task_unit_aw_guard_protect_king",
             ArmyMapInformationRules.PendingOperationLocalizationKey(
                 ArmyRtsState.Replenish, royalGuardArmy: true),
@@ -115,7 +145,7 @@ internal static class ArmyMapInformationRulesTests
                 structurallyStable: true, leaseEligible: false),
             "captain continuity cannot preserve a guard inside an ordinary army");
         Equal(true, ArmyCaptainContinuityRules.ShouldRetainCaptain(
-                structurallyStable: true, leaseEligible: true),
+            structurallyStable: true, leaseEligible: true),
             "a stable eligible ordinary captain remains protected from churn");
     }
 

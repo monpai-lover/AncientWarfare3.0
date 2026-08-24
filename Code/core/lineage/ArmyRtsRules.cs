@@ -491,7 +491,8 @@ namespace AncientWarfare3.core.lineage
                 return false;
             return nextState == ArmyRtsState.March ||
                    nextState == ArmyRtsState.Pursue ||
-                   nextState == ArmyRtsState.Retreat;
+                   nextState == ArmyRtsState.Retreat ||
+                   nextState == ArmyRtsState.Assault;
         }
 
         public static int ResolveStableStrategicEndpoint(int lockedTileId,

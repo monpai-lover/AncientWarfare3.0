@@ -198,6 +198,13 @@ namespace AncientWarfare3.core.lineage
         {
             Kingdom kingdom = city?.kingdom;
             if (!IsControlledCity(city, kingdom)) return 0;
+            // During formal war the synthetic ledger is authoritative. The
+            // compatibility cache is intentionally rebuilt in bounded slices
+            // and returns zero until a complete generation is published;
+            // exposing that transient value makes synthetic reserves appear
+            // exhausted immediately after a levy is created.
+            if (ResolveMobilizationPhase(kingdom) == ArmyMobilizationPhase.War)
+                return CountWartimeReplacement(city, kingdom);
             KingdomEstimate state = State(kingdom);
             EnsureGeneration(kingdom, state);
             ReconcileEstimateIfNeeded(city, state);

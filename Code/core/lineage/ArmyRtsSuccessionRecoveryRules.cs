@@ -3,6 +3,13 @@ namespace AncientWarfare3.core.lineage
     public static class ArmyRtsSuccessionRecoveryRules
     {
         public const int MaximumArmiesPerCycle = 8;
+        public const int CaptainRecoveryRetryCooldownCycles = 60;
+
+        public static bool ShouldAttemptCaptainRecovery(long currentCycle,
+            long retryAfterCycle)
+        {
+            return currentCycle >= retryAfterCycle;
+        }
 
         public static bool ShouldEnqueue(bool kingdomValid, bool kingValid,
             bool fromLoad, long currentKingId, long requestedKingId,

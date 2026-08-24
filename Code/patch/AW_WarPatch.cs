@@ -116,11 +116,12 @@ namespace AncientWarfare3.patch
                     ZhuluWarDeclarationScope.CurrentDefenderId);
                 WarRecordWriter.OnWarStart(__result);
                 RecordNativeZhuluStart(__result);
-                WarScoreService.StartWar(__result);
-                return;
             }
-            WarRecordWriter.OnWarStart(__result);
-            RecordMainBelligerents(__result);
+            else
+            {
+                WarRecordWriter.OnWarStart(__result);
+                RecordMainBelligerents(__result);
+            }
             WarScoreService.StartWar(__result);
             SyntheticMobilizationLedgerService.OnWarStarted(__result);
             CityReservePoolService.OnWarStarted(__result);
@@ -433,7 +434,7 @@ namespace AncientWarfare3.patch
                 TryEndAllActiveSourcesForWar(pWar.data.id,
                     LineageService.CurTime());
             ArmyReplenishmentOperationService.OnWarEnded(pWar);
-            KingdomWarDirectorService.CleanupExcludedWar(pWar);
+            KingdomWarDirectorService.OnWarEnded(pWar);
             ArmyRtsWarLifecycleService.OnWarEnded(pWar);
             CoalitionWarTaskService.OnWarEnded(pWar);
             WarMilitaryFactsService.OnWarEnded(pWar);

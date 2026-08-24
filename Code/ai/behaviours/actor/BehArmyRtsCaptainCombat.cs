@@ -3,8 +3,9 @@ using ai.behaviours;
 
 namespace AncientWarfare3.ai.behaviours.actor
 {
-    // Keeps only the captain in a bounded tactical loop. Soldiers remain on
-    // the original follow/combat tasks and are never repositioned here.
+    // Keeps captain and member combat in bounded tactical loops. Strategic
+    // movement remains owned by the formation controller; these behaviours
+    // only validate a nearby target and issue an attack.
     public sealed class BehArmyRtsCaptainCombat : BehaviourActionActor
     {
         public override BehResult execute(Actor pActor)
@@ -52,6 +53,37 @@ namespace AncientWarfare3.ai.behaviours.actor
                     pActor.tryToAttack(target);
             }
             catch { }
+            return BehResult.Continue;
+        }
+    }
+
+    public sealed class BehArmyRtsMemberCombat : BehaviourActionActor
+    {
+        public override BehResult execute(Actor pActor)
+        {
+            if (!ArmyRtsControllerService.HasMemberCombatMission(pActor))
+            {
+                ArmyRtsControllerService.ReleaseActor(pActor);
+                return BehResult.Stop;
+            }
+
+            Actor target = pActor.beh_actor_target?.a;
+            if (!ArmyRtsControllerService.IsValidMemberCombatTarget(
+                    pActor, target))
+                target = pActor.attack_target?.a;
+            if (!ArmyRtsControllerService.IsValidMemberCombatTarget(
+                    pActor, target))
+                target = ArmyRtsControllerService.FindCaptainCombatTarget(
+                    pActor);
+            if (!ArmyRtsControllerService.IsValidMemberCombatTarget(
+                    pActor, target))
+            {
+                pActor.beh_actor_target = null;
+                pActor.makeWait(0.15f);
+                return BehResult.RepeatStep;
+            }
+
+            pActor.beh_actor_target = target;
             return BehResult.Continue;
         }
     }

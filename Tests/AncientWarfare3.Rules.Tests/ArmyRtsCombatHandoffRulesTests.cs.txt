@@ -523,13 +523,13 @@ internal static class ArmyRtsCombatHandoffRulesTests
             ? memberTaskContent.Substring(memberCombatStart,
                 memberCombatEnd - memberCombatStart)
             : string.Empty;
-        Assert(memberCombatBody.Contains("new BehFightCheckEnemyIsOk()",
+        Assert(memberCombatBody.Contains("new BehArmyRtsMemberCombat()",
                    StringComparison.Ordinal) &&
                memberCombatBody.Contains("GoToActorTargetType.SameTile",
                    StringComparison.Ordinal) &&
-               !controller.Contains("FindMemberCombatTarget(",
+               controller.Contains("FindCaptainCombatTarget(",
                    StringComparison.Ordinal),
-            "member combat uses native fighting after native target acquisition");
+            "member combat uses the bounded RTS target chain for ordinary residents");
 
         int setMemberCombatStart = controller.IndexOf(
             "internal static bool TrySetMemberCombatTask(",
@@ -599,14 +599,48 @@ internal static class ArmyRtsCombatHandoffRulesTests
             ? controller.Substring(siegeTargetStart,
                 siegeTargetEnd - siegeTargetStart)
             : string.Empty;
-        Assert(siegeTargetBody.Contains(
+        Assert(!siegeTargetBody.Contains(
                    "pTarget.is_profession_warrior",
                    StringComparison.Ordinal),
-            "city combat retains hostile military targets only and exits after the garrison is gone");
+            "city combat can select ordinary residents while the population guard remains authoritative");
         Assert(missionRouteClearBody.Contains(
                    "ClearArmyAttackTargets(pArmy)",
                    StringComparison.Ordinal),
             "an accepted emergency mission clears every stale attack target with the old route");
+        int targetCompletedStart = controller.IndexOf(
+            "public static void OnTargetCompleted(City pTargetCity)",
+            StringComparison.Ordinal);
+        int targetCompletedEnd = controller.IndexOf(
+            "public static bool TryGetWatchdogSample(",
+            targetCompletedStart, StringComparison.Ordinal);
+        string targetCompletedBody = targetCompletedStart >= 0 &&
+            targetCompletedEnd > targetCompletedStart
+            ? controller.Substring(targetCompletedStart,
+                targetCompletedEnd - targetCompletedStart)
+            : string.Empty;
+        int nativeTargetClear = targetCompletedBody.IndexOf(
+            "ClearVanillaCityAttackTarget(army, pTargetCity)",
+            StringComparison.Ordinal);
+        int targetInvalidate = targetCompletedBody.IndexOf(
+            "Invalidate(armyId)", nativeTargetClear,
+            StringComparison.Ordinal);
+        Assert(nativeTargetClear >= 0 && targetInvalidate > nativeTargetClear,
+            "capture completion clears the anchor city's native attack target before mission invalidation");
+        int releaseActorStart = controller.IndexOf(
+            "public static void ReleaseActor(Actor pActor)",
+            StringComparison.Ordinal);
+        int releaseActorEnd = controller.IndexOf(
+            "public static void ReassertCaptainCommand(",
+            releaseActorStart, StringComparison.Ordinal);
+        string releaseActorBody = releaseActorStart >= 0 &&
+            releaseActorEnd > releaseActorStart
+            ? controller.Substring(releaseActorStart,
+                releaseActorEnd - releaseActorStart)
+            : string.Empty;
+        Assert(releaseActorBody.Contains(
+                   "ArmyMarchRules.VanillaAttackMarchTaskId",
+                   StringComparison.Ordinal),
+            "releasing an invalidated army also clears the vanilla attack-march task");
         int combatOwnershipStart = controller.IndexOf(
             "private static bool TryHandleWarCombatOwnership(",
             StringComparison.Ordinal);

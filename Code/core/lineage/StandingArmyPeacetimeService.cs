@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.content;
+using AncientWarfare3.core.performance;
 using life.taxi;
 
 namespace AncientWarfare3.core.lineage
@@ -153,16 +154,14 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null || pActor.ai == null) return;
             ReleasePostReturnMovementOwnership(pActor);
             RefreshJob(pActor);
-            Army army = pActor.army;
-            AncientWarfare3.ModClass.LogInfo(
-                "[AW3 peacetime] stage=" +
-                (pActor.ai.job?.id == ArmyRtsContent.CitizenJobId
-                    ? "post_return_citizen"
-                    : "post_return_military") +
-                " actor=" + pActor.data.id +
-                " army=" + (army?.data?.id ?? -1L) +
-                " job=" + (pActor.ai.job?.id ?? "none") +
-                " task=" + (pActor.ai.task?.id ?? "none"));
+            // Returning units can be released in large batches. Per-actor
+            // Info logging here serializes the main thread and turns a normal
+            // peacetime return into a multi-second file-I/O spike. Detailed
+            // movement diagnostics remain available through the sampled RTS
+            // diagnostic gate when explicitly enabled.
+            if (AWPerformanceSettings.ArmyRtsDiagnosticsEnabled)
+                ArmyRtsMovementDiagnostic.Log("peacetime", "return_completed",
+                    pActor);
         }
 
         private static void ReleasePostReturnMovementOwnership(Actor pActor)

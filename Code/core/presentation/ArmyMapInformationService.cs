@@ -50,6 +50,7 @@ namespace AncientWarfare3.core.presentation
         private static bool _selectionInProgress;
         private static int _reserveSupplyFrame = -1;
         private static long _reserveSupplyCityId = -1L;
+        private static long _reserveSupplyArmyId = -1L;
         private static int _reserveSupplyValue;
 
         static ArmyMapInformationService()
@@ -109,6 +110,7 @@ namespace AncientWarfare3.core.presentation
             _initializationFailed = false;
             _reserveSupplyFrame = -1;
             _reserveSupplyCityId = -1L;
+            _reserveSupplyArmyId = -1L;
             _reserveSupplyValue = 0;
         }
 
@@ -338,7 +340,8 @@ namespace AncientWarfare3.core.presentation
                 int reserveSupply = 0;
                 string manpowerText = string.Empty;
                 if (ArmyMapInformationRules.ShouldDisplayReserveManpower(
-                        royalGuardArmy))
+                    royalGuardArmy, hasMission,
+                    hasReplenishmentOperation))
                 {
                     ResolveManpowerValues(pArmy, memberCount, hasProjection,
                         hasMission, mission, activeDeployment,
@@ -492,21 +495,27 @@ namespace AncientWarfare3.core.presentation
                 ArmyLogisticsRules.MinimumOperationalForce);
 
             City sourceCity = ResolveReserveSourceCity(pArmy);
-            pReserveSupply = ResolveAuthoritativeReserveSupply(sourceCity);
+            pReserveSupply = ResolveAuthoritativeReserveSupply(pArmy, sourceCity);
         }
 
         private static int ResolveAuthoritativeReserveSupply(
-            City sourceCity)
+            Army pArmy, City sourceCity)
         {
             if (sourceCity?.data == null) return 0;
             int frame = Time.frameCount;
             if (_reserveSupplyFrame == frame &&
-                _reserveSupplyCityId == sourceCity.id)
+                _reserveSupplyCityId == sourceCity.id &&
+                _reserveSupplyArmyId == (pArmy?.id ?? -1L))
                 return _reserveSupplyValue;
             _reserveSupplyFrame = frame;
             _reserveSupplyCityId = sourceCity.id;
-            _reserveSupplyValue =
-                CityReservePoolService.CountAvailable(sourceCity);
+            _reserveSupplyArmyId = pArmy?.id ?? -1L;
+            int cityReserve = CityReservePoolService.CountAvailable(sourceCity);
+            int armyReserve = 0;
+            try { armyReserve = ArmyConquestReserveService.Get(pArmy); }
+            catch { }
+            _reserveSupplyValue = ArmyMapInformationRules.CombineReserveSupply(
+                cityReserve, armyReserve);
             return _reserveSupplyValue;
         }
 

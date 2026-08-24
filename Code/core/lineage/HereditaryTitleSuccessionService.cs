@@ -39,6 +39,15 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
 
+            // Direct eligible sons have priority over every collateral branch.
+            // Resolve this bounded path before querying the complete living
+            // lineage; deaths with a valid heir should not pay for a world-wide
+            // collateral candidate scan.
+            long directSuccessorId = HereditaryTitleSuccessionRules
+                .SelectSuccessor(candidates);
+            if (directSuccessorId >= 0L)
+                return ResolveActor(directSuccessorId);
+
             long lineageId = LineageQuery.GetActorLineageId(pHolder.data.id);
             if (lineageId >= 0L)
             {

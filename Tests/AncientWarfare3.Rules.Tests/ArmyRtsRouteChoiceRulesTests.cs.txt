@@ -42,6 +42,18 @@ internal static class ArmyRtsRouteChoiceRulesTests
                 actorInsideBoat: true, physicalRouteAvailable: false),
             "an already embarked actor must retain transport ownership while its route is active");
         VanillaPassengerTasksOwnLoadingAndLanding();
+        Assert(ArmyRtsTransportRules.ShouldPreserveDirectorOmission(
+                activeVoyage: false, liveArmy: true,
+                missionValid: true, targetComplete: false),
+            "a valid in-progress land mission must survive a transient director omission");
+        Assert(!ArmyRtsTransportRules.ShouldPreserveDirectorOmission(
+                activeVoyage: false, liveArmy: true,
+                missionValid: false, targetComplete: false),
+            "an invalid mission must still be released when the director omits it");
+        Assert(!ArmyRtsTransportRules.ShouldPreserveDirectorOmission(
+                activeVoyage: false, liveArmy: true,
+                missionValid: true, targetComplete: true),
+            "a completed objective must still be released when the director omits it");
         Assert(!ArmyRtsTransportRules.ShouldCountAsLanded(
                 sameTargetIsland: true, actorOnStableLand: false,
                 targetOnStableLand: true),
