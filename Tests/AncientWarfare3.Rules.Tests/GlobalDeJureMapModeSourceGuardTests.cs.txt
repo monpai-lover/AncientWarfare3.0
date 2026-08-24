@@ -65,9 +65,12 @@ internal static class GlobalDeJureMapModeSourceGuardTests
              !service.Substring(globalClick, globalClickEnd - globalClick)
                  .Contains("PushRegion", StringComparison.Ordinal),
             "global region click stops at the domestic region overview");
-        True(runtime.Contains("IsCityGlobalRegionLayer", StringComparison.Ordinal) &&
-             runtime.Contains("Vector2?)null", StringComparison.Ordinal),
-            "global region labels use the territory centroid anchor");
+        True(!runtime.Contains("Vector2?)null", StringComparison.Ordinal),
+            "global region labels use the legal seat anchor");
+        string job = Read("Code/core/policy/HierarchicalVassalLabelBuildJob.cs");
+        True(job.Contains("if (_cityLabel && _hasRegionAnchor)", StringComparison.Ordinal) &&
+             job.Contains("CalculateCityLabelSize(frozenTiles.Count)", StringComparison.Ordinal),
+            "seat-anchored region labels skip centroid geometry and use tile count only");
     }
 
     private static string Read(string pPath)

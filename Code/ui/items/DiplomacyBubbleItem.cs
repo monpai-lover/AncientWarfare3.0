@@ -46,10 +46,11 @@ namespace AncientWarfare3.ui.items
                     pEvent.SpeakerKingdomId);
             float maxWidth = Mathf.Max(140f, pRowWidth *
                 (side == DiplomacyBubbleSide.Center ? .82f : .70f));
+            string message = DiplomacyConversationService.BuildText(pEvent);
             _text.text = "<size=7><color=#A9A396>" +
                          DiplomacyConversationService.Timestamp(pEvent) +
                          "</color></size>\n" +
-                         DiplomacyConversationService.BuildText(pEvent);
+                         message;
             _text.rectTransform.sizeDelta = new Vector2(maxWidth - 18f, 400f);
             float textHeight = Mathf.Clamp(_text.preferredHeight, 30f, 220f);
             bool canRespond = pEvent.Proposal != null &&

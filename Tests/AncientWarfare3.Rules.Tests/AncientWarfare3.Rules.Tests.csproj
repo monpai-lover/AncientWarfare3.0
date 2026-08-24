@@ -40,6 +40,8 @@
     <Compile Include="DeJureRegionMergeRulesTests.cs.txt" />
     <Compile Include="DeJureRegionMergeSourceGuardTests.cs.txt" />
     <Compile Include="GlobalDeJureMapModeSourceGuardTests.cs.txt" />
+    <Compile Include="DiplomacyTributaryDetailsRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\TributaryDiplomacyDetails.cs" Link="Production\TributaryDiplomacyDetails.cs" />
     <Compile Include="CourtStatisticsRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CourtStatisticsRules.cs" Link="Production\CourtStatisticsRules.cs" />
     <Compile Include="CityLeaderCandidateScoringRulesTests.cs.txt" />
@@ -228,6 +230,8 @@
     <Compile Include="CapturedMilitaryOwnershipRulesTests.cs.txt" />
     <Compile Include="ActorPresentationDirtyRulesTests.cs.txt" />
     <Compile Include="AWPathRequestReuseRulesTests.cs.txt" />
+    <Compile Include="AWPathOptimizationRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathOptimizationRules.cs" Link="Production\AWPathOptimizationRules.cs" />
     <Compile Include="IdleBehaviourThrottleGateTests.cs.txt" />
     <Compile Include="..\..\Code\core\performance\AWIdleBehaviourBudget.cs" Link="Production\AWIdleBehaviourBudget.cs" />
     <Compile Include="VanillaLookupOptimizationSourceGuardTests.cs.txt" />
@@ -449,6 +453,7 @@
     <Compile Include="PreparationRecruitmentProtectionRulesTests.cs.txt" />
     <Compile Include="ArmyRtsWarLifecycleStateTests.cs.txt" />
     <Compile Include="ArmyRtsCombatHandoffRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsCombatTargetRulesTests.cs.txt" />
     <Compile Include="ArmyRtsCaptainCombatRulesTests.cs.txt" />
     <Compile Include="RoyalGuardTaskRecoveryRulesTests.cs.txt" />
     <Compile Include="ArmyNativeRouteLockRulesTests.cs.txt" />
@@ -472,6 +477,7 @@
     <Compile Include="WarForceEliminationRulesTests.cs.txt" />
     <Compile Include="WarTerminalSettlementRulesTests.cs.txt" />
     <Compile Include="WarTerminalSettlementSourceTests.cs.txt" />
+    <Compile Include="WarPeaceCessionPriorityRulesTests.cs.txt" />
     <Compile Include="SpecialGovernmentWarParticipationRulesTests.cs.txt" />
     <Compile Include="ArmyReplenishmentOperationRulesTests.cs.txt" />
     <Compile Include="CourtConscriptionLawRulesTests.cs.txt" />
@@ -746,6 +752,7 @@
     <Compile Include="..\..\Code\core\lineage\ArmyRtsTaskOwnershipRules.cs" Link="Production\ArmyRtsTaskOwnershipRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsFieldCombatRules.cs" Link="Production\ArmyRtsFieldCombatRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsCaptainCombatRules.cs" Link="Production\ArmyRtsCaptainCombatRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsCombatTargetRules.cs" Link="Production\ArmyRtsCombatTargetRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyStallWatchdogRules.cs" Link="Production\ArmyStallWatchdogRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyFormationRules.cs" Link="Production\ArmyFormationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRetreatRules.cs" Link="Production\ArmyRetreatRules.cs" />
@@ -1037,6 +1044,11 @@
     <Compile Include="..\..\Code\core\lineage\AsyncStrategyAdmissionModels.cs" Link="Production\AsyncStrategyAdmissionModels.cs" />
     <Compile Include="..\..\Code\core\lineage\RulerHouseholdPregnancyRules.cs" Link="Production\RulerHouseholdPregnancyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarPeaceSettlementScopeRules.cs" Link="Production\WarPeaceSettlementScopeRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarPeaceSettlementModels.cs" Link="Production\WarPeaceSettlementModels.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarPeaceTermsRules.cs" Link="Production\WarPeaceTermsRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarPeaceOfferLedgerRules.cs" Link="Production\WarPeaceOfferLedgerRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarPeaceSettlementValidationRules.cs" Link="Production\WarPeaceSettlementValidationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarPeaceDefaultOfferRules.cs" Link="Production\WarPeaceDefaultOfferRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SeparatePeaceRuntimeFactsRules.cs" Link="Production\SeparatePeaceRuntimeFactsRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarParticipantRosterRules.cs" Link="Production\WarParticipantRosterRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarParticipantLifecycleRules.cs" Link="Production\WarParticipantLifecycleRules.cs" />

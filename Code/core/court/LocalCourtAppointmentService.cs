@@ -52,6 +52,14 @@ namespace AncientWarfare3.core.court
             string rootOffice = desiredSeats.Count == 0
                 ? string.Empty
                 : desiredSeats[0];
+            if (!HasLiveCityLeader(pCity) && !string.IsNullOrEmpty(rootOffice))
+            {
+                if (TryRepairCityLeader(pKingdom, pCity, rootOffice, active))
+                {
+                    if (!TryLoadActive(pKingdom.id, pCity.data.id,
+                            out active)) return false;
+                }
+            }
             Actor cityLeader = pCity.leader;
             if (!string.IsNullOrEmpty(rootOffice) && cityLeader?.data != null)
             {
@@ -275,6 +283,7 @@ namespace AncientWarfare3.core.court
         {
             if (pActor?.data == null || pKingdom?.data == null ||
                 !pActor.isSexMale() || pActor.hasTrait("madness") ||
+                pActor.isCityLeader() ||
                 !CourtAffiliationResolver.CanServe(pActor, pKingdom,
                     CourtOfficeLayer.City) ||
                 !RoyalGuardOfficeRules.CanAppearInOfficeCandidateList(
@@ -293,7 +302,8 @@ namespace AncientWarfare3.core.court
         }
 
         private static List<Actor> LoadAllCandidates(Kingdom pKingdom,
-            City pCity, IReadOnlyList<Actor> pWaitingCandidates)
+            City pCity, IReadOnlyList<Actor> pWaitingCandidates,
+            bool pFullScan = false)
         {
             var result = new List<Actor>();
             var actorIds = new HashSet<long>();
@@ -324,7 +334,8 @@ namespace AncientWarfare3.core.court
                 CandidateScans[scanKey] = scan;
             }
             int start = scan.Cursor % units.Count;
-            int inspected = Math.Min(CandidateScanLimit, units.Count);
+            int inspected = pFullScan ? units.Count :
+                Math.Min(CandidateScanLimit, units.Count);
             for (int offset = 0; offset < inspected; offset++)
             {
                 Actor actor = units[(start + offset) % units.Count];
@@ -335,6 +346,57 @@ namespace AncientWarfare3.core.court
             }
             scan.Cursor = (start + inspected) % units.Count;
             return result;
+        }
+
+        private static bool TryRepairCityLeader(Kingdom pKingdom, City pCity,
+            string pRootOffice, IReadOnlyList<ActiveLocalOfficer> pActive)
+        {
+            Actor candidate = null;
+            ActiveLocalOfficer rootRow = pActive?.FirstOrDefault(row =>
+                row != null && row.OfficeId == pRootOffice);
+            if (rootRow != null)
+            {
+                Actor projected = FindActor(rootRow.ActorId);
+                if (IsUsableLeader(projected, pKingdom)) candidate = projected;
+            }
+            if (candidate == null)
+            {
+                List<Actor> candidates = LoadAllCandidates(pKingdom, pCity,
+                    LoadCandidates(pKingdom, pCity), pFullScan: true);
+                candidate = SelectCandidate(candidates, pKingdom, pCity,
+                    NativeCityId(pCity.leader), pRootOffice,
+                    pAllowVacancyPromotion: true);
+            }
+            if (candidate == null) return false;
+
+            if (rootRow != null && rootRow.ActorId != candidate.data.id)
+            {
+                Actor stale = FindActor(rootRow.ActorId);
+                if (stale?.data != null && stale.isAlive() && !stale.isRekt())
+                    CourtService.TryDismissOfficer(stale, pKingdom,
+                        "city_leader_rebound");
+            }
+            return ManualLocalChiefAppointmentService.TryAppoint(
+                pKingdom, pCity, candidate,
+                () => rootRow != null && rootRow.ActorId == candidate.data.id
+                    ? true
+                    : CourtService.TryAssignLocalOfficer(candidate, pKingdom,
+                        pCity, pRootOffice, pVacancyPromotion: true));
+        }
+
+        private static bool HasLiveCityLeader(City pCity)
+        {
+            Actor leader = pCity?.leader;
+            return leader?.data != null && leader.isAlive() &&
+                   !leader.isRekt() && leader.city == pCity &&
+                   leader.kingdom == pCity.kingdom && leader.isCityLeader();
+        }
+
+        private static bool IsUsableLeader(Actor pActor, Kingdom pKingdom)
+        {
+            return pActor?.data != null && pActor.isAlive() &&
+                   !pActor.isRekt() && pActor.kingdom == pKingdom &&
+                   !pActor.isKing() && !pActor.isCityLeader();
         }
 
         internal static void ClearRuntime()

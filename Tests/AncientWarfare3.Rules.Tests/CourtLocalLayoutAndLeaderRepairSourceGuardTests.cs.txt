@@ -22,18 +22,17 @@ internal static class CourtLocalLayoutAndLeaderRepairSourceGuardTests
             "button layout must distinguish local court context");
         Contains(leader, "CourtOfficeLayer.City",
             "city leader repair must inspect local-layer officers");
-        Contains(leader, "pCity.getUnits()",
-            "local leader repair must prioritize current-city officers");
+        Contains(leader, "LocalCourtAppointmentService.ReconcileCity",
+            "city leader repair must use the local court reconciler");
         Contains(promotion, "RemoveLeader_Postfix",
             "leader removal must trigger immediate vacancy repair");
         Contains(promotion, "CityLeaderVacancyRepairService.Request",
             "leader removal must enqueue the immediate repair service");
-        Contains(vacancy, "CourtOfficeLayer.City",
-            "vacancy repair must inspect local court officers");
-        Contains(vacancy, "PickLocalOfficer",
-            "vacancy repair must prioritize local officers");
-        Contains(vacancy, "AW_CityLeaderPatch.CheckFindLeader_Prefix",
-            "vacancy repair must retain the existing national fallback");
+        Contains(vacancy, "AW_CityLeaderPatch",
+            "vacancy repair must delegate to the shared local court pipeline");
+        False(vacancy.Contains("PickLocalOfficer",
+                StringComparison.Ordinal),
+            "vacancy repair cannot maintain a second candidate selector");
         Contains(courtService,
             "LocalChiefOfficeResolver.ResolveChiefOffice(pKingdom, pCity)",
             "CourtService exposes the shared local-chief result");
@@ -43,9 +42,6 @@ internal static class CourtLocalLayoutAndLeaderRepairSourceGuardTests
         Contains(governorProjection,
             "CourtService.ResolveCityOffice(",
             "governor projection uses the shared chief office");
-        Contains(vacancy,
-            "CourtService.ResolveCityOffice(",
-            "leader promotion validates against the shared chief office");
         False(localAppointments.Contains(
                 "CustomCourtHierarchyLayoutRules.BuildRanks(",
                 StringComparison.Ordinal),

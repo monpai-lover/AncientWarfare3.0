@@ -230,6 +230,19 @@ namespace AncientWarfare3.core.policy
             _geometryTask = Task.Run(() =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (_cityLabel && _hasRegionAnchor)
+                {
+                    var seatPlacement =
+                        new HierarchicalVassalMapModeLabelPlacement
+                        {
+                            Centroid = _regionAnchor,
+                            Angle = 0f,
+                            Size = HierarchicalVassalMapModeGeometry.
+                                CalculateCityLabelSize(frozenTiles.Count)
+                        };
+                    return new HierarchicalVassalLabelBuildResult(
+                        seatPlacement, frozenName, 0);
+                }
                 HierarchicalVassalMapModeGeometryMetrics metrics =
                     HierarchicalVassalMapModeGeometry.CalculateMetrics(
                         frozenTiles, cancellationToken);

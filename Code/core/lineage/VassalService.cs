@@ -292,6 +292,103 @@ namespace AncientWarfare3.core.lineage
             return FindKingdom(GetTributarySuzerainId(pKingdom));
         }
 
+        internal static bool TryReadTributaryDiplomacyDetails(
+            Kingdom pBase, Kingdom pOther,
+            out TributaryDiplomacyDetails pDetails)
+        {
+            pDetails = default;
+            if (!Ready || pBase?.data == null || pOther?.data == null ||
+                pBase.isRekt() || pOther.isRekt() || pBase == pOther)
+                return false;
+
+            try
+            {
+                bool baseIsTributary =
+                    GetTributarySuzerainId(pBase) == pOther.id;
+                bool otherIsTributary =
+                    GetTributarySuzerainId(pOther) == pBase.id;
+                TributaryDiplomacyDirection direction =
+                    TributaryDiplomacyDetails.ResolveDirection(
+                        baseIsTributary, otherIsTributary);
+                if (direction == TributaryDiplomacyDirection.None)
+                    return false;
+
+                Kingdom tributary = direction ==
+                                     TributaryDiplomacyDirection.BasePays
+                    ? pBase
+                    : pOther;
+                Kingdom suzerain = direction ==
+                                   TributaryDiplomacyDirection.BasePays
+                    ? pOther
+                    : pBase;
+                ActiveRelationDetails relation =
+                    ReadActiveRelationDetails(tributary.id);
+                if (relation == null || relation.suzerain_id != suzerain.id ||
+                    !VassalContractTierRules.IsLooseTributary(
+                        relation.contract_tier))
+                    return false;
+
+                VassalEffectiveTerms terms = GetEffectiveRelationTerms(
+                    relation,
+                    CentralizationService.ReadSnapshot(suzerain).effects,
+                    CourtInstitutionEffectService.Read(suzerain));
+                CityEconomyService.TryGetLatestCachedTaxContribution(
+                    tributary, out float annualTax);
+                float political = VassalFiscalRules.PoliticalTribute(
+                    annualTax, terms.TributeRate,
+                    KingdomPolicyService.GetPoliticalPoints(tributary),
+                    KingdomPolicyService.GetPoliticalPoints(suzerain),
+                    VassalFiscalRules.MaximumPoliticalBalance);
+                int gold = VassalFiscalRules.GoldTribute(
+                    annualTax, terms.TributeRate,
+                    GetCapitalGold(tributary));
+
+                int year = Date.getCurrentYear();
+                string settlementState = ResolveTributarySettlementState(
+                    relation, year);
+                bool hasOffering = false;
+                if (relation.relation_id >= 0)
+                {
+                    try
+                    {
+                        hasOffering = new RulerHouseholdQuery(DB)
+                            .HasTributaryOffering(relation.relation_id, year);
+                    }
+                    catch { }
+                }
+
+                pDetails = new TributaryDiplomacyDetails(direction,
+                    relation.relation_id, tributary.id, suzerain.id,
+                    relation.tribute_rate, relation.next_tribute_due_year,
+                    relation.last_tribute_paid_year,
+                    relation.last_tribute_factor_percent, political, gold,
+                    settlementState, hasOffering);
+                return true;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "Tributary diplomacy detail read failed: " +
+                    error.Message);
+                pDetails = default;
+                return false;
+            }
+        }
+
+        private static string ResolveTributarySettlementState(
+            ActiveRelationDetails pRelation, int pYear)
+        {
+            if (pRelation == null || pRelation.next_tribute_due_year < 0)
+                return "no_record";
+            if (pRelation.next_tribute_due_year <= pYear &&
+                pRelation.last_tribute_paid_year < pYear)
+                return "due";
+            if (pRelation.last_tribute_paid_year >= 0 &&
+                pRelation.next_tribute_due_year > pYear)
+                return "paid";
+            return "no_record";
+        }
+
         public static Kingdom GetDiplomaticSuzerain(Kingdom pKingdom)
         {
             return GetSuzerain(pKingdom) ?? GetTributarySuzerain(pKingdom);

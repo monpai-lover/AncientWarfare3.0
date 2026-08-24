@@ -228,6 +228,10 @@ namespace AncientWarfare3.core.lineage
                 HistoryTarget.Kingdom(suzerain));
             HistoryWriter.RecordKingdom(suzerain, eventId, text,
                 HistoryTarget.Kingdom(tributary));
+            DiplomacyConversationService.RecordTributePayment(tributary,
+                suzerain, eventId, result.PoliticalTransferred,
+                result.GoldTransferred, result.FactorPercent,
+                result.OfferingOutcome);
         }
     }
 }

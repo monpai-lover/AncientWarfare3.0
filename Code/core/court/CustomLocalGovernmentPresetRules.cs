@@ -25,6 +25,7 @@ namespace AncientWarfare3.core.court
                 : pId;
             var template = Template(id, "民州", "Civil Prefecture",
                 CustomLocalCourtDefaultKind.CivilDefault);
+            template.ChiefOfficeId = id + "_governor";
             template.Offices.Add(Office(id + "_governor", "郡守",
                 "Commandery Governor", 10, 0f, 0f, CourtSchoolId.Legalist,
                 Effect(CustomCourtEffectId.CivilOrder,
@@ -57,6 +58,7 @@ namespace AncientWarfare3.core.court
                 : pId;
             var template = Template(id, "军府", "Military Government",
                 CustomLocalCourtDefaultKind.MilitaryDefault);
+            template.ChiefOfficeId = id + "_dudu";
             template.Offices.Add(Office(id + "_dudu", "都督",
                 "Commander", 10, 0f, 0f, CourtSchoolId.Military,
                 Effect(CustomCourtEffectId.ArmyMorale,

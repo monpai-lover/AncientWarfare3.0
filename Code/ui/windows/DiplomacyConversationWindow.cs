@@ -262,11 +262,12 @@ namespace AncientWarfare3.ui.windows
                 capitalDistances.TryGetValue(other.id,
                     out long capitalDistanceSquared);
                 string relationDetail = BuildRelationDetail(baseKingdom,
-                    other, capitalDistanceSquared, out int opinion);
+                    other, capitalDistanceSquared, out int opinion,
+                    out bool hasTributaryDetails);
                 _kingdomPool[i].Bind(other,
                     RulerAppellationService.GetProjectedStateName(other),
                     relationDetail, opinion, KingdomColor(other),
-                    other.id == _selectedKingdomId,
+                    other.id == _selectedKingdomId, hasTributaryDetails,
                     SelectKingdom);
             }
             for (int i = others.Count; i < _kingdomPool.Count; i++)
@@ -291,7 +292,7 @@ namespace AncientWarfare3.ui.windows
                            RulerAppellationService.GetProjectedStateName(selected) +
                            "\n<size=8><color=#BBB5A7>" +
                            BuildRelationDetail(baseKingdom, selected,
-                               selectedCapitalDistanceSquared, out _) +
+                               selectedCapitalDistanceSquared, out _, out _) +
                            "</color></size>";
             IReadOnlyList<DiplomacyConversationEvent> events =
                 DiplomacyConversationService.ReadEvents(baseKingdom.id,
@@ -2470,14 +2471,64 @@ namespace AncientWarfare3.ui.windows
 
         private static string BuildRelationDetail(Kingdom pBase,
             Kingdom pOther, long pCapitalDistanceSquared,
-            out int pOpinion)
+            out int pOpinion, out bool pHasTributaryDetails)
         {
             string relation = RelationLabel(pBase, pOther);
             pOpinion = DiplomacyOpinionService.Read(pBase, pOther);
-            return relation + "  " +
+            string tributaryDetail = BuildTributaryDetail(pBase, pOther,
+                out pHasTributaryDetails);
+            string summary = relation + "  " +
                    AW_L10n.Text("aw_diplomacy_opinion", "Opinion") +
                    " " + (pOpinion > 0 ? "+" : "") + pOpinion +
                    "  " + DistanceLabel(pCapitalDistanceSquared);
+            return pHasTributaryDetails
+                ? summary + "\n" + tributaryDetail
+                : summary;
+        }
+
+        private static string BuildTributaryDetail(Kingdom pBase,
+            Kingdom pOther, out bool pHasDetails)
+        {
+            pHasDetails = false;
+            if (!VassalService.TryReadTributaryDiplomacyDetails(pBase,
+                    pOther, out TributaryDiplomacyDetails details))
+                return "";
+
+            pHasDetails = true;
+            string due = details.NextDueYear < 0
+                ? AW_L10n.Text("aw_diplomacy_tributary_unknown", "unknown")
+                : details.NextDueYear.ToString();
+            string stateKey = details.SettlementState switch
+            {
+                "due" => "aw_diplomacy_tributary_due",
+                "paid" => "aw_diplomacy_tributary_paid",
+                _ => "aw_diplomacy_tributary_no_record"
+            };
+            string state = AW_L10n.Text(stateKey, details.SettlementState);
+            string offering = AW_L10n.Text(
+                details.HasCurrentYearOffering
+                    ? "aw_diplomacy_tributary_offering_paid"
+                    : "aw_diplomacy_tributary_offering_none",
+                details.HasCurrentYearOffering
+                    ? "Consort offering recorded"
+                    : "No consort offering recorded");
+            string compact = string.Format(
+                AW_L10n.Text("aw_diplomacy_tributary_summary",
+                    "Tribute {0}% | due {1} | forecast political {2}, gold {3}"),
+                details.TributeRate, due,
+                details.ForecastPolitical.ToString("0.0"),
+                details.ForecastGold);
+            string lastPaid = details.LastPaidYear < 0
+                ? AW_L10n.Text("aw_diplomacy_tributary_unknown", "unknown")
+                : details.LastPaidYear.ToString();
+            string factor = details.LastFactorPercent < 0
+                ? AW_L10n.Text("aw_diplomacy_tributary_unknown", "unknown")
+                : details.LastFactorPercent + "%";
+            string history = string.Format(
+                AW_L10n.Text("aw_diplomacy_tributary_history",
+                    "Status {0} | last paid {1} | actual factor {2} | {3}"),
+                state, lastPaid, factor, offering);
+            return compact + "\n" + history;
         }
 
         private static long CapitalDistanceSquared(Kingdom pBase,

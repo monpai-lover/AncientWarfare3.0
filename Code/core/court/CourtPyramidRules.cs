@@ -189,6 +189,8 @@ namespace AncientWarfare3.core.court
                          .Where(p => !p.IsVacancy && p.ActorId >= 0)
                          .GroupBy(p => IsRegionalNode(p)
                              ? "regional:" + p.ActorId + ":" + p.OfficeId
+                             : p.RoleId == CourtPyramidRoleId.King
+                                 ? "king:" + p.ActorId
                              : "actor:" + p.ActorId))
             {
                 List<CourtPyramidNodeModel> ordered = group

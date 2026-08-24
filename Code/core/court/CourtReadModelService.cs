@@ -329,24 +329,8 @@ namespace AncientWarfare3.core.court
             int capacity = Math.Max(1, pCapacity);
             var result = new List<string>();
             if (pTemplate != null)
-            {
-                List<CustomCourtOffice> offices = (pTemplate.Offices ??
-                    new List<CustomCourtOffice>()).Where(office =>
-                    office != null && office.Layer == CourtOfficeLayer.City)
-                    .ToList();
-                IReadOnlyDictionary<string, int> ranks =
-                    CustomCourtHierarchyLayoutRules.BuildRanks(offices,
-                        pTemplate.Edges);
-                foreach (CustomCourtOffice office in offices.OrderBy(office =>
-                             ranks.TryGetValue(office.Id, out int rank)
-                                 ? rank : int.MaxValue)
-                             .ThenBy(office => office.Grade)
-                             .ThenBy(office => office.Id,
-                                 StringComparer.Ordinal))
-                    for (int slot = 0; slot < Math.Max(1, office.Slots);
-                         slot++) result.Add(office.Id);
-                return result;
-            }
+                return LocalChiefOfficeResolver.ResolveOrderedSeats(
+                    pKingdom, pCity, capacity).ToList();
 
             string leaderOffice = CourtService.ResolveCityOffice(pKingdom,
                 pCity);
@@ -466,7 +450,7 @@ namespace AncientWarfare3.core.court
         private static void AddKing(List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
         {
             Actor king = pKingdom.king;
-            if (!IsValid(king, pKingdom)) return;
+            if (!IsValidKing(king, pKingdom)) return;
             string school = ActorSchool(king, "");
             pSeeds.Add(new CourtPyramidNodeModel(king.data.id, CourtPyramidRoleId.King,
                 CourtPyramidRoleId.King, CourtPyramidRules.KingRank, 0, false)
@@ -474,8 +458,21 @@ namespace AncientWarfare3.core.court
                 ActorName = SafeActorName(king),
                 SchoolId = school,
                 SchoolIconPath = RegisteredSchoolIconPath(school),
-                Influence = 100f
+                Influence = 100f,
+                IsFixedRole = true
             });
+        }
+
+        private static bool IsValidKing(Actor pActor, Kingdom pKingdom)
+        {
+            if (pActor?.data == null || pKingdom?.data == null ||
+                pKingdom.isRekt()) return false;
+            try
+            {
+                return pActor.isAlive() && !pActor.isRekt() &&
+                       (pActor.kingdom == pKingdom || pActor.isKing());
+            }
+            catch { return false; }
         }
 
         private static void AddPrimitiveHeir(List<CourtPyramidNodeModel> pSeeds,

@@ -9,6 +9,20 @@ using AncientWarfare3.core.presentation;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--army-rts-succession")
+{
+    ArmyRtsSuccessionRecoveryRulesTests.Run();
+    Console.WriteLine("AW3 army RTS succession rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--diplomacy-tributary-details")
+{
+    DiplomacyTributaryDetailsRulesTests.Run();
+    Console.WriteLine("Diplomacy tributary details rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--island-escape-behaviour")
 {
     IslandEscapeBehaviourRulesTests.Run();
@@ -102,6 +116,7 @@ if (args.Length == 1 && args[0] == "--war-terminal-settlement")
 {
     WarTerminalSettlementRulesTests.Run();
     WarTerminalSettlementSourceTests.Run();
+    WarPeaceCessionPriorityRulesTests.Run();
     Console.WriteLine("War terminal settlement rules passed.");
     return;
 }
@@ -593,6 +608,7 @@ if (args.Length == 1 && args[0] == "--rts-war-lifecycle")
     PreparationRecruitmentProtectionRulesTests.Run();
     ArmyRtsWarLifecycleStateTests.Run();
     ArmyRtsCombatHandoffRulesTests.Run();
+    ArmyRtsCombatTargetRulesTests.Run();
     ArmyRtsCaptainCombatRulesTests.Run();
     RoyalGuardTaskRecoveryRulesTests.Run();
     ArmyNativeRouteLockRulesTests.Run();
@@ -1106,6 +1122,7 @@ if (args.Length == 1 && args[0] == "--actor-runtime")
     CapturedMilitaryOwnershipRulesTests.Run();
     ActorPresentationDirtyRulesTests.Run();
     AWPathRequestReuseRulesTests.Run();
+    AWPathOptimizationRulesTests.Run();
     PathfindingPerformanceTests.Run();
     PathfindingCursorTests.Run();
     SchoolRuntimePerformanceTests.Run();
@@ -9083,6 +9100,7 @@ RebellionForceCollapseRulesTests.Run();
 WarForceEliminationRulesTests.Run();
 WarTerminalSettlementRulesTests.Run();
 WarTerminalSettlementSourceTests.Run();
+WarPeaceCessionPriorityRulesTests.Run();
 SpecialGovernmentWarParticipationRulesTests.Run();
 HistoricalFigureSpawnRulesTests.Run();
 Regression20260721Tests.Run();

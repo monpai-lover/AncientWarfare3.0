@@ -17,14 +17,14 @@ internal static class WarriorDecisionAndCombatRegressionTests
                !runner.Contains("actor.b6_0_updateDecision(batch._elapsed)",
                    StringComparison.Ordinal),
             "the cooperative post runner must leave the vanilla decision queue lifecycle to its original job updater");
-        Assert(content.Contains("new BehFightCheckEnemyIsOk()",
+        Assert(content.Contains("new BehArmyRtsMemberCombat()",
                    StringComparison.Ordinal) &&
                content.Contains(
                    "GoToActorTargetType.SameTile",
                    StringComparison.Ordinal) &&
                content.Contains("new BehRestartTask()",
                    StringComparison.Ordinal),
-            "member combat must use the vanilla fighting task chain");
+            "member combat must use the RTS target chain so ordinary residents can be engaged");
 
         string safety = File.ReadAllText(Path.Combine(root, "Code",
             "patch", "AW_ArmySafetyPatch.cs"));

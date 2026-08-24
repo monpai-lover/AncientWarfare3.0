@@ -60,6 +60,7 @@ namespace AncientWarfare3.core.court
                     .OrderBy(item => item.Id, StringComparer.Ordinal).ToList();
                 local.Edges = SortEdges(local.Edges);
                 NormalizeOffices(local.Offices);
+                CustomLocalCourtTemplateRules.EnsureChiefOfficeId(local);
             }
             normalized.ArchivedCrossLayerEdges = SortEdges(
                 normalized.ArchivedCrossLayerEdges);

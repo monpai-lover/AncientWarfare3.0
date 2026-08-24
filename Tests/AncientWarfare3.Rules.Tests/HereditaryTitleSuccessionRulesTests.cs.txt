@@ -34,6 +34,10 @@ internal static class HereditaryTitleSuccessionRulesTests
         Contains(noble, "NobleTitleStyle.Princess");
         Contains(noble, "NobleTitleStyle.SeniorPrincess");
         Contains(noble, "NobleTitleStyle.GrandPrincess");
+        string hereditary = Read(
+            "Code/core/lineage/HereditaryTitleSuccessionService.cs");
+        Contains(hereditary, "directSuccessorId");
+        Contains(hereditary, "GetLivingLineageMemberIds");
         string virtualService = Read(
             "Code/core/lineage/VirtualNobleTitleService.cs");
         Contains(virtualService, "pHolder.isSexMale()");

@@ -31,7 +31,10 @@ namespace AncientWarfare3.core.court
                 pGovernorTitle = configuredGovernorTitle;
             if (Cache.TryGetValue(pKingdom.id,
                     out IReadOnlyList<RegionalGovernmentReadModel> cached))
+            {
+                RefreshCachedGovernorActors(pKingdom, cached);
                 return cached;
+            }
             IReadOnlyList<RegionalGovernmentReadModel> legal =
                 DeJureRegionReadModelService.Build(pKingdom, pRegionTitle,
                     pGovernorTitle, configuredLocalLevelTitle);
@@ -159,6 +162,34 @@ namespace AncientWarfare3.core.court
                         index[cityId] = region;
             }
             RegionByCityCache[pKingdomId] = index;
+        }
+
+        private static void RefreshCachedGovernorActors(Kingdom pKingdom,
+            IReadOnlyList<RegionalGovernmentReadModel> pRegions)
+        {
+            if (pKingdom?.data == null || pRegions == null) return;
+            foreach (RegionalGovernmentReadModel region in pRegions)
+            {
+                if (region == null || region.EffectiveSeatCityId < 0L)
+                    continue;
+                City seat = null;
+                try { seat = World.world?.cities?.get(
+                    region.EffectiveSeatCityId); }
+                catch { }
+                bool controlled = seat?.data != null && !seat.isRekt() &&
+                    seat.kingdom == pKingdom;
+                bool live = controlled && seat.leader != null &&
+                    seat.leader.data != null;
+                if (live)
+                {
+                    try { live = seat.leader.isAlive() &&
+                        !seat.leader.isRekt(); }
+                    catch { live = false; }
+                }
+                region.GovernorActorId =
+                    LocalGovernorIdentityRules.ResolveRegionalGovernorActorId(
+                        controlled, seat?.leader?.data?.id ?? -1L, live);
+            }
         }
 
         private static int SafePopulation(City pCity)

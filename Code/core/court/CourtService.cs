@@ -116,6 +116,59 @@ namespace AncientWarfare3.core.court
     {
         private const int CandidateLimit = 24;
 
+        // A court reconciliation may fill many vacancies from the same
+        // population. Keep the expensive qualification and appointment-score
+        // work once per actor/office/phase instead of repeating it for every
+        // vacancy and candidate source.
+        private sealed class CandidateSelectionCache
+        {
+            private readonly Dictionary<string, bool> _eligibility =
+                new Dictionary<string, bool>(StringComparer.Ordinal);
+            private readonly Dictionary<string, float> _scores =
+                new Dictionary<string, float>(StringComparer.Ordinal);
+
+            internal bool GetCachedEligibility(Actor pActor,
+                Kingdom pKingdom, string pOfficeId,
+                bool pAllowVacancyPromotion, string pLayer,
+                CivilServiceQualificationRecord pQualification = null,
+                bool pQualificationsCaptured = false)
+            {
+                if (pActor?.data == null) return false;
+                string key = EligibilityKey(pActor.data.id, pOfficeId,
+                    pAllowVacancyPromotion, pLayer);
+                if (_eligibility.TryGetValue(key, out bool value))
+                    return value;
+                value = IsManualCentralCandidateEligible(pActor, pKingdom,
+                    pOfficeId, pAllowVacancyPromotion, null, pLayer,
+                    pQualification, pQualificationsCaptured);
+                _eligibility[key] = value;
+                return value;
+            }
+
+            internal float GetCachedScore(Kingdom pKingdom, Actor pActor,
+                string pOfficeId, string pPreferredSchool,
+                bool pNineRankSystem)
+            {
+                if (pActor?.data == null) return float.MinValue;
+                string key = pActor.data.id + "|" + (pOfficeId ?? "") +
+                             "|" + (pPreferredSchool ?? "") +
+                             "|" + (pNineRankSystem ? "1" : "0");
+                if (_scores.TryGetValue(key, out float value)) return value;
+                value = ScoreCandidate(pKingdom, pActor, pOfficeId,
+                    pPreferredSchool, pNineRankSystem);
+                _scores[key] = value;
+                return value;
+            }
+
+            private static string EligibilityKey(long pActorId,
+                string pOfficeId, bool pAllowVacancyPromotion, string pLayer)
+            {
+                return pActorId + "|" + (pOfficeId ?? "") + "|" +
+                       (pAllowVacancyPromotion ? "1" : "0") + "|" +
+                       (pLayer ?? "");
+            }
+        }
+
         public static bool HasOfficialCourt(Kingdom pKingdom)
         {
             if (!KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom))
@@ -672,6 +725,7 @@ namespace AncientWarfare3.core.court
                 CivilServiceQualificationService.HasExaminationSystem(pKingdom)
                     ? BuildIndexedFormalCandidateRoster(pKingdom)
                     : null;
+            var candidateCache = new CandidateSelectionCache();
 
             foreach (string office in
                      CentralOfficeIdsForCurrentProfile(pKingdom))
@@ -679,7 +733,7 @@ namespace AncientWarfare3.core.court
                     CourtProfileRegistry.PreferredSchoolFor(
                         pKingdom, office),
                     indexedFormalCandidates, pUnavailableActorIds,
-                    pAllowActing)) filledCount++;
+                    pAllowActing, candidateCache)) filledCount++;
 
             foreach (string office in
                      MilitaryOfficeIdsForCurrentProfile(pKingdom))
@@ -687,7 +741,8 @@ namespace AncientWarfare3.core.court
                     CourtProfileRegistry.PreferredSchoolFor(
                         pKingdom, office),
                     indexedFormalCandidates, pUnavailableActorIds,
-                    pAllowActing, CourtOfficeLayer.Military)) filledCount++;
+                    pAllowActing, candidateCache,
+                    CourtOfficeLayer.Military)) filledCount++;
             return filledCount;
         }
 
@@ -915,6 +970,7 @@ namespace AncientWarfare3.core.court
             HashSet<string> pOccupiedOffices, string pOfficeId, string pPreferredSchool,
             List<Actor> indexedFormalCandidates,
             HashSet<long> pUnavailableActorIds, bool pAllowActing,
+            CandidateSelectionCache pCandidateCache,
             string pLayer = CourtOfficeLayer.Central)
         {
             if (pOccupiedOffices != null && pOccupiedOffices.Contains(pOfficeId)) return false;
@@ -928,13 +984,15 @@ namespace AncientWarfare3.core.court
             Actor indexedStrict = examinationSystem
                 ? FindBestIndexedFormalCandidate(pKingdom,
                     indexedFormalCandidates, pOfficeId, pPreferredSchool,
-                    pAllowVacancyPromotion: false, pUnavailableActorIds, pLayer)
+                    pAllowVacancyPromotion: false, pUnavailableActorIds,
+                    pLayer, pCandidateCache)
                 : null;
             Actor rosterStrict = FindBestCandidate(pKingdom, pRoster,
                 pOfficeId, pPreferredSchool,
-                pAllowVacancyPromotion: false, pUnavailableActorIds, pLayer);
+                pAllowVacancyPromotion: false, pUnavailableActorIds, pLayer,
+                pCandidateCache);
             Actor candidate = BetterCandidate(pKingdom, indexedStrict,
-                rosterStrict, pOfficeId, pPreferredSchool);
+                rosterStrict, pOfficeId, pPreferredSchool, pCandidateCache);
             bool vacancyPromotion = false;
             if (candidate == null)
             {
@@ -942,14 +1000,15 @@ namespace AncientWarfare3.core.court
                     ? FindBestIndexedFormalCandidate(pKingdom,
                         indexedFormalCandidates, pOfficeId, pPreferredSchool,
                         pAllowVacancyPromotion: true, pUnavailableActorIds,
-                        pLayer)
+                        pLayer, pCandidateCache)
                     : null;
                 Actor rosterFallback = FindBestCandidate(pKingdom, pRoster,
                     pOfficeId, pPreferredSchool,
                     pAllowVacancyPromotion: true, pUnavailableActorIds,
-                    pLayer);
+                    pLayer, pCandidateCache);
                 candidate = BetterCandidate(pKingdom, indexedFallback,
-                    rosterFallback, pOfficeId, pPreferredSchool);
+                    rosterFallback, pOfficeId, pPreferredSchool,
+                    pCandidateCache);
                 vacancyPromotion = candidate != null;
             }
             bool acting = false;
@@ -1015,7 +1074,8 @@ namespace AncientWarfare3.core.court
             List<Actor> pCandidates, string pOfficeId, string pPreferredSchool,
             bool pAllowVacancyPromotion,
             HashSet<long> pUnavailableActorIds,
-            string pLayer = CourtOfficeLayer.Central)
+            string pLayer = CourtOfficeLayer.Central,
+            CandidateSelectionCache pCandidateCache = null)
         {
             if (pCandidates == null || pCandidates.Count == 0) return null;
             Actor best = null;
@@ -1024,11 +1084,18 @@ namespace AncientWarfare3.core.court
             for (int index = 0; index < pCandidates.Count; index++)
             {
                 Actor actor = pCandidates[index];
-                if (!IsManualCentralCandidateEligible(actor, pKingdom,
+                if (pUnavailableActorIds?.Contains(actor?.data?.id ?? -1L) == true)
+                    continue;
+                bool eligible = pCandidateCache?.GetCachedEligibility(actor,
+                    pKingdom, pOfficeId, pAllowVacancyPromotion, pLayer) ??
+                    IsManualCentralCandidateEligible(actor, pKingdom,
                         pOfficeId, pAllowVacancyPromotion,
-                        pUnavailableActorIds, pLayer)) continue;
-                float score = ScoreCandidate(pKingdom, actor, pOfficeId,
-                    pPreferredSchool, nineRankSystem);
+                        pUnavailableActorIds, pLayer);
+                if (!eligible) continue;
+                float score = pCandidateCache?.GetCachedScore(pKingdom, actor,
+                    pOfficeId, pPreferredSchool, nineRankSystem) ??
+                    ScoreCandidate(pKingdom, actor, pOfficeId,
+                        pPreferredSchool, nineRankSystem);
                 if (score <= bestScore) continue;
                 best = actor;
                 bestScore = score;
@@ -1040,7 +1107,8 @@ namespace AncientWarfare3.core.court
             string pOfficeId, string pPreferredSchool,
             bool pAllowVacancyPromotion,
             HashSet<long> pUnavailableActorIds,
-            string pLayer = CourtOfficeLayer.Central)
+            string pLayer = CourtOfficeLayer.Central,
+            CandidateSelectionCache pCandidateCache = null)
         {
             Actor best = null;
             float bestScore = -1f;
@@ -1050,11 +1118,18 @@ namespace AncientWarfare3.core.court
             foreach (Actor actor in RosterOrSafeUnits(pKingdom, pRoster))
             {
                 if (++seen > CandidateLimit * 8) break;
-                if (!IsManualCentralCandidateEligible(actor, pKingdom,
+                if (pUnavailableActorIds?.Contains(actor?.data?.id ?? -1L) == true)
+                    continue;
+                bool eligible = pCandidateCache?.GetCachedEligibility(actor,
+                    pKingdom, pOfficeId, pAllowVacancyPromotion, pLayer) ??
+                    IsManualCentralCandidateEligible(actor, pKingdom,
                         pOfficeId, pAllowVacancyPromotion,
-                        pUnavailableActorIds, pLayer)) continue;
-                float score = ScoreCandidate(pKingdom, actor, pOfficeId, pPreferredSchool,
-                    nineRankSystem);
+                        pUnavailableActorIds, pLayer);
+                if (!eligible) continue;
+                float score = pCandidateCache?.GetCachedScore(pKingdom, actor,
+                    pOfficeId, pPreferredSchool, nineRankSystem) ??
+                    ScoreCandidate(pKingdom, actor, pOfficeId, pPreferredSchool,
+                        nineRankSystem);
                 if (score <= bestScore) continue;
                 best = actor;
                 bestScore = score;
@@ -1089,15 +1164,20 @@ namespace AncientWarfare3.core.court
         }
 
         private static Actor BetterCandidate(Kingdom pKingdom, Actor pFirst,
-            Actor pSecond, string pOfficeId, string pPreferredSchool)
+            Actor pSecond, string pOfficeId, string pPreferredSchool,
+            CandidateSelectionCache pCandidateCache = null)
         {
             if (pFirst?.data == null) return pSecond;
             if (pSecond?.data == null) return pFirst;
             bool nineRankSystem = HasNineRankSystem(pKingdom);
-            float firstScore = ScoreCandidate(pKingdom, pFirst, pOfficeId,
-                pPreferredSchool, nineRankSystem);
-            float secondScore = ScoreCandidate(pKingdom, pSecond, pOfficeId,
-                pPreferredSchool, nineRankSystem);
+            float firstScore = pCandidateCache?.GetCachedScore(pKingdom, pFirst,
+                pOfficeId, pPreferredSchool, nineRankSystem) ??
+                ScoreCandidate(pKingdom, pFirst, pOfficeId,
+                    pPreferredSchool, nineRankSystem);
+            float secondScore = pCandidateCache?.GetCachedScore(pKingdom, pSecond,
+                pOfficeId, pPreferredSchool, nineRankSystem) ??
+                ScoreCandidate(pKingdom, pSecond, pOfficeId,
+                    pPreferredSchool, nineRankSystem);
             if (secondScore > firstScore) return pSecond;
             if (firstScore > secondScore) return pFirst;
             return pSecond.data.id < pFirst.data.id ? pSecond : pFirst;

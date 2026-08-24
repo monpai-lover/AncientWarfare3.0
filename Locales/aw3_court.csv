@@ -931,3 +931,4 @@ aw_custom_court_local_level_title,基层行政称呼,Local level title,基層行
 aw_custom_court_local_level_title_desc,显示在原城市名称旁的基层行政等级称呼,Administrative level shown beside the unchanged city name,顯示在原城市名稱旁的基層行政等級稱呼
 aw_court_regional_member_count,辖领{0}州,{0} prefectures,轄領{0}州
 aw_court_regional_node_summary,{0} | {1} | 首府 {2} | 辖领 {3} 州,{0} | {1} | Seat {2} | {3} prefectures,{0} | {1} | 首府 {2} | 轄領 {3} 州
+aw_custom_court_chief_protected,城市主官席位固定，不能删除,The city chief seat is fixed and cannot be deleted.,城市主官席位固定，不能刪除

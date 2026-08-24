@@ -1356,6 +1356,17 @@ namespace AncientWarfare3.ui.windows
             }
             string officeId = card?.Office?.Id;
             if (string.IsNullOrEmpty(officeId)) return;
+            if (_editingLocal && ActiveLocalTemplate != null)
+                CustomLocalCourtTemplateRules.EnsureChiefOfficeId(
+                    ActiveLocalTemplate);
+            if (_editingLocal && ActiveLocalTemplate != null &&
+                string.Equals(ActiveLocalTemplate.ChiefOfficeId, officeId,
+                    StringComparison.Ordinal))
+            {
+                SetStatus(AW_L10n.Text("aw_custom_court_chief_protected",
+                    "The city chief seat is fixed and cannot be deleted."));
+                return;
+            }
             ActiveOffices?.RemoveAll(office => office != null &&
                 string.Equals(office.Id, officeId, StringComparison.Ordinal));
             ActiveEdges?.RemoveAll(edge => edge == null ||

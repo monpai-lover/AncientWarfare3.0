@@ -134,6 +134,7 @@ namespace AncientWarfare3.core.court
     public sealed class CustomLocalCourtTemplate
     {
         public string Id { get; set; } = string.Empty;
+        public string ChiefOfficeId { get; set; } = string.Empty;
         public CustomCourtLocalizedText Name { get; set; } =
             new CustomCourtLocalizedText();
         public CustomLocalCourtDefaultKind DefaultKind { get; set; } =

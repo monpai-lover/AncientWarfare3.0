@@ -708,10 +708,8 @@ namespace AncientWarfare3.core.policy
                     "region"), pSource.Region.SeatCityId, name, false,
                 true, pSource.SeatCity.kingdom, pSource.SeatCity, pSource.Zones,
                 pSource.ZoneIds, pSource.Region.RegionId,
-                HierarchicalVassalMapModeService.IsCityGlobalRegionLayer
-                    ? (Vector2?)null
-                    : new Vector2(pSource.SeatCity.city_center.x,
-                        pSource.SeatCity.city_center.y));
+                new Vector2(pSource.SeatCity.city_center.x,
+                    pSource.SeatCity.city_center.y));
             RegisterConvertedSource(source);
         }
 

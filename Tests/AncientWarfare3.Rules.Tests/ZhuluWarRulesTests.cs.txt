@@ -100,9 +100,9 @@ internal static class ZhuluWarRulesTests
         Equal(ZhuluZeroForceFallback.AttackersWin,
             ZhuluWarRules.ResolveZeroForceFallback(1, 0),
             "defender-only exhaustion awards all defender land to attackers");
-        False(ZhuluWarRules.ShouldEnrollInAw3WarSystems(
+        True(ZhuluWarRules.ShouldEnrollInAw3WarSystems(
                 ZhuluWarRules.WarTypeId, active: true),
-            "active native Zhulu wars never enter AW3 military systems");
+            "active Zhulu wars enter AW3 military systems");
         True(ZhuluWarRules.ShouldEnrollInAw3WarSystems(
                 "aw_normal_war", active: true),
             "active ordinary wars retain AW3 military systems");
@@ -454,6 +454,15 @@ internal static class ZhuluWarRulesTests
              zhuluStartReplicaGate > zhuluStartBranch &&
              zhuluStartReplicaGate < zhuluDefenderPersistence,
             "replica Zhulu starts return before persistence and history writes");
+        int zhuluLifecycleStart = warPatch.IndexOf(
+            "ArmyRtsWarLifecycleService.OnWarStarted(__result)",
+            zhuluStartBranch, StringComparison.Ordinal);
+        int zhuluLifecycleEnd = warPatch.IndexOf(
+            "ArmyRtsPlanSnapshotService.OnWarStarted(__result)",
+            zhuluStartBranch, StringComparison.Ordinal);
+        True(zhuluLifecycleStart > zhuluDefenderPersistence &&
+             zhuluLifecycleEnd > zhuluLifecycleStart,
+            "Zhulu starts enter the normal AW3 army lifecycle after special declaration persistence");
         True(File.Exists(migrationPath) &&
              restore.Contains("ZhuluWarMigrationService.RebuildRuntime"),
             "save restore migrates legacy Zhulu rosters");
@@ -466,7 +475,7 @@ internal static class ZhuluWarRulesTests
              director.Contains("ShouldEnrollInAw3Systems(pWar)") &&
              logistics.Contains("ShouldEnrollInAw3Systems(pWar)") &&
              emergency.Contains("ShouldEnrollInAw3Systems(pWar)"),
-            "all war-index rebuild boundaries reject native Zhulu wars");
+            "all war-index rebuild boundaries share the Zhulu enrollment gate");
         True(missionPersistence.Contains("IsZhuluWar(war") &&
              missionPersistence.Contains(
                  "AW3MultiplayerReplicaScope.IsReplicaSession") &&
@@ -479,6 +488,7 @@ internal static class ZhuluWarRulesTests
              forceSpecial.Contains("ResolveLiveDeclaredDefender(pWar)"),
             "zero-force fallback uses the declared defender and rechecks each transfer");
         True(warPatch.Contains("CleanupLegacyZhuluRuntime(pWar)") &&
+             warPatch.Contains("KingdomWarDirectorService.OnWarEnded(pWar)") &&
              territory.Contains("ResolveLegacyZhuluGoals(") &&
              territory.Contains("WAR_ID=@war AND GOAL_TYPE=@goal AND RESOLVED=0"),
             "Zhulu end closes stale runtime state and only its legacy open goals");

@@ -9,6 +9,11 @@ internal static class ManualLocalChiefAppointmentSourceGuardTests
         string service = ReadOptional(
             "Code/core/court/ManualLocalChiefAppointmentService.cs");
         string window = Read("Code/ui/windows/CourtAppointmentWindow.cs");
+        string leader = Read("Code/patch/AW_CityLeaderPatch.cs");
+        string vacancy = Read(
+            "Code/core/court/CityLeaderVacancyRepairService.cs");
+        string local = Read(
+            "Code/core/court/LocalCourtAppointmentService.cs");
 
         Contains(courtService, "IsAuthoritativeLocalChiefScope");
         Contains(courtService,
@@ -25,6 +30,12 @@ internal static class ManualLocalChiefAppointmentSourceGuardTests
         Contains(service,
             "CityBureauAnnualWorkService.RequestImmediateReconcile");
         DoesNotContain(window, ".setLeader(");
+        Contains(leader, "LocalCourtAppointmentService.ReconcileCity");
+        DoesNotContain(leader, "pCity.getUnits()");
+        Contains(vacancy, "AW_CityLeaderPatch");
+        DoesNotContain(vacancy, "PickLocalOfficer");
+        Contains(local, "TryRepairCityLeader");
+        Contains(local, "LoadAllCandidates(pKingdom, pCity,");
     }
 
     private static string Read(string pPath) => File.ReadAllText(
