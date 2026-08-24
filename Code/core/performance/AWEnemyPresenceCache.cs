@@ -60,13 +60,7 @@ internal static class AWEnemyPresenceCache
             return false;
         }
 
-        if (Bench.bench_enabled)
-        {
-            Interlocked.Increment(
-                ref _negativeKeyReuses);
-        }
-
-        return true;
+        return false;
     }
 
     internal static bool TryGetPreparationEmptyResult(
@@ -77,31 +71,14 @@ internal static class AWEnemyPresenceCache
     {
         if (!_preparationActive ||
             pTile == null ||
-            pKingdom == null ||
-            HasPopulatedEnemy(pKingdom))
+            pKingdom == null)
         {
             result = null;
             return false;
         }
 
-        int pKey =
-            pTile.chunk.id * 10000 +
-            pRange;
-        if (TryGetNegativeResult(
-                pKingdom,
-                pKey))
-        {
-            EnemiesFinder.counter_reused++;
-            result = _emptyResult;
-            return true;
-        }
-
-        AddNegativeResult(
-            pKingdom,
-            pKey,
-            pRange);
-        result = _emptyResult;
-        return true;
+        result = null;
+        return false;
     }
 
     internal static void AddNegativeResult(
@@ -142,7 +119,7 @@ internal static class AWEnemyPresenceCache
         Kingdom pMainKingdom)
     {
         bool collectDiagnostics =
-            Bench.bench_enabled;
+            ShouldCollectDiagnostics();
         if (collectDiagnostics)
         {
             Interlocked.Increment(ref _queries);
@@ -181,7 +158,7 @@ internal static class AWEnemyPresenceCache
 
     internal static void RecordSkippedChunkBuild()
     {
-        if (Bench.bench_enabled)
+        if (ShouldCollectDiagnostics())
         {
             Interlocked.Increment(
                 ref _skippedChunkBuilds);
@@ -220,6 +197,13 @@ internal static class AWEnemyPresenceCache
                 ref _negativeKeyReuses));
     }
 
+    private static bool ShouldCollectDiagnostics()
+    {
+        return Bench.bench_enabled ||
+               AncientWarfare3.core.policy.RuntimePerformanceDiagnostic
+                   .IsSampling;
+    }
+
     private static bool FindPopulatedEnemy(
         Kingdom pMainKingdom)
     {
@@ -233,18 +217,10 @@ internal static class AWEnemyPresenceCache
             return false;
         }
 
-        if (HasPopulatedEnemyIn(
-                pMainKingdom,
-                World.world.kingdoms,
-                peacefulMonsters))
-        {
-            return true;
-        }
-
-        return HasPopulatedEnemyIn(
-            pMainKingdom,
-            World.world.kingdoms_wild,
-            peacefulMonsters);
+        return HasPopulatedEnemyIn(pMainKingdom,
+            World.world.kingdoms, peacefulMonsters) ||
+            HasPopulatedEnemyIn(pMainKingdom,
+                World.world.kingdoms_wild, peacefulMonsters);
     }
 
     private static bool HasPopulatedEnemyIn(

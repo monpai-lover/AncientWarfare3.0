@@ -15,6 +15,7 @@ namespace AncientWarfare3.core.performance
     internal static class AWFramePriorityGovernor
     {
         private const int BaselineWindowSize = 120;
+        private const int PeakWindowSize = 120;
         private const double BootstrapBaselineMilliseconds = 6d;
 
         private static readonly double[] BaselineSamples =
@@ -45,12 +46,11 @@ namespace AncientWarfare3.core.performance
         private static string _currentAw3Phase = "idle";
         private static string _longestPhase = string.Empty;
         private static double _longestPhaseMilliseconds;
+        private static int _longestPhaseFramesRemaining;
         private static bool _faulted;
         private static string _faultMessage = string.Empty;
         private static bool _criticalHookInstalled;
         private static int _simulationPhaseDepth;
-        private static AWWartimeFrameBudgetState _wartimeBudgetState =
-            new AWWartimeFrameBudgetState();
 
         public static long CyclesStarted { get; private set; }
         public static long CyclesCompleted { get; private set; }
@@ -65,10 +65,6 @@ namespace AncientWarfare3.core.performance
             _longestPhaseMilliseconds;
         public static double FrameBudgetMilliseconds =>
             _frameBudgetMilliseconds;
-        public static float EffectiveTargetRenderFps =>
-            _wartimeBudgetState.EffectiveTargetFps > 0f
-                ? _wartimeBudgetState.EffectiveTargetFps
-                : AWPerformanceSettings.TargetRenderFps;
 
         public static void Initialize()
         {
@@ -89,7 +85,6 @@ namespace AncientWarfare3.core.performance
             _simulationCpuMilliseconds = 0d;
             _vanillaCpuMilliseconds = 0d;
             _aw3CpuMilliseconds = 0d;
-            UpdateWartimeBudgetState();
             RecalculateBudget();
         }
 
@@ -122,7 +117,7 @@ namespace AncientWarfare3.core.performance
             double currentFrameElapsed =
                 ElapsedMilliseconds(_frameStartedAt);
             double targetMilliseconds =
-                1000d / EffectiveTargetRenderFps;
+                1000d / AWPerformanceSettings.TargetRenderFps;
             if (currentFrameElapsed >= targetMilliseconds -
                 AWPerformanceSettings.RenderReserveMilliseconds)
                 return CanUseStarvationSlice(pDomain);
@@ -140,7 +135,7 @@ namespace AncientWarfare3.core.performance
         {
             BeginFrame();
             double targetMilliseconds =
-                1000d / EffectiveTargetRenderFps;
+                1000d / AWPerformanceSettings.TargetRenderFps;
             double deadlineRemaining = targetMilliseconds -
                 AWPerformanceSettings.RenderReserveMilliseconds -
                 ElapsedMilliseconds(_frameStartedAt);
@@ -192,6 +187,7 @@ namespace AncientWarfare3.core.performance
             {
                 _longestPhaseMilliseconds = elapsed;
                 _longestPhase = pPhase;
+                _longestPhaseFramesRemaining = PeakWindowSize;
             }
 
             if (PhaseEstimates.TryGetValue(pPhase, out double previous))
@@ -263,10 +259,9 @@ namespace AncientWarfare3.core.performance
                 "cycles={9}/{10} speed={11:0.#}x/{12:0.00}x " +
                 "credits={13:0.0} ticks={14}/{15} " +
                 "longest={16}:{17:0.00}ms workers={18}/{19}/{20}" +
-                "(total/fg/path) world={21}:{22}@{23:0.00} " +
-                "{24} dynamic_fps_reason={25}",
+                "(total/fg/path) world={21}:{22}@{23:0.00}",
                 AWPerformanceSettings.Mode.ToString().ToLowerInvariant(),
-                EffectiveTargetRenderFps,
+                AWPerformanceSettings.TargetRenderFps,
                 _frameBudgetMilliseconds, _baselineP90,
                 _simulationCpuMilliseconds, _vanillaCpuMilliseconds,
                 _aw3CpuMilliseconds, _currentVanillaPhase,
@@ -279,13 +274,16 @@ namespace AncientWarfare3.core.performance
                 AWPerformanceSettings.ForegroundParallelism,
                 AWPerformanceSettings.PathfindingWorkerCount,
                 AWSimulationTime.BoundWorldSeedId,
-                AWSimulationTime.Generation, AWSimulationTime.DiagnosticTime,
-                AWMilitaryFrontLaneScheduler.GetDiagnostics(),
-                _wartimeBudgetState.Reason);
+                AWSimulationTime.Generation, AWSimulationTime.DiagnosticTime);
         }
 
         private static void FinalizePreviousFrame()
         {
+            if (_longestPhaseFramesRemaining > 0)
+                _longestPhaseFramesRemaining--;
+            if (_longestPhaseFramesRemaining == 0 &&
+                _longestPhaseMilliseconds > 0d)
+                DecayLongestPhase();
             double baseline = Math.Max(0d,
                 _hostCpuMilliseconds - _simulationCpuMilliseconds);
             if (baseline > 0d && baseline < 1000d)
@@ -302,10 +300,22 @@ namespace AncientWarfare3.core.performance
             _lastFrameSimulationMilliseconds = _simulationCpuMilliseconds;
         }
 
+        private static void DecayLongestPhase()
+        {
+            _longestPhaseMilliseconds *= 0.5d;
+            if (_longestPhaseMilliseconds < 0.05d)
+            {
+                _longestPhaseMilliseconds = 0d;
+                _longestPhase = string.Empty;
+            }
+            else
+                _longestPhaseFramesRemaining = PeakWindowSize;
+        }
+
         private static void RecalculateBudget()
         {
             double targetMilliseconds =
-                1000d / EffectiveTargetRenderFps;
+                1000d / AWPerformanceSettings.TargetRenderFps;
             double rawBudget = targetMilliseconds -
                                AWPerformanceSettings.RenderReserveMilliseconds -
                                _baselineP90;
@@ -317,31 +327,6 @@ namespace AncientWarfare3.core.performance
             _frameBudgetMilliseconds = Math.Max(0d,
                 Math.Min(AWPerformanceSettings
                     .MaxSimulationMillisecondsPerFrame, rawBudget));
-        }
-
-        private static void UpdateWartimeBudgetState()
-        {
-            try
-            {
-                AWCooperativeSimulationRunner runner =
-                    AWCooperativeSimulationRunner.Instance;
-                _wartimeBudgetState = AWWartimeFrameBudgetRules.Advance(
-                    _wartimeBudgetState,
-                    AWMilitaryFrontLaneScheduler.HasWartimeWork,
-                    runner.AdmissionCredits,
-                    AWFrameSchedulerRules.CreditCapacity(
-                        AWPerformanceSettings.Mode,
-                        runner.RequestedSpeed),
-                    AWPerformanceSettings.TargetRenderFps);
-            }
-            catch
-            {
-                _wartimeBudgetState =
-                    new AWWartimeFrameBudgetState(
-                        AWWartimeFrameBudgetTier.Configured, 0, 0,
-                        AWPerformanceSettings.TargetRenderFps,
-                        "configured");
-            }
         }
 
         private static bool CanUseStarvationSlice(

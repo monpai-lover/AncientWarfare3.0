@@ -5,8 +5,9 @@ namespace AncientWarfare3.core.performance
         internal static int ResolveP0ChunkCount(int remainingCount,
             int batchSize)
         {
-            _ = batchSize;
-            return System.Math.Max(0, remainingCount);
+            if (remainingCount <= 0) return 0;
+            return System.Math.Min(remainingCount,
+                System.Math.Max(1, batchSize));
         }
 
         internal static int ResolveP0PriorityRank(bool isRoyalGuard)

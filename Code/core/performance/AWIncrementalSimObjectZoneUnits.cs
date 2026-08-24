@@ -108,6 +108,12 @@ internal static class AWIncrementalSimObjectZoneUnits
     private static long rejectedWorld;
     private static long rejectedTiles;
     private static long rejectedAfterDisposed;
+    private static long dirtyActorVisits;
+    private static long dirtyChunkVisits;
+    private static long cityClearVisits;
+    private static long managerClearVisits;
+    private static long cityMembershipVisits;
+    private static long structuralScanActors;
 
     internal static void CompleteFullRebuild(
         List<Actor> source,
@@ -264,6 +270,7 @@ internal static class AWIncrementalSimObjectZoneUnits
 
         foreach (City city in world.cities)
         {
+            cityClearVisits++;
             city.clearCurrentCaptureAmounts();
             city.clearDangerZones();
         }
@@ -283,6 +290,7 @@ internal static class AWIncrementalSimObjectZoneUnits
         foreach (BaseSystemManager manager in
                  world.list_all_sim_managers)
         {
+            managerClearVisits++;
             manager.ClearAllDisposed();
         }
 
@@ -316,6 +324,7 @@ internal static class AWIncrementalSimObjectZoneUnits
         int dirtyCount =
             AWActorZoneMembershipDirtyIndex
                 .Consume(DirtyActors);
+        dirtyActorVisits += dirtyCount;
         if (benchmark)
         {
             Bench.benchEnd(
@@ -372,6 +381,7 @@ internal static class AWIncrementalSimObjectZoneUnits
         bool chunkMembershipChanged =
             ApplyUnitMembershipChanges(
                 tilesToClear);
+        dirtyChunkVisits += DirtyChunks.Count;
 
         if (benchmark)
         {
@@ -403,6 +413,7 @@ internal static class AWIncrementalSimObjectZoneUnits
                 "sim_zones");
         }
 
+        cityMembershipVisits += CityMembershipActorRanks.Count;
         foreach (int actorRank in
                  CityMembershipActorRanks)
         {
@@ -475,7 +486,10 @@ internal static class AWIncrementalSimObjectZoneUnits
             "islands={3}/{4}/{5}(full/incremental/changes) " +
             "structural={6}/{7}/{8}(passes/add/remove) " +
             "reject=disabled:{9},not_ready:{10},buildings:{11}," +
-            "world:{12},tiles:{13},disposed:{14},order:{15}",
+            "world:{12},tiles:{13},disposed:{14},order:{15} " +
+            "dirty={16}/{17}(actors/chunks) " +
+            "full_loops={18}/{19}/{20}(cities/managers/city_membership) " +
+            "structural_scan_actors={21}",
             attempts,
             handled,
             fullRebuilds,
@@ -491,7 +505,13 @@ internal static class AWIncrementalSimObjectZoneUnits
             rejectedWorld,
             rejectedTiles,
             rejectedAfterDisposed,
-            rejectedStructuralOrder);
+            rejectedStructuralOrder,
+            dirtyActorVisits,
+            dirtyChunkVisits,
+            cityClearVisits,
+            managerClearVisits,
+            cityMembershipVisits,
+            structuralScanActors);
     }
 
     internal static void Invalidate()
@@ -607,6 +627,7 @@ internal static class AWIncrementalSimObjectZoneUnits
             return false;
         }
 
+        structuralScanActors += currentCount;
         EnsureReconcileStorage(currentCount);
         ReconciledActorRanks.Clear();
         int previousRank = -1;

@@ -105,15 +105,6 @@ namespace AncientWarfare3.patch
                             error);
                     }
 
-                    try
-                    {
-                        AWMilitaryFrontLaneScheduler.ProcessFrame();
-                    }
-                    catch (System.Exception error)
-                    {
-                        ModClass.LogError(
-                            "AW military front lane failed: " + error);
-                    }
                 }
 
                 AWPresentationCommandQueue.DrainMainThread();

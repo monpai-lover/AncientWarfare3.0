@@ -133,37 +133,6 @@ namespace AncientWarfare3.core.performance
             if (_stage == RunnerStage.Post && _useCustomPostRunner)
                 return _postRunner.GetNextPhaseName(_phasePrefix);
 
-            if (_stage == RunnerStage.Parallel)
-            {
-                if (_parallelEnabled)
-                {
-                    string parallelPhase = FindNextParallelJobPhase();
-                    if (parallelPhase != null) return parallelPhase;
-                }
-                else if (_batchIndex < _batches.Count)
-                {
-                    return _phasePrefix + ".parallel.batch." +
-                           _batchIndex;
-                }
-
-                return _phasePrefix + ".apply_parallel_results";
-            }
-
-            if (_stage == RunnerStage.Pre || _stage == RunnerStage.Post)
-            {
-                int nextBatchIndex = FindNextMainThreadBatchIndex(_stage);
-                if (nextBatchIndex >= 0)
-                {
-                    return _phasePrefix + "." +
-                           (_stage == RunnerStage.Pre ? "pre" : "post") +
-                           ".batch." + nextBatchIndex;
-                }
-
-                return _stage == RunnerStage.Pre
-                    ? _phasePrefix + ".clear_parallel_results"
-                    : _phasePrefix + ".finish";
-            }
-
             switch (_stage)
             {
                 case RunnerStage.Idle:
@@ -461,34 +430,6 @@ namespace AncientWarfare3.core.performance
             return false;
         }
 
-        private string FindNextParallelJobPhase()
-        {
-            int nextJobIndex = _parallelJobIndex;
-            int nextBatchIndex = _batchIndex;
-            int jobCount = _batches.Count == 0
-                ? 0
-                : _batches[0].jobs_parallel.Count;
-            while (nextJobIndex < jobCount &&
-                   nextBatchIndex >= _batches.Count)
-            {
-                nextJobIndex++;
-                nextBatchIndex = 0;
-            }
-
-            while (nextJobIndex < jobCount &&
-                   ShouldSkipParallelJob(_batches[0].jobs_parallel[
-                       nextJobIndex]))
-            {
-                nextJobIndex++;
-                nextBatchIndex = 0;
-            }
-
-            if (nextJobIndex >= jobCount) return null;
-            Job<TObject> job = _batches[0].jobs_parallel[nextJobIndex];
-            return _phasePrefix + ".parallel." + job.id +
-                   ".batch_group." + nextBatchIndex;
-        }
-
         private const string PrepareJobId = "prepare";
         private const string UpdateVisibilityJobId = "update_visibility";
         private const string UpdateStatsJobId = "update_stats";
@@ -584,14 +525,6 @@ namespace AncientWarfare3.core.performance
                 default:
                     throw new ArgumentOutOfRangeException(nameof(pJobStage));
             }
-        }
-
-        private int FindNextMainThreadBatchIndex(RunnerStage pJobStage)
-        {
-            for (int index = _batchIndex; index < _batches.Count; index++)
-                if (GetJobs(_batches[index], pJobStage).Count > 0)
-                    return index;
-            return -1;
         }
     }
 }

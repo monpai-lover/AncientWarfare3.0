@@ -53,7 +53,6 @@ namespace AncientWarfare3.core.performance
         private static long rejectedAtCapacity;
         private static long submittedRequests;
         private static long failedRequests;
-        private static long ambientDeferredRequests;
 
         internal static bool HasPendingRequests => Pending.Count != 0;
         internal static bool IsCapturing => accepting;
@@ -154,8 +153,6 @@ namespace AncientWarfare3.core.performance
         internal static int FlushAtFrameStart()
         {
             int submitted = 0;
-            int ambientSubmitted = 0;
-            int writeIndex = 0;
             for (int i = 0; i < Pending.Count; i++)
             {
                 RequestWorkItem item = Pending[i];
@@ -166,24 +163,12 @@ namespace AncientWarfare3.core.performance
                     continue;
                 }
 
-                AWPathWorkClass workClass =
-                    AWPathMovementBridge.ClassifyPathWork(item.Actor);
-                bool nonAmbient = workClass != AWPathWorkClass.Ambient;
-                if (AWDeferredPathRequestBatchRules.ShouldDeferAmbientFlush(
-                        nonAmbient, ambientSubmitted))
-                {
-                    Pending[writeIndex++] = item;
-                    Interlocked.Increment(ref ambientDeferredRequests);
-                    continue;
-                }
-
                 ExecuteEvent result = AWPathMovementBridge.Submit(item.Actor,
                     item.Target, item.PathOnWater, item.WalkOnBlocks,
                     item.WalkOnLava, item.RegionLimit);
                 if (result == ExecuteEvent.True)
                 {
                     submitted++;
-                    if (!nonAmbient) ambientSubmitted++;
                     Interlocked.Increment(ref submittedRequests);
                 }
                 else
@@ -192,21 +177,8 @@ namespace AncientWarfare3.core.performance
                 }
             }
 
-            if (writeIndex == 0)
-            {
-                Pending.Clear();
-                PendingSlots.Clear();
-            }
-            else
-            {
-                Pending.RemoveRange(writeIndex, Pending.Count - writeIndex);
-                PendingSlots.Clear();
-                for (int i = 0; i < Pending.Count; i++)
-                {
-                    long actorId = Pending[i].ActorId;
-                    if (actorId >= 0) PendingSlots[actorId] = i;
-                }
-            }
+            Pending.Clear();
+            PendingSlots.Clear();
             return submitted;
         }
 
@@ -229,13 +201,12 @@ namespace AncientWarfare3.core.performance
         {
             return string.Format(CultureInfo.InvariantCulture,
                 "captured={0} replaced={1} pending={2} submitted={3} " +
-                "failed={4} capacity_rejects={5} ambient_deferred={6}",
+                "failed={4} capacity_rejects={5}",
                 Interlocked.Read(ref capturedRequests),
                 Interlocked.Read(ref replacedRequests), Pending.Count,
                 Interlocked.Read(ref submittedRequests),
                 Interlocked.Read(ref failedRequests),
-                Interlocked.Read(ref rejectedAtCapacity),
-                Interlocked.Read(ref ambientDeferredRequests));
+                Interlocked.Read(ref rejectedAtCapacity));
         }
     }
 }

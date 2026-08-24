@@ -50,6 +50,7 @@ namespace AncientWarfare3.core.performance
             _sessionStarted = false;
             _nativeCycleToken = 0L;
             CityMilitaryThreatFacts.Reset();
+            ArmyRtsTransportDiagnostics.Reset();
         }
 
         private static void ProcessCycle(ArmyRtsSchedulerOwner pOwner,

@@ -13,13 +13,16 @@ $guards = @(
   'ReplacementArmyCommandSourceGuardTests','RoyalGuardTaskPresentationSourceGuard','RtsOccupiedTargetHandoffSourceGuard',
   'RtsWartimeLifecycleSourceGuard','SchedulerIntegrationFixSourceGuardTests','WarRegressionTests',
   'WartimeZeroArmyRecoverySourceGuard','WesternBilateralFamilyTreeSourceGuard','WesternLineageAdmissionSourceGuard',
-  'XiaExpansionAndCivMonkeyNamingTests'
+  'XiaExpansionAndCivMonkeyNamingTests','AWDockTransportDiagnosticSourceGuard',
+  'AWTemporaryShoreTransportSourceGuard','ArmyRtsTransportRetrySourceGuard',
+  'RtsPathRequestDeduplicationSourceGuard','FramePriorityRecoverySourceGuard',
+  'RtsTransportDiagnosticsSourceGuard'
 )
 $fail = @()
 foreach ($g in $guards) {
   $p = Join-Path $PSScriptRoot "Tests\$g.ps1"
   if (-not (Test-Path $p)) { Write-Host "MISSING $g"; continue }
-  try { & $p *> $null; if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }; }
+  try { $global:LASTEXITCODE = 0; & $p *> $null; if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }; }
   catch { $fail += ,@($g, $_.Exception.Message) }
 }
 Write-Host "=== RAN $($guards.Count) guards ==="

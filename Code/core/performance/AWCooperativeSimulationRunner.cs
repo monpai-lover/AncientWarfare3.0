@@ -999,7 +999,7 @@ namespace AncientWarfare3.core.performance
             }
 
             double targetFrameMilliseconds =
-                1000d / AWFramePriorityGovernor.EffectiveTargetRenderFps;
+                1000d / AWPerformanceSettings.TargetRenderFps;
             double desiredBurstMilliseconds = Math.Max(
                 MinimumBurstMilliseconds,
                 Math.Min(MaximumBurstMilliseconds,
@@ -1532,6 +1532,16 @@ namespace AncientWarfare3.core.performance
 
             float elapsed = now - _rateWindowStartedAt;
             if (elapsed < 0.5f) return;
+
+            // A host stall is not simulated time. Discard that rate window so
+            // one hitch cannot pin the displayed speed for the next minute.
+            if (elapsed > 2f)
+            {
+                _rateWindowStartedAt = now;
+                _simulatedSecondsAtRateWindowStart =
+                    _simulatedSecondsCompleted;
+                return;
+            }
 
             double completedSimulationSeconds =
                 _simulatedSecondsCompleted -

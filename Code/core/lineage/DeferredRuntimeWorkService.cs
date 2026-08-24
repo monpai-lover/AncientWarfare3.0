@@ -36,14 +36,31 @@ namespace AncientWarfare3.core.lineage
         private static int _consecutiveCriticalRuntimeWork;
         private static int _consecutiveRuntimeWork;
         private static int _lastDrainFrame = -1;
+        private static long _orderedEnqueued;
+        private static long _coalescedEnqueued;
+        private static long _drained;
+        private static int _lastDrainProcessed;
 
         public static int PendingCount => PersistentQueue.Count +
                                           RuntimeQueue.Count +
                                           CriticalRuntimeQueue.Count;
 
+        public static string GetDiagnostics()
+        {
+            return "persistent=" + PersistentQueue.Count +
+                   " runtime=" + RuntimeQueue.Count +
+                   " critical=" + CriticalRuntimeQueue.Count +
+                   " coalesced_index=" + Coalesced.Count +
+                   " ordered_enqueued=" + _orderedEnqueued +
+                   " coalesced_enqueued=" + _coalescedEnqueued +
+                   " drained=" + _drained +
+                   " last_drain=" + _lastDrainProcessed;
+        }
+
         public static void EnqueueCoalesced(string pKey, DeferredWorkClass pClass, Action pAction)
         {
             if (string.IsNullOrEmpty(pKey) || pAction == null) return;
+            _coalescedEnqueued++;
             if (Coalesced.TryGetValue(pKey, out LinkedListNode<WorkItem> existing))
             {
                 if (existing.Value.workClass != pClass)
@@ -70,6 +87,7 @@ namespace AncientWarfare3.core.lineage
         public static void EnqueueOrdered(DeferredWorkClass pClass, Action pAction)
         {
             if (pAction == null) return;
+            _orderedEnqueued++;
             QueueFor(pClass).AddLast(new WorkItem
             {
                 workClass = pClass,
@@ -97,6 +115,8 @@ namespace AncientWarfare3.core.lineage
                 Execute(node.Value);
                 processed++;
             }
+            _lastDrainProcessed = processed;
+            _drained += processed;
         }
 
         public static void FlushPersistent()
@@ -118,6 +138,10 @@ namespace AncientWarfare3.core.lineage
             _consecutiveCriticalRuntimeWork = 0;
             _consecutiveRuntimeWork = 0;
             _lastDrainFrame = -1;
+            _orderedEnqueued = 0L;
+            _coalescedEnqueued = 0L;
+            _drained = 0L;
+            _lastDrainProcessed = 0;
         }
 
         private static void Execute(WorkItem pItem)

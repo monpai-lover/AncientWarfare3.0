@@ -5,6 +5,9 @@ namespace AncientWarfare3.core.lineage
         public const int MaximumConsecutiveCriticalRuntimeWork = 3;
         public const int MaximumConsecutiveRuntimeWork = 3;
         public const int MaximumItemsPerAuthorityFrame = 1;
+        public const int BacklogCatchUpThreshold = 32;
+        public const int MaximumCatchUpItemsPerAuthorityFrame = 4;
+        public const double MaximumCatchUpMillisecondsPerAuthorityFrame = 1.5d;
 
         public static int ResolveItemsPerAuthorityFrame(
             int pPendingCount)
@@ -12,6 +15,27 @@ namespace AncientWarfare3.core.lineage
             return pPendingCount <= 0
                 ? 0
                 : MaximumItemsPerAuthorityFrame;
+        }
+
+        public static int ResolveCatchUpItemsPerAuthorityFrame(
+            int pPendingCount)
+        {
+            if (pPendingCount <= 0) return 0;
+            if (pPendingCount <= BacklogCatchUpThreshold)
+                return MaximumItemsPerAuthorityFrame;
+
+            int excess = pPendingCount - BacklogCatchUpThreshold;
+            int additional = 1 + excess / BacklogCatchUpThreshold;
+            return System.Math.Min(MaximumCatchUpItemsPerAuthorityFrame,
+                MaximumItemsPerAuthorityFrame + additional);
+        }
+
+        public static double ResolveDrainMillisecondsPerAuthorityFrame(
+            int pPendingCount)
+        {
+            return pPendingCount > BacklogCatchUpThreshold
+                ? MaximumCatchUpMillisecondsPerAuthorityFrame
+                : 1.0d;
         }
 
         public static bool ShouldStartFrameDrain(int pLastDrainFrame,

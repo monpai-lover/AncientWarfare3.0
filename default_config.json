@@ -3,7 +3,7 @@
     {
       "Id": "AW3_ENABLE_FRAME_PRIORITY_SCHEDULER",
       "Type": "SWITCH",
-      "BoolVal": false,
+      "BoolVal": true,
       "Callback": "AWPerformanceSettings:SwitchFramePriorityScheduler"
     },
     {

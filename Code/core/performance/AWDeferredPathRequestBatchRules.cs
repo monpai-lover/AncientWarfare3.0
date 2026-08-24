@@ -5,14 +5,6 @@ namespace AncientWarfare3.core.performance
     internal static class AWDeferredPathRequestBatchRules
     {
         internal const int DefaultCapacity = 512;
-        internal const int MaximumAmbientFlushPerFrame = 96;
-
-        internal static bool ShouldDeferAmbientFlush(bool pOperational,
-            int pAmbientSubmitted)
-        {
-            return !pOperational &&
-                   pAmbientSubmitted >= MaximumAmbientFlushPerFrame;
-        }
 
         internal static bool CanCapture(int pCount, int pCapacity,
             bool pCycleAccepting)

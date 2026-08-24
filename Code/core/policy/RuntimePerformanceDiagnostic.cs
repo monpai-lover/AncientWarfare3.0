@@ -95,6 +95,8 @@ namespace AncientWarfare3.core.policy
         private static long _slowestDeferredTicks;
         private static string _slowestAnnualStageId = "none";
         private static long _slowestAnnualStageTicks;
+        private static string _slowestAuthorityStageId = "none";
+        private static long _slowestAuthorityStageTicks;
         private static int _sampleGc0Start;
         private static int _sampleGc1Start;
         private static int _sampleGc2Start;
@@ -166,6 +168,8 @@ namespace AncientWarfare3.core.policy
             _frameContinuousStageTicks = 0L;
             _frameAnnualStageId = "none";
             _frameAnnualStageTicks = 0L;
+            _slowestAuthorityStageId = "none";
+            _slowestAuthorityStageTicks = 0L;
             _sampling = RuntimePerformanceDiagnosticRules.ShouldSample(
                 currentMode != 0, _frame);
             AWSchedulerStageDiagnostics.BeginFrame(_sampling);
@@ -188,6 +192,23 @@ namespace AncientWarfare3.core.policy
         public static long BeginContinuousScope()
         {
             return _frameStarted != 0L ? Stopwatch.GetTimestamp() : 0L;
+        }
+
+        public static long BeginAuthorityStage()
+        {
+            return _sampling ? Stopwatch.GetTimestamp() : 0L;
+        }
+
+        public static void EndAuthorityStage(string pId, long pStarted)
+        {
+            long elapsed = Elapsed(pStarted);
+            if (elapsed < 0L || !RuntimePerformanceDiagnosticRules.
+                    ShouldReplaceSlowest(_slowestAuthorityStageTicks,
+                        elapsed)) return;
+            _slowestAuthorityStageTicks = elapsed;
+            _slowestAuthorityStageId = string.IsNullOrEmpty(pId)
+                ? "authority_unknown"
+                : pId;
         }
 
         public static bool ShouldCollectActorDetail()
@@ -631,6 +652,8 @@ namespace AncientWarfare3.core.policy
                 " school_pending_deaths=" + schoolPendingDeaths +
                 " school_pending_descents=" + schoolPendingDescents +
                 " deferred_runtime_work=" + deferredRuntimeWork +
+                " deferred_runtime_detail=" +
+                DeferredRuntimeWorkService.GetDiagnostics() +
                 " kingdom_repair_queue=" + kingdomRepairQueue +
                 " army_count=" + armyCount +
                 " frame_ms=" + Milliseconds(frameTicks) +
@@ -644,6 +667,20 @@ namespace AncientWarfare3.core.policy
                 Milliseconds(schedulerStages.HostUnaccountedTicks) +
                 " simulation_coordinator=" +
                 AWSimulationCoordinatorThread.Instance.GetDiagnostics() +
+                " simulation_workers=" +
+                AWSimulationWorkerPool.Instance.GetDiagnostics() +
+                " spatial_zones_incremental=" +
+                AWIncrementalSimObjectZoneUnits.GetDiagnostics() +
+                " spatial_zones_parallel=" +
+                AWParallelSimObjectZoneUnits.GetDiagnostics() +
+                " nearby_status=" +
+                AWNearbyStatusTargetIndex.GetDiagnostics() +
+                " status_scheduler=" +
+                AWStatusSimulationScheduler.GetDiagnostics() +
+                " stack_effects=" +
+                AWActiveStackEffectsUpdater.GetDiagnostics() +
+                " inside_boat=" +
+                AWInsideBoatActorIndex.GetDiagnostics() +
                 " worst_frame=" + _worstFrameNumber +
                 " worst_frame_ms=" + Milliseconds(_worstFrameTicks) +
                 " worst_frame_stage=" + _worstFrameStageId +
@@ -761,6 +798,8 @@ namespace AncientWarfare3.core.policy
                 " path_reused=" + pathDiagnostics.Reused +
                 " path_reused_running=" +
                 pathDiagnostics.ReusedRunning +
+                " path_straight_segments=" +
+                pathDiagnostics.StraightSegments +
                 " path_cancelled=" + pathDiagnostics.Cancelled +
                 " path_completed=" + pathDiagnostics.Completed +
                 " path_failed=" + pathDiagnostics.Failed +
@@ -824,6 +863,8 @@ namespace AncientWarfare3.core.policy
                 " army_rts_replans=" + armyRts.Replans +
                 " army_rts_no_progress_ms=" +
                 armyRts.NoProgressMilliseconds +
+                " transport_diag=" +
+                ArmyRtsTransportDiagnostics.Snapshot() +
                 " detail=" + _slowestDetailId +
                 " detail_ms=" + Milliseconds(_slowestDetailTicks) +
                 " deferred_key=" + _slowestDeferredKey +
@@ -832,6 +873,9 @@ namespace AncientWarfare3.core.policy
                 " annual_stage=" + _slowestAnnualStageId +
                 " annual_stage_ms=" +
                 Milliseconds(_slowestAnnualStageTicks) +
+                " authority_stage=" + _slowestAuthorityStageId +
+                " authority_stage_ms=" +
+                Milliseconds(_slowestAuthorityStageTicks) +
                 " gc0_collections=" + gc0Collections +
                 " gc1_collections=" + gc1Collections +
                 " gc2_collections=" + gc2Collections +
@@ -1265,6 +1309,8 @@ namespace AncientWarfare3.core.policy
             _slowestDeferredTicks = 0L;
             _slowestAnnualStageId = "none";
             _slowestAnnualStageTicks = 0L;
+            _slowestAuthorityStageId = "none";
+            _slowestAuthorityStageTicks = 0L;
             Array.Clear(RecentTicks, 0, RecentTicks.Length);
             Array.Clear(RecentCounts, 0, RecentCounts.Length);
             Array.Clear(ActorRaceTicks, 0, ActorRaceTicks.Length);

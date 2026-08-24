@@ -1,3 +1,4 @@
+using System;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.court;
@@ -38,7 +39,6 @@ namespace AncientWarfare3.core.performance
             CooperativeGate.Reset();
             NativeGate.Reset();
             _nativeCycleToken = 0L;
-            AWMilitaryFrontLaneScheduler.Reset();
             ArmyRtsSchedulingService.Reset();
             NobleHeirPregnancyService.Reset();
             RulerHouseholdPregnancyService.Reset();
@@ -55,6 +55,7 @@ namespace AncientWarfare3.core.performance
             AWEnemyPresenceCache.Clear();
             AWStatusSimulationScheduler.ClearRuntime();
             CityReservePoolService.ClearRuntime();
+            SyntheticMobilizationLedgerService.ClearRuntime();
             WarForceEliminationSettlementService.ClearRuntime();
             WarTerminalSettlementCoordinator.ClearRuntime();
             SpecialGovernmentWarParticipationService.ClearRuntime();
@@ -81,25 +82,43 @@ namespace AncientWarfare3.core.performance
                            !AWWorldInitializationGate.IsPending();
             if (!pGate.TryEnter(pCycleToken, allowed)) return;
 
-            WesternCourtElectionService.ProcessAuthorityCycle();
-            AccessionIdentityService.ProcessDeferredInstallations();
-            ReigningRoyalLineageIndex.ProcessAuthorityCycle();
-            SuccessionDisputePersistenceService.ProcessAuthorityCycle();
-            AWLocalizedNameMigrationService.ProcessAuthorityCycle();
-            WesternLineageMigrationService.ProcessAuthorityCycle();
-            KingdomInstitutionalXiaizationService.ProcessAuthorityCycle();
-            DynasticMaleLineContinuityService.ProcessAuthorityCycle();
-            NobleHeirPregnancyService.ProcessAuthorityCycle();
-            RulerHouseholdPregnancyService.ProcessAuthorityCycle();
-            ArmyMembershipReconciliationService.ProcessFrame();
-            EnclosedUnownedZoneRepairService.ProcessAuthorityCycle();
-            EmptyCityResettlementService.ProcessAuthorityCycle();
-            TemporaryMilitaryReturnService.ProcessFrame();
-            WarArmyReturnService.ProcessFrame();
-            ArmyRtsAssignmentReconciliationService.ProcessAuthorityCycle();
+            MeasureAuthority("court_election",
+                WesternCourtElectionService.ProcessAuthorityCycle);
+            MeasureAuthority("accession_installations",
+                AccessionIdentityService.ProcessDeferredInstallations);
+            MeasureAuthority("royal_lineage_index",
+                ReigningRoyalLineageIndex.ProcessAuthorityCycle);
+            MeasureAuthority("succession_dispute_persistence",
+                SuccessionDisputePersistenceService.ProcessAuthorityCycle);
+            MeasureAuthority("localized_name_migration",
+                AWLocalizedNameMigrationService.ProcessAuthorityCycle);
+            MeasureAuthority("western_lineage_migration",
+                WesternLineageMigrationService.ProcessAuthorityCycle);
+            MeasureAuthority("institutional_xiaization",
+                KingdomInstitutionalXiaizationService.ProcessAuthorityCycle);
+            MeasureAuthority("dynastic_continuity",
+                DynasticMaleLineContinuityService.ProcessAuthorityCycle);
+            MeasureAuthority("noble_heir_pregnancy",
+                NobleHeirPregnancyService.ProcessAuthorityCycle);
+            MeasureAuthority("household_pregnancy",
+                RulerHouseholdPregnancyService.ProcessAuthorityCycle);
+            MeasureAuthority("army_membership_reconciliation",
+                ArmyMembershipReconciliationService.ProcessFrame);
+            MeasureAuthority("unowned_zone_repair",
+                EnclosedUnownedZoneRepairService.ProcessAuthorityCycle);
+            MeasureAuthority("empty_city_resettlement",
+                EmptyCityResettlementService.ProcessAuthorityCycle);
+            MeasureAuthority("temporary_military_return",
+                TemporaryMilitaryReturnService.ProcessFrame);
+            MeasureAuthority("war_army_return",
+                WarArmyReturnService.ProcessFrame);
+            MeasureAuthority("rts_assignment_reconciliation",
+                ArmyRtsAssignmentReconciliationService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.PathfindingIndex,
                 AWPathfindingBootstrap.ProcessFrame);
-            ArmyRtsSchedulingService.ProcessAw3Authority(pCycleToken, pPaused);
+            MeasureAuthority("army_rts_authority", () =>
+                ArmyRtsSchedulingService.ProcessAw3Authority(
+                    pCycleToken, pPaused));
             Measure(RecentFeatureBenchmarkRules.SchoolsIndex,
                 HistoricalSchoolRuntime.ProcessFrame);
             Measure(RecentFeatureBenchmarkRules.CivilServiceExamRuntimeIndex,
@@ -116,12 +135,15 @@ namespace AncientWarfare3.core.performance
                 SpecialGovernmentWarParticipationService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.MonthKingdomPolicyIndex,
                 KingdomDecisionMonthlyService.ProcessAuthorityCycle);
-            TemporaryLevyService.ProcessLegacyMigration();
+            MeasureAuthority("temporary_levy_migration",
+                TemporaryLevyService.ProcessLegacyMigration);
             Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
                 CityReservePoolService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
                 ArmyReplenishmentOperationService.ProcessAuthorityCycle);
-            WarRefugeeService.ProcessAuthorityCycle(pCycleToken, pPaused);
+            MeasureAuthority("war_refugee",
+                () => WarRefugeeService.ProcessAuthorityCycle(
+                    pCycleToken, pPaused));
             Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,
                 DrainAuthorityCompletions);
             Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,
@@ -146,11 +168,20 @@ namespace AncientWarfare3.core.performance
             PeasantRebelBanditStrongholdPopulationService.
                 ProcessAuthorityCycle();
             BanditStrongholdCityDisposalService.ProcessAuthorityCycle();
+            int pending = DeferredRuntimeWorkService.PendingCount;
             int itemLimit = DeferredRuntimeWorkRules.
                 ResolveItemsPerAuthorityFrame(
-                DeferredRuntimeWorkService.PendingCount);
+                pending);
             if (itemLimit <= 0) return;
-            DeferredRuntimeWorkService.DrainFrame(pMilliseconds: 1.0,
+            // Keep the ordinary one-item authority budget. If large-step
+            // simulation has produced a backlog, allow a tiny bounded
+            // catch-up window so persistent work cannot grow forever.
+            int catchUpLimit = DeferredRuntimeWorkRules.
+                ResolveCatchUpItemsPerAuthorityFrame(pending);
+            itemLimit = Math.Max(itemLimit, catchUpLimit);
+            DeferredRuntimeWorkService.DrainFrame(
+                pMilliseconds: DeferredRuntimeWorkRules.
+                    ResolveDrainMillisecondsPerAuthorityFrame(pending),
                 pMaxItems: itemLimit);
         }
 
@@ -182,11 +213,27 @@ namespace AncientWarfare3.core.performance
 
         private static void Measure(int pIndex, System.Action pAction)
         {
+            long authorityStage = RuntimePerformanceDiagnostic.
+                BeginAuthorityStage();
             long benchmark = RecentFeatureBenchmark.Begin();
             try { pAction(); }
             finally
             {
                 RecentFeatureBenchmark.End(pIndex, benchmark);
+                RuntimePerformanceDiagnostic.EndAuthorityStage(
+                    RecentFeatureBenchmarkRules.IdForIndex(pIndex),
+                    authorityStage);
+            }
+        }
+
+        private static void MeasureAuthority(string pId,
+            System.Action pAction)
+        {
+            long started = RuntimePerformanceDiagnostic.BeginAuthorityStage();
+            try { pAction(); }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndAuthorityStage(pId, started);
             }
         }
     }
