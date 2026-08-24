@@ -568,6 +568,19 @@ internal static class NameSystemRulesTests
                 "武德元年", "周伯发元年"),
             "a committed formal era takes precedence over local ruler chronology");
 
+        Equal(true, RegnalChronologyRules.ShouldUseEraName(
+                isXiaProfile: true, isBandit: false, isRebel: false),
+            "a Xia realm keeps its era-name chronology");
+        Equal(false, RegnalChronologyRules.ShouldUseEraName(
+                isXiaProfile: false, isBandit: false, isRebel: false),
+            "a western or non-Xia realm uses world chronology");
+        Equal(false, RegnalChronologyRules.ShouldUseEraName(
+                isXiaProfile: true, isBandit: true, isRebel: false),
+            "a bandit realm uses world chronology even if its culture is Xia");
+        Equal(false, RegnalChronologyRules.ShouldUseEraName(
+                isXiaProfile: true, isBandit: false, isRebel: true),
+            "a rebel realm uses world chronology even if its culture is Xia");
+
         Equal("鲁伯", RulerAppellationRules.LivingRanked("鲁", RulerRank.Bo),
             "Bo remains distinct");
         Equal("晋侯", RulerAppellationRules.LivingRanked("晋", RulerRank.Hou),

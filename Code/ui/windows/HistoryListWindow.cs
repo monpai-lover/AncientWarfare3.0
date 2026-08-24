@@ -1239,16 +1239,7 @@ namespace AncientWarfare3.ui.windows
             if (EraNameRules.IsValidCustom(pReign.formal_era_stem))
                 return pReign.formal_era_stem +
                        EraNameRules.FormatYear(pReignYear);
-            if (string.IsNullOrWhiteSpace(pReign.state_name_snapshot) ||
-                string.IsNullOrWhiteSpace(pReign.given_name) ||
-                pReign.title_rank < 0) return "";
-            int rank = Mathf.Clamp(pReign.title_rank,
-                (int)KingdomTitle.Baron, (int)KingdomTitle.Emperor);
-            return RegnalChronologyRules.Format(
-                pReign.state_name_snapshot,
-                KingdomTitleService.GetTitleChar((KingdomTitle)rank),
-                pReign.given_name, pReignYear,
-                isHereditaryMonarchy: true, isRepublic: false);
+            return "";
         }
 
         private static string RichName(string pText, string pColor)

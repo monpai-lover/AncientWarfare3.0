@@ -302,6 +302,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null)
                 return new EffectiveChronology(-1, "", "", false);
+            if (UsesWorldChronology(pKingdom))
+                return new EffectiveChronology(pKingdom.id, "", "", false);
             bool empireRank = KingdomTitleService.GetTitle(pKingdom) >=
                               KingdomTitle.Emperor;
             bool ceremonialEmperor =
@@ -337,6 +339,8 @@ namespace AncientWarfare3.core.lineage
 
         public static string GetYearName(Kingdom pKingdom)
         {
+            if (UsesWorldChronology(pKingdom))
+                return "";
             EffectiveChronology chronology = GetEffectiveChronology(pKingdom);
             string formalEra = string.IsNullOrEmpty(chronology.EraName)
                 ? ""
@@ -406,6 +410,29 @@ namespace AncientWarfare3.core.lineage
             return RegnalChronologyRules.Format(profile, stateName,
                 (int)rank, KingdomTitleService.GetTitleChar(rank),
                 rulerName, reignYear, hereditary, republic);
+        }
+
+        private static bool UsesWorldChronology(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return true;
+            ActorAsset actorAsset;
+            try { actorAsset = pKingdom.getActorAsset(); }
+            catch { return true; }
+            RegnalChronologyProfile profile =
+                RegnalChronologyRules.ResolveProfile(
+                    valid: !pKingdom.isNeutral(),
+                    civilized: actorAsset != null && actorAsset.civ,
+                    biologicalXia: LineageService.IsXiaKingdom(
+                        pKingdom, actorAsset),
+                    monkey: CivMonkeyPolicyRules.IsNativePolicySpecies(
+                        pKingdom.data.original_actor_asset,
+                        pKingdom.asset?.id, actorAsset?.id),
+                    enteredXia: XiaCultureIntegrationService.IsIntegrated(
+                        pKingdom.culture));
+            return !RegnalChronologyRules.ShouldUseEraName(
+                profile == RegnalChronologyProfile.Xia,
+                PeasantRebelRouteService.IsBandit(pKingdom),
+                MandateRebelService.IsRebelKingdom(pKingdom));
         }
 
         private static string ReadXiaRulerName(Actor pRuler)
