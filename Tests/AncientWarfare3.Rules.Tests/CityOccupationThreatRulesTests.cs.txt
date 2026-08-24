@@ -1,0 +1,38 @@
+using AncientWarfare3.core.lineage;
+
+internal static class CityOccupationThreatRulesTests
+{
+    public static void Run()
+    {
+        Assert(CityOccupationThreatRules.IsEnemyOccupationActive(
+                true, true, false, false),
+            "an active hostile physical occupier marks the city occupied");
+        Assert(CityOccupationThreatRules.IsEnemyOccupationActive(
+                false, false, true, true),
+            "a hostile frozen occupation marks the city occupied");
+        Assert(!CityOccupationThreatRules.IsEnemyOccupationActive(
+                true, false, false, false),
+            "a friendly physical controller is not an enemy occupation");
+        Assert(!CityOccupationThreatRules.IsEnemyOccupationActive(
+                false, false, true, false),
+            "a friendly frozen controller is not an enemy occupation");
+        Assert(!CityOccupationThreatRules.IsEnemyOccupationActive(
+                false, false, false, false),
+            "unit presence without an occupation signal cannot mark a city occupied");
+
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "CityAttackZoneService.cs"));
+        Assert(source.Contains("CityOccupationThreatRules.IsEnemyOccupationActive"),
+            "city threat queries use the occupation-state rule");
+        Assert(!source.Contains("RecordPhysicalScan()"),
+            "city threat queries do not perform a physical unit scan");
+        Assert(!source.Contains("ScanZone("),
+            "city threat queries do not enumerate city zones");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

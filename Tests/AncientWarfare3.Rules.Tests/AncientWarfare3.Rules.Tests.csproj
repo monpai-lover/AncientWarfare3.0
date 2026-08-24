@@ -423,6 +423,8 @@
     <Compile Include="SyntheticLevyRulesTests.cs.txt" />
     <Compile Include="SyntheticMobilizationRulesTests.cs.txt" />
     <Compile Include="CityMilitaryThreatFactsRulesTests.cs.txt" />
+    <Compile Include="CityOccupationThreatRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\CityOccupationThreatRules.cs" Link="Production\CityOccupationThreatRules.cs" />
     <Compile Include="ArmyRtsAsyncPlanningRulesTests.cs.txt" />
     <Compile Include="ActorKingdomSafetyRulesTests.cs.txt" />
     <Compile Include="KingdomFounderSpeciesSafetyRulesTests.cs.txt" />

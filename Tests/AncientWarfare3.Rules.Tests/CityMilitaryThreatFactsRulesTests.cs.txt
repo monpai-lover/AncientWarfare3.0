@@ -51,17 +51,12 @@ internal static class CityMilitaryThreatFactsRulesTests
             "city hostile-military queries enter the authority-cycle cache");
         Assert(!source.Contains("tile.doUnits(actor =>"),
             "a physical city scan does not allocate one captured callback per tile");
-        Assert(source.Contains("pZone?.chunk"),
-            "city threat scans resolve the vanilla TileZone chunk index");
-        Assert(source.Contains("pChunk.objects.kingdoms"),
-            "city threat scans use the vanilla chunk kingdom index");
-        Assert(source.Contains("pChunk.objects.getUnits(kingdomId)"),
-            "city threat scans use the vanilla per-kingdom unit index");
-        Assert(source.Contains(
-                "AllowedZones.Contains(pActor.current_tile?.zone)"),
-            "chunk candidates are filtered back to the target city zones");
-        Assert(source.Contains("HostilityByKingdom"),
-            "a physical city scan caches war relation checks per kingdom");
+        Assert(source.Contains("pCity.isGettingCaptured()"),
+            "city threat queries read the vanilla active-occupation signal");
+        Assert(source.Contains("pCity.being_captured_by"),
+            "city threat queries use the vanilla occupation controller");
+        Assert(!source.Contains("getUnits(kingdomId)"),
+            "city threat queries do not enumerate chunk units");
     }
 
     private static void PresenceSnapshotIsSharedAcrossObservingKingdoms()

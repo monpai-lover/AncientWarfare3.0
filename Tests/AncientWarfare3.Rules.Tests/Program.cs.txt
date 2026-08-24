@@ -9065,6 +9065,7 @@ ActorRacePerformanceRulesTests.Run();
 ActorBatchPerformanceRulesTests.Run();
 ArmyRtsControllerPerformanceRulesTests.Run();
 CityMilitaryThreatFactsRulesTests.Run();
+CityOccupationThreatRulesTests.Run();
 ArmyRtsAsyncPlanningRulesTests.Run();
 SchedulerLoadSafetyRulesTests.Run();
 BackgroundThreadCrashBoundaryRulesTests.Run();
