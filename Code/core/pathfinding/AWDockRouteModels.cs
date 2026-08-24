@@ -1,5 +1,20 @@
 namespace AncientWarfare3.core.pathfinding
 {
+    // Kept as a small compatibility surface for the transport controller.
+    // The 18:55 path implementation intentionally does not perform the newer
+    // dynamic whole-map shoreline scan; callers still need a typed failure
+    // result while using the registered shoreline fallback only.
+    internal enum AWDockRouteFailureReason
+    {
+        None = 0,
+        InvalidEndpoints = 1,
+        NoStableShore = 2,
+        NoNavigableWater = 3,
+        DifferentWaterComponents = 4,
+        NoDockOrShorePair = 5,
+        TopologyChanged = 6
+    }
+
     internal enum AWTransportRouteSource
     {
         DockPortal = 0,

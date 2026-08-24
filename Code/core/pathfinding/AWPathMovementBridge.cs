@@ -28,25 +28,6 @@ namespace AncientWarfare3.core.pathfinding
 
         internal static int ActorGateCount => 0;
 
-        internal static bool CanAcceptRequest(Actor pActor,
-            WorldTile pTarget)
-        {
-            if (pActor?.data == null || pActor.current_tile == null ||
-                pTarget?.data == null || pActor.asset == null)
-                return false;
-            try
-            {
-                if (pActor.isRekt()) return false;
-                if (pActor.asset.is_boat && !pTarget.isGoodForBoat())
-                    return false;
-            }
-            catch
-            {
-                return false;
-            }
-            return true;
-        }
-
         public static ExecuteEvent Submit(Actor pActor, WorldTile pTarget, bool pPathOnWater,
             bool pWalkOnBlocks, bool pWalkOnLava, int pLimitPathfindingRegions)
         {
@@ -1533,23 +1514,6 @@ namespace AncientWarfare3.core.pathfinding
             }
             return AWPathWorkClassRules.Classify(warrior, hasArmy, boat,
                 TransportContexts.ContainsKey(pActorId), schoolJourney);
-        }
-
-        internal static bool IsOperationalPath(Actor pActor)
-        {
-            return ClassifyPathWork(pActor) ==
-                   AWPathWorkClass.Operational;
-        }
-
-        internal static bool IsEssentialPath(Actor pActor)
-        {
-            return ClassifyPathWork(pActor) ==
-                   AWPathWorkClass.EssentialTravel;
-        }
-
-        internal static AWPathWorkClass ClassifyPathWork(Actor pActor)
-        {
-            return ClassifyWork(pActor, pActor?.data?.id ?? -1L);
         }
 
         private enum SlowMoveReason

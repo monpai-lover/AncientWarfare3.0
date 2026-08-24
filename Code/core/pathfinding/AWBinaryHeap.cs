@@ -17,17 +17,9 @@ namespace AncientWarfare3.core.pathfinding
 
         public int Count { get; private set; }
 
-        internal void EnsureCapacity(int pCapacity)
-        {
-            if (pCapacity <= _items.Length) return;
-            int capacity = _items.Length;
-            while (capacity < pCapacity) capacity *= 2;
-            Array.Resize(ref _items, capacity);
-        }
-
         public void Enqueue(T pItem)
         {
-            EnsureCapacity(Count + 1);
+            if (Count == _items.Length) Array.Resize(ref _items, _items.Length * 2);
             int index = Count++;
             while (index > 0)
             {

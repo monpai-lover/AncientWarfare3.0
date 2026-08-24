@@ -95,7 +95,7 @@ namespace AncientWarfare3.core.pathfinding
 
     public sealed class AWPathFinder : IDisposable
     {
-        private const int SegmentStepBudget = 24;
+        private const int SegmentStepBudget = 16;
         private const int SegmentLowWatermark = 8;
         private readonly IAWPathGenerator _generator;
         private readonly AWPathDiagnostics _diagnostics;
@@ -113,7 +113,6 @@ namespace AncientWarfare3.core.pathfinding
         private int _started;
         private int _stopping;
         private int _queueDepth;
-        private long _queueObservationCounter;
         private int _consecutiveStarvedWork;
         private long _staleWorkCount;
 
@@ -149,11 +148,7 @@ namespace AncientWarfare3.core.pathfinding
                 var thread = new Thread(WorkerLoop)
                 {
                     IsBackground = true,
-                    Name = "AW3 Path Worker " + (i + 1),
-                    // Path generation is background work. Keep it below the
-                    // Unity simulation thread during request waves, matching
-                    // Cultiway perf's worker scheduling contract.
-                    Priority = ThreadPriority.BelowNormal
+                    Name = "AW3 Path Worker " + (i + 1)
                 };
                 _workers[i] = thread;
                 thread.Start();
@@ -405,16 +400,9 @@ namespace AncientWarfare3.core.pathfinding
             {
                 while (true)
                 {
+                    _queueSignal.Wait();
                     if (Volatile.Read(ref _stopping) != 0) break;
-                    if (!TryTakeWork(out AWScheduledPathWork work))
-                    {
-                        // A single wakeup may expose a burst of queued path
-                        // segments. Drain that burst without re-entering the
-                        // kernel wait after every segment; only block once the
-                        // queues are actually empty.
-                        _queueSignal.Wait();
-                        continue;
-                    }
+                    if (!TryTakeWork(out AWScheduledPathWork work)) continue;
                     _diagnostics?.OnDequeued(work.Priority, work.EnqueuedAt);
 
                     PathfindingTask task = null;
@@ -594,11 +582,7 @@ namespace AncientWarfare3.core.pathfinding
         {
             QueueFor(pWork.Priority).Enqueue(pWork);
             Interlocked.Increment(ref _queueDepth);
-            // Queue admission is a hot path.  Keep the normal path O(1),
-            // while sampling category counts sparsely so diagnostics retain
-            // useful high-water marks without an all-session scan per request.
-            if ((Interlocked.Increment(ref _queueObservationCounter) & 63L) == 0L)
-                ObserveQueuesLocked();
+            ObserveQueuesLocked();
             _queueSignal.Release();
         }
 
@@ -680,6 +664,7 @@ namespace AncientWarfare3.core.pathfinding
                     latest))
                 pRecord.Running.Cancel(pReason);
             _diagnostics?.OnCancelled();
+            ObserveQueuesLocked();
         }
 
         private static bool CanReuse(PathfindingTask pTask,
@@ -738,11 +723,6 @@ namespace AncientWarfare3.core.pathfinding
                 ambientQueued, operationalActive, essentialActive, ambientActive);
         }
 
-        private void ObserveQueuesLocked()
-        {
-            _diagnostics?.ObserveQueue(SnapshotQueuesLocked());
-        }
-
         private static void CountWork(AWPathWorkClass? pWorkClass, bool active,
             ref int operational, ref int essential, ref int ambient)
         {
@@ -752,6 +732,11 @@ namespace AncientWarfare3.core.pathfinding
                 case AWPathWorkClass.EssentialTravel: essential++; break;
                 default: ambient++; break;
             }
+        }
+
+        private void ObserveQueuesLocked()
+        {
+            _diagnostics?.ObserveQueue(SnapshotQueuesLocked());
         }
 
         private void Reject(AWPathRequest pRequest,

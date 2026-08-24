@@ -53,6 +53,7 @@ namespace AncientWarfare3.core.pathfinding
         private long _dockRequests;
         private long _boatRetries;
         private long _rtsSharedRouteReuses;
+        private long _straightSegments;
         private long _memberCorrections;
         private int _operationalQueueHighWater;
         private int _essentialQueueHighWater;
@@ -95,6 +96,7 @@ namespace AncientWarfare3.core.pathfinding
         public long DockRequests => Interlocked.Read(ref _dockRequests);
         public long BoatRetries => Interlocked.Read(ref _boatRetries);
         public long RtsSharedRouteReuses => Interlocked.Read(ref _rtsSharedRouteReuses);
+        public long StraightSegments => Interlocked.Read(ref _straightSegments);
         public long MemberCorrections => Interlocked.Read(ref _memberCorrections);
         public int OperationalQueueHighWater =>
             Volatile.Read(ref _operationalQueueHighWater);
@@ -164,6 +166,7 @@ namespace AncientWarfare3.core.pathfinding
         public void OnDockRequest() => Interlocked.Increment(ref _dockRequests);
         public void OnBoatRetry() => Interlocked.Increment(ref _boatRetries);
         public void OnRtsSharedRouteReuse() => Interlocked.Increment(ref _rtsSharedRouteReuses);
+        public void OnStraightSegment() => Interlocked.Increment(ref _straightSegments);
         public void OnMemberCorrection() => Interlocked.Increment(ref _memberCorrections);
         public void OnDequeued(AWPathWorkPriority pPriority, long pEnqueuedAt)
         {

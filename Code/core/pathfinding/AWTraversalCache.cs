@@ -222,30 +222,6 @@ namespace AncientWarfare3.core.pathfinding
             if (_dirtyTiles.Add(tileId)) _dirtyTileQueue.Enqueue(tileId);
         }
 
-        public void MarkTopologyDirty(IEnumerable<MapChunk> pChunks)
-        {
-            AssertMainThread();
-            if (pChunks == null || _width <= 0) return;
-            bool foundTile = false;
-            foreach (MapChunk chunk in pChunks)
-            {
-                WorldTile[] tiles = chunk?.tiles;
-                if (tiles == null) continue;
-                for (int index = 0; index < tiles.Length; index++)
-                {
-                    int tileId = tiles[index]?.data?.tile_id ?? -1;
-                    if (tileId < 0) continue;
-                    foundTile = true;
-                    if (_dirtyTiles.Add(tileId))
-                        _dirtyTileQueue.Enqueue(tileId);
-                }
-            }
-            if (!foundTile) return;
-            if (_initializing) IncrementSourceRevision();
-            _topologyDirty = true;
-            IncrementTopologySourceRevision();
-        }
-
         private void IncrementSourceRevision()
         {
             _sourceRevision = _sourceRevision == long.MaxValue

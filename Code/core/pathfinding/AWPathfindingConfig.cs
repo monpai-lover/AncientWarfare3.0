@@ -9,10 +9,6 @@ namespace AncientWarfare3.core.pathfinding
 
         public int ShortRangeTiles { get; set; } = 24;
         public int LongRangeTiles { get; set; } = 96;
-        public int SegmentTargetSteps { get; set; } = 24;
-        public int RegionCorridorLookaheadTiles { get; set; } = 64;
-        public int RegionRouteCacheSize { get; set; } = 512;
-        public float LongRangeHeuristicWeight { get; set; } = 1.15f;
         public int MaxNodesShort { get; set; } = 3000;
         public int MaxNodesLong { get; set; } = 12000;
         public int MaxNodesLongFallback { get; set; } = 60000;
@@ -46,10 +42,6 @@ namespace AncientWarfare3.core.pathfinding
             {
                 ShortRangeTiles = 24,
                 LongRangeTiles = 96,
-                SegmentTargetSteps = 24,
-                RegionCorridorLookaheadTiles = 64,
-                RegionRouteCacheSize = 512,
-                LongRangeHeuristicWeight = 1.15f,
                 MaxNodesShort = 6000,
                 MaxNodesLong = 60000,
                 MaxNodesLongFallback = Math.Max(120000,

@@ -82,36 +82,14 @@ namespace AncientWarfare3.patch
                         AWPathFailureReason.CancelledByNewRequest);
                 return true;
             }
-            // Match the Cultiway admission boundary before a request enters
-            // the deferred batch. Invalid actors/targets must not occupy a
-            // batch slot and later repeat the full submission chain.
-            if (!AWPathMovementBridge.CanAcceptRequest(__instance, pTile))
-            {
-                __result = ExecuteEvent.False;
-                return false;
-            }
             long benchmark = RecentFeatureBenchmark.Begin();
             RuntimePerformanceDiagnostic.ActorRaceScopeToken raceToken =
                 RuntimePerformanceDiagnostic.BeginActorRaceScope(__instance);
             try
             {
-                if (AWDeferredPathRequestBatch.TryCapture(
-                        __instance, pTile, pPathOnWater, pWalkOnBlocks,
-                        pWalkOnLava, pLimitPathfindingRegions))
-                {
-                    __instance.setTileTarget(pTile);
-                    __instance.next_step_position =
-                        __instance.current_tile?.posV3 ??
-                        __instance.next_step_position;
-                    __instance.setNotMoving();
-                    __result = ExecuteEvent.True;
-                }
-                else
-                {
-                    __result = AWPathMovementBridge.Submit(__instance, pTile,
-                        pPathOnWater, pWalkOnBlocks, pWalkOnLava,
-                        pLimitPathfindingRegions);
-                }
+                __result = AWPathMovementBridge.Submit(__instance, pTile,
+                    pPathOnWater, pWalkOnBlocks, pWalkOnLava,
+                    pLimitPathfindingRegions);
             }
             finally
             {
@@ -433,37 +411,6 @@ namespace AncientWarfare3.patch
             AWPathfindingBootstrap.ClearWorld();
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(MapChunkManager), nameof(MapChunkManager.updateDirty))]
-        private static void MapChunkManagerUpdateDirty_Prefix(
-            MapChunkManager __instance, ref bool __state)
-        {
-            __state = false;
-            if (__instance == null ||
-                !DebugConfig.isOn(DebugOption.SystemUpdateDirtyChunks) ||
-                World.world == null ||
-                (!__instance.isAllChunksDirty() &&
-                 World.world.isActionHappening()))
-                return;
-            List<MapChunk> dirtyLinks = __instance._dirty_chunks_links;
-            List<MapChunk> dirtyRegions = __instance._dirty_chunks_regions;
-            if (dirtyLinks == null || dirtyRegions == null ||
-                dirtyLinks.Count == 0 && dirtyRegions.Count == 0)
-                return;
-
-            var dirtyChunks = new HashSet<MapChunk>(dirtyRegions);
-            dirtyChunks.UnionWith(dirtyLinks);
-            AWPathfindingBootstrap.Cache.MarkTopologyDirty(dirtyChunks);
-            __state = true;
-        }
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(MapChunkManager), nameof(MapChunkManager.updateDirty))]
-        private static void MapChunkManagerUpdateDirty_Postfix(bool __state)
-        {
-            if (__state) AWDockTransportService.MarkTopologyDirty();
-        }
-
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.setTileTypes),
             new[] { typeof(TileType), typeof(TopTileType), typeof(bool) })]
@@ -499,27 +446,6 @@ namespace AncientWarfare3.patch
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.stopFire))]
         private static void StopFire_Postfix(WorldTile __instance)
-        {
-            AWPathfindingBootstrap.Cache.MarkDirty(__instance);
-        }
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.setFireData))]
-        private static void SetFireData_Postfix(WorldTile __instance)
-        {
-            AWPathfindingBootstrap.Cache.MarkDirty(__instance);
-        }
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.freeze))]
-        private static void Freeze_Postfix(WorldTile __instance)
-        {
-            AWPathfindingBootstrap.Cache.MarkDirty(__instance);
-        }
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.unfreeze))]
-        private static void Unfreeze_Postfix(WorldTile __instance)
         {
             AWPathfindingBootstrap.Cache.MarkDirty(__instance);
         }
