@@ -39,7 +39,8 @@ namespace AncientWarfare3.core.multiplayer.commands
             CourtManualAppointmentResult result =
                 CourtService.TryManualAppointment(request.CountryId,
                     request.Key, request.ActorId, request.TargetActorId,
-                    request.SecondaryKey, request.CityId);
+                    request.SecondaryKey, request.CityId,
+                    request.SecondaryId);
             if (result == CourtManualAppointmentResult.Success)
                 return AW3CommandResult.Success("aw3_court_appointment_ok",
                     request.ActorId, (int)result);

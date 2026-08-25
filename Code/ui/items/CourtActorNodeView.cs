@@ -100,7 +100,8 @@ namespace AncientWarfare3.ui.items
 
             _button.onClick.RemoveAllListeners();
             bool officeAvailable = CourtService.IsManualOfficeAvailable(
-                pKingdom, pNode.OfficeId, pNode.OfficeLayer, pNode.CityId) &&
+                pKingdom, pNode.OfficeId, pNode.OfficeLayer, pNode.CityId,
+                pNode.CountyId) &&
                 !IsMilitaryGovernorateCommandNode(pNode);
             bool appointmentAllowed = CourtService.CanUseManualAppointment(
                 pKingdom);
@@ -114,7 +115,8 @@ namespace AncientWarfare3.ui.items
             else if (canAppoint)
                 _button.onClick.AddListener(() =>
                     CourtAppointmentWindow.Open(pKingdom.id, pNode.OfficeId,
-                        -1L, pNode.OfficeLayer, pNode.CityId));
+                        -1L, pNode.OfficeLayer, pNode.CityId,
+                        pNode.CountyId));
 
             long incumbentActorId = live && !pNode.IsVacancy
                 ? actor.data.id
@@ -189,7 +191,8 @@ namespace AncientWarfare3.ui.items
                     : AW_L10n.Text("aw_court_select_officer", "Select");
                 _manageOfficeButton.onClick.AddListener(() =>
                     CourtAppointmentWindow.Open(pKingdom.id, pNode.OfficeId,
-                        incumbentActorId, pNode.OfficeLayer, pNode.CityId));
+                        incumbentActorId, pNode.OfficeLayer, pNode.CityId,
+                        pNode.CountyId));
                 string tipDescription = replacing
                     ? AW_L10n.Text("aw_court_replace_officer_desc",
                         "Choose a new actor to replace the current officer.")
@@ -650,6 +653,15 @@ namespace AncientWarfare3.ui.items
                     ? office : place + " " + office;
                 if (!string.IsNullOrEmpty(localLabel)) labels.Add(localLabel);
             }
+            else if (pNode.OfficeLayer == CourtOfficeLayer.County &&
+                     !string.IsNullOrEmpty(pNode.OfficeId))
+            {
+                string county = string.IsNullOrWhiteSpace(pNode.CityName)
+                    ? AW_L10n.Text("aw_county_label", "County")
+                    : pNode.CityName;
+                string office = OfficeName(pKingdom, pNode.OfficeId);
+                labels.Add(county + " " + office);
+            }
             foreach (string role in pNode.Roles ?? new List<string>())
             {
                 if (pNode.OfficeLayer == CourtOfficeLayer.City &&
@@ -731,6 +743,8 @@ namespace AncientWarfare3.ui.items
 
         private static string OfficeName(Kingdom pKingdom, string pOfficeId)
         {
+            if (pOfficeId == CourtOfficeId.CountyMagistrate)
+                return AW_L10n.Text("aw_court_office_county_magistrate", "County Magistrate");
             if (!string.IsNullOrEmpty(pOfficeId) && pOfficeId.StartsWith(
                     "regional_superior:", StringComparison.Ordinal))
                 return AW_L10n.Text("aw_court_office_regional_superior",

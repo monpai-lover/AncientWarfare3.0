@@ -271,8 +271,13 @@ namespace AncientWarfare3.core.policy
                 if (!CountyMetaCache.TryGetValue(county.CountyId,
                         out AWMapModeMetaObject countyMeta))
                 {
+                    ColorAsset countryColor = null;
+                    try { countryColor = pPhysicalKingdom.getColor(); }
+                    catch { }
+                    countryColor?.initColor();
                     countyMeta = new AWMapModeMetaObject(county.CountyId,
-                        county.Name, AWMapModeMetaTypes.HierarchicalVassal, null);
+                        county.Name, AWMapModeMetaTypes.HierarchicalVassal,
+                        countryColor);
                     CountyMetaCache[county.CountyId] = countyMeta;
                 }
                 else if (countyMeta.data != null)

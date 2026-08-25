@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
@@ -66,7 +67,8 @@ namespace AncientWarfare3.core.court
                 .ToDictionary(group => group.Key, group => group.First());
             List<CourtOfficerView> officers = CourtService.GetActiveOfficers(
                     pKingdom, 512).Where(row => row != null &&
-                    row.layer == CourtOfficeLayer.City).ToList();
+                    (row.layer == CourtOfficeLayer.City ||
+                     row.layer == CourtOfficeLayer.County)).ToList();
             Dictionary<long, OfficialCareerStateView> careerStates =
                 OfficialCareerStateService.LoadKingdomStates(pKingdom.id);
             foreach (City city in cities)
@@ -87,7 +89,8 @@ namespace AncientWarfare3.core.court
                 .ToDictionary(group => group.Key, group => group.First());
             List<CourtOfficerView> officers = CourtService.GetActiveOfficers(
                     pKingdom, 512).Where(row => row != null &&
-                    row.layer == CourtOfficeLayer.City).ToList();
+                    (row.layer == CourtOfficeLayer.City ||
+                     row.layer == CourtOfficeLayer.County)).ToList();
             return BuildLocal(pKingdom, pCity, bureaus, officers,
                 OfficialCareerStateService.LoadKingdomStates(
                     pKingdom?.id ?? -1L));
@@ -161,6 +164,9 @@ namespace AncientWarfare3.core.court
                 CountryCorruption = CorruptionService.ReadCountry(pKingdom),
                 CityCorruption = CorruptionService.ReadCity(pCity)
             };
+            model.Counties = CountyAdministrationService.CountiesForCity(
+                pCity.data.id).Where(county => county != null && county.Active)
+                .OrderBy(county => county.Ordinal).ToList();
             if (RegionalGovernmentAggregationService.TryFindRegion(pKingdom,
                     pCity.data.id, out RegionalGovernmentReadModel region))
             {
@@ -210,6 +216,7 @@ namespace AncientWarfare3.core.court
                         row.city_id == pCity.data.id).ToList();
             AddLocalNodes(model, pKingdom, pCity, seats, officers,
                 localTemplate, pCareerStates);
+            AddCountyNodes(model, pKingdom, pCity, officers, pCareerStates);
             AddRegionalSuperiorNode(model, pKingdom, pCity);
             // The regional superior is part of the local court graph and must
             // participate in the same layout pass as the city officials.
@@ -217,7 +224,8 @@ namespace AncientWarfare3.core.court
             // hidden behind another node or rendered on top of it.
             LayoutLocalHierarchy(model.Nodes);
             model.ActiveSeats = model.Nodes.Count(node =>
-                node != null && node.OfficeLayer == CourtOfficeLayer.City &&
+                node != null && (node.OfficeLayer == CourtOfficeLayer.City ||
+                    node.OfficeLayer == CourtOfficeLayer.County) &&
                 !node.IsVacancy && node.ActorId >= 0);
             model.LeaderNode = model.Nodes.FirstOrDefault(node =>
                 node?.OfficeLayer == CourtOfficeLayer.City &&
@@ -416,6 +424,53 @@ namespace AncientWarfare3.core.court
                 });
             }
 
+            pModel.Nodes = pModel.Nodes.OrderBy(node => node.Rank)
+                .ThenBy(node => node.StableOrder)
+                .ThenBy(node => node.IsVacancy)
+                .ThenBy(node => node.ActorId).ToList();
+            LayoutLocalHierarchy(pModel.Nodes);
+            ApplyCareerStates(pModel.Nodes, pCareerStates,
+                CourtService.HasNineRankSystem(pKingdom));
+        }
+
+        private static void AddCountyNodes(LocalCourtReadModel pModel,
+            Kingdom pKingdom, City pCity, IReadOnlyList<CourtOfficerView> pOfficers,
+            Dictionary<long, OfficialCareerStateView> pCareerStates)
+        {
+            if (pModel == null || pCity?.data == null ||
+                pModel.Counties == null || pModel.Counties.Count == 0) return;
+            int order = pModel.Nodes.Count + 1;
+            foreach (CountyRecord county in pModel.Counties)
+            {
+                CourtOfficerView officer = (pOfficers ??
+                        Array.Empty<CourtOfficerView>()).FirstOrDefault(row =>
+                    row != null && row.layer == CourtOfficeLayer.County &&
+                    row.city_id == pCity.data.id &&
+                    row.county_id == county.CountyId &&
+                    row.office_id == CourtOfficeId.CountyMagistrate);
+                Actor actor = officer == null ? null :
+                    World.world?.units?.get(officer.actor_id);
+                bool valid = IsValid(actor, pKingdom);
+                var node = new CourtPyramidNodeModel(valid ? actor.data.id : -1L,
+                    CourtOfficeId.CountyMagistrate,
+                    CourtOfficeId.CountyMagistrate, CourtPyramidRules.GovernorRank + 10,
+                    order++, !valid)
+                {
+                    OfficeLayer = CourtOfficeLayer.County,
+                    CityId = pCity.data.id,
+                    CountyId = county.CountyId,
+                    CityName = county.Name ?? string.Empty,
+                    DisplayTitle = AW_L10n.Text("aw_county_label", "County"),
+                    ActorName = valid ? SafeActorName(actor) : string.Empty,
+                    SchoolId = valid ? ActorSchool(actor, "") : CourtSchoolId.None,
+                    SchoolIconPath = valid ? RegisteredSchoolIconPath(
+                        ActorSchool(actor, "")) : string.Empty,
+                    AppointmentYear = valid ? officer?.appointed_year ?? -1 : -1,
+                    Influence = valid ? officer?.influence ?? SafeStat(actor,
+                        "stewardship") : 0f
+                };
+                pModel.Nodes.Add(node);
+            }
             pModel.Nodes = pModel.Nodes.OrderBy(node => node.Rank)
                 .ThenBy(node => node.StableOrder)
                 .ThenBy(node => node.IsVacancy)
