@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.county;
 using AncientWarfare3.utils;
 using UnityEngine;
 
@@ -104,6 +105,8 @@ namespace AncientWarfare3.core.policy
         private static readonly Dictionary<long, NativeCityLabelEntry>
             NativeCityLabels = new Dictionary<long, NativeCityLabelEntry>();
         private static readonly Dictionary<long, AWMapModeMetaObject>
+            CountyMetaCache = new Dictionary<long, AWMapModeMetaObject>();
+        private static readonly Dictionary<long, AWMapModeMetaObject>
             CityRegionMetaCache = new Dictionary<long, AWMapModeMetaObject>();
         private static readonly Stack<NativeCountryLabelEntry>
             NativeCountryLabelPool = new Stack<NativeCountryLabelEntry>();
@@ -198,6 +201,7 @@ namespace AncientWarfare3.core.policy
         {
             RegionalGovernmentAggregationService.Clear();
             CityRegionMetaCache.Clear();
+            CountyMetaCache.Clear();
             InvalidateNativeLabelCache();
             HierarchicalVassalMapModeLabelLayer.MarkDirty();
             HierarchicalVassalMapModeLabelLayer.RequestRefresh();
@@ -221,6 +225,9 @@ namespace AncientWarfare3.core.policy
         internal static bool IsCityMemberLayer => IsCityLayer &&
             CityAdministrationState.IsCityLevel;
 
+        internal static bool IsCityCountyLayer => IsCityLayer &&
+            CityAdministrationState.IsCountyLevel;
+
         internal static long CityAdministrationFocusSeatCityId =>
             CityAdministrationState.FocusSeatCityId;
 
@@ -239,7 +246,7 @@ namespace AncientWarfare3.core.policy
                     physicalKingdom)) return cached.Meta;
 
             IMetaObject resolved = ResolveMetaForZone(
-                city, physicalKingdom);
+                pZone, city, physicalKingdom);
             if (_nativeDrawPassActive)
             {
                 NativeDrawMetaCache[pZone.id] =
@@ -250,11 +257,28 @@ namespace AncientWarfare3.core.policy
             return resolved;
         }
 
-        private static IMetaObject ResolveMetaForZone(City pCity,
+        private static IMetaObject ResolveMetaForZone(TileZone pZone, City pCity,
             Kingdom pPhysicalKingdom)
         {
             if (pCity?.data == null || pCity.isRekt()) return null;
             if (!IsValidKingdom(pPhysicalKingdom)) return null;
+            if (IsCityCountyLayer)
+            {
+                CountyRecord county = CountyAdministrationService.FindForZone(
+                    pZone.id);
+                if (county == null || county.CountyId !=
+                    CityAdministrationState.FocusCountyId) return null;
+                if (!CountyMetaCache.TryGetValue(county.CountyId,
+                        out AWMapModeMetaObject countyMeta))
+                {
+                    countyMeta = new AWMapModeMetaObject(county.CountyId,
+                        county.Name, AWMapModeMetaTypes.HierarchicalVassal, null);
+                    CountyMetaCache[county.CountyId] = countyMeta;
+                }
+                else if (countyMeta.data != null)
+                    countyMeta.data.name = county.Name ?? string.Empty;
+                return countyMeta;
+            }
             if (IsCityRegionLayer)
             {
                 EnsureHierarchyIndex();
@@ -348,6 +372,24 @@ namespace AncientWarfare3.core.policy
                 cityEntry.Add(pZone);
                 return;
             }
+            if (IsCityCountyLayer)
+            {
+                CountyRecord county = CountyAdministrationService.FindForZone(
+                    pZone.id);
+                if (county == null || county.CountyId !=
+                    CityAdministrationState.FocusCountyId) return;
+                City city = cached.City;
+                if (city?.data == null || city.isRekt()) return;
+                if (!NativeCityLabels.TryGetValue(county.CountyId,
+                        out NativeCityLabelEntry countyEntry))
+                {
+                    countyEntry = AcquireNativeCityLabelEntry(city);
+                    countyEntry.SetDisplayName(county.Name);
+                    NativeCityLabels.Add(county.CountyId, countyEntry);
+                }
+                countyEntry.Add(pZone);
+                return;
+            }
 
             Kingdom representative = cached.Meta as Kingdom;
             if (!IsValidKingdom(representative)) return;
@@ -368,7 +410,8 @@ namespace AncientWarfare3.core.policy
                 if (_nativeDrawPassActive && !_nativeDrawPassUsingCache)
                 {
                     if (IsCityCountryLayer) PublishNativeCountryLabels();
-                    else if (IsCityMemberLayer) PublishNativeCityLabels();
+                    else if (IsCityMemberLayer || IsCityCountyLayer)
+                        PublishNativeCityLabels();
                     else if (IsCityRegionLayer && !IsCityGlobalRegionLayer)
                         PublishNativeCityLabels();
                     else if (!IsCityGlobalRegionLayer)
@@ -422,6 +465,7 @@ namespace AncientWarfare3.core.policy
         {
             _nativeDrawCacheValid = false;
             NativeDrawMetaCache.Clear();
+            CountyMetaCache.Clear();
         }
 
         private static void PublishNativeCityLabels()
@@ -448,8 +492,18 @@ namespace AncientWarfare3.core.policy
                     Size = HierarchicalVassalMapModeGeometry.
                         CalculateCityLabelSize(entry.LandArea)
                 };
+                long labelId = IsCityCountyLayer
+                    ? NativeCityPublishEntries[index].City?.data?.id ?? city.id
+                    : city.id;
+                if (IsCityCountyLayer)
+                {
+                    foreach (KeyValuePair<long, NativeCityLabelEntry> pair in
+                             NativeCityLabels)
+                        if (ReferenceEquals(pair.Value, entry))
+                            labelId = pair.Key;
+                }
                 string key = HierarchicalVassalMapModeLabelLayer.
-                    GetNativeLabelKey(false, CurrentLabelFocusKey, city.id);
+                    GetNativeLabelKey(false, CurrentLabelFocusKey, labelId);
                 HierarchicalVassalMapModeLabelLayer.ApplyRuntimeLabel(
                     key, displayName, placement, 0, false, city.kingdom,
                     city);
@@ -647,6 +701,7 @@ namespace AncientWarfare3.core.policy
         internal static long CurrentLabelFocusKey =>
             IsCityLayer ? (IsCityCountryLayer ? -1L :
                 IsCityRegionLayer ? CityAdministrationState.FocusKingdomId :
+                IsCityCountyLayer ? CityAdministrationState.FocusCountyId :
                 CityAdministrationState.FocusSeatCityId) :
             (State.IsRoot ? -1L : State.FocusKingdomId);
 
@@ -1015,6 +1070,19 @@ namespace AncientWarfare3.core.policy
 
             if (IsCityLayer)
             {
+                if (IsCityCountyLayer)
+                {
+                    CountyRecord county = CountyAdministrationService.FindForZone(
+                        clickedZone.id);
+                    if (county == null || county.CountyId !=
+                        CityAdministrationState.FocusCountyId)
+                    {
+                        bool popped = CityAdministrationState.PopRegion();
+                        if (popped) RefreshView();
+                        return popped;
+                    }
+                    return TryInspectCity(pTile, pPowerId);
+                }
                 if (IsCityCountryLayer)
                 {
                     EnsureHierarchyIndex();
@@ -1032,6 +1100,17 @@ namespace AncientWarfare3.core.policy
                     return ReturnToRootFromUnmappedClick();
                 if (IsCityGlobalRegionLayer)
                     return HandleGlobalCityRegionClick(city);
+                if (IsCityMemberLayer)
+                {
+                    CountyRecord county = CountyAdministrationService.FindForZone(
+                        clickedZone.id);
+                    if (county != null && CityAdministrationState.PushCounty(
+                            county.CountyId))
+                    {
+                        RefreshView();
+                        return true;
+                    }
+                }
                 if (IsCityRegionLayer)
                 {
                     EnsureHierarchyIndex();
@@ -1109,6 +1188,12 @@ namespace AncientWarfare3.core.policy
 
         private static bool ReturnToRootFromUnmappedClick()
         {
+            if (IsCityCountyLayer)
+            {
+                bool popped = CityAdministrationState.PopRegion();
+                if (popped) RefreshView();
+                return popped;
+            }
             if (IsCityMemberLayer)
             {
                 CityAdministrationState.PopRegion();

@@ -60,6 +60,10 @@ internal static class CityAdministrationMapModeRulesTests
             CityAdministrationMapModeRules.ResolveCountyClick(
                 true, -1L, -1L, false),
             "empty city click does not clear county labels");
+        Equal(CityAdministrationMapClickAction.PopToRegions,
+            CityAdministrationMapModeRules.ResolveCountyClick(
+                false, 88L, 99L, true),
+            "different county returns to city level");
         Equal("#4A6FA5", CityAdministrationMapModeRules.RegionColorHex(0L),
             "first commandery uses the stable region palette");
         True(CityAdministrationMapModeRules.RegionColorHex(0L) !=
