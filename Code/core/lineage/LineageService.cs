@@ -1079,7 +1079,8 @@ namespace AncientWarfare3.core.lineage
                 namingProfile == NamingProfileId.OrcNomadic)
             {
                 WesternLineageAdmissionService.TryEnsure(pActor,
-                    pRuler: false, pHeir: false, pNoble: true,
+                    pRuler: false, pHeir: false,
+                    pNoble: SocialIdentityService.IsFormalNoble(pActor),
                     pOfficial: true, pSourceType: "official");
                 return;
             }
