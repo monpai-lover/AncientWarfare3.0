@@ -39,6 +39,12 @@
       "Callback": "AWPerformanceSettings:SwitchAiVassalActions"
     },
     {
+      "Id": "AW3_USE_HISTORICAL_DEJURE_CITY_NAMES",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchHistoricalDeJureCityNames"
+    },
+    {
       "Id": "AW3_SHOW_ARMY_RTS_VISUALS",
       "Type": "SWITCH",
       "BoolVal": false,

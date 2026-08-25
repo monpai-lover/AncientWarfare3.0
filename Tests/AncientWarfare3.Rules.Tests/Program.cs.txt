@@ -69,6 +69,13 @@ if (args.Length == 1 && args[0] == "--court-history-localization")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--historical-dejure-naming")
+{
+    XiaHistoricalDeJureRulesTests.Run();
+    Console.WriteLine("Historical de jure naming rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--mandate-capital-transfer")
 {
     MandateCapitalTransferRulesTests.Run();
