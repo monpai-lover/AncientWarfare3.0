@@ -14,6 +14,7 @@ namespace AncientWarfare3.core.performance
         private static bool _configDiplomacyAiEnabled = true;
         private static bool _configAiAllianceActionsEnabled = true;
         private static bool _configAiVassalActionsEnabled = true;
+        private static bool _configHistoricalDeJureCityNames;
 
         internal static event Action ArmyRtsDiagnosticsDisabled;
         internal static event Action ArmyMapInformationDisabled;
@@ -49,6 +50,8 @@ namespace AncientWarfare3.core.performance
             _configAiAllianceActionsEnabled;
         public static bool EnableAiVassalActions =>
             _configAiVassalActionsEnabled;
+        public static bool EnableHistoricalDeJureCityNames =>
+            _configHistoricalDeJureCityNames;
 
         public const float RenderReserveMilliseconds = 2f;
         public const float MinimumSliceMilliseconds = 0.15f;
@@ -157,6 +160,11 @@ namespace AncientWarfare3.core.performance
         public static void SwitchAiVassalActions(bool pValue)
         {
             _configAiVassalActionsEnabled = pValue;
+        }
+
+        public static void SwitchHistoricalDeJureCityNames(bool pValue)
+        {
+            _configHistoricalDeJureCityNames = pValue;
         }
 
         public static void SetTargetRenderFps(float pValue)

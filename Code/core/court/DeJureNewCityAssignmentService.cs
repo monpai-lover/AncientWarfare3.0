@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.naming;
+using AncientWarfare3.core.performance;
 
 namespace AncientWarfare3.core.court
 {
@@ -120,9 +122,54 @@ namespace AncientWarfare3.core.court
             }
 
             RetryIds.Remove(pCity.data.id);
+            ApplyHistoricalCityName(pCity);
             HierarchicalVassalMapModeService.MarkHierarchyDirty(kingdom);
             HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
             return true;
+        }
+
+        private static void ApplyHistoricalCityName(City pCity)
+        {
+            try
+            {
+                if (!LineageService.IsXiaKingdom(pCity?.kingdom) ||
+                    !XiaHistoricalDeJureRules.ShouldNameCity(
+                        AWPerformanceSettings.EnableHistoricalDeJureCityNames,
+                        pCity?.data != null && !pCity.data.custom_name)) return;
+                if (!DeJureRegionStore.TryGetForCity(pCity.data.id,
+                        out DeJureRegion region)) return;
+                XiaHistoricalCommanderyDefinition commandery =
+                    XiaHistoricalDeJureCatalogService.Current.GetCommandery(
+                        region.HistoricalCommanderyId);
+                if (commandery == null) return;
+                var used = new HashSet<string>(region.MemberCityIds
+                    .Select(id => World.world?.cities?.get(id)?.data?.name ??
+                        string.Empty), StringComparer.Ordinal);
+                string candidate = XiaHistoricalDeJureRules.SelectUnusedCounty(
+                    commandery, used, StableSelector(pCity.data.id));
+                if (string.IsNullOrWhiteSpace(candidate) ||
+                    string.Equals(candidate, pCity.data.name,
+                        StringComparison.Ordinal)) return;
+                pCity.setName(candidate, pTrack: false);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Historical de jure city naming failed: " +
+                    error.Message);
+            }
+        }
+
+        private static int StableSelector(long pCityId)
+        {
+            unchecked
+            {
+                ulong value = (ulong)pCityId ^
+                    ((ulong)(uint)MapBox.current_world_seed_id << 32);
+                value ^= value >> 33;
+                value *= 0xff51afd7ed558ccdUL;
+                value ^= value >> 33;
+                return (int)(value ^ (value >> 32));
+            }
         }
 
         private static bool PrepareNeighbours(City pCity)

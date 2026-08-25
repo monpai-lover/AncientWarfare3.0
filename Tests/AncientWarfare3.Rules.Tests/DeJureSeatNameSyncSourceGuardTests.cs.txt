@@ -9,12 +9,11 @@ internal static class DeJureSeatNameSyncSourceGuardTests
         string readModel = Read("Code/core/court/DeJureRegionReadModelService.cs");
         string mapMode = Read("Code/core/policy/HierarchicalVassalMapModeService.cs");
 
-        Contains(store, "private static bool SyncRegionNameFromSeatLocked(");
-        Contains(store, "private static bool SyncAllRegionNamesLocked()");
-        Contains(store, "SyncRegionNameFromSeatLocked(current);");
-        Contains(store, "SyncRegionNameFromSeatLocked(target);");
-        Contains(store, "SyncRegionNameFromSeatLocked(region);");
-        Contains(store, "SyncAllRegionNamesLocked();");
+        Contains(store, "private static void MigrateHistoricalMetadataLocked()");
+        Contains(store, "return pRegion?.RegionName ?? string.Empty;");
+        NotContains(store, "SyncRegionNameFromSeatLocked(current);");
+        NotContains(store, "SyncRegionNameFromSeatLocked(target);");
+        NotContains(store, "SyncAllRegionNamesLocked();");
         Contains(readModel, "DeJureRegionStore.ResolveDisplayName(legal)");
         Contains(mapMode, "DeJureRegionStore.ResolveDisplayName(legal)");
     }
@@ -28,5 +27,12 @@ internal static class DeJureSeatNameSyncSourceGuardTests
         if (!pText.Contains(pNeedle, StringComparison.Ordinal))
             throw new InvalidOperationException(
                 "missing de-jure seat name sync source guard: " + pNeedle);
+    }
+
+    private static void NotContains(string pText, string pNeedle)
+    {
+        if (pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "unexpected de-jure seat name sync source: " + pNeedle);
     }
 }

@@ -1,0 +1,3 @@
+key,cz,en,ch
+AW3_USE_HISTORICAL_DEJURE_CITY_NAMES,启用历史州郡城市命名,Use historical state/commandery city names,啟用歷史州郡城市命名
+AW3_USE_HISTORICAL_DEJURE_CITY_NAMES Description,仅为新建且未手动改名的夏人城市使用历史县名；关闭后不改已有城市,Only new non-manually-renamed Xia cities use historical county names; disabling does not rename existing cities,僅為新建且未手動改名的夏人城市使用歷史縣名；關閉後不改已有城市

@@ -1,0 +1,73 @@
+using System;
+using System.Linq;
+using AncientWarfare3.core.court;
+using AncientWarfare3.core.naming;
+
+internal static class XiaHistoricalDeJureRulesTests
+{
+    internal static void Run()
+    {
+        var catalog = new XiaHistoricalDeJureCatalog(new[]
+        {
+            new XiaHistoricalStateDefinition("司州", "司州", new[]
+            {
+                new XiaHistoricalCommanderyDefinition("河南郡", "河南郡",
+                    new[] { "雒阳", "荥阳", "雒阳" })
+            })
+        });
+        var profile = XiaHistoricalDeJureRules.SelectProfile(catalog,
+            new[] { "雒阳" }, 0);
+        Equal("司州", profile.StateId, "state profile matches city");
+        Equal("河南郡", profile.CommanderyId,
+            "commandery profile matches city");
+        Equal(2, catalog.GetCommandery("河南郡").CityNames.Count,
+            "commandery city names are deduplicated");
+        Equal("荥阳", XiaHistoricalDeJureRules.SelectUnusedCounty(
+            catalog.GetCommandery("河南郡"), new[] { "雒阳" }, 0),
+            "unused county is deterministic");
+        Equal(string.Empty, XiaHistoricalDeJureRules.SelectUnusedCounty(
+            catalog.GetCommandery("河南郡"), new[] { "雒阳", "荥阳" }, 0),
+            "exhausted pool returns empty fallback");
+        False(XiaHistoricalDeJureRules.ShouldNameCity(false, true),
+            "historical naming defaults off");
+        True(XiaHistoricalDeJureRules.ShouldNameCity(true, true),
+            "historical naming can be enabled");
+        False(XiaHistoricalDeJureRules.ShouldNameCity(true, false),
+            "manual name is protected");
+
+        var migration = DeJureHistoricalProfileRules.Migrate("", "", -1L,
+            "河南郡", "司州", 12L);
+        Equal("司州", migration.RegionName,
+            "missing legacy name receives historical state name");
+        True(migration.SeatLocked, "resolved seat is locked");
+        var preserved = DeJureHistoricalProfileRules.Migrate("旧州", "旧州",
+            9L, "河南郡", "司州", 12L);
+        Equal("旧州", preserved.RegionName,
+            "existing legacy state name is preserved");
+        Equal(9L, preserved.SeatCityId, "existing legal seat is preserved");
+        False(DeJureHistoricalProfileRules.ShouldDeriveRegionNameOnRead(),
+            "read paths never derive state names");
+        True(DeJureHistoricalProfileRules.ShouldApplyTrackedSeatRename(true,
+            true, true), "tracked seat rename is accepted");
+        False(DeJureHistoricalProfileRules.ShouldApplyTrackedSeatRename(true,
+            false, true), "generated rename is rejected");
+        False(DeJureHistoricalProfileRules.ShouldApplyTrackedSeatRename(false,
+            true, true), "non-seat rename is rejected");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual)) throw new InvalidOperationException(
+            pMessage + ": expected " + pExpected + ", got " + pActual);
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+}

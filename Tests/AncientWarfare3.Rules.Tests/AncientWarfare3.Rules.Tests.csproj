@@ -513,7 +513,6 @@
     <Compile Include="MandateMilitaryStrengthRulesTests.cs.txt" />
     <Compile Include="MandateCapitalTransferRulesTests.cs.txt" />
     <Compile Include="MandatePhaseRulesTests.cs.txt" />
-    <Compile Include="..\..\Code\core\lineage\MandatePhaseRules.cs" Link="Production\MandatePhaseRules.cs" />
     <Compile Include="WarTypeOwnershipMatrixTests.cs.txt" />
     <Compile Include="WarBorderTargetRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\MandateMilitaryStrengthRules.cs" Link="Production\MandateMilitaryStrengthRules.cs" />
@@ -596,6 +595,10 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="XiaHistoricalDeJureRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\naming\XiaHistoricalDeJureCatalog.cs" Link="Production\XiaHistoricalDeJureCatalog.cs" />
+    <Compile Include="..\..\Code\core\naming\XiaHistoricalDeJureRules.cs" Link="Production\XiaHistoricalDeJureRules.cs" />
+    <Compile Include="..\..\Code\core\court\DeJureHistoricalProfileRules.cs" Link="Production\DeJureHistoricalProfileRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ShiBranchRules.cs" Link="Production\ShiBranchRules.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageDisplayNameRules.cs" Link="Production\LineageDisplayNameRules.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageGivenNameNormalizationRules.cs" Link="Production\LineageGivenNameNormalizationRules.cs" />
@@ -1013,7 +1016,6 @@
     <Compile Include="..\..\Code\core\lineage\FeudatorySuccessionRules.cs" Link="Production\FeudatorySuccessionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DynasticTitleRules.cs" Link="Production\DynasticTitleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DynasticReproductionRules.cs" Link="Production\DynasticReproductionRules.cs" />
-    <Compile Include="..\..\Code\core\lineage\DynasticMaleLineContinuityRules.cs" Link="Production\DynasticMaleLineContinuityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\NobleRankRules.cs" Link="Production\NobleRankRules.cs" />
     <Compile Include="..\..\Code\core\lineage\NobleIdentityRules.cs" Link="Production\NobleIdentityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaContactRules.cs" Link="Production\XiaContactRules.cs" />
