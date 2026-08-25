@@ -192,11 +192,14 @@ internal static class ArmyRtsEndToEndFlowTests
 
         string runner = File.ReadAllText(Path.Combine(root, "Code", "core",
             "performance", "AWCooperativeActorPostRunner.cs"));
-        int p0Start = runner.IndexOf("private void ProcessMilitaryP0Actor(",
+        int p0Start = runner.IndexOf(
+            "internal static void ProcessMilitaryP0Actor(",
             StringComparison.Ordinal);
-        int p0End = runner.IndexOf(
-            "private static bool YieldMilitaryP0Ownership", p0Start,
-            StringComparison.Ordinal);
+        int p0End = p0Start >= 0
+            ? runner.IndexOf(
+                "private static bool YieldMilitaryP0Ownership", p0Start,
+                StringComparison.Ordinal)
+            : -1;
         string p0 = p0Start >= 0 && p0End > p0Start
             ? runner.Substring(p0Start, p0End - p0Start)
             : string.Empty;

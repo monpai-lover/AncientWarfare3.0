@@ -12,6 +12,13 @@ internal static class CountyZonePartitionRulesTests
         Equal(2, twentySix.Count, "26 zones split into two counties");
         var fifty = CountyZonePartitionRules.Partition(Range(1, 50), null);
         Equal(2, fifty.Count, "50 zones split into two counties");
+        var fiftyOne = CountyZonePartitionRules.Partition(Range(1, 51), null);
+        Equal(3, fiftyOne.Count, "51 zones split into three counties");
+        var oneHundred = CountyZonePartitionRules.Partition(Range(1, 100), null);
+        Equal(3, oneHundred.Count, "large cities cap at three counties");
+        Equal(34, oneHundred[0].Count, "zones are evenly distributed");
+        Equal(33, oneHundred[1].Count, "zones are evenly distributed");
+        Equal(33, oneHundred[2].Count, "zones are evenly distributed");
         foreach (var county in twentySix)
             True(county.Count <= CountyZonePartitionRules.MaximumZonesPerCounty,
                 "a county never exceeds the zone cap");

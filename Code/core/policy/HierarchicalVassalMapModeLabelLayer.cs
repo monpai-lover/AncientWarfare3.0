@@ -254,7 +254,7 @@ namespace AncientWarfare3.core.policy
                         RecoverFromProcessFailure();
                 }
                 catch { }
-                SetRootActive(false);
+                if (!_active) SetRootActive(false);
                 _reportedFailure = !HierarchicalVassalMapLabelRuntime.
                     CanRetryProcessFailure;
                 if (_reportedFailure) return;
@@ -341,6 +341,15 @@ namespace AncientWarfare3.core.policy
                 if (TryParseNativeLabelKey(pair.Key, out _, out _, out _) &&
                     (pActiveKeys == null || !pActiveKeys.Contains(pair.Key)))
                     pair.Value.SetActive(false);
+        }
+
+        internal static void KeepNativeLabelsVisible()
+        {
+            // Empty clicks are not navigation. Re-show already-built native
+            // entries after the engine's zone redraw without changing focus.
+            foreach (KeyValuePair<string, LabelNode> pair in RuntimeNodes)
+                if (TryParseNativeLabelKey(pair.Key, out _, out _, out _))
+                    pair.Value.SetActive(true);
         }
 
         internal static bool ShowRuntimeLabel(string pKey)

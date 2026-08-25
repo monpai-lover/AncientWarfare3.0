@@ -9,8 +9,9 @@ internal static class GlobalDeJureEmptyClickSourceGuardTests
             "Code/core/policy/HierarchicalVassalMapModeService.cs");
         Contains(service, "if (IsCityGlobalRegionLayer)");
         Contains(service,
+            "HierarchicalVassalMapModeLabelLayer.KeepNativeLabelsVisible();");
+        Contains(service,
             "HierarchicalVassalMapModeLabelLayer.RequestRefresh();");
-        Contains(service, "RequestNativeRedraw();");
         Contains(service, "return true;");
     }
 

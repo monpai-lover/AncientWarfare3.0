@@ -16,7 +16,10 @@ internal static class PeacetimeRtsOwnershipReleaseRulesTests
         string unregister = Slice(priority,
             "internal static void Unregister(long actorId)",
             "internal static void CopySnapshot(");
-        Assert(unregister.Contains("ProcessedThisCycle.Remove(actorId)",
+        Assert(unregister.Contains("ProcessedFrameByActor.Remove(actorId)",
+                   StringComparison.Ordinal) &&
+               unregister.Contains(
+                   "ProcessedThisMilitaryStep.Remove(actorId)",
                    StringComparison.Ordinal) &&
                unregister.Contains("VanillaTaxiActors.Remove(actorId)",
                    StringComparison.Ordinal) &&

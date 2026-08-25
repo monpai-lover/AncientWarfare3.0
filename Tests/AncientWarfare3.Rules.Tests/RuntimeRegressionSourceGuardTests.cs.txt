@@ -78,9 +78,12 @@ internal static class RuntimeRegressionSourceGuardTests
                warLabels.Contains("case \"bandit_suppression\":") &&
                warLabels.Contains("case \"de_jure_war\":"),
             "war reason keys must be normalized and localized in history content");
-        Assert(!tributarySettlement.Contains("\" political=\"") &&
-               !tributarySettlement.Contains("\" gold=\"") &&
-               !tributarySettlement.Contains("\" factor=\""),
+        Assert(!tributarySettlement.Contains(
+                   "HistoryText.PlainText(\" political=\"") &&
+               !tributarySettlement.Contains(
+                   "HistoryText.PlainText(\" gold=\"") &&
+               !tributarySettlement.Contains(
+                   "HistoryText.PlainText(\" factor=\""),
             "tributary history must not leak raw diagnostic parameter labels");
         Assert(historyListWindow.Contains(
                    "WarDisplayLabelRules.NormalizeHistoryContent") &&

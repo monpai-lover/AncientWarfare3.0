@@ -1,0 +1,84 @@
+using System;
+using System.IO;
+
+internal static class LocalCourtCountyMapFixSourceGuardTests
+{
+    internal static void Run()
+    {
+        string chief = Read("Code/core/court/LocalChiefOfficeResolver.cs");
+        Contains(chief, "return custom.ToArray();",
+            "local templates must expose all configured offices");
+        string readModel = Read("Code/core/court/CourtReadModelService.cs");
+        Contains(readModel, "CourtService.GetActiveOfficers(\n                    pKingdom, int.MaxValue)",
+            "local court read models must not truncate county officers");
+        string runtime = Read("Code/core/court/CustomCourtRuntime.cs");
+        Contains(runtime, "bool effectiveManual = manual;",
+            "capital local courts must allow explicit template bindings");
+        string county = Read("Code/core/county/CountyAdministrationService.cs");
+        Contains(county, "CountyZonePartitionRules.Partition(valid, adjacency)",
+            "county reconciliation must partition all current city zones");
+        Contains(county, "!used.Contains(p.CountyId)",
+            "county reconciliation must retire surplus records");
+        Contains(county, "DeJureRegionStore.TryGetForCity(",
+            "county naming must reuse the city's persisted commandery");
+        Contains(county, "SelectUnusedCountyFromCatalog(",
+            "unmatched legacy cities must still receive historical county names");
+        string partition = Read("Code/core/county/CountyZonePartitionRules.cs");
+        Contains(partition, "MaximumCountiesPerCity = 3",
+            "a city must cap its county count at three");
+        Contains(partition, "int countyCount = Math.Min(MaximumCountiesPerCity",
+            "county count must be determined from the 25-zone threshold");
+        string map = Read("Code/core/policy/HierarchicalVassalMapModeService.cs");
+        Contains(map, "KeepNativeLabelsVisible();",
+            "empty global clicks must preserve existing labels");
+        Contains(map, "IsCityCountyLayer ? 0.72f : 1f",
+            "county map labels must use a smaller scale");
+        Contains(map, "KeepNativeLabelsVisible();",
+            "native label failures must preserve the last visible label batch");
+        Contains(map, "county.CityId != CityAdministrationState.",
+            "county rendering must include every county in the focused city");
+        Contains(map, "ResolveCountyColor(",
+            "county rendering must use distinct original palette colors");
+        string meta = Read("Code/core/policy/AWMapModeMetaLibrary.cs");
+        Contains(meta, "ColorCountyZones(",
+            "county hover must preserve sibling county colors");
+        string runtimeLabels = Read(
+            "Code/core/policy/HierarchicalVassalMapLabelRuntime.cs");
+        Contains(runtimeLabels, "pSource.SeatCity.city_center.x",
+            "de jure labels must anchor to the seat city");
+        Contains(map, "StableLiveListSnapshotRules.TryCapture(",
+            "label discovery must snapshot the live kingdom collection");
+        Contains(map, "Kingdom pKingdom) => StableLiveListSnapshotRules."
+            + "TryCapture(",
+            "label discovery must snapshot each live city collection");
+        Contains(runtimeLabels, "_activeViewDirty = _mapModeActive;",
+            "label failures must leave the active view queued for retry");
+        string heir = Read("Code/core/lineage/HeirService.cs");
+        Contains(heir, "SynchronizeHomeForSuccession(",
+            "registered heirs must persist the inheritance realm as nationality");
+        string affiliation = Read(
+            "Code/core/schools/HistoricalAffiliationService.cs");
+        Contains(affiliation, "SynchronizeHomeForSuccession",
+            "affiliation authority must expose an heir nationality transfer");
+        string schoolStore = Read(
+            "Code/core/schools/HistoricalSchoolStore.cs");
+        Contains(schoolStore, "HOME_KINGDOM_ID=@homeKingdom",
+            "heir nationality changes must persist the home kingdom id");
+        Contains(schoolStore, "HOME_KINGDOM_NAME=@homeKingdomName",
+            "heir nationality changes must persist the home kingdom name");
+        Contains(schoolStore, "HOMETOWN_CITY_ID=@hometown",
+            "heir nationality changes must persist the inherited home city");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            pPath.Replace('/', Path.DirectorySeparatorChar)))
+        .Replace("\r\n", "\n");
+
+    private static void Contains(string pText, string pNeedle,
+        string pMessage)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage);
+    }
+}

@@ -1,0 +1,23 @@
+using System;
+using System.IO;
+
+internal static class XiaBoatProjectileSourceGuardTests
+{
+    internal static void Run()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "content", "XiaBoats.cs"));
+        Contains(source, "private const string BOAT_ARROW_ATTACK_ID = \"boat_arrow\";");
+        Contains(source, "NormalizeBoatAttacks();");
+        Contains(source, "list_only_boat_assets");
+        Contains(source, "if (boat == null || !boat.is_boat) continue;");
+        Contains(source, "boat.default_attack = BOAT_ARROW_ATTACK_ID;");
+    }
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "missing all-boat arrow projectile guard: " + pNeedle);
+    }
+}

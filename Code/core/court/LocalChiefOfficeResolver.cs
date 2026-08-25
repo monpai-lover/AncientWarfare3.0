@@ -15,7 +15,11 @@ namespace AncientWarfare3.core.court
             IReadOnlyList<string> custom = ResolveCustomOfficeIds(
                 pKingdom, pCity);
             if (custom.Count > 0)
-                return custom.Take(pCapacity).ToArray();
+                // The bureau slot count is a legacy capacity value and can be
+                // stale (older saves commonly contain one slot).  A selected
+                // local template is authoritative: expose every configured
+                // office so lower officials remain visible and appointable.
+                return custom.ToArray();
             string builtInChief = CourtService.ResolveBuiltInCityOffice(
                 pKingdom, pCity);
             return Enumerable.Range(0, pCapacity)

@@ -1160,10 +1160,14 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                     {
                         RunTaskVerifierJobs();
                         taskVerifierStageCompleted = true;
+                        // The verifier consumes its own post job in one
+                        // bounded pass. Initialize the remaining post-job
+                        // range only when entering that range; resetting it
+                        // on every Step() replays batch 0 forever.
+                        batchIndex = 0;
+                        postJobIndex = taskVerifierJobIndex + 1;
                         return false;
                     }
-                    batchIndex = 0;
-                    postJobIndex = taskVerifierJobIndex + 1;
                     if (TryRunNextPostRange(
                             taskVerifierJobIndex + 1,
                             int.MaxValue))

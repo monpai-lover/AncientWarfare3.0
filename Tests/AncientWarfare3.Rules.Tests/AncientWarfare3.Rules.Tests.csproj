@@ -40,6 +40,9 @@
     <Compile Include="DeJureRegionMergeRulesTests.cs.txt" />
     <Compile Include="DeJureRegionMergeSourceGuardTests.cs.txt" />
     <Compile Include="GlobalDeJureMapModeSourceGuardTests.cs.txt" />
+    <Compile Include="LocalCourtCountyMapFixSourceGuardTests.cs.txt" />
+    <Compile Include="StableLiveListSnapshotRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\policy\StableLiveListSnapshotRules.cs" Link="Production\StableLiveListSnapshotRules.cs" />
     <Compile Include="DiplomacyTributaryDetailsRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\TributaryDiplomacyDetails.cs" Link="Production\TributaryDiplomacyDetails.cs" />
     <Compile Include="CourtStatisticsRulesTests.cs.txt" />
@@ -598,6 +601,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="HistoricalCountyNameRulesTests.cs.txt" />
+    <Compile Include="CountyZonePartitionRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\county\CountyZonePartitionRules.cs" Link="Production\CountyZonePartitionRules.cs" />
+    <Compile Include="XiaBoatProjectileSourceGuardTests.cs.txt" />
     <Compile Include="XiaHistoricalDeJureRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\DeJureHistoricalProfileRules.cs" Link="Production\DeJureHistoricalProfileRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ShiBranchRules.cs" Link="Production\ShiBranchRules.cs" />

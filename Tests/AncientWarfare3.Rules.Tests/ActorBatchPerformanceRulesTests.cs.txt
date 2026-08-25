@@ -34,13 +34,13 @@ internal static class ActorBatchPerformanceRulesTests
         string root = Directory.GetCurrentDirectory();
         string runner = File.ReadAllText(Path.Combine(root, "Code", "core",
             "performance", "AWCooperativeBatchRunner.cs"));
-        if (!runner.Contains("CanDeferActorParallelStageToPresentation") ||
-            !runner.Contains("update_stats"))
+        if (!runner.Contains(
+                "public bool WaitingForPresentationDispatch => false;") ||
+            runner.Contains("AWSimulationCoordinatorThread"))
             throw new InvalidOperationException(
-                "actor update_stats must keep ObjectContainer commits out of presentation background work");
+                "actor batches must use the Cultiway single scheduler channel");
 
-        if (!runner.Contains("FindNextParallelJobPhase", StringComparison.Ordinal) ||
-            !runner.Contains("FindNextMainThreadBatchIndex", StringComparison.Ordinal) ||
+        if (!runner.Contains("FindNextMainThreadBatchIndex", StringComparison.Ordinal) ||
             !runner.Contains(".parallel." , StringComparison.Ordinal))
             throw new InvalidOperationException(
                 "batch scheduling must expose fine-grained phase names for adaptive large-step budgeting");

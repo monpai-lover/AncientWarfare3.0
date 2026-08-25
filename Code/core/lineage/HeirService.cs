@@ -723,6 +723,9 @@ namespace AncientWarfare3.core.lineage
                     if (home?.data != null && pHeir.city != home)
                         pHeir.joinCity(home);
                 }
+                if (!HistoricalAffiliationService.
+                        SynchronizeHomeForSuccession(pHeir, pKingdom, home))
+                    return false;
                 pHeir.clearGraphicsFully();
             }
             catch { return false; }

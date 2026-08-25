@@ -42,8 +42,7 @@ namespace AncientWarfare3.core.lineage
             catch { return; }
             if (kingdom?.data == null || kingdom.isRekt()) return;
             if (KingdomExtinctionRules.ShouldDeferRemovalVerification(
-                    cityIndexStable: !manager.hasDirtyCities(),
-                    actorKingdomIndexStable: !manager.isUnitsDirty()))
+                    cityIndexStable: !manager.hasDirtyCities()))
             {
                 Schedule(kingdom);
                 return;

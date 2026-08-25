@@ -20,6 +20,7 @@ namespace AncientWarfare3.content
     {
         public const string TRADING_ID   = "boat_trading_Xia";
         public const string TRANSPORT_ID = "boat_transport_Xia";
+        private const string BOAT_ARROW_ATTACK_ID = "boat_arrow";
 
         // 从干净模板 clone(非 *_human,避免继承 human 的 texture_asset 脏状态)。
         private const string TRADING_FROM   = "$boat_trading$";
@@ -29,6 +30,21 @@ namespace AncientWarfare3.content
         {
             CloneBoat(TRADING_ID, TRADING_FROM);
             CloneBoat(TRANSPORT_ID, TRANSPORT_FROM);
+            NormalizeBoatAttacks();
+        }
+
+        // Keep every boat on the vanilla boat-arrow weapon. Its projectile is
+        // the stock "arrow" asset, while the boat-specific weapon preserves
+        // the correct naval attack path and stats.
+        private static void NormalizeBoatAttacks()
+        {
+            var boats = AssetManager.actor_library?.list_only_boat_assets;
+            if (boats == null) return;
+            foreach (ActorAsset boat in boats)
+            {
+                if (boat == null || !boat.is_boat) continue;
+                boat.default_attack = BOAT_ARROW_ATTACK_ID;
+            }
         }
 
         private static void CloneBoat(string pNewId, string pFromId)
@@ -41,6 +57,8 @@ namespace AncientWarfare3.content
             }
             // clone 继承 is_boat / boat_type / default_attack / decisions 等;船身贴图按新 id 懒加载 actors/boats/{pNewId}/。
             ActorAsset boat = AssetManager.actor_library.clone(pNewId, pFromId);
+            if (boat != null && boat.is_boat)
+                boat.default_attack = BOAT_ARROW_ATTACK_ID;
 
             // 船的贴图由 Boat 组件按 actors/boats/{id}/ 懒加载。这里仍要保留普通 sprite renderer
             // 和 override 标记,否则 BatchActors 会把它排除在可显示/可刷新的船资产列表之外。

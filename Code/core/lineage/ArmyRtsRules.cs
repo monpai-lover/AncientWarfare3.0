@@ -495,6 +495,18 @@ namespace AncientWarfare3.core.lineage
                    nextState == ArmyRtsState.Assault;
         }
 
+        public static bool ShouldPreserveStrategicRoute(
+            bool routeSubmitted, bool routeArrived, bool transportActive)
+        {
+            return routeSubmitted || routeArrived || transportActive;
+        }
+
+        public static bool ShouldLatchRetreatArrival(
+            bool exactCityZone, bool borderCityZone)
+        {
+            return exactCityZone || borderCityZone;
+        }
+
         public static int ResolveStableStrategicEndpoint(int lockedTileId,
             bool lockedEndpointLive, int candidateTileId)
         {

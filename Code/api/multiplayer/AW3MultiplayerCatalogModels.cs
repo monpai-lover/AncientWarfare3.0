@@ -63,7 +63,9 @@ namespace AncientWarfare3.api.multiplayer
         VirtualTitles = 30,
         MilitaryGovernorate = 31,
         CustomCourtWorkflow = 32,
-        BanditAmnestySettlement = 33
+        BanditAmnestySettlement = 33,
+        CourtStatistics = 34,
+        DeJureRegionMerge = 35
     }
 
     public enum AW3WindowOpenStatus : byte

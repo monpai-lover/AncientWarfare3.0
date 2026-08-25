@@ -234,9 +234,10 @@ namespace AncientWarfare3.core.policy
             }
             if (_processFailureRetryCount >= 3)
             {
-                _activeViewDirty = false;
-                _rootCountriesDirty = false;
-                _rootCitiesDirty = false;
+                // Preserve the last published labels and stop retrying a
+                // permanent fault every frame. Any later dirty notification
+                // resets the counter and permits a fresh batch.
+                return;
             }
         }
 

@@ -73,6 +73,17 @@ if (args.Length == 1 && args[0] == "--court-history-localization")
     DeJureSeatRenameSourceGuardTests.Run();
     DeJureSeatNameSyncSourceGuardTests.Run();
     GlobalDeJureEmptyClickSourceGuardTests.Run();
+    LocalCourtCountyMapFixSourceGuardTests.Run();
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--local-court-county-map-fixes")
+{
+    CountyZonePartitionRulesTests.Run();
+    CityAdministrationMapModeRulesTests.Run();
+    StableLiveListSnapshotRulesTests.Run();
+    LocalCourtCountyMapFixSourceGuardTests.Run();
+    Console.WriteLine("Local court, county, and map fix guards passed.");
     return;
 }
 
@@ -87,6 +98,13 @@ if (args.Length == 1 && args[0] == "--historical-dejure-naming")
 {
     XiaHistoricalDeJureRulesTests.Run();
     Console.WriteLine("Historical de jure naming rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--xia-boat-arrow-projectiles")
+{
+    XiaBoatProjectileSourceGuardTests.Run();
+    Console.WriteLine("Xia boat arrow projectile rules passed.");
     return;
 }
 

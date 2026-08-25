@@ -1,0 +1,85 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using AncientWarfare3.core.policy;
+
+internal static class StableLiveListSnapshotRulesTests
+{
+    internal static void Run()
+    {
+        object first = new object();
+        object second = new object();
+        IReadOnlyList<object> stable = StableLiveListSnapshotRules.TryCapture(
+            new[] { first, second });
+        Equal(2, stable?.Count ?? -1,
+            "stable live lists produce a complete snapshot");
+        True(ReferenceEquals(first, stable[0]) &&
+             ReferenceEquals(second, stable[1]),
+            "stable snapshots preserve item identity");
+
+        Equal(null, StableLiveListSnapshotRules.TryCapture(
+                new ShrinkingList(first, second)),
+            "a shrinking live list fails instead of returning a prefix");
+        Equal(null, StableLiveListSnapshotRules.TryCapture(
+                new ReplacingList(first, second)),
+            "same-count replacement fails instead of publishing mixed data");
+        Equal(null, StableLiveListSnapshotRules.TryCapture(
+                new ThrowingList(first, second)),
+            "index failures reject the complete snapshot");
+    }
+
+    private sealed class ShrinkingList : IReadOnlyList<object>
+    {
+        private readonly object[] _items;
+        private int _countReads;
+        internal ShrinkingList(params object[] pItems) => _items = pItems;
+        public int Count => ++_countReads == 1 ? _items.Length : 1;
+        public object this[int pIndex] => _items[pIndex];
+        public IEnumerator<object> GetEnumerator() =>
+            ((IEnumerable<object>)_items).GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class ReplacingList : IReadOnlyList<object>
+    {
+        private readonly object[] _items;
+        private int _firstReads;
+        internal ReplacingList(params object[] pItems) => _items = pItems;
+        public int Count => _items.Length;
+        public object this[int pIndex]
+        {
+            get
+            {
+                if (pIndex == 0 && _firstReads++ > 0) return new object();
+                return _items[pIndex];
+            }
+        }
+        public IEnumerator<object> GetEnumerator() =>
+            ((IEnumerable<object>)_items).GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class ThrowingList : IReadOnlyList<object>
+    {
+        private readonly object[] _items;
+        internal ThrowingList(params object[] pItems) => _items = pItems;
+        public int Count => _items.Length;
+        public object this[int pIndex] => pIndex == 1
+            ? throw new InvalidOperationException("mutated")
+            : _items[pIndex];
+        public IEnumerator<object> GetEnumerator() =>
+            ((IEnumerable<object>)_items).GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private static void True(bool pActual, string pMessage)
+    {
+        if (!pActual) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage);
+    }
+}

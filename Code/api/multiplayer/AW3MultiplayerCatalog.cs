@@ -136,7 +136,15 @@ namespace AncientWarfare3.api.multiplayer
                     "ui/icons/iconDiplomacy",
                     AW3WindowCategory.Domestic,
                     AW3WindowContextRequirement.Country |
-                    AW3WindowContextRequirement.TargetCountry)
+                    AW3WindowContextRequirement.TargetCountry),
+                Window(AW3WindowKind.CourtStatistics,
+                    "aw_court_statistics", "ui/icons/iconKingdomList",
+                    AW3WindowCategory.Domestic,
+                    AW3WindowContextRequirement.Country),
+                Window(AW3WindowKind.DeJureRegionMerge,
+                    "aw_de_jure_region_merge", "ui/icons/iconDiplomacy",
+                    AW3WindowCategory.Domestic,
+                    AW3WindowContextRequirement.Country)
             });
 
         private static readonly IReadOnlyList<AW3CommandDescriptor>

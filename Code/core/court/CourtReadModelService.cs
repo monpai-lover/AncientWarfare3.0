@@ -66,7 +66,7 @@ namespace AncientWarfare3.core.court
                     row.city_id >= 0).GroupBy(row => row.city_id)
                 .ToDictionary(group => group.Key, group => group.First());
             List<CourtOfficerView> officers = CourtService.GetActiveOfficers(
-                    pKingdom, 512).Where(row => row != null &&
+                    pKingdom, int.MaxValue).Where(row => row != null &&
                     (row.layer == CourtOfficeLayer.City ||
                      row.layer == CourtOfficeLayer.County)).ToList();
             Dictionary<long, OfficialCareerStateView> careerStates =
@@ -88,7 +88,7 @@ namespace AncientWarfare3.core.court
                     row.city_id >= 0).GroupBy(row => row.city_id)
                 .ToDictionary(group => group.Key, group => group.First());
             List<CourtOfficerView> officers = CourtService.GetActiveOfficers(
-                    pKingdom, 512).Where(row => row != null &&
+                    pKingdom, int.MaxValue).Where(row => row != null &&
                     (row.layer == CourtOfficeLayer.City ||
                      row.layer == CourtOfficeLayer.County)).ToList();
             return BuildLocal(pKingdom, pCity, bureaus, officers,
@@ -211,7 +211,7 @@ namespace AncientWarfare3.core.court
             EnsurePersistedLocalLeader(pKingdom, pCity, seats, officers);
             if (seats.Count > 0 && !officers.Any(row =>
                     row.office_id == seats[0]))
-                officers = CourtService.GetActiveOfficers(pKingdom, 512)
+                officers = CourtService.GetActiveOfficers(pKingdom, int.MaxValue)
                     .Where(row => row != null &&
                         row.layer == CourtOfficeLayer.City &&
                         row.city_id == pCity.data.id).ToList();
@@ -454,9 +454,13 @@ namespace AncientWarfare3.core.court
                 Actor actor = officer == null ? null :
                     World.world?.units?.get(officer.actor_id);
                 bool valid = IsValid(actor, pKingdom);
+                int chiefRank = pModel.Nodes.Where(item => item != null &&
+                        item.OfficeLayer == CourtOfficeLayer.City)
+                    .Select(item => item.Rank).DefaultIfEmpty(
+                        CourtPyramidRules.GovernorRank).Min();
                 var node = new CourtPyramidNodeModel(valid ? actor.data.id : -1L,
                     CourtOfficeId.CountyMagistrate,
-                    CourtOfficeId.CountyMagistrate, CourtPyramidRules.GovernorRank + 10,
+                    CourtOfficeId.CountyMagistrate, chiefRank + 10,
                     order++, !valid)
                 {
                     OfficeLayer = CourtOfficeLayer.County,

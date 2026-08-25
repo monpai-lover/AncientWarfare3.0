@@ -509,7 +509,7 @@ internal static class WarArmyReturnRulesTests
              lifecycleStoreClear > lifecycleCombatClear &&
              lifecycleWarEnd.Substring(lifecycleMissionGuard,
                      lifecycleCombatClear - lifecycleMissionGuard)
-                 .Contains("if (!hasValidMission)",
+                 .Contains("if (!returnActive && !hasValidMission)",
                      StringComparison.Ordinal),
             "war lifecycle preserves replacement missions while fallback return owns ended-war cleanup");
         True(lifecycleWarEnd.Contains(

@@ -2015,7 +2015,10 @@ namespace AncientWarfare3.core.schools
             {
                 using var command = new SQLiteCommand(DB);
                 command.CommandText = "UPDATE " + AffiliationTable +
-                    " SET RESIDENCE_CITY_ID=@residence," +
+                    " SET HOME_KINGDOM_ID=@homeKingdom," +
+                    "HOME_KINGDOM_NAME=@homeKingdomName," +
+                    "HOMETOWN_CITY_ID=@hometown," +
+                    "RESIDENCE_CITY_ID=@residence," +
                     "PREVIOUS_RESIDENCE_CITY_ID=@previous,DESTINATION_CITY_ID=@destination," +
                     "SERVICE_KINGDOM_ID=@service,LIFECYCLE_STATE=@state," +
                     "SERVICE_START_YEAR=@serviceStart,SERVICE_END_YEAR=@serviceEnd," +
@@ -2023,6 +2026,12 @@ namespace AncientWarfare3.core.schools
                     "VOYAGE_START_YEAR=@voyageStart,VOYAGE_ARRIVAL_YEAR=@voyageArrival," +
                     "TRANSPORT_FAILURES=@failures,UPDATED_TIME=@time WHERE ACTOR_ID=@actor" +
                     " AND LIFECYCLE_STATE<>@deadState";
+                command.Parameters.AddWithValue("@homeKingdom",
+                    pState.HomeKingdomId);
+                command.Parameters.AddWithValue("@homeKingdomName",
+                    pState.HomeKingdomName ?? string.Empty);
+                command.Parameters.AddWithValue("@hometown",
+                    pState.HometownCityId);
                 command.Parameters.AddWithValue("@residence", pState.ResidenceCityId);
                 command.Parameters.AddWithValue("@previous", pState.PreviousResidenceCityId);
                 command.Parameters.AddWithValue("@destination", pState.DestinationCityId);

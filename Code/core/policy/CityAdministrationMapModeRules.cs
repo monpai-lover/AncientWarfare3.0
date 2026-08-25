@@ -24,6 +24,7 @@ namespace AncientWarfare3.core.policy
         private long _focusedKingdomId = -1L;
         private readonly List<long> _regionBreadcrumbs = new List<long>();
         private long _focusedCountyId = -1L;
+        private long _focusedCountyCityId = -1L;
 
         internal bool IsCountryLevel => _focusedKingdomId < 0L;
         internal bool IsRegionLevel => _focusedKingdomId >= 0L &&
@@ -36,6 +37,8 @@ namespace AncientWarfare3.core.policy
         internal long FocusSeatCityId => IsCityLevel
             ? _regionBreadcrumbs[_regionBreadcrumbs.Count - 1] : -1L;
         internal long FocusCountyId => IsCountyLevel ? _focusedCountyId : -1L;
+        internal long FocusCountyCityId => IsCountyLevel
+            ? _focusedCountyCityId : -1L;
         internal IReadOnlyList<long> RegionBreadcrumbs => _regionBreadcrumbs;
 
         internal bool PushKingdom(long pKingdomId)
@@ -51,6 +54,7 @@ namespace AncientWarfare3.core.policy
             _focusedKingdomId = -1L;
             _regionBreadcrumbs.Clear();
             _focusedCountyId = -1L;
+            _focusedCountyCityId = -1L;
             return true;
         }
 
@@ -67,16 +71,18 @@ namespace AncientWarfare3.core.policy
             if (IsCountyLevel)
             {
                 _focusedCountyId = -1L;
+                _focusedCountyCityId = -1L;
                 return true;
             }
             _regionBreadcrumbs.RemoveAt(_regionBreadcrumbs.Count - 1);
             return true;
         }
 
-        internal bool PushCounty(long pCountyId)
+        internal bool PushCounty(long pCountyId, long pCityId = -1L)
         {
             if (pCountyId < 0L || !IsCityLevel) return false;
             _focusedCountyId = pCountyId;
+            _focusedCountyCityId = pCityId;
             return true;
         }
 
@@ -85,6 +91,7 @@ namespace AncientWarfare3.core.policy
             _focusedKingdomId = -1L;
             _regionBreadcrumbs.Clear();
             _focusedCountyId = -1L;
+            _focusedCountyCityId = -1L;
         }
     }
 
@@ -100,6 +107,23 @@ namespace AncientWarfare3.core.policy
         {
             long normalized = pSeatCityId < 0L ? -pSeatCityId : pSeatCityId;
             return RegionPalette[(int)(normalized % RegionPalette.Length)];
+        }
+
+        internal static bool IsCountyVisible(long pFocusedCityId,
+            long pCountyCityId)
+        {
+            return pFocusedCityId >= 0L &&
+                   pCountyCityId == pFocusedCityId;
+        }
+
+        internal static int CountyPaletteIndex(int pRealmColorIndex,
+            int pCountyOrdinal, int pPaletteCount)
+        {
+            if (pPaletteCount <= 0) return -1;
+            int origin = pRealmColorIndex < 0 ? 0 : pRealmColorIndex;
+            int ordinal = Math.Max(0, pCountyOrdinal);
+            int index = (origin + ordinal) % pPaletteCount;
+            return index < 0 ? index + pPaletteCount : index;
         }
 
         internal static string CacheKey(long pWorldGeneration,

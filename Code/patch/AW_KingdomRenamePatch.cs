@@ -29,8 +29,7 @@ namespace AncientWarfare3.patch
                 if (!string.Equals(__state, committedCityName,
                         StringComparison.Ordinal))
                 {
-                    DeJureRegionStore.SyncSeatName(city, committedCityName,
-                        pTrack);
+                    DeJureRegionStore.SyncSeatName(city, committedCityName);
                     HierarchicalVassalMapModeService.MarkCityDirty(city);
                 }
                 return;

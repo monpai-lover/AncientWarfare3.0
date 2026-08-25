@@ -32,11 +32,15 @@ internal static class RecruitmentLifecycleRemovalRulesTests
         Assert(!annual.Contains("WartimeGarrisonService.OnKingdomYear",
             StringComparison.Ordinal),
             "annual work must not run AW3 war mobilization");
-        Assert(!warPatch.Contains("TemporaryLevyService.OnWarStarted",
-            StringComparison.Ordinal) &&
+        Assert(warPatch.Contains(
+                "TemporaryLevyService.OnWarStarted(__result,",
+                StringComparison.Ordinal) &&
+            warPatch.Contains(
+                "WarNoticeService.FindSignatureForWar(__result)",
+                StringComparison.Ordinal) &&
             !warPatch.Contains("TemporaryLevyService.OnEmergencyChanged",
                 StringComparison.Ordinal),
-            "war lifecycle must not start AW3 levy preparation");
+            "war lifecycle converges notice preparation through the signed war-start entry point");
         Assert(notice.Contains("TemporaryLevyService.OnEmergencyChanged",
                    StringComparison.Ordinal) &&
                notice.Contains("TemporaryLevyService.OnNoticeClosed",

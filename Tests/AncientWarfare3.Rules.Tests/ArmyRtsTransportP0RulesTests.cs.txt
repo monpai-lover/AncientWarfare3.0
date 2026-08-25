@@ -91,6 +91,47 @@ internal static class ArmyRtsTransportP0RulesTests
         string boatLifecycle = File.ReadAllText(Path.Combine(root, "Code",
             "patch", "AW_ActorBoatLifecyclePatch.cs"));
 
+        int captainPriorityStart = controller.IndexOf(
+            "internal static bool HasActiveCaptainObjective(",
+            StringComparison.Ordinal);
+        int captainPriorityEnd = controller.IndexOf(
+            "// Runs at the actor-post boundary",
+            captainPriorityStart, StringComparison.Ordinal);
+        string captainPriorityBody = captainPriorityStart >= 0 &&
+            captainPriorityEnd > captainPriorityStart
+            ? controller.Substring(captainPriorityStart,
+                captainPriorityEnd - captainPriorityStart)
+            : string.Empty;
+        Assert(!captainPriorityBody.Contains(
+                   "record.State == ArmyRtsState.Rally",
+                   StringComparison.Ordinal),
+            "an active RTS captain remains eligible for P0 while rallying");
+
+        int memberPriorityStart = controller.IndexOf(
+            "internal static bool HasActiveMemberObjective(",
+            StringComparison.Ordinal);
+        int memberPriorityEnd = controller.IndexOf(
+            "public static bool HasFrontHoldMission(",
+            memberPriorityStart, StringComparison.Ordinal);
+        string memberPriorityBody = memberPriorityStart >= 0 &&
+            memberPriorityEnd > memberPriorityStart
+            ? controller.Substring(memberPriorityStart,
+                memberPriorityEnd - memberPriorityStart)
+            : string.Empty;
+        Assert(!memberPriorityBody.Contains(
+                   "record.State == ArmyRtsState.Rally",
+                   StringComparison.Ordinal),
+            "active RTS members remain eligible for P0 while rallying");
+
+        Assert(!controller.Contains(
+                   "if (pState != ArmyRtsState.Rally)\n                ArmyMilitaryMovementPriorityIndex.Register",
+                   StringComparison.Ordinal),
+            "state/job reconciliation cannot drop RTS actors from P0 during rally");
+        Assert(!controller.Contains(
+                   "record.State != ArmyRtsState.Rally &&\n                    ShouldOwnMilitaryActor",
+                   StringComparison.Ordinal),
+            "captain command reassertion cannot drop a rallying captain from P0");
+
         int boatOwnershipStart = transport.IndexOf(
             "public static bool OwnsTransportBoat(",
             StringComparison.Ordinal);

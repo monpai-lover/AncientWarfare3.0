@@ -7,6 +7,7 @@ namespace AncientWarfare3.core.county
     public static class CountyZonePartitionRules
     {
         public const int MaximumZonesPerCounty = 25;
+        public const int MaximumCountiesPerCity = 3;
 
         public static IReadOnlyList<IReadOnlyList<long>> Partition(
             IEnumerable<long> pZoneIds,
@@ -16,46 +17,47 @@ namespace AncientWarfare3.core.county
                 .OrderBy(p => p).ToArray();
             var result = new List<IReadOnlyList<long>>();
             if (zones.Length == 0) return result;
-            if (zones.Length <= MaximumZonesPerCounty)
-            {
-                result.Add(zones);
-                return result;
-            }
+            int countyCount = Math.Min(MaximumCountiesPerCity,
+                (zones.Length + MaximumZonesPerCounty - 1) /
+                MaximumZonesPerCounty);
+            var ordered = new List<long>(zones.Length);
             if (pAdjacency == null)
             {
-                for (int offset = 0; offset < zones.Length;
-                    offset += MaximumZonesPerCounty)
-                    result.Add(zones.Skip(offset)
-                        .Take(MaximumZonesPerCounty).ToArray());
-                return result;
+                ordered.AddRange(zones);
             }
-
-            var remaining = new HashSet<long>(zones);
-            while (remaining.Count > 0)
+            else
             {
-                long seed = remaining.Min();
-                var county = new List<long>(MaximumZonesPerCounty);
-                var queue = new Queue<long>();
-                var queued = new HashSet<long>();
-                queue.Enqueue(seed);
-                queued.Add(seed);
-                while (queue.Count > 0 && county.Count < MaximumZonesPerCounty)
+                // Preserve spatial continuity where possible, but build one
+                // complete ordering first.  This allows the final county
+                // count to be capped at three and the complete city to be
+                // divided evenly even when zone adjacency has gaps.
+                var remaining = new HashSet<long>(zones);
+                while (remaining.Count > 0)
                 {
-                    long zone = queue.Dequeue();
-                    if (!remaining.Remove(zone)) continue;
-                    county.Add(zone);
-                    if (!pAdjacency.TryGetValue(zone,
-                            out IReadOnlyList<long> neighbours)) continue;
-                    foreach (long neighbour in neighbours.OrderBy(p => p))
-                        if (remaining.Contains(neighbour) && queued.Add(neighbour))
-                            queue.Enqueue(neighbour);
+                    var queue = new Queue<long>();
+                    var queued = new HashSet<long>();
+                    queue.Enqueue(remaining.Min());
+                    while (queue.Count > 0)
+                    {
+                        long zone = queue.Dequeue();
+                        if (!remaining.Remove(zone)) continue;
+                        ordered.Add(zone);
+                        if (!pAdjacency.TryGetValue(zone,
+                                out IReadOnlyList<long> neighbours)) continue;
+                        foreach (long neighbour in neighbours.OrderBy(p => p))
+                            if (remaining.Contains(neighbour) &&
+                                queued.Add(neighbour)) queue.Enqueue(neighbour);
+                    }
                 }
-                if (county.Count == 0)
-                {
-                    county.Add(seed);
-                    remaining.Remove(seed);
-                }
-                result.Add(county);
+            }
+            int baseSize = ordered.Count / countyCount;
+            int remainder = ordered.Count % countyCount;
+            int offset = 0;
+            for (int index = 0; index < countyCount; index++)
+            {
+                int size = baseSize + (index < remainder ? 1 : 0);
+                result.Add(ordered.Skip(offset).Take(size).ToArray());
+                offset += size;
             }
             return result;
         }

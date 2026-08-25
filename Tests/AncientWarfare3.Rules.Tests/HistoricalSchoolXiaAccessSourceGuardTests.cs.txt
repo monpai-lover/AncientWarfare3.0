@@ -38,7 +38,7 @@ internal static class HistoricalSchoolXiaAccessSourceGuardTests
             "!HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(pDestination)",
             "direct invitation must reject foreign non-Xia destinations");
         Contains(travel,
-            "!HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(city)",
+            "HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(city) &&",
             "ordinary destination candidates must exclude inaccessible cities");
         Contains(travel,
             "!HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(\n" +

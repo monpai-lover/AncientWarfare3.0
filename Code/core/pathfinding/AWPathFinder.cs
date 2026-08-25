@@ -330,7 +330,8 @@ namespace AncientWarfare3.core.pathfinding
             WorldTile pTarget, bool pPathOnWater, bool pWalkOnBlocks,
             bool pWalkOnLava, int pLimitRegions)
         {
-            if (pActor?.data == null || pTarget?.data == null ||
+            if (pActor?.data == null || pActor.data.id <= 0L ||
+                pTarget?.data == null ||
                 pActor.current_tile?.data == null)
                 return new AWPathSubmissionResult(
                     AWPathSubmissionKind.Rejected,
@@ -418,7 +419,8 @@ namespace AncientWarfare3.core.pathfinding
 #if !AW3_RULES_TESTS
         public void RequestDirectPath(Actor pActor, WorldTile pTarget)
         {
-            if (pActor?.data == null || pTarget?.data == null ||
+            if (pActor?.data == null || pActor.data.id <= 0L ||
+                pTarget?.data == null ||
                 pActor.current_tile?.data == null) return;
             AWTraversalGeneration generation =
                 AWPathfindingBootstrap.Cache?.Pin();

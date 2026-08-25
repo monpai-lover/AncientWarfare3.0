@@ -31,9 +31,10 @@ if ($westernPromotionStart -lt 0 -or $westernPromotionEnd -le
 }
 $westernPromotion = $lineage.Substring($westernPromotionStart,
     $westernPromotionEnd - $westernPromotionStart)
-if (-not $westernPromotion.Contains('pNoble: true') -or
+if (-not $westernPromotion.Contains(
+        'pNoble: SocialIdentityService.IsFormalNoble(pActor)') -or
     -not $westernPromotion.Contains('pOfficial: true')) {
-    throw 'Successful Western appointments no longer establish noble officials.'
+    throw 'Western appointments must preserve only existing formal nobility.'
 }
 
 Write-Output 'Western court candidate eligibility source guard passed.'

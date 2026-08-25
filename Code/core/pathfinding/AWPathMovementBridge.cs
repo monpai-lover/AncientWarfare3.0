@@ -66,7 +66,13 @@ namespace AncientWarfare3.core.pathfinding
             AWPathWorkClass? pRetainedWorkClass = null)
         {
             AWPathFinder finder = AWPathfindingBootstrap.Finder;
-            if (pActor?.data == null || pTarget?.data == null ||
+            // Vanilla can invoke GoToTileTarget while a newly spawned actor
+            // still has the transient id 0.  Cultiway rejects that request
+            // as InvalidActor; do the same before constructing AWPathRequest,
+            // whose world-scoped identity deliberately also supports the
+            // negative ids reserved for shared RTS routes.
+            if (pActor?.data == null || pActor.data.id <= 0L ||
+                pTarget?.data == null ||
                 pActor.current_tile?.data == null) return ExecuteEvent.False;
             if (AWPathLifecycleRules.ShouldBypassDecorativePath(
                     pActor.ai?.task?.id))

@@ -96,7 +96,11 @@ namespace AncientWarfare3.core.court
                     isCapital);
             bool military = automaticKind ==
                 CustomLocalGovernmentDefaultKind.Military;
-            bool effectiveManual = manual && !isCapital;
+            // A capital still uses the civil default when no explicit binding
+            // exists, but an explicit player choice must be respected there as
+            // well.  The previous capital exclusion made Minzhou/Junfu
+            // impossible to switch in the most visible local court.
+            bool effectiveManual = manual;
             string resolvedId = CustomLocalCourtTemplateRules.ResolveTemplateId(
                 templates, persistedId, effectiveManual, military);
             pTemplate = templates.FirstOrDefault(template =>

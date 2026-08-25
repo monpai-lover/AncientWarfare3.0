@@ -63,11 +63,16 @@ internal static class ArmySharedPathRecoveryRulesTests
                 hasPreviousTile: true, transportStep: true,
                 deltaX: 255, deltaY: 0),
             "transport owns its non-local spatial transition");
-        Assert(ArmySharedPathRules.ShouldWaitForProviderRoute(
+        Assert(!ArmySharedPathRules.ShouldWaitForProviderRoute(
                 usesProvider: true, providerComplete: false,
                 routeStepCount: 0, routeContainsTransportStep: false,
                 transportActive: false),
-            "captain waits while the single provider route is pending");
+            "an empty provider route falls back to the native mission target");
+        Assert(ArmySharedPathRules.ShouldWaitForProviderRoute(
+                usesProvider: true, providerComplete: false,
+                routeStepCount: 1, routeContainsTransportStep: false,
+                transportActive: false),
+            "captain waits only after the provider has published a route step");
         Assert(!ArmySharedPathRules.ShouldWaitForProviderRoute(
                 usesProvider: true, providerComplete: true,
                 routeStepCount: 4, routeContainsTransportStep: false,
@@ -78,6 +83,20 @@ internal static class ArmySharedPathRecoveryRulesTests
                 routeStepCount: 4, routeContainsTransportStep: true,
                 transportActive: false),
             "transport steps remain owned by transport lifecycle");
+        Assert(ArmyRtsRules.ShouldPreserveStrategicRoute(
+                routeSubmitted: true, routeArrived: false,
+                transportActive: false),
+            "a pending strategic route survives the next authority pass");
+        Assert(!ArmyRtsRules.ShouldPreserveStrategicRoute(
+                routeSubmitted: false, routeArrived: false,
+                transportActive: false),
+            "an idle route state can be replaced");
+        Assert(ArmyRtsRules.ShouldLatchRetreatArrival(
+                exactCityZone: false, borderCityZone: true),
+            "retreat completes at a reachable friendly border zone");
+        Assert(!ArmyRtsRules.ShouldLatchRetreatArrival(
+                exactCityZone: false, borderCityZone: false),
+            "a tile merely adjacent to the city is not retreat arrival");
 
         string root = Directory.GetCurrentDirectory();
         string controller = File.ReadAllText(Path.Combine(root, "Code",
@@ -105,6 +124,9 @@ internal static class ArmySharedPathRecoveryRulesTests
         Assert(controller.Contains("TryIssueVanillaCityAttackOrder(pArmy,",
                 StringComparison.Ordinal),
             "RTS movement publishes its locked city target to vanilla AI");
+        Assert(controller.Contains("ShouldPreserveStrategicRoute(",
+                StringComparison.Ordinal),
+            "native march and retreat jobs preserve an in-flight route");
 
         string watchdog = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyStallWatchdogService.cs"));
@@ -170,8 +192,16 @@ internal static class ArmySharedPathRecoveryRulesTests
         Assert(advanceBody.Contains("SubmitStrategicRoute(",
                 StringComparison.Ordinal),
             "strategic marching installs one provider route owner");
-        Assert(controller.Contains("ShouldWaitForProviderRoute",
-                StringComparison.Ordinal),
+        string captainMission = File.ReadAllText(Path.Combine(root, "Code",
+            "ai", "behaviours", "actor", "BehArmyRtsMission.cs"));
+        int waitForProvider = captainMission.IndexOf(
+            "ShouldWaitForProviderRoute(pActor)",
+            StringComparison.Ordinal);
+        int installProviderRoute = captainMission.IndexOf(
+            "TryStartCompleteSharedRoute(pActor)",
+            StringComparison.Ordinal);
+        Assert(waitForProvider >= 0 &&
+               installProviderRoute > waitForProvider,
             "captain behavior waits for provider completion before vanilla fallback");
     }
 
