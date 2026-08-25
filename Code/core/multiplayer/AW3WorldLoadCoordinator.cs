@@ -225,6 +225,7 @@ namespace AncientWarfare3.core.multiplayer
                     CityReservePoolService.EndWorldLoadRestore();
                     DeJureRegionStore.RepairAfterWorldLoaded();
                     CountyAdministrationStore.RepairAfterWorldLoaded();
+                    SocialIdentityMigrationService.RepairAfterWorldLoaded();
                     return;
                 }
                 if (result.Success)
@@ -238,6 +239,7 @@ namespace AncientWarfare3.core.multiplayer
                             CityReservePoolService.EndWorldLoadRestore();
                             DeJureRegionStore.RepairAfterWorldLoaded();
                             CountyAdministrationStore.RepairAfterWorldLoaded();
+                            SocialIdentityMigrationService.RepairAfterWorldLoaded();
                             return;
                         }
                         try
@@ -257,6 +259,7 @@ namespace AncientWarfare3.core.multiplayer
                 CityReservePoolService.EndWorldLoadRestore();
                 DeJureRegionStore.RepairAfterWorldLoaded();
                 CountyAdministrationStore.RepairAfterWorldLoaded();
+                SocialIdentityMigrationService.RepairAfterWorldLoaded();
                 return;
             }
 
@@ -270,6 +273,7 @@ namespace AncientWarfare3.core.multiplayer
                 CityReservePoolService.EndWorldLoadRestore();
                 DeJureRegionStore.RepairAfterWorldLoaded();
                 CountyAdministrationStore.RepairAfterWorldLoaded();
+                SocialIdentityMigrationService.RepairAfterWorldLoaded();
                 return;
             }
 
@@ -296,6 +300,7 @@ namespace AncientWarfare3.core.multiplayer
             CityReservePoolService.EndWorldLoadRestore();
             DeJureRegionStore.RepairAfterWorldLoaded();
             CountyAdministrationStore.RepairAfterWorldLoaded();
+            SocialIdentityMigrationService.RepairAfterWorldLoaded();
         }
 
         private static void LogNormalFailure(string context,

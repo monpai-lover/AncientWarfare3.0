@@ -92,8 +92,10 @@ namespace AncientWarfare3.core.court
                 pKingdom, pLayer, pOfficeId, pCity);
             bool regionalGovernor = OfficialCareerStateService.
                 IsRegionalGovernorSeat(pKingdom, pLayer, pOfficeId, pCity);
+            bool countyLayer = pLayer == CourtOfficeLayer.County;
+            bool localLayer = pLayer == CourtOfficeLayer.City || countyLayer;
             bool localLeaderQualificationBypass = pAllowLocalLowerQualification &&
-                pLayer == CourtOfficeLayer.City && pActor.isCityLeader();
+                localLayer && pActor.isCityLeader();
             int currentRank = OfficialCareerStateService.ReadRankFast(pActor);
             bool hasCareerRank = nineRankSystem && currentRank >
                 OfficialCareerRankRules.Unranked;
@@ -102,7 +104,7 @@ namespace AncientWarfare3.core.court
                 !localLeaderQualificationBypass) return false;
             bool allowUnqualifiedLocalFallback =
                 LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
-                    pLayer == CourtOfficeLayer.City, officeGrade,
+                    localLayer, officeGrade,
                     pAllowVacancyPromotion &&
                     pAllowLocalLowerQualification);
             CivilServiceQualificationRecord qualification = examinationSystem
@@ -126,7 +128,7 @@ namespace AncientWarfare3.core.court
                 return false;
 
             if (currentRank <= OfficialCareerRankRules.Unranked)
-                currentRank = pLayer == CourtOfficeLayer.City
+                currentRank = localLayer
                     ? OfficialCareerRankRules.ResolveInitialLocalAppointmentRank(
                         OfficialCareerRankRules.Unranked, officeGrade,
                         hasNineRankSystem: true, hasFormalQualification: true,
@@ -142,7 +144,7 @@ namespace AncientWarfare3.core.court
             pActor.data.get(LineageKeys.OFFICER_LAST_KAOKE,
                 out int evaluation, -1);
             bool passingEvaluation = evaluation >= 0 && evaluation <= 2;
-            bool rankEligible = pLayer == CourtOfficeLayer.City
+            bool rankEligible = localLayer
                 ? currentRank >= OfficialCareerRankRules.
                     RequiredRankForLocalOfficeGrade(officeGrade,
                         regionalGovernor)

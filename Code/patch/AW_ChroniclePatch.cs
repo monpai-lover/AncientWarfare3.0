@@ -255,6 +255,7 @@ namespace AncientWarfare3.patch
         public static void NewCityEvent_Postfix(City __instance)
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
+            CountyAdministrationStore.MarkCityDirty(__instance?.data?.id ?? -1L);
             KingdomMilitaryReadinessService.OnCityKingdomChanged(
                 __instance, null, __instance?.kingdom);
             ArmyRetreatService.OnCityControlChanged(__instance, null);

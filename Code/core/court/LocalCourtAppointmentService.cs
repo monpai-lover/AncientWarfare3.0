@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.schools;
 
@@ -181,6 +182,66 @@ namespace AncientWarfare3.core.court
                 finalCounts[seat] = filled - 1;
             }
             return true;
+        }
+
+        internal static bool ReconcileCounties(Kingdom pKingdom, City pCity,
+            int pYear, out int pVacancies)
+        {
+            pVacancies = 0;
+            if (DB == null || pKingdom?.data == null || pCity?.data == null ||
+                pCity.kingdom != pKingdom) return false;
+            IReadOnlyList<CountyRecord> counties =
+                CountyAdministrationService.CountiesForCity(pCity.data.id);
+            if (counties.Count == 0) return true;
+            HashSet<long> occupied = LoadCountyOfficerIds(pKingdom.id,
+                pCity.data.id);
+            List<Actor> candidates = null;
+            foreach (CountyRecord county in counties.OrderBy(p => p.Ordinal))
+            {
+                if (county == null || !county.Active || county.CountyId < 0L)
+                    continue;
+                if (occupied.Contains(county.CountyId)) continue;
+                candidates ??= LoadAllCandidates(pKingdom, pCity,
+                    LoadCandidates(pKingdom, pCity));
+                Actor candidate = candidates.Where(p => p?.data != null)
+                    .OrderByDescending(MainAbility)
+                    .ThenBy(p => p.data.id)
+                    .FirstOrDefault();
+                if (candidate == null || !CourtService.TryAssignCountyMagistrate(
+                        candidate, pKingdom, pCity, county.CountyId,
+                        pVacancyPromotion: true))
+                {
+                    pVacancies++;
+                    continue;
+                }
+                occupied.Add(county.CountyId);
+                candidates.Remove(candidate);
+            }
+            return true;
+        }
+
+        private static HashSet<long> LoadCountyOfficerIds(long pKingdomId,
+            long pCityId)
+        {
+            var result = new HashSet<long>();
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT COUNTY_ID FROM " +
+                    CourtOfficerTableItem.GetTableName() +
+                    " WHERE KINGDOM_ID=@kingdom AND CITY_ID=@city " +
+                    "AND LAYER=@layer AND OFFICE_ID=@office AND ACTIVE=1";
+                command.Parameters.AddWithValue("@kingdom", pKingdomId);
+                command.Parameters.AddWithValue("@city", pCityId);
+                command.Parameters.AddWithValue("@layer", CourtOfficeLayer.County);
+                command.Parameters.AddWithValue("@office",
+                    CourtOfficeId.CountyMagistrate);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read() && !reader.IsDBNull(0))
+                    result.Add(Convert.ToInt64(reader.GetValue(0)));
+            }
+            catch { }
+            return result;
         }
 
         private static List<string> DesiredSeats(Kingdom pKingdom, City pCity,

@@ -9,6 +9,7 @@ namespace AncientWarfare3.core.court
         public const string Censor = "censor";
         public const string Feudatory = "feudatory";
         public const string Regional = "regional";
+        public const string County = "county";
     }
 
     public static class CourtOfficeId
@@ -30,6 +31,7 @@ namespace AncientWarfare3.core.court
         public const string Governor = "governor";
         public const string GranaryOfficer = "granary_officer";
         public const string Constable = "constable";
+        public const string CountyMagistrate = "county_magistrate";
 
         // 三省六部(Sui-Tang tier)
         public const string Zhongshu = "zhongshu"; // 中书省

@@ -30,6 +30,12 @@ namespace AncientWarfare3.core.court
             return isCityLayer && officeGrade == 30 && vacancyPromotion;
         }
 
+        public static bool CanUseCountyFallback(bool isCountyLayer,
+            int officeGrade, bool vacancyPromotion)
+        {
+            return isCountyLayer && officeGrade == 30 && vacancyPromotion;
+        }
+
         public static int ResolveEntryRank(int currentRank, int officeGrade)
         {
             if (officeGrade != 30) return currentRank;

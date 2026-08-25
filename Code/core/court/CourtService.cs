@@ -6,6 +6,7 @@ using AncientWarfare3.content.policies;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.patch;
@@ -1795,7 +1796,7 @@ namespace AncientWarfare3.core.court
 
         private static bool SetOfficer(Actor pActor, Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId, City pCity,
             bool pActing = false, bool pVacancyPromotion = false,
-            bool pAllowLocalLowerQualification = false)
+            bool pAllowLocalLowerQualification = false, long pCountyId = -1L)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
             if (!RoyalGuardOfficeRules.CanAcceptOfficeAppointment(
@@ -1820,7 +1821,7 @@ namespace AncientWarfare3.core.court
             OfficialCareerAppointmentResult careerResult = OfficialCareerService.Appoint(
                 pActor, pKingdom, pLayer ?? "", pOfficeId ?? "", personalSchool,
                 pCity, pActing, pVacancyPromotion,
-                pAllowLocalLowerQualification);
+                pAllowLocalLowerQualification, pCountyId);
             if (!careerResult.IsCommitted)
             {
                 ModClass.LogWarning("Court appointment persistence failed: kingdom=" +
@@ -1871,6 +1872,23 @@ namespace AncientWarfare3.core.court
                 pOfficeId, SchoolMembershipService.GetSchool(pActor.data.id),
                 pCity, pActing: false, pVacancyPromotion,
                 pAllowLocalLowerQualification: true);
+        }
+
+        internal static bool TryAssignCountyMagistrate(Actor pActor,
+            Kingdom pKingdom, City pCity, long pCountyId,
+            bool pVacancyPromotion = true)
+        {
+            if (pActor?.data == null || pKingdom?.data == null ||
+                pCity?.data == null || pCity.kingdom != pKingdom ||
+                pCountyId < 0L)
+                return false;
+            if (!CountyAdministrationService.CountiesForCity(pCity.data.id)
+                    .Any(p => p.CountyId == pCountyId && p.Active)) return false;
+            return SetOfficer(pActor, pKingdom, CourtOfficeLayer.County,
+                CourtOfficeId.CountyMagistrate,
+                SchoolMembershipService.GetSchool(pActor.data.id), pCity,
+                pVacancyPromotion: pVacancyPromotion,
+                pAllowLocalLowerQualification: true, pCountyId: pCountyId);
         }
 
         internal static bool EnsureLocalOfficerHistory(Kingdom pKingdom,

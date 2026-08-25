@@ -789,8 +789,6 @@ namespace AncientWarfare3.core.lineage
         {
             if (!SocialIdentityService.IsFormalNoble(pActor))
             {
-                EnsureLineageForNoble(pActor, NobleTrigger.Official,
-                    pOfficeId, pDeferArchive: true);
                 SocialIdentityService.ApplyOfficial(pActor);
                 return;
             }
@@ -833,6 +831,16 @@ namespace AncientWarfare3.core.lineage
                 return;
             if (SlaveService.IsSlave(pActor))
                 SlaveService.FreeSlave(pActor, "promoted");
+
+            // Ordinary officials receive scholar-official status without
+            // entering the noble lineage admission path.
+            if (pTrigger == NobleTrigger.Official &&
+                !SocialIdentityService.IsFormalNoble(pActor))
+            {
+                SocialIdentityService.ApplyOfficial(pActor);
+                ApplyDisplayName(pActor);
+                return;
+            }
 
             if (westernAdmission)
             {

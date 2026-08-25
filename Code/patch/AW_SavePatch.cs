@@ -259,6 +259,7 @@ namespace AncientWarfare3.patch
             AW3SaveDirectoryRegistry.ClearForNewWorld();
             DeJureRegionStore.ClearForNewWorld();
             CountyAdministrationStore.ClearForNewWorld();
+            SocialIdentityMigrationService.ResetForNewWorld();
         }
     }
 }

@@ -7,12 +7,14 @@ namespace AncientWarfare3.core.court
             string pInstitutionAtAppointment, int pAppointedYear,
             double pAppointedTime, int pEndedYear, double pEndedTime, bool pIsCurrent,
             string pEndReason, string pKingdomName, string pKingdomColor, string pCityName,
-            int pRankAtAppointment, int pLocalGradeAtAppointment)
+            int pRankAtAppointment, int pLocalGradeAtAppointment,
+            long pCountyId = -1L)
         {
             OfficerId = pOfficerId;
             KingdomId = pKingdomId;
             ActorId = pActorId;
             CityId = pCityId;
+            CountyId = pCountyId;
             Layer = pLayer ?? "";
             OfficeId = pOfficeId ?? "";
             InstitutionAtAppointment = pInstitutionAtAppointment ?? "";
@@ -51,6 +53,7 @@ namespace AncientWarfare3.core.court
         public long KingdomId { get; }
         public long ActorId { get; }
         public long CityId { get; }
+        public long CountyId { get; }
         public string Layer { get; }
         public string OfficeId { get; }
         public string InstitutionAtAppointment { get; }

@@ -12,13 +12,19 @@ namespace AncientWarfare3.core.county
             long cityId = pCity.data.id;
             HashSet<long> valid = new HashSet<long>(pCity.zones
                 .Where(p => p != null).Select(p => (long)p.id));
+            var adjacency = pCity.zones.Where(p => p != null).ToDictionary(
+                p => (long)p.id,
+                p => (IReadOnlyList<long>)(p.neighbours ?? Array.Empty<TileZone>())
+                    .Where(n => n != null && valid.Contains(n.id))
+                    .Select(n => (long)n.id).OrderBy(n => n).ToArray());
             IReadOnlyList<CountyRecord> existing = CountyAdministrationStore.ForCity(cityId);
             var assigned = new HashSet<long>();
             foreach (CountyRecord county in existing)
             {
                 county.ZoneIds = county.ZoneIds.Where(valid.Contains).ToList();
+                county.Active = county.ZoneIds.Count > 0;
                 assigned.UnionWith(county.ZoneIds);
-                CountyAdministrationStore.Upsert(county);
+                if (county.Active) CountyAdministrationStore.Upsert(county);
             }
             long[] missing = valid.Where(p => !assigned.Contains(p)).OrderBy(p => p).ToArray();
             if (missing.Length == 0 && existing.Count > 0) return;
@@ -37,7 +43,7 @@ namespace AncientWarfare3.core.county
             }
             if (missingOffset < missing.Length)
                 groups.AddRange(CountyZonePartitionRules.Partition(
-                    missing.Skip(missingOffset), pAdjacency: null));
+                    missing.Skip(missingOffset), pAdjacency: adjacency));
             int ordinal = existing.Count == 0 ? 0 : existing.Max(p => p.Ordinal) + 1;
             foreach (IReadOnlyList<long> group in groups)
             {

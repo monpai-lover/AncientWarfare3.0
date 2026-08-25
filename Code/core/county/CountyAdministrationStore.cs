@@ -13,6 +13,8 @@ namespace AncientWarfare3.core.county
         private static CountyAdministrationSnapshot _snapshot;
         private static string _directory;
         private static bool _readAttempted;
+        private static readonly HashSet<long> DirtyCities =
+            new HashSet<long>();
 
         internal static long Revision
         {
@@ -59,6 +61,7 @@ namespace AncientWarfare3.core.county
                 _directory = null;
                 _snapshot = new CountyAdministrationSnapshot();
                 _readAttempted = true;
+                DirtyCities.Clear();
             }
         }
 
@@ -69,6 +72,7 @@ namespace AncientWarfare3.core.county
                 _directory = null;
                 _snapshot = null;
                 _readAttempted = false;
+                DirtyCities.Clear();
             }
         }
 
@@ -117,7 +121,33 @@ namespace AncientWarfare3.core.county
             }
         }
 
-        internal static void MarkCityDirty(long pCityId) { }
+        internal static void MarkCityDirty(long pCityId)
+        {
+            if (pCityId < 0L) return;
+            EnsureInitialized();
+            lock (Gate) DirtyCities.Add(pCityId);
+        }
+
+        internal static int RepairDirtyCities(int pBudget = 4)
+        {
+            if (pBudget <= 0 || World.world?.cities == null) return 0;
+            long[] ids;
+            lock (Gate)
+            {
+                ids = DirtyCities.Take(pBudget).ToArray();
+                foreach (long id in ids) DirtyCities.Remove(id);
+            }
+            int repaired = 0;
+            foreach (long id in ids)
+            {
+                City city = World.world.cities.FirstOrDefault(p =>
+                    p?.data?.id == id);
+                if (city == null) continue;
+                CountyAdministrationService.ReconcileCity(city);
+                repaired++;
+            }
+            return repaired;
+        }
 
         private static void EnsureInitialized()
         {

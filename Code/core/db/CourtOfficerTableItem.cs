@@ -10,6 +10,7 @@ namespace AncientWarfare3.core.db
         public long actor_id;
         public string actor_name;
         public long city_id;
+        [TableItemDef(pDefaultValue: "-1")] public long county_id = -1L;
         public string layer;
         public string office_id;
         public string school_id;

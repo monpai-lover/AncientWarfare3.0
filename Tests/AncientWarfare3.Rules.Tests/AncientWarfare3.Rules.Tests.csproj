@@ -13,6 +13,10 @@
 		<Compile Include="..\..\Code\core\lineage\SocialIdentityRules.cs" Link="Production\SocialIdentityRules.cs" />
 		<Compile Include="CountyZonePartitionRulesTests.cs.txt" />
 		<Compile Include="..\..\Code\core\county\CountyZonePartitionRules.cs" Link="Production\CountyZonePartitionRules.cs" />
+		<Compile Include="CountyCourtRulesTests.cs.txt" />
+		<Compile Include="..\..\Code\core\court\CountyCourtRules.cs" Link="Production\CountyCourtRules.cs" />
+		<Compile Include="..\..\Code\core\court\CourtIds.cs" Link="Production\CourtIds.cs" />
+		<Compile Include="..\..\Code\core\court\LocalLowOfficeVacancyRules.cs" Link="Production\LocalLowOfficeVacancyRules.cs" />
 		<Compile Include="IslandEscapeBehaviourRulesTests.cs.txt" />
 		<Compile Include="..\..\Code\core\lineage\IslandEscapeBehaviourRules.cs" Link="Production\IslandEscapeBehaviourRules.cs" />
     <Compile Include="MandateIslandExileRulesTests.cs.txt" />

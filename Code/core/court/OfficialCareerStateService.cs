@@ -552,6 +552,7 @@ namespace AncientWarfare3.core.court
                 actor.data.get(LineageKeys.COURT_LAYER,
                     out string runtimeLayer, "");
                 bool localOffice = runtimeLayer == CourtOfficeLayer.City ||
+                    runtimeLayer == CourtOfficeLayer.County ||
                     LocalCourtOfficeRules.IsLocalOffice(state.OfficeId);
                 bool cityLeaderOffice = localOffice && actor.isCityLeader() ||
                     CourtCityOfficeRules.IsCityLeaderOffice(state.OfficeId);
@@ -1581,7 +1582,8 @@ namespace AncientWarfare3.core.court
                     pLayer, pOfficeId, pCity);
                 bool regionalGovernorSeat = IsRegionalGovernorSeat(pKingdom,
                     pLayer, pOfficeId, pCity);
-                return pLayer == CourtOfficeLayer.City
+                return pLayer == CourtOfficeLayer.City ||
+                    pLayer == CourtOfficeLayer.County
                     ? pVacancyPromotion
                         ? OfficialCareerRankRules.
                             ResolveLocalVacancyPromotionRank(existingRank,
@@ -1620,7 +1622,8 @@ namespace AncientWarfare3.core.court
             bool hasFormalQualification = CivilServiceExamRules.
                 IsFormalAppointmentQualification(
                     qualification?.Qualification);
-            bool localOffice = pLayer == CourtOfficeLayer.City;
+            bool localOffice = pLayer == CourtOfficeLayer.City ||
+                pLayer == CourtOfficeLayer.County;
             bool hasLocalQualification = pAllowLocalLowerQualification &&
                 localOffice && (pActor.isCityLeader() ||
                     LocalOfficialCandidateRules.AcceptsAppointmentQualification(
@@ -1635,9 +1638,13 @@ namespace AncientWarfare3.core.court
             bool regionalGovernor = IsRegionalGovernorSeat(pKingdom, pLayer,
                 pOfficeId, pCity);
             bool allowUnqualifiedLocalFallback =
-                LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
-                    localOffice, officeGrade,
-                    pVacancyPromotion && pAllowLocalLowerQualification);
+                (pLayer == CourtOfficeLayer.County
+                    ? LocalLowOfficeVacancyRules.CanUseCountyFallback(
+                        true, officeGrade,
+                        pVacancyPromotion && pAllowLocalLowerQualification)
+                    : LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
+                        localOffice, officeGrade,
+                        pVacancyPromotion && pAllowLocalLowerQualification));
             bool hasAppointmentQualification = hasFormalQualification ||
                 hasLocalQualification || hasLegacyCredential ||
                 allowUnqualifiedLocalFallback;

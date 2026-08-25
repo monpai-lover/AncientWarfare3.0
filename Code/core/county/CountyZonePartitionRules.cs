@@ -7,6 +7,7 @@ namespace AncientWarfare3.core.county
     public static class CountyZonePartitionRules
     {
         public const int MaximumZonesPerCounty = 25;
+
         public static IReadOnlyList<IReadOnlyList<long>> Partition(
             IEnumerable<long> pZoneIds,
             IReadOnlyDictionary<long, IReadOnlyList<long>> pAdjacency)
@@ -28,6 +29,7 @@ namespace AncientWarfare3.core.county
                         .Take(MaximumZonesPerCounty).ToArray());
                 return result;
             }
+
             var remaining = new HashSet<long>(zones);
             while (remaining.Count > 0)
             {
@@ -42,8 +44,8 @@ namespace AncientWarfare3.core.county
                     long zone = queue.Dequeue();
                     if (!remaining.Remove(zone)) continue;
                     county.Add(zone);
-                    if (pAdjacency == null || !pAdjacency.TryGetValue(zone,
-                        out var neighbours)) continue;
+                    if (!pAdjacency.TryGetValue(zone,
+                            out IReadOnlyList<long> neighbours)) continue;
                     foreach (long neighbour in neighbours.OrderBy(p => p))
                         if (remaining.Contains(neighbour) && queued.Add(neighbour))
                             queue.Enqueue(neighbour);
@@ -66,10 +68,13 @@ namespace AncientWarfare3.core.county
         {
             string baseName = string.IsNullOrWhiteSpace(pHistoricalName)
                 ? pCityName : pHistoricalName;
-            baseName = (baseName ?? "城市").Trim();
-            if (!baseName.EndsWith("县", StringComparison.Ordinal)) baseName += "县";
+            baseName = (baseName ?? "\u57ce\u5e02").Trim();
+            const string countySuffix = "\u53bf";
+            if (!baseName.EndsWith(countySuffix, StringComparison.Ordinal))
+                baseName += countySuffix;
             return pOrdinal <= 0 ? baseName : baseName + (pOrdinal + 1);
         }
+
         public static string PreserveManual(string pCurrent, string pCityName,
             int pOrdinal)
         {
