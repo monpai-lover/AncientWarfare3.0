@@ -104,7 +104,9 @@ namespace AncientWarfare3.ui.windows
             if (result.Status == AW3CommandStatus.Accepted)
             {
                 _feedback = null;
-                if (_officeLayer == CourtOfficeLayer.City && _cityId >= 0)
+                if ((_officeLayer == CourtOfficeLayer.City ||
+                     _officeLayer == CourtOfficeLayer.County) &&
+                    _cityId >= 0)
                     CourtWindow.OpenCity(_kingdomId, _cityId);
                 else
                     CourtWindow.OpenAndRefresh(_kingdomId);
