@@ -17,16 +17,18 @@ namespace AncientWarfare3.core.county
                 p => (IReadOnlyList<long>)(p.neighbours ?? Array.Empty<TileZone>())
                     .Where(n => n != null && valid.Contains(n.id))
                     .Select(n => (long)n.id).OrderBy(n => n).ToArray());
-            IReadOnlyList<CountyRecord> existing = CountyAdministrationStore.ForCity(cityId);
+            IReadOnlyList<CountyRecord> existing =
+                CountyAdministrationStore.ForCityIncludingInactive(cityId);
             var assigned = new HashSet<long>();
             foreach (CountyRecord county in existing)
             {
                 county.ZoneIds = county.ZoneIds.Where(valid.Contains).ToList();
                 county.Active = county.ZoneIds.Count > 0;
                 assigned.UnionWith(county.ZoneIds);
-                if (county.Active) CountyAdministrationStore.Upsert(county);
+                CountyAdministrationStore.Upsert(county);
             }
             long[] missing = valid.Where(p => !assigned.Contains(p)).OrderBy(p => p).ToArray();
+            existing = existing.Where(p => p.Active).ToArray();
             if (missing.Length == 0 && existing.Count > 0) return;
             var groups = new List<IReadOnlyList<long>>();
             int missingOffset = 0;

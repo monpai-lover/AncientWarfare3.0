@@ -92,6 +92,15 @@ namespace AncientWarfare3.core.county
                     p.CityId == pCityId).Select(Clone).ToArray();
         }
 
+        internal static IReadOnlyList<CountyRecord> ForCityIncludingInactive(
+            long pCityId)
+        {
+            EnsureInitialized();
+            lock (Gate)
+                return _snapshot.Counties.Where(p => p != null &&
+                    p.CityId == pCityId).Select(Clone).ToArray();
+        }
+
         internal static CountyRecord FindByZone(long pZoneId)
         {
             EnsureInitialized();
@@ -183,6 +192,9 @@ namespace AncientWarfare3.core.county
             if (pSnapshot == null) return;
             if (pSnapshot.Counties == null) pSnapshot.Counties = new List<CountyRecord>();
             pSnapshot.NextCountyId = Math.Max(1L, pSnapshot.NextCountyId);
+            long maxId = pSnapshot.Counties.Where(p => p != null)
+                .Select(p => p.CountyId).DefaultIfEmpty(0L).Max();
+            pSnapshot.NextCountyId = Math.Max(pSnapshot.NextCountyId, maxId + 1L);
             foreach (CountyRecord county in pSnapshot.Counties)
             {
                 if (county == null) continue;
