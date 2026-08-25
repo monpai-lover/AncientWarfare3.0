@@ -40,6 +40,7 @@ namespace AncientWarfare3.core.court
         public string school_id = "";
         public string layer = "";
         public long city_id = -1L;
+        public long county_id = -1L;
         public float influence;
         public int appointed_year = -1;
     }
@@ -354,7 +355,7 @@ namespace AncientWarfare3.core.court
             try
             {
                 using var cmd = new SQLiteCommand(db);
-                cmd.CommandText = "SELECT ACTOR_NAME, OFFICE_ID, SCHOOL_ID, LAYER, CITY_ID, INFLUENCE, ACTOR_ID, APPOINTED_YEAR FROM " +
+                 cmd.CommandText = "SELECT ACTOR_NAME, OFFICE_ID, SCHOOL_ID, LAYER, CITY_ID, IFNULL(COUNTY_ID,-1), INFLUENCE, ACTOR_ID, APPOINTED_YEAR FROM " +
                     CourtOfficerTableItem.GetTableName() +
                     " WHERE KINGDOM_ID = @kid AND ACTIVE = 1 ORDER BY INFLUENCE DESC LIMIT @lim";
                 cmd.Parameters.AddWithValue("@kid", pKingdom.id);
@@ -369,9 +370,10 @@ namespace AncientWarfare3.core.court
                         school_id = reader.IsDBNull(2) ? "" : reader.GetValue(2)?.ToString() ?? "",
                         layer = reader.IsDBNull(3) ? "" : reader.GetValue(3)?.ToString() ?? "",
                         city_id = reader.IsDBNull(4) ? -1L : Convert.ToInt64(reader.GetValue(4)),
-                        influence = reader.IsDBNull(5) ? 0f : (float)Convert.ToDouble(reader.GetValue(5)),
-                        actor_id = reader.IsDBNull(6) ? -1L : Convert.ToInt64(reader.GetValue(6)),
-                        appointed_year = reader.IsDBNull(7) ? -1 : Convert.ToInt32(reader.GetValue(7))
+                         county_id = reader.IsDBNull(5) ? -1L : Convert.ToInt64(reader.GetValue(5)),
+                         influence = reader.IsDBNull(6) ? 0f : (float)Convert.ToDouble(reader.GetValue(6)),
+                         actor_id = reader.IsDBNull(7) ? -1L : Convert.ToInt64(reader.GetValue(7)),
+                         appointed_year = reader.IsDBNull(8) ? -1 : Convert.ToInt32(reader.GetValue(8))
                     });
                 }
             }
@@ -427,7 +429,7 @@ namespace AncientWarfare3.core.court
             {
                 using var command = new SQLiteCommand(db);
                 command.CommandText = "SELECT ACTOR_NAME,OFFICE_ID,SCHOOL_ID," +
-                    "LAYER,CITY_ID,INFLUENCE,ACTOR_ID,APPOINTED_YEAR FROM " +
+                     "LAYER,CITY_ID,IFNULL(COUNTY_ID,-1),INFLUENCE,ACTOR_ID,APPOINTED_YEAR FROM " +
                     CourtOfficerTableItem.GetTableName() +
                     " WHERE KINGDOM_ID=@kingdom AND ACTIVE=1 AND LAYER=@layer " +
                     "AND OFFICE_ID=@office AND CITY_ID=@city " +
@@ -447,10 +449,11 @@ namespace AncientWarfare3.core.court
                         layer = CourtDbString(reader, 3),
                         city_id = reader.IsDBNull(4) ? -1L :
                             Convert.ToInt64(reader.GetValue(4)),
-                        influence = CourtDbFloat(reader, 5),
-                        actor_id = reader.IsDBNull(6) ? -1L :
-                            Convert.ToInt64(reader.GetValue(6)),
-                        appointed_year = CourtDbInt(reader, 7)
+                         county_id = reader.IsDBNull(5) ? -1L : Convert.ToInt64(reader.GetValue(5)),
+                         influence = CourtDbFloat(reader, 6),
+                         actor_id = reader.IsDBNull(7) ? -1L :
+                             Convert.ToInt64(reader.GetValue(7)),
+                         appointed_year = CourtDbInt(reader, 8)
                     });
             }
             catch (Exception exception)
@@ -2705,8 +2708,8 @@ namespace AncientWarfare3.core.court
             try
             {
                 using var cmd = new SQLiteCommand(db);
-                cmd.CommandText = "SELECT ACTOR_NAME,OFFICE_ID,SCHOOL_ID,LAYER," +
-                                  "CITY_ID,INFLUENCE,ACTOR_ID,APPOINTED_YEAR FROM " +
+                 cmd.CommandText = "SELECT ACTOR_NAME,OFFICE_ID,SCHOOL_ID,LAYER," +
+                                   "CITY_ID,IFNULL(COUNTY_ID,-1),INFLUENCE,ACTOR_ID,APPOINTED_YEAR FROM " +
                                   CourtOfficerTableItem.GetTableName() +
                                   " WHERE KINGDOM_ID = @kid AND ACTIVE = 1 " +
                                   "AND LAYER = @layer AND OFFICE_ID = @office LIMIT 1";
@@ -2727,12 +2730,14 @@ namespace AncientWarfare3.core.court
                         reader.GetValue(3)?.ToString() ?? "",
                     city_id = reader.IsDBNull(4) ? -1L :
                         Convert.ToInt64(reader.GetValue(4)),
-                    influence = reader.IsDBNull(5) ? 0f :
-                        Convert.ToSingle(reader.GetValue(5)),
-                    actor_id = reader.IsDBNull(6) ? -1L :
-                        Convert.ToInt64(reader.GetValue(6)),
-                    appointed_year = reader.IsDBNull(7) ? -1 :
-                        Convert.ToInt32(reader.GetValue(7))
+                     county_id = reader.IsDBNull(5) ? -1L :
+                         Convert.ToInt64(reader.GetValue(5)),
+                     influence = reader.IsDBNull(6) ? 0f :
+                         Convert.ToSingle(reader.GetValue(6)),
+                     actor_id = reader.IsDBNull(7) ? -1L :
+                         Convert.ToInt64(reader.GetValue(7)),
+                     appointed_year = reader.IsDBNull(8) ? -1 :
+                         Convert.ToInt32(reader.GetValue(8))
                 };
             }
             catch (Exception error)
