@@ -2,6 +2,7 @@ using AncientWarfare3.content;
 using AncientWarfare3.content.figures;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
+
 using AncientWarfare3.core.naming;
 using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.core.policy;
@@ -9251,5 +9252,7 @@ HistoricalSchoolXiaAccessRulesTests.Run();
 HistoricalSchoolXiaAccessSourceGuardTests.Run();
 WarRefugeeRulesTests.Run();
 CityShiInfluenceSourceGuardTests.Run();
+SocialIdentityRulesTests.Run();
+CountyZonePartitionRulesTests.Run();
 
 Console.WriteLine("Rule tests passed.");

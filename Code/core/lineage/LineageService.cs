@@ -787,6 +787,13 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void OnCityLeaderAppointed(Actor pActor, string pOfficeId = CourtOfficeId.Governor)
         {
+            if (!SocialIdentityService.IsFormalNoble(pActor))
+            {
+                EnsureLineageForNoble(pActor, NobleTrigger.Official,
+                    pOfficeId, pDeferArchive: true);
+                SocialIdentityService.ApplyOfficial(pActor);
+                return;
+            }
             NamingProfileId namingProfile = AWCultureNamingTraditionService
                 .ResolveForActorReadOnly(pActor).Profile;
             if (namingProfile == NamingProfileId.Western ||
@@ -842,6 +849,14 @@ namespace AncientWarfare3.core.lineage
             else
                 EnsureForeignPseudoOfficialLineage(pActor, pTrigger,
                     pOfficeId: pOfficeId, pArchiveActor: false);
+
+            if (pTrigger == NobleTrigger.Official &&
+                !SocialIdentityService.IsFormalNoble(pActor))
+            {
+                SocialIdentityService.ApplyOfficial(pActor);
+                ApplyDisplayName(pActor);
+                return;
+            }
 
             // 本人即贵族:距离归零、加 guizu、状态 noble。
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
@@ -2332,6 +2347,15 @@ namespace AncientWarfare3.core.lineage
         public static void RefreshNobleStatus(Actor pActor)
         {
             if (!CanUseXiaizedLineageGovernment(pActor) && !UsesAwLineageSystem(pActor)) return;
+
+            pActor.data.get(LineageKeys.SOCIAL_IDENTITY,
+                out string socialIdentity, "");
+            if (socialIdentity == SocialIdentityService.ScholarOfficialValue)
+            {
+                SocialIdentityService.ApplyTraits(pActor,
+                    SocialIdentityClass.ScholarOfficial);
+                return;
+            }
 
             pActor.data.get(LineageKeys.NOBLE_DISTANCE, out int dist, 99);
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineage, -1);

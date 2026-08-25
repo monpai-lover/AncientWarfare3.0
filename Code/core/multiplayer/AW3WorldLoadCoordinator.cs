@@ -3,6 +3,7 @@ using System.IO;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.multiplayer
@@ -223,6 +224,7 @@ namespace AncientWarfare3.core.multiplayer
                         "runtime_restore: " + error.Message);
                     CityReservePoolService.EndWorldLoadRestore();
                     DeJureRegionStore.RepairAfterWorldLoaded();
+                    CountyAdministrationStore.RepairAfterWorldLoaded();
                     return;
                 }
                 if (result.Success)
@@ -235,6 +237,7 @@ namespace AncientWarfare3.core.multiplayer
                         {
                             CityReservePoolService.EndWorldLoadRestore();
                             DeJureRegionStore.RepairAfterWorldLoaded();
+                            CountyAdministrationStore.RepairAfterWorldLoaded();
                             return;
                         }
                         try
@@ -253,6 +256,7 @@ namespace AncientWarfare3.core.multiplayer
                     operation.FailAw3Restore(RestoreFailureDetail(result));
                 CityReservePoolService.EndWorldLoadRestore();
                 DeJureRegionStore.RepairAfterWorldLoaded();
+                CountyAdministrationStore.RepairAfterWorldLoaded();
                 return;
             }
 
@@ -265,6 +269,7 @@ namespace AncientWarfare3.core.multiplayer
                 LogNormalFailure("generated world", result);
                 CityReservePoolService.EndWorldLoadRestore();
                 DeJureRegionStore.RepairAfterWorldLoaded();
+                CountyAdministrationStore.RepairAfterWorldLoaded();
                 return;
             }
 
@@ -290,6 +295,7 @@ namespace AncientWarfare3.core.multiplayer
             }
             CityReservePoolService.EndWorldLoadRestore();
             DeJureRegionStore.RepairAfterWorldLoaded();
+            CountyAdministrationStore.RepairAfterWorldLoaded();
         }
 
         private static void LogNormalFailure(string context,

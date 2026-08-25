@@ -422,6 +422,8 @@ namespace AncientWarfare3.core.lineage
 
         public const string TRAIT_GUIZU = "guizu";
         public const string TRAIT_ZHUHOU = "zhuhou";
+        public const string TRAIT_SHIDAFU = "shidafu";
+        public const string SOCIAL_IDENTITY = "aw_social_identity";
         public const string TRAIT_SLAVE = "slave";
         public const string TRAIT_VETERAN = "veteran";
         public const string TRAIT_GUARD = "aw_royal_guard";

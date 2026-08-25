@@ -1,0 +1,59 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class SocialIdentityRulesTests
+{
+    public static void Run()
+    {
+        Equal(SocialIdentityClass.Noble,
+            SocialIdentityRules.Resolve(isOfficial: true, isActing: false,
+                isCurrentRuler: true, isRegisteredHeir: false,
+                isRoyalRelative: false, hasFormalTitle: false),
+            "the reigning ruler remains noble");
+        Equal(SocialIdentityClass.Noble,
+            SocialIdentityRules.Resolve(isOfficial: true, isActing: false,
+                isCurrentRuler: false, isRegisteredHeir: true,
+                isRoyalRelative: false, hasFormalTitle: false),
+            "the registered heir remains noble");
+        Equal(SocialIdentityClass.Noble,
+            SocialIdentityRules.Resolve(isOfficial: true, isActing: false,
+                isCurrentRuler: false, isRegisteredHeir: false,
+                isRoyalRelative: false, hasFormalTitle: true),
+            "a titled official remains noble");
+        Equal(SocialIdentityClass.ScholarOfficial,
+            SocialIdentityRules.Resolve(isOfficial: true, isActing: false,
+                isCurrentRuler: false, isRegisteredHeir: false,
+                isRoyalRelative: false, hasFormalTitle: false),
+            "an ordinary confirmed official becomes a scholar-official");
+        Equal(SocialIdentityClass.None,
+            SocialIdentityRules.Resolve(isOfficial: false, isActing: false,
+                isCurrentRuler: false, isRegisteredHeir: false,
+                isRoyalRelative: false, hasFormalTitle: false),
+            "an ordinary non-official has no office identity");
+        Equal(SocialIdentityClass.None,
+            SocialIdentityRules.Resolve(isOfficial: true, isActing: true,
+                isCurrentRuler: false, isRegisteredHeir: false,
+                isRoyalRelative: false, hasFormalTitle: false),
+            "an acting appointment does not grant a permanent identity");
+        True(SocialIdentityRules.ShouldHaveNobleTrait(SocialIdentityClass.Noble),
+            "noble identity owns guizu");
+        True(SocialIdentityRules.ShouldHaveScholarTrait(
+                SocialIdentityClass.ScholarOfficial),
+            "scholar-official identity owns shidafu");
+        Equal(false, SocialIdentityRules.ShouldHaveScholarTrait(
+                SocialIdentityClass.Noble),
+            "noble and scholar-official traits are mutually exclusive");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

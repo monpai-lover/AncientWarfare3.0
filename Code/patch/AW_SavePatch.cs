@@ -3,6 +3,7 @@ using AncientWarfare3.core.db;
 using AncientWarfare3.core.multiplayer;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.content;
@@ -75,6 +76,7 @@ namespace AncientWarfare3.patch
                 ArmyRtsPlanSnapshotService.PublishToSave(pFolder);
                 AW3SaveDirectoryRegistry.Observe(pFolder);
                 DeJureRegionStore.PublishToSave(pFolder);
+                CountyAdministrationStore.PublishToSave(pFolder);
             }
             finally
             {
@@ -226,6 +228,7 @@ namespace AncientWarfare3.patch
             ArmyRtsPlanSnapshotService.ObserveLoadDirectory(pPath);
             AW3SaveDirectoryRegistry.Observe(pPath);
             DeJureRegionStore.ObserveLoadDirectory(pPath);
+            CountyAdministrationStore.ObserveLoadDirectory(pPath);
             AW3WorldLoadCoordinator.ObserveLoadWorldStarted(pPath);
         }
 
@@ -238,6 +241,7 @@ namespace AncientWarfare3.patch
             ArmyRtsPlanSnapshotService.ObserveLoadDirectory(pPath);
             AW3SaveDirectoryRegistry.Observe(pPath);
             DeJureRegionStore.ObserveLoadDirectory(pPath);
+            CountyAdministrationStore.ObserveLoadDirectory(pPath);
         }
 
         [HarmonyPrefix]
@@ -254,6 +258,7 @@ namespace AncientWarfare3.patch
             ArmyRtsPlanSnapshotService.OnNewWorldGenerated();
             AW3SaveDirectoryRegistry.ClearForNewWorld();
             DeJureRegionStore.ClearForNewWorld();
+            CountyAdministrationStore.ClearForNewWorld();
         }
     }
 }

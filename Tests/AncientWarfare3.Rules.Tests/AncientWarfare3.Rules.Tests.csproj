@@ -4,11 +4,15 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
-    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <DefineConstants>$(DefineConstants);AW3_RULES_TESTS</DefineConstants>
     <WorldBoxManaged Condition="'$(WorldBoxManaged)' == ''">D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed</WorldBoxManaged>
   </PropertyGroup>
 	<ItemGroup>
+		<Compile Include="SocialIdentityRulesTests.cs.txt" />
+		<Compile Include="..\..\Code\core\lineage\SocialIdentityRules.cs" Link="Production\SocialIdentityRules.cs" />
+		<Compile Include="CountyZonePartitionRulesTests.cs.txt" />
+		<Compile Include="..\..\Code\core\county\CountyZonePartitionRules.cs" Link="Production\CountyZonePartitionRules.cs" />
 		<Compile Include="IslandEscapeBehaviourRulesTests.cs.txt" />
 		<Compile Include="..\..\Code\core\lineage\IslandEscapeBehaviourRules.cs" Link="Production\IslandEscapeBehaviourRules.cs" />
     <Compile Include="MandateIslandExileRulesTests.cs.txt" />
