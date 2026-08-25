@@ -166,7 +166,7 @@ namespace AncientWarfare3.core.pathfinding
             AWTraversalGeneration prepared = pInput.ResultGenerationId > 0
                 ? new AWTraversalGeneration(pInput.ResultGenerationId,
                     pInput.Width, pInput.Height, pInput.ChunkSize, chunks,
-                    topology)
+                    topology, pInput.WorldGeneration)
                 : null;
             return new AWTraversalBuildResult(pInput.WorldGeneration,
                 pInput.BaseGenerationId, pInput.SourceRevision,

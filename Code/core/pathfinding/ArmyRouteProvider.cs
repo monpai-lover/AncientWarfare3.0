@@ -373,6 +373,16 @@ namespace AncientWarfare3.core.pathfinding
             _ownsFinder = false;
         }
 
+        // The shared actor finder is ticked by AWPathfindingBootstrap at the
+        // simulation completion boundary.  A dedicated army finder has no
+        // bootstrap owner, so it needs the same Cultiway lifecycle tick here.
+        // Never tick the shared finder from this provider or recovery would be
+        // consumed twice by the RTS and actor paths.
+        internal void TickOwnedFinder()
+        {
+            if (_ownsFinder) _finder.Tick();
+        }
+
         internal bool OwnsFinder => _ownsFinder;
 
         public ArmyRouteHandle Submit(ArmyRouteRequest request)
@@ -402,7 +412,10 @@ namespace AncientWarfare3.core.pathfinding
                         AWNarrowWaterRecoveryRules.
                             MaximumConsecutiveWaterTiles);
                 long finderRequestId = FinderRequestId(request.ArmyId);
-                var pathRequest = new AWPathRequest(finderRequestId,
+                AWPathAgentKey agentKey = new AWPathAgentKey(
+                    AWPathWorldKey.MainWorld(AWAsyncRuntime.WorldGeneration),
+                    finderRequestId);
+                var pathRequest = new AWPathRequest(agentKey,
                     captain.current_tile.data.tile_id,
                     target.data.tile_id, options,
                     AWPathMovementBridge.CaptureProfile(captain),
@@ -740,8 +753,13 @@ namespace AncientWarfare3.core.pathfinding
             if (!ArmyRouteProviderRules.ShouldRun(worldReady,
                     externalActorPathOwner)) return;
             if (!CanSubmit) return;
-            if (_host == null) return;
-            EnsureProvider();
+            if (_host == null)
+            {
+                EnsureProvider();
+            }
+            Aw3ArmyRouteProvider currentAw3 = _host?.CurrentProvider as
+                Aw3ArmyRouteProvider;
+            currentAw3?.TickOwnedFinder();
         }
 
         public static ArmyRouteHandle Submit(ArmyRouteRequest pRequest)

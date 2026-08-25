@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -28,11 +28,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private const string CurrentEnemyTargetJobId =
         "b2_checkCurrentEnemyTarget";
     private const string TaskVerifierJobId = "b4_checkTaskVerifier";
-    private const string PathMovementJobId = "b5_checkPathMovement";
     private const string NaturalDeathJobId = "b55_update_natural_death";
     private const string UpdateAiJobId = "b6_update_ai";
-    private const string SmoothMovementJobId =
-        "u10_checkSmoothMovement";
 
     private static long enemyFinderCalls;
     private static long enemyFinderReuses;
@@ -45,6 +42,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private static long diagnosticEnemyCalls;
     private static long diagnosticEnemyCandidates;
     private static long diagnosticEnemyEmpty;
+    private static readonly List<long> militaryPriorityRefreshActorIds =
+        new List<long>();
 
     private static bool CaptureDiagnostics =>
         AWPerformanceSettings.EnablePerformanceDiagnostics ||
@@ -55,8 +54,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private readonly Action<int> enemyPrepareWorkItemAction;
     private readonly Action<int> taskVerifierWorkItemAction;
     private readonly Action<int> searchWorkItemAction;
-    private readonly Action<int> pathMovementWorkItemAction;
-    private readonly Action<int> smoothMovementWorkItemAction;
     private readonly List<long> militaryP0ActorIds = new List<long>();
 
     private enum PostStage
@@ -74,14 +71,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         AwaitEnemySearch,
         CommitEnemySearch,
         BeforePathMovement,
-        SchedulePathMovement,
-        AwaitPathMovement,
-        CommitPathMovement,
-        AfterPathMovement,
-        ScheduleSmoothMovement,
-        AwaitSmoothMovement,
-        CommitSmoothMovement,
-        AfterSmoothMovement,
         Finish
     }
 
@@ -96,10 +85,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private TaskVerifierBatchWork[] taskVerifierWorkItems =
         Array.Empty<TaskVerifierBatchWork>();
     private SearchWorkItem[] workItems = Array.Empty<SearchWorkItem>();
-    private PathMovementBatchWork[] pathMovementWorkItems =
-        Array.Empty<PathMovementBatchWork>();
-    private SmoothMovementBatchWork[] smoothMovementWorkItems =
-        Array.Empty<SmoothMovementBatchWork>();
     private Actor[][] activeBehaviorActorsByBatch =
         Array.Empty<Actor[]>();
     private int[] activeBehaviorActorCounts =
@@ -124,27 +109,17 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private int currentEnemyTargetJobIndex;
     private int enemySearchJobIndex;
     private int taskVerifierJobIndex;
-    private int pathMovementJobIndex;
-    private int smoothMovementJobIndex;
     private int batchIndex;
     private int postJobIndex;
     private int workIndex;
     private int workCount;
     private int tileActionCommitIndex;
-    private int pathCommitIndex;
-    private int smoothCommitIndex;
     private int workGroupSize;
     private bool splitPostJobs;
     private bool taskVerifierStageCompleted;
     private AWSimulationWorkerPool.WorkTicket searchTicket;
-    private AWSimulationWorkerPool.WorkTicket pathMovementTicket;
-    private AWSimulationWorkerPool.WorkTicket smoothMovementTicket;
     private long searchScheduleStartedAt;
     private long searchScheduleCompletedAt;
-    private long pathMovementScheduleStartedAt;
-    private long pathMovementScheduleCompletedAt;
-    private long smoothMovementScheduleStartedAt;
-    private long smoothMovementScheduleCompletedAt;
 
     internal AWCooperativeActorPostRunner()
     {
@@ -157,10 +132,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         taskVerifierWorkItemAction =
             RunTaskVerifierWorkItemAt;
         searchWorkItemAction = SearchWorkItemAt;
-        pathMovementWorkItemAction =
-            RunPathMovementWorkItemAt;
-        smoothMovementWorkItemAction =
-            RunSmoothMovementWorkItemAt;
     }
 
     internal static string GetEnemyFinderDiagnostics()
@@ -206,13 +177,11 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     {
         ArmyMilitaryMovementPriorityIndex.BeginCycle();
         ArmyMilitaryMovementPriorityIndex.RefreshVanillaTaxiSnapshot();
-        RefreshRoyalGuardMilitaryPriorities(activeBatches);
+        ArmyRtsControllerService.RefreshMilitaryPriorityIndex();
         ArmyRtsTransportService.RefreshMilitaryP0Priority();
+        RefreshRoyalGuardMilitaryPriorities();
         ArmyMilitaryMovementPriorityIndex.CopySnapshot(militaryP0ActorIds);
         militaryP0Cursor = 0;
-        AWDeferredPathRequestBatch.StartCycle();
-        AWDeferredPathRequestBatch.BeginCapture();
-        AWEnemyPresenceCache.EndPreparation();
         batches = activeBatches;
         elapsed = cycleElapsed;
         workGroupSize = Math.Max(1, AWPerformanceSettings.ForegroundParallelism * 4);
@@ -221,20 +190,12 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         workIndex = 0;
         workCount = 0;
         tileActionCommitIndex = 0;
-        pathCommitIndex = 0;
-        smoothCommitIndex = 0;
         splitPostJobs =
             AWSimulationTickBenchmark.ShouldSplitActorPostJobs;
         taskVerifierStageCompleted = false;
         searchTicket = default;
-        pathMovementTicket = default;
-        smoothMovementTicket = default;
         searchScheduleStartedAt = 0L;
         searchScheduleCompletedAt = 0L;
-        pathMovementScheduleStartedAt = 0L;
-        pathMovementScheduleCompletedAt = 0L;
-        smoothMovementScheduleStartedAt = 0L;
-        smoothMovementScheduleCompletedAt = 0L;
         PrepareActiveBehaviorPartitions(batches.Count);
 
         if (batches.Count == 0)
@@ -297,28 +258,13 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         ValidateUpdateEligibilityJobs();
         ValidateActorGateJobs();
 
-        pathMovementJobIndex = FindPostJobIndex(
-            batches[0].jobs_post,
-            PathMovementJobId);
         taskVerifierJobIndex = FindPostJobIndex(
             batches[0].jobs_post,
             TaskVerifierJobId);
-        if (taskVerifierJobIndex !=
-                enemySearchJobIndex + 1 ||
-            pathMovementJobIndex !=
-                taskVerifierJobIndex + 1)
+        if (taskVerifierJobIndex != enemySearchJobIndex + 1)
         {
             throw new InvalidOperationException(
-                "Actor post jobs 中 b3/b4/b5 顺序无效");
-        }
-
-        smoothMovementJobIndex = FindPostJobIndex(
-            batches[0].jobs_post,
-            SmoothMovementJobId);
-        if (smoothMovementJobIndex <= pathMovementJobIndex)
-        {
-            throw new InvalidOperationException(
-                "Actor post jobs 中 u10_checkSmoothMovement 顺序无效");
+                "Actor post jobs 中 b3/b4 顺序无效");
         }
 
         // P0 owns the military actor lifecycle only after native timer and
@@ -326,29 +272,24 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         stage = PostStage.BeforeDeadCheck;
     }
 
-    private static void RefreshRoyalGuardMilitaryPriorities(
-        List<BatchActors> activeBatches)
+    private static void RefreshRoyalGuardMilitaryPriorities()
     {
-        if (activeBatches == null) return;
-        for (int batchIndex = 0;
-             batchIndex < activeBatches.Count;
-             batchIndex++)
+        ArmyMilitaryMovementPriorityIndex.CopyRegisteredSnapshot(
+            militaryPriorityRefreshActorIds);
+        for (int actorIndex = 0;
+             actorIndex < militaryPriorityRefreshActorIds.Count;
+             actorIndex++)
         {
-            BatchActors batch = activeBatches[batchIndex];
-            List<Job<Actor>> jobs = batch?.jobs_post;
-            if (jobs == null) continue;
-            int enemySearchIndex = FindPostJobIndex(jobs, EnemySearchJobId);
-            if (enemySearchIndex < 0) continue;
-
-            ObjectContainer<Actor> container =
-                jobs[enemySearchIndex]?.container;
-            Actor[] actors = container?.getFastSimpleArray();
-            int count = Math.Min(container?.Count ?? 0, actors?.Length ?? 0);
-            for (int actorIndex = 0; actorIndex < count; actorIndex++)
+            Actor actor = null;
+            try
             {
-                RoyalGuardService.TryRefreshMilitaryPriority(actors[actorIndex]);
-                ArmyRtsControllerService.TryRefreshMilitaryPriority(actors[actorIndex]);
+                actor = World.world?.units?.get(
+                    militaryPriorityRefreshActorIds[actorIndex]);
             }
+            catch { }
+            if (actor == null) continue;
+            RoyalGuardService.TryRefreshMilitaryPriority(actor);
+            ArmyRtsControllerService.TryRefreshMilitaryPriority(actor);
         }
     }
 
@@ -828,22 +769,13 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     }
 
     public bool WaitingForBackgroundWork =>
-        (stage == PostStage.AwaitEnemySearch &&
-         searchTicket.IsValid) ||
-        (stage == PostStage.AwaitPathMovement &&
-         pathMovementTicket.IsValid) ||
-        (stage == PostStage.AwaitSmoothMovement &&
-         smoothMovementTicket.IsValid);
+        stage == PostStage.AwaitEnemySearch && searchTicket.IsValid;
 
     public bool IsBackgroundWorkCompleted =>
         stage switch
         {
             PostStage.AwaitEnemySearch when searchTicket.IsValid =>
                 AWSimulationWorkerPool.Instance.IsCompleted(searchTicket),
-            PostStage.AwaitPathMovement when pathMovementTicket.IsValid =>
-                AWSimulationWorkerPool.Instance.IsCompleted(pathMovementTicket),
-            PostStage.AwaitSmoothMovement when smoothMovementTicket.IsValid =>
-                AWSimulationWorkerPool.Instance.IsCompleted(smoothMovementTicket),
             _ => false
         };
 
@@ -855,14 +787,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 AWSimulationWorkerPool.Instance.TryWait(
                     searchTicket,
                     maximumMilliseconds),
-            PostStage.AwaitPathMovement when pathMovementTicket.IsValid =>
-                AWSimulationWorkerPool.Instance.TryWait(
-                    pathMovementTicket,
-                    maximumMilliseconds),
-            PostStage.AwaitSmoothMovement when smoothMovementTicket.IsValid =>
-                AWSimulationWorkerPool.Instance.TryWait(
-                    smoothMovementTicket,
-                    maximumMilliseconds),
             _ => true
         };
     }
@@ -873,17 +797,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             searchTicket.IsValid)
         {
             AWSimulationWorkerPool.Instance.Wait(searchTicket);
-        }
-        else if (stage == PostStage.AwaitPathMovement &&
-                 pathMovementTicket.IsValid)
-        {
-            AWSimulationWorkerPool.Instance.Wait(pathMovementTicket);
-        }
-        else if (stage == PostStage.AwaitSmoothMovement &&
-                 smoothMovementTicket.IsValid)
-        {
-            AWSimulationWorkerPool.Instance.Wait(
-                smoothMovementTicket);
         }
     }
 
@@ -943,8 +856,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 : GetNextPostRangePhaseName(
                     phasePrefix,
                     enemySearchJobIndex + 1,
-                    pathMovementJobIndex,
-                    "before_b5",
+                    int.MaxValue,
+                    "after_b4",
                     restartRange: true);
         }
 
@@ -953,49 +866,20 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             return GetNextPostRangePhaseName(
                 phasePrefix,
                 enemySearchJobIndex + 1,
-                pathMovementJobIndex,
-                "before_b5",
+                int.MaxValue,
+                "after_b4",
                 restartRange: true);
         }
 
         if (stage == PostStage.BeforePathMovement &&
             taskVerifierStageCompleted)
         {
-            return phasePrefix + ".post.b5.schedule";
-        }
-
-        if (stage == PostStage.CommitPathMovement &&
-            pathCommitIndex >= batches.Count)
-        {
             return GetNextPostRangePhaseName(
                 phasePrefix,
-                pathMovementJobIndex + 1,
-                smoothMovementJobIndex,
-                "before_u10",
-                restartRange: true);
-        }
-
-        if (stage == PostStage.AfterPathMovement &&
-            batchIndex >= batches.Count)
-        {
-            return phasePrefix + ".post.u10.schedule";
-        }
-
-        if (stage == PostStage.CommitSmoothMovement &&
-            smoothCommitIndex >= batches.Count)
-        {
-            return GetNextPostRangePhaseName(
-                phasePrefix,
-                smoothMovementJobIndex + 1,
+                taskVerifierJobIndex + 1,
                 int.MaxValue,
-                "after_u10",
+                "after_b4",
                 restartRange: true);
-        }
-
-        if (stage == PostStage.AfterSmoothMovement &&
-            batchIndex >= batches.Count)
-        {
-            return phasePrefix + ".post.finish";
         }
 
         return stage switch
@@ -1044,37 +928,11 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             PostStage.CommitEnemySearch =>
                 phasePrefix + ".post.b3.commit.batch_group." + workIndex,
             PostStage.BeforePathMovement =>
-                phasePrefix + ".post.b4.parallel",
-            PostStage.SchedulePathMovement =>
-                phasePrefix + ".post.b5.schedule",
-            PostStage.AwaitPathMovement =>
-                IsBackgroundWorkCompleted
-                    ? phasePrefix + ".post.b5.complete"
-                    : phasePrefix + ".post.b5.await",
-            PostStage.CommitPathMovement =>
-                phasePrefix + ".post.b5.commit.batch." +
-                pathCommitIndex,
-            PostStage.AfterPathMovement =>
                 GetNextPostRangePhaseName(
                     phasePrefix,
-                    pathMovementJobIndex + 1,
-                    smoothMovementJobIndex,
-                    "before_u10"),
-            PostStage.ScheduleSmoothMovement =>
-                phasePrefix + ".post.u10.schedule",
-            PostStage.AwaitSmoothMovement =>
-                IsBackgroundWorkCompleted
-                    ? phasePrefix + ".post.u10.complete"
-                    : phasePrefix + ".post.u10.await",
-            PostStage.CommitSmoothMovement =>
-                phasePrefix + ".post.u10.commit.batch." +
-                smoothCommitIndex,
-            PostStage.AfterSmoothMovement =>
-                GetNextPostRangePhaseName(
-                    phasePrefix,
-                    smoothMovementJobIndex + 1,
+                    taskVerifierJobIndex + 1,
                     int.MaxValue,
-                    "after_u10"),
+                    "after_b4"),
             PostStage.Finish =>
                 phasePrefix + ".post.finish",
             _ => phasePrefix + ".post.idle"
@@ -1103,7 +961,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                         return false;
                     }
 
-                    BeginEnemySearchPreparation();
+                    BeginEnemySearch();
                     return false;
                 case PostStage.BeforeDeadCheck:
                     if (TryRunNextPostRange(
@@ -1216,7 +1074,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                         continue;
                     }
 
-                    BeginEnemySearchPreparation();
+                    BeginEnemySearch();
                     continue;
                 case PostStage.PrepareEnemySearch:
                     int prepareEnd = splitPostJobs
@@ -1234,7 +1092,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                         return false;
                     }
 
-                    AWEnemyPresenceCache.EndPreparation();
                     workIndex = 0;
                     if (workCount == 0)
                     {
@@ -1305,154 +1162,10 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                         taskVerifierStageCompleted = true;
                         return false;
                     }
-
-                    PreparePathMovementWorkItems();
-                    stage = PostStage.SchedulePathMovement;
-                    continue;
-                case PostStage.SchedulePathMovement:
-                    pathMovementScheduleStartedAt =
-                        StartBenchmarkMeasurement();
-                    try
-                    {
-                        pathMovementTicket =
-                            AWSimulationWorkerPool.Instance.BeginIndexed(
-                                0,
-                                batches.Count,
-                                pathMovementWorkItemAction);
-                    }
-                    finally
-                    {
-                        if (pathMovementScheduleStartedAt != 0L)
-                        {
-                            pathMovementScheduleCompletedAt =
-                                Stopwatch.GetTimestamp();
-                        }
-                    }
-
-                    stage = PostStage.AwaitPathMovement;
-                    return false;
-                case PostStage.AwaitPathMovement:
-                    AWSimulationWorkerPool.Instance.Wait(
-                        pathMovementTicket);
-                    AWSimulationWorkerPool.WorkResult pathResult;
-                    try
-                    {
-                        pathResult =
-                            AWSimulationWorkerPool.Instance.Complete(
-                                pathMovementTicket);
-                    }
-                    finally
-                    {
-                        pathMovementTicket = default;
-                    }
-
-                    RecordPathMovementBenchmark(pathResult);
-                    pathCommitIndex = 0;
-                    stage = PostStage.CommitPathMovement;
-                    return false;
-                case PostStage.CommitPathMovement:
-                    if (pathCommitIndex < batches.Count)
-                    {
-                        int pathCommitEnd = splitPostJobs
-                            ? pathCommitIndex + 1
-                            : Math.Min(
-                                batches.Count,
-                                pathCommitIndex +
-                                workGroupSize);
-                        while (pathCommitIndex <
-                               pathCommitEnd)
-                        {
-                            CommitPathMovementWorkItem(
-                                pathCommitIndex++);
-                        }
-
-                        return false;
-                    }
-
                     batchIndex = 0;
-                    postJobIndex = pathMovementJobIndex + 1;
-                    stage = PostStage.AfterPathMovement;
-                    continue;
-                case PostStage.AfterPathMovement:
+                    postJobIndex = taskVerifierJobIndex + 1;
                     if (TryRunNextPostRange(
-                            pathMovementJobIndex + 1,
-                            smoothMovementJobIndex))
-                    {
-                        return false;
-                    }
-
-                    PrepareSmoothMovementWorkItems();
-                    stage = PostStage.ScheduleSmoothMovement;
-                    continue;
-                case PostStage.ScheduleSmoothMovement:
-                    smoothMovementScheduleStartedAt =
-                        StartBenchmarkMeasurement();
-                    try
-                    {
-                        smoothMovementTicket =
-                            AWSimulationWorkerPool.Instance.BeginIndexed(
-                                0,
-                                batches.Count,
-                                smoothMovementWorkItemAction);
-                    }
-                    finally
-                    {
-                        if (smoothMovementScheduleStartedAt != 0L)
-                        {
-                            smoothMovementScheduleCompletedAt =
-                                Stopwatch.GetTimestamp();
-                        }
-                    }
-
-                    stage = PostStage.AwaitSmoothMovement;
-                    return false;
-                case PostStage.AwaitSmoothMovement:
-                    AWSimulationWorkerPool.Instance.Wait(
-                        smoothMovementTicket);
-                    AWSimulationWorkerPool.WorkResult smoothResult;
-                    try
-                    {
-                        smoothResult =
-                            AWSimulationWorkerPool.Instance.Complete(
-                                smoothMovementTicket);
-                    }
-                    finally
-                    {
-                        smoothMovementTicket = default;
-                    }
-
-                    RecordSmoothMovementBenchmark(
-                        smoothResult);
-                    smoothCommitIndex = 0;
-                    stage = PostStage.CommitSmoothMovement;
-                    return false;
-                case PostStage.CommitSmoothMovement:
-                    if (smoothCommitIndex < batches.Count)
-                    {
-                        int smoothCommitEnd = splitPostJobs
-                            ? smoothCommitIndex + 1
-                            : Math.Min(
-                                batches.Count,
-                                smoothCommitIndex +
-                                workGroupSize);
-                        while (smoothCommitIndex <
-                               smoothCommitEnd)
-                        {
-                            CommitSmoothMovementWorkItem(
-                                smoothCommitIndex++);
-                        }
-
-                        return false;
-                    }
-
-                    batchIndex = 0;
-                    postJobIndex =
-                        smoothMovementJobIndex + 1;
-                    stage = PostStage.AfterSmoothMovement;
-                    continue;
-                case PostStage.AfterSmoothMovement:
-                    if (TryRunNextPostRange(
-                            smoothMovementJobIndex + 1,
+                            taskVerifierJobIndex + 1,
                             int.MaxValue))
                     {
                         return false;
@@ -1461,8 +1174,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                     stage = PostStage.Finish;
                     continue;
                 case PostStage.Finish:
-                    AWDeferredPathRequestBatch.EndCapture();
-                    AWDeferredPathRequestBatch.CompleteCycle();
                     ResetCycleReferences(
                         clearPendingWork: false);
                     stage = PostStage.Idle;
@@ -1475,28 +1186,12 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
     public void Abort()
     {
-        AWDeferredPathRequestBatch.AbortCycle();
         if (searchTicket.IsValid)
         {
             AWSimulationWorkerPool.Instance.WaitAndDiscard(searchTicket);
             searchTicket = default;
         }
 
-        if (pathMovementTicket.IsValid)
-        {
-            AWSimulationWorkerPool.Instance.WaitAndDiscard(
-                pathMovementTicket);
-            pathMovementTicket = default;
-        }
-
-        if (smoothMovementTicket.IsValid)
-        {
-            AWSimulationWorkerPool.Instance.WaitAndDiscard(
-                smoothMovementTicket);
-            smoothMovementTicket = default;
-        }
-
-        AWEnemyPresenceCache.EndPreparation();
         ClearActiveBehaviorPartitions();
         ResetCycleReferences(
             clearPendingWork: true);
@@ -2714,329 +2409,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         return actor.position_height > 0f;
     }
 
-    private void PreparePathMovementWorkItems()
-    {
-        int count = batches.Count;
-        if (pathMovementWorkItems.Length < count)
-        {
-            int previousLength =
-                pathMovementWorkItems.Length;
-            Array.Resize(
-                ref pathMovementWorkItems,
-                count);
-            for (int i = previousLength; i < count; i++)
-            {
-                pathMovementWorkItems[i] =
-                    new PathMovementBatchWork();
-            }
-        }
-
-        bool paused = World.world.isPaused();
-        for (int i = 0; i < count; i++)
-        {
-            BatchActors batch = batches[i];
-            Job<Actor> job =
-                batch.jobs_post[pathMovementJobIndex];
-            PathMovementBatchWork work =
-                pathMovementWorkItems[i];
-            if (job.current_skips > 0)
-            {
-                job.current_skips--;
-                ObjectContainer<Actor> priorityContainer = job.container;
-                priorityContainer.checkAddRemove();
-                work.ConfigurePriorityOnly(batch, job,
-                    priorityContainer.getFastSimpleArray(),
-                    priorityContainer.Count);
-                continue;
-            }
-
-            if (paused)
-            {
-                work.ConfigureSkipped(batch, job);
-                continue;
-            }
-
-            ObjectContainer<Actor> container =
-                job.container;
-            if (activeBehaviorPartitionsValid[i] &&
-                !container.isDirtyContainer())
-            {
-                work.ConfigureParallel(
-                    batch,
-                    job,
-                    activeBehaviorActorsByBatch[i],
-                    activeBehaviorActorCounts[i]);
-                continue;
-            }
-
-            activeBehaviorPartitionsValid[i] = false;
-            work.ConfigureFallback(batch, job);
-        }
-    }
-
-    private void RunPathMovementWorkItemAt(int index)
-    {
-        pathMovementWorkItems[index].RunParallel();
-    }
-
-    private void CommitPathMovementWorkItem(int index)
-    {
-        PathMovementBatchWork work = pathMovementWorkItems[index];
-        Job<Actor> job = work.Job;
-        if (work.Skipped)
-        {
-            work.Reset();
-            return;
-        }
-
-        long startedAt = StartBenchmarkMeasurement();
-        int actorsChecked;
-        if (work.PriorityOnly)
-        {
-            actorsChecked = work.Checked;
-            for (int i = 0; i < work.Count; i++)
-            {
-                PathMovementWorkEntry entry = work.Entries[i];
-                if (entry.Kind == PathMovementWorkKind.RequiresSerial)
-                {
-                    Actor actor = work.Actors[i];
-                    PreparedNativePathCommitDecision decision =
-                        AWPathMovementBridge.CommitPreparedPathMovement(
-                            actor, entry.Prepared);
-                    if (decision ==
-                        PreparedNativePathCommitDecision.Commit)
-                        actor?.skipBehaviour();
-                }
-            }
-        }
-        else if (work.Fallback)
-        {
-            RunPathMovementJob(job.container, out actorsChecked);
-        }
-        else
-        {
-            actorsChecked = work.Checked;
-            Actor[] actors = work.Actors;
-            PathMovementWorkEntry[] entries = work.Entries;
-            int writeIndex = -1;
-            for (int i = 0; i < work.Count; i++)
-            {
-                Actor actor = actors[i];
-                PathMovementWorkEntry entry = entries[i];
-                bool retain = entry.Kind == PathMovementWorkKind.Retain;
-                if (entry.Kind == PathMovementWorkKind.RequiresSerial)
-                {
-                    PreparedNativePathCommitDecision decision =
-                        AWPathMovementBridge.CommitPreparedPathMovement(
-                            actor, entry.Prepared);
-                    if (decision ==
-                        PreparedNativePathCommitDecision.Commit)
-                    {
-                        actor.skipBehaviour();
-                        retain = false;
-                    }
-                    else if (decision ==
-                        PreparedNativePathCommitDecision.RetryLater)
-                    {
-                        retain = IsLivePathMovementActor(actor);
-                    }
-                    else
-                    {
-                        retain = false;
-                    }
-                }
-
-                if (!retain)
-                {
-                    if (writeIndex < 0) writeIndex = i;
-                    continue;
-                }
-
-                if (writeIndex >= 0) actors[writeIndex++] = actor;
-            }
-
-            activeBehaviorActorCounts[index] = writeIndex < 0
-                ? work.Count
-                : writeIndex;
-        }
-
-        if (activeBehaviorPartitionsValid[index])
-        {
-            Actor[] actors = activeBehaviorActorsByBatch[index];
-            int count = activeBehaviorActorCounts[index];
-            int writeIndex = 0;
-            for (int i = 0; i < count; i++)
-            {
-                Actor actor = actors[i];
-                if (!actor._update_done && !actor._beh_skip)
-                {
-                    actors[writeIndex++] = actor;
-                }
-            }
-
-            activeBehaviorActorCounts[index] = writeIndex;
-        }
-
-        if (job.random_tick_skips > 0)
-        {
-            job.current_skips = Randy.randomInt(0, job.random_tick_skips);
-        }
-
-        if (splitPostJobs)
-        {
-            job.time_benchmark +=
-                (Stopwatch.GetTimestamp() - startedAt) /
-                (double)Stopwatch.Frequency;
-            job.counter += actorsChecked;
-        }
-
-        work.Reset();
-    }
-
-    private static bool IsLivePathMovementActor(Actor pActor)
-    {
-        if (pActor?.data == null || pActor.batch == null) return false;
-        try { return !pActor.isRekt() && pActor.isAlive(); }
-        catch { return false; }
-    }
-
-    private void PrepareSmoothMovementWorkItems()
-    {
-        ArmyMilitaryMovementPriorityIndex.RefreshVanillaTaxiSnapshot();
-        int count = batches.Count;
-        if (smoothMovementWorkItems.Length < count)
-        {
-            int previousLength =
-                smoothMovementWorkItems.Length;
-            Array.Resize(
-                ref smoothMovementWorkItems,
-                count);
-            for (int i = previousLength; i < count; i++)
-            {
-                smoothMovementWorkItems[i] =
-                    new SmoothMovementBatchWork();
-            }
-        }
-
-        bool paused = World.world.isPaused();
-        for (int i = 0; i < count; i++)
-        {
-            BatchActors batch = batches[i];
-            Job<Actor> job =
-                batch.jobs_post[smoothMovementJobIndex];
-            SmoothMovementBatchWork work =
-                smoothMovementWorkItems[i];
-            batch._elapsed = elapsed;
-            batch._cur_container = job.container;
-            if (job.current_skips > 0)
-            {
-                job.current_skips--;
-                ObjectContainer<Actor> priorityContainer = job.container;
-                priorityContainer.checkAddRemove();
-                work.ConfigurePriorityOnly(batch, job,
-                    priorityContainer.getFastSimpleArray(),
-                    priorityContainer.Count, elapsed);
-                continue;
-            }
-
-            if (paused)
-            {
-                work.ConfigureSkipped(batch, job);
-                continue;
-            }
-
-            ObjectContainer<Actor> container =
-                job.container;
-            if (container.Count == 0 &&
-                !container.isDirtyContainer())
-            {
-                work.Configure(
-                    batch,
-                    job,
-                    Array.Empty<Actor>(),
-                    0,
-                    elapsed);
-                continue;
-            }
-
-            container.checkAddRemove();
-            Actor[] actors =
-                container.getFastSimpleArray();
-            int actorCount = container.Count;
-            batch._array = actors;
-            batch._count = actorCount;
-            work.Configure(
-                batch,
-                job,
-                actors,
-                actorCount,
-                elapsed);
-        }
-    }
-
-    private void RunSmoothMovementWorkItemAt(int index)
-    {
-        smoothMovementWorkItems[index].RunParallel();
-    }
-
-    private void CommitSmoothMovementWorkItem(int index)
-    {
-        SmoothMovementBatchWork work = smoothMovementWorkItems[index];
-        Job<Actor> job = work.Job;
-        if (work.Skipped)
-        {
-            work.Reset();
-            return;
-        }
-
-        long startedAt = StartBenchmarkMeasurement();
-        int actorsChecked = work.Checked;
-        Actor[] actors = work.SerialActors;
-        AWPathMovementBridge.AWPreparedSmoothMovement[] entries = work.Entries;
-        for (int i = 0; i < work.SerialCount; i++)
-        {
-            AWPathMovementBridge.CommitPreparedSmoothMovement(
-                actors[i], work.Elapsed, entries[i]);
-        }
-
-        if (job.random_tick_skips > 0)
-        {
-            job.current_skips = Randy.randomInt(0, job.random_tick_skips);
-        }
-
-        if (splitPostJobs)
-        {
-            job.time_benchmark +=
-                (Stopwatch.GetTimestamp() - startedAt) /
-                (double)Stopwatch.Frequency;
-            job.counter += actorsChecked;
-        }
-
-        work.Reset();
-    }
-
-    private void RunPathMovementJob(ObjectContainer<Actor> pContainer,
-        out int pActorsChecked)
-    {
-        pActorsChecked = 0;
-        if (pContainer.Count == 0 && !pContainer.isDirtyContainer())
-            return;
-        pContainer.checkAddRemove();
-        if (World.world.isPaused()) return;
-        Actor[] actors = pContainer.getFastSimpleArray();
-        int count = pContainer.Count;
-        for (int i = 0; i < count; i++)
-        {
-            Actor actor = actors[i];
-            if (actor._update_done || actor._beh_skip) continue;
-            pActorsChecked++;
-            if (AWPathMovementBridge.HasOwnership(actor))
-            {
-                AWPathMovementBridge.Update(actor);
-                actor.skipBehaviour();
-            }
-        }
-    }
 
     private void PrepareEnemySearchClassifications()
     {
@@ -3165,12 +2537,11 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             actorsClassified);
     }
 
-    private void BeginEnemySearchPreparation()
+    private void BeginEnemySearch()
     {
         batchIndex = 0;
         postJobIndex = currentEnemyTargetJobIndex;
         PrepareEnemySearchClassifications();
-        AWEnemyPresenceCache.BeginPreparation();
         stage = PostStage.PrepareEnemySearch;
     }
 
@@ -3315,6 +2686,34 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         {
             return;
         }
+
+        // Keep the admission contract aligned with Cultiway master. These
+        // states are already handled by the actor update/active-behaviour
+        // stages and must not enter the expensive native enemy finder again.
+        if (actor._update_done || actor._beh_skip)
+        {
+            return;
+        }
+        if (!actor.isAllowedToLookForEnemies() ||
+            actor.isInWaterAndCantAttack() ||
+            actor._has_status_strange_urge)
+        {
+            return;
+        }
+        if (actor.has_attack_target)
+        {
+            if (!actor.hasTask() || !actor.ai.task.in_combat)
+            {
+                actor.setTask("fighting", pClean: true, pCleanJob: true);
+            }
+
+            return;
+        }
+        if (actor._timeout_targets > 0f)
+        {
+            return;
+        }
+
         bool applyBackoff = AWEnemySearchBackoffRules.ShouldApply(
             actor.has_attack_target,
             actor._timeout_targets,
@@ -3327,19 +2726,10 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             collectDiagnostics
                 ? EnemiesFinder.counter_reused
                 : 0;
-        EnemyFinderData enemyData;
-        if (!AWEnemyPresenceCache
-                .TryGetPreparationEmptyResult(
-                    actor.current_tile,
-                    actor.kingdom,
-                    SimGlobals.m.unit_chunk_sight_range,
-                    out enemyData))
-        {
-            enemyData =
-                EnemiesFinder.findEnemiesFrom(
-                    actor.current_tile,
-                    actor.kingdom);
-        }
+        EnemyFinderData enemyData =
+            EnemiesFinder.findEnemiesFrom(
+                actor.current_tile,
+                actor.kingdom);
 
         List<BaseSimObject> primaryCandidates =
             enemyData.list;
@@ -3585,19 +2975,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 taskVerifierWorkItems[i]?.Reset();
             }
 
-            for (int i = 0;
-                 i < pathMovementWorkItems.Length;
-                 i++)
-            {
-                pathMovementWorkItems[i]?.Reset();
-            }
-
-            for (int i = 0;
-                 i < smoothMovementWorkItems.Length;
-                 i++)
-            {
-                smoothMovementWorkItems[i]?.Reset();
-            }
         }
 
         workCount = 0;
@@ -3605,21 +2982,13 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         militaryP0ActorIds.Clear();
         militaryP0Cursor = 0;
         tileActionCommitIndex = 0;
-        pathCommitIndex = 0;
-        smoothCommitIndex = 0;
         batchIndex = 0;
         postJobIndex = 0;
         batches = null;
         splitPostJobs = false;
         searchTicket = default;
-        pathMovementTicket = default;
-        smoothMovementTicket = default;
         searchScheduleStartedAt = 0L;
         searchScheduleCompletedAt = 0L;
-        pathMovementScheduleStartedAt = 0L;
-        pathMovementScheduleCompletedAt = 0L;
-        smoothMovementScheduleStartedAt = 0L;
-        smoothMovementScheduleCompletedAt = 0L;
     }
 
     private static int FindEnemySearchJobIndex(List<Job<Actor>> jobs)
@@ -3712,79 +3081,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             result.ExecutedItems);
     }
 
-    private void RecordPathMovementBenchmark(
-        AWSimulationWorkerPool.WorkResult result)
-    {
-        if (!AWSimulationTickBenchmark.IsCapturing)
-        {
-            return;
-        }
-
-        int actorsChecked = 0;
-        for (int i = 0; i < batches.Count; i++)
-        {
-            actorsChecked +=
-                pathMovementWorkItems[i].Checked;
-        }
-
-        long mainThreadOverlap =
-            CalculateOverlap(
-                result.StartedAt,
-                result.CompletedAt,
-                pathMovementScheduleStartedAt,
-                pathMovementScheduleCompletedAt) +
-            Math.Min(
-                result.WallTicks,
-                result.MainWaitTicks);
-        double backgroundSeconds = Math.Max(
-            0L,
-            result.WallTicks - mainThreadOverlap) /
-            (double)Stopwatch.Frequency;
-        AWSimulationTickBenchmark.RecordActorBackgroundMetric(
-            "b5_checkPathMovement.parallel",
-            "vanilla.actors.post.b5.background",
-            result.WallSeconds,
-            backgroundSeconds,
-            actorsChecked);
-    }
-
-    private void RecordSmoothMovementBenchmark(
-        AWSimulationWorkerPool.WorkResult result)
-    {
-        if (!AWSimulationTickBenchmark.IsCapturing)
-        {
-            return;
-        }
-
-        int actorsHandled = 0;
-        for (int i = 0; i < batches.Count; i++)
-        {
-            SmoothMovementBatchWork work =
-                smoothMovementWorkItems[i];
-            actorsHandled += work.Checked;
-        }
-
-        long mainThreadOverlap =
-            CalculateOverlap(
-                result.StartedAt,
-                result.CompletedAt,
-                smoothMovementScheduleStartedAt,
-                smoothMovementScheduleCompletedAt) +
-            Math.Min(
-                result.WallTicks,
-                result.MainWaitTicks);
-        double backgroundSeconds = Math.Max(
-            0L,
-            result.WallTicks - mainThreadOverlap) /
-            (double)Stopwatch.Frequency;
-        AWSimulationTickBenchmark.RecordActorBackgroundMetric(
-            "u10_checkSmoothMovement.parallel",
-            "vanilla.actors.post.u10.background",
-            result.WallSeconds,
-            backgroundSeconds,
-            actorsHandled);
-    }
-
     private static long CalculateOverlap(
         long startedAt,
         long completedAt,
@@ -3802,6 +3098,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         long overlapEnd = Math.Min(completedAt, rangeCompletedAt);
         return Math.Max(0L, overlapEnd - overlapStart);
     }
+
 
     private enum TaskVerifierKind : byte
     {
@@ -4370,296 +3667,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         }
     }
 
-    private sealed class PathMovementBatchWork
-    {
-        internal Job<Actor> Job { get; private set; }
-        internal Actor[] Actors { get; private set; }
-        internal int Count { get; private set; }
-        internal int Checked { get; private set; }
-        internal bool Fallback { get; private set; }
-        internal bool Skipped { get; private set; }
-        internal bool PriorityOnly { get; private set; }
-        internal bool[] MilitaryPriorityActive { get; private set; } =
-            Array.Empty<bool>();
-        internal PathMovementWorkEntry[] Entries { get; private set; } =
-            Array.Empty<PathMovementWorkEntry>();
-
-        internal void ConfigureParallel(
-            BatchActors batch,
-            Job<Actor> job,
-            Actor[] actors,
-            int count)
-        {
-            Job = job;
-            Actors = actors;
-            Count = count;
-            Checked = 0;
-            Fallback = false;
-            Skipped = false;
-            PriorityOnly = false;
-            if (Entries.Length < count)
-                Entries = new PathMovementWorkEntry[Math.Max(
-                    AWPerformanceSettings.SimulationBatchSize, count)];
-        }
-
-        internal void ConfigureFallback(BatchActors batch, Job<Actor> job)
-        {
-            Job = job;
-            Actors = null;
-            Count = 0;
-            Checked = 0;
-            Fallback = true;
-            Skipped = false;
-            PriorityOnly = false;
-        }
-
-        internal void ConfigureSkipped(BatchActors batch, Job<Actor> job)
-        {
-            Job = job;
-            Actors = null;
-            Count = 0;
-            Checked = 0;
-            Fallback = false;
-            Skipped = true;
-            PriorityOnly = false;
-        }
-
-        internal void ConfigurePriorityOnly(BatchActors batch, Job<Actor> job,
-            Actor[] actors, int count)
-        {
-            Job = job;
-            Actors = actors;
-            Count = count;
-            Checked = 0;
-            Fallback = false;
-            Skipped = false;
-            PriorityOnly = true;
-            if (Entries.Length < count)
-                Entries = new PathMovementWorkEntry[Math.Max(
-                    AWPerformanceSettings.SimulationBatchSize, count)];
-            if (MilitaryPriorityActive.Length < count)
-                MilitaryPriorityActive = new bool[Entries.Length];
-            for (int i = 0; i < count; i++)
-            {
-                MilitaryPriorityActive[i] =
-                    ArmyRtsControllerService.HasActiveCaptainObjective(actors[i]) ||
-                    ArmyRtsControllerService.HasActiveMemberObjective(actors[i]) ||
-                    RoyalGuardService.HasLandFollowPriority(actors[i]);
-            }
-        }
-
-        internal void RunParallel()
-        {
-            if (Skipped || Fallback || Count == 0) return;
-            int checkedActors = 0;
-            for (int i = 0; i < Count; i++)
-            {
-                Actor actor = Actors[i];
-                ref PathMovementWorkEntry entry = ref Entries[i];
-                entry.Prepared = default;
-                if (ArmyMilitaryMovementPriorityIndex.WasProcessed(
-                        actor?.data?.id ?? -1L))
-                {
-                    entry.Kind = PathMovementWorkKind.Retain;
-                    continue;
-                }
-                if (PriorityOnly && !ArmyRtsMovementCadenceRules.
-                        ShouldRunDuringSkippedPathBatch(
-                            AWPerformanceSettings.Mode ==
-                                AWSimulationMode.Large,
-                            MilitaryPriorityActive[i]))
-                {
-                    entry.Kind = PathMovementWorkKind.Retain;
-                    continue;
-                }
-                if (actor._update_done || actor._beh_skip)
-                {
-                    entry.Kind = PathMovementWorkKind.Inactive;
-                    continue;
-                }
-
-                checkedActors++;
-                AWPathMovementBridge.AWParallelPathMovementResult result =
-                    AWPathMovementBridge.TryRunParallelSafePathMovement(
-                        actor, out AWPathMovementBridge.AWPreparedPathMovement prepared);
-                switch (result)
-                {
-                    case AWPathMovementBridge.AWParallelPathMovementResult.NoPath:
-                        entry.Kind = PathMovementWorkKind.Retain;
-                        break;
-                    case AWPathMovementBridge.AWParallelPathMovementResult.Handled:
-                        actor.skipBehaviour();
-                        entry.Kind = PathMovementWorkKind.Handled;
-                        break;
-                    case AWPathMovementBridge.AWParallelPathMovementResult.RequiresSerial:
-                        entry.Prepared = prepared;
-                        entry.Kind = PathMovementWorkKind.RequiresSerial;
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
-            }
-            Checked = checkedActors;
-        }
-
-        internal void Reset()
-        {
-            int previousCount = Count;
-            Job = null;
-            Actors = null;
-            Count = 0;
-            Checked = 0;
-            Fallback = false;
-            Skipped = false;
-            PriorityOnly = false;
-            if (previousCount > 0)
-                Array.Clear(Entries, 0, previousCount);
-        }
-    }
-
-    private enum PathMovementWorkKind : byte
-    {
-        Inactive,
-        Retain,
-        Handled,
-        RequiresSerial
-    }
-
-    private struct PathMovementWorkEntry
-    {
-        internal PathMovementWorkKind Kind;
-        internal AWPathMovementBridge.AWPreparedPathMovement Prepared;
-    }
-
-    private sealed class SmoothMovementBatchWork
-    {
-        internal Actor[] Actors { get; private set; }
-        internal Actor[] SerialActors { get; private set; } = Array.Empty<Actor>();
-        internal Job<Actor> Job { get; private set; }
-        internal int Count { get; private set; }
-        internal int Checked { get; private set; }
-        internal int SerialCount { get; private set; }
-        internal bool Skipped { get; private set; }
-        internal bool PriorityOnly { get; private set; }
-        internal bool[] MilitaryPriorityActive { get; private set; } =
-            Array.Empty<bool>();
-        internal float Elapsed { get; private set; }
-        internal AWPathMovementBridge.AWPreparedSmoothMovement[] Entries { get; private set; } =
-            Array.Empty<AWPathMovementBridge.AWPreparedSmoothMovement>();
-
-        internal void Configure(
-            BatchActors batch,
-            Job<Actor> job,
-            Actor[] actors,
-            int count,
-            float elapsed)
-        {
-            Job = job;
-            Actors = actors;
-            Count = count;
-            Checked = 0;
-            SerialCount = 0;
-            Skipped = false;
-            PriorityOnly = false;
-            Elapsed = elapsed;
-            if (Entries.Length < count)
-            {
-                int capacity = Math.Max(AWPerformanceSettings.SimulationBatchSize, count);
-                SerialActors = new Actor[capacity];
-                Entries = new AWPathMovementBridge.AWPreparedSmoothMovement[capacity];
-            }
-        }
-
-        internal void ConfigureSkipped(BatchActors batch, Job<Actor> job)
-        {
-            Job = job;
-            Count = 0;
-            Checked = 0;
-            Skipped = true;
-            Elapsed = 0f;
-            Actors = null;
-            PriorityOnly = false;
-        }
-
-        internal void ConfigurePriorityOnly(BatchActors batch, Job<Actor> job,
-            Actor[] actors, int count, float elapsed)
-        {
-            Job = job;
-            Actors = actors;
-            Count = count;
-            Checked = 0;
-            SerialCount = 0;
-            Skipped = false;
-            PriorityOnly = true;
-            Elapsed = elapsed;
-            if (Entries.Length < count)
-            {
-                int capacity = Math.Max(AWPerformanceSettings.SimulationBatchSize,
-                    count);
-                SerialActors = new Actor[capacity];
-                Entries = new AWPathMovementBridge.AWPreparedSmoothMovement[
-                    capacity];
-            }
-            if (MilitaryPriorityActive.Length < count)
-                MilitaryPriorityActive = new bool[Math.Max(
-                    AWPerformanceSettings.SimulationBatchSize, count)];
-            for (int i = 0; i < count; i++)
-            {
-                MilitaryPriorityActive[i] =
-                    ArmyRtsControllerService.HasActiveCaptainObjective(actors[i]) ||
-                    ArmyRtsControllerService.HasActiveMemberObjective(actors[i]) ||
-                    RoyalGuardService.HasLandFollowPriority(actors[i]);
-            }
-        }
-
-        internal void RunParallel()
-        {
-            if (Skipped || Count == 0) return;
-            int serialCount = 0;
-            for (int i = 0; i < Count; i++)
-            {
-                Actor actor = Actors[i];
-                if (ArmyMilitaryMovementPriorityIndex.WasProcessed(
-                        actor?.data?.id ?? -1L)) continue;
-                if (PriorityOnly && !ArmyRtsMovementCadenceRules.
-                        ShouldRunDuringSkippedMovementBatch(
-                            AWPerformanceSettings.Mode ==
-                                AWSimulationMode.Large,
-                            MilitaryPriorityActive[i]))
-                    continue;
-                AWPathMovementBridge.AWParallelSmoothMovementResult result =
-                    AWPathMovementBridge.TryRunParallelSafeSmoothMovement(
-                        actor, Elapsed,
-                        out AWPathMovementBridge.AWPreparedSmoothMovement prepared);
-                if (result == AWPathMovementBridge.AWParallelSmoothMovementResult.RequiresSerial)
-                {
-                    SerialActors[serialCount] = Actors[i];
-                    Entries[serialCount] = prepared;
-                    serialCount++;
-                }
-            }
-            Checked = Count;
-            SerialCount = serialCount;
-        }
-
-        internal void Reset()
-        {
-            int previousCount = Count;
-            Job = null;
-            Actors = null;
-            Count = 0;
-            Checked = 0;
-            Skipped = false;
-            PriorityOnly = false;
-            Elapsed = 0f;
-            if (SerialCount > 0)
-            {
-                Array.Clear(SerialActors, 0, SerialCount);
-                Array.Clear(Entries, 0, SerialCount);
-            }
-            SerialCount = 0;
-        }
-    }
 
     private sealed class SearchWorkItem
     {

@@ -3,8 +3,45 @@ using System;
 
 namespace AncientWarfare3.core.pathfinding
 {
+    public readonly struct AWTraversalState
+    {
+        internal AWTraversalState(float pStamina, float pHealth, float pRisk)
+        {
+            Stamina = pStamina;
+            Health = pHealth;
+            Risk = pRisk;
+        }
+
+        public float Stamina { get; }
+        public float Health { get; }
+        public float Risk { get; }
+    }
+
     public static class AWTraversalRules
     {
+        public static AWTraversalState AdvanceState(
+            AWActorTraversalProfile pActor, AWTraversalEstimate pEstimate)
+        {
+            return AdvanceState(new AWTraversalState(pActor.Stamina,
+                    pActor.Health, 0f), pActor, pEstimate);
+        }
+
+        public static AWTraversalState AdvanceState(
+            AWTraversalState pCurrent, AWActorTraversalProfile pActor,
+            AWTraversalEstimate pEstimate)
+        {
+            if (pActor.MaxStamina <= 0f)
+                return new AWTraversalState(0f,
+                    Math.Max(0f, pCurrent.Health - pEstimate.HealthCost),
+                    pCurrent.Risk + pEstimate.RiskCost);
+            float stamina = Math.Max(0f, Math.Min(pActor.MaxStamina,
+                pCurrent.Stamina - pEstimate.StaminaCost +
+                pEstimate.TimeSeconds * pActor.StaminaRegeneration));
+            return new AWTraversalState(stamina,
+                Math.Max(0f, pCurrent.Health - pEstimate.HealthCost),
+                pCurrent.Risk + pEstimate.RiskCost);
+        }
+
         public static bool CanPublishInitialGeneration(
             bool tileCaptureComplete, int pendingDirtyChunkCount)
         {

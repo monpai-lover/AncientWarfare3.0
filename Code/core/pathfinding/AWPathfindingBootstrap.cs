@@ -52,7 +52,11 @@ namespace AncientWarfare3.core.pathfinding
                     "path_owner_audit", diagnostic);
             }
             diagnostic = RuntimePerformanceDiagnostic.BeginScope();
-            try { EnsureTraversalStarted(); }
+            try
+            {
+                EnsureTraversalStarted();
+                EnsureNavigationGrid();
+            }
             finally
             {
                 RuntimePerformanceDiagnostic.EndDetail(
@@ -134,6 +138,20 @@ namespace AncientWarfare3.core.pathfinding
             }
         }
 
+        /// <summary>
+        /// Completes the Cultiway-style per-simulation-tick path lifecycle.
+        /// Dirty traversal work remains budgeted in ProcessFrame; retry
+        /// activation is centralized in the shared Finder and runs once at
+        /// the simulation completion boundary.
+        /// </summary>
+        internal static void Tick()
+        {
+            if (!AWPathfindingRuntimeMode.IsAw3 || !_running) return;
+            _finder?.Tick();
+            TraversalCache.ProcessPendingBuild();
+            AWPathNavigationGridService.FlushDirty();
+        }
+
         public static void ClearWorld()
         {
             AWArmyMarchService.Clear();
@@ -141,6 +159,7 @@ namespace AncientWarfare3.core.pathfinding
             if (!AWPathfindingRuntimeMode.IsAw3) return;
             StopOwnedPathfinder();
             TraversalCache.Clear();
+            AWPathNavigationGridService.Clear();
             _traversalRunning = false;
             _maintenanceFrame = 0;
             _lastMaintenanceRenderFrame = -1;
@@ -157,7 +176,8 @@ namespace AncientWarfare3.core.pathfinding
             int workerCount =
                 AWPerformanceSettings.ActorPathfindingWorkerCount;
             if (workerCount <= 0) return;
-            _finder = new AWPathFinder(new AWStreamingPathGenerator(), Diagnostics);
+            _finder = new AWPathFinder(new AWStreamingPathGenerator(),
+                Diagnostics, AWPathMovementBridge.CreateRecoveryRequest);
             _finder.Start(workerCount);
             _running = true;
         }
@@ -170,6 +190,14 @@ namespace AncientWarfare3.core.pathfinding
                 MapBox.height <= 0) return;
             TraversalCache.Initialize();
             _traversalRunning = TraversalCache.GenerationId >= 0;
+        }
+
+        private static void EnsureNavigationGrid()
+        {
+            if (AWPathNavigationGridService.Current != null) return;
+            AWTraversalGeneration generation = TraversalCache.CurrentGeneration;
+            if (generation != null)
+                AWPathNavigationGridService.BuildFromTraversal(generation);
         }
 
         private static void StopOwnedPathfinder()

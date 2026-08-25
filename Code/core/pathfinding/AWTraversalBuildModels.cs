@@ -27,7 +27,8 @@ namespace AncientWarfare3.core.pathfinding
             AWTileTraversalSnapshot[][] baseChunks,
             AWTraversalChunkCapture[] captures,
             bool rebuildWaterConnectivity = false,
-            int resultGenerationId = 0)
+            int resultGenerationId = 0,
+            long gridIdentity = 0L)
         {
             WorldGeneration = worldGeneration;
             BaseGenerationId = baseGenerationId;
@@ -43,6 +44,7 @@ namespace AncientWarfare3.core.pathfinding
                 : (AWTraversalChunkCapture[])captures.Clone();
             RebuildWaterConnectivity = rebuildWaterConnectivity;
             ResultGenerationId = Math.Max(0, resultGenerationId);
+            GridIdentity = gridIdentity;
         }
 
         public long WorldGeneration { get; }
@@ -55,6 +57,7 @@ namespace AncientWarfare3.core.pathfinding
         public AWTraversalChunkCapture[] Captures { get; }
         public bool RebuildWaterConnectivity { get; }
         public int ResultGenerationId { get; }
+        public long GridIdentity { get; }
     }
 
     internal sealed class AWTraversalBuildResult
@@ -64,7 +67,8 @@ namespace AncientWarfare3.core.pathfinding
             int pHeight, int pChunkSize,
             AWTileTraversalSnapshot[][] pChunks,
             AWRegionTopologySnapshot pRegionTopology = null,
-            AWTraversalGeneration pPreparedGeneration = null)
+            AWTraversalGeneration pPreparedGeneration = null,
+            long pGridIdentity = 0L)
         {
             WorldGeneration = pWorldGeneration;
             BaseGenerationId = pBaseGenerationId;
@@ -75,6 +79,9 @@ namespace AncientWarfare3.core.pathfinding
             Chunks = pChunks ?? Array.Empty<AWTileTraversalSnapshot[]>();
             RegionTopology = pRegionTopology;
             PreparedGeneration = pPreparedGeneration;
+            GridIdentity = pGridIdentity != 0L
+                ? pGridIdentity
+                : pPreparedGeneration?.Identity ?? 0L;
         }
 
         public long WorldGeneration { get; }
@@ -88,6 +95,7 @@ namespace AncientWarfare3.core.pathfinding
         // swaps references on the main thread.
         internal AWRegionTopologySnapshot RegionTopology { get; }
         internal AWTraversalGeneration PreparedGeneration { get; }
+        internal long GridIdentity { get; }
     }
 
     internal sealed class AWTraversalOverlayEntry

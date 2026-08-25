@@ -217,9 +217,11 @@ namespace AncientWarfare3.core.pathfinding
 
         internal AWTraversalGeneration(int pId, int pWidth, int pHeight, int pChunkSize,
             AWTileTraversalSnapshot[][] pChunks,
-            AWRegionTopologySnapshot pRegionTopology = null)
+            AWRegionTopologySnapshot pRegionTopology = null,
+            long pWorldGeneration = 0L)
         {
             Id = pId;
+            WorldGeneration = pWorldGeneration;
             Width = Math.Max(0, pWidth);
             Height = Math.Max(0, pHeight);
             ChunkSize = Math.Max(1, pChunkSize);
@@ -237,6 +239,7 @@ namespace AncientWarfare3.core.pathfinding
             if (pBase == null)
                 throw new ArgumentNullException(nameof(pBase));
             Id = pId;
+            WorldGeneration = pBase.WorldGeneration;
             Width = pBase.Width;
             Height = pBase.Height;
             ChunkSize = pBase.ChunkSize;
@@ -259,6 +262,10 @@ namespace AncientWarfare3.core.pathfinding
         }
 
         public int Id { get; }
+        // The generation id identifies a traversal snapshot within one world;
+        // this value identifies the world itself and prevents old snapshots
+        // from being reused after a world reload.
+        public long WorldGeneration { get; }
         public int Width { get; }
         public int Height { get; }
         public int ChunkSize { get; }
@@ -422,7 +429,8 @@ namespace AncientWarfare3.core.pathfinding
         }
 
         public static AWTraversalGeneration FromTiles(int pId, int width, int height,
-            AWTileTraversalSnapshot[] pTiles, int pChunkSize = DefaultChunkSize)
+            AWTileTraversalSnapshot[] pTiles, int pChunkSize = DefaultChunkSize,
+            long pWorldGeneration = 0L)
         {
             int chunkSize = Math.Max(1, pChunkSize);
             int chunksWide = Math.Max(1, (width + chunkSize - 1) / chunkSize);
@@ -440,7 +448,8 @@ namespace AncientWarfare3.core.pathfinding
                 int local = tile.X % chunkSize + tile.Y % chunkSize * chunkSize;
                 chunks[chunkId][local] = tile;
             }
-            return new AWTraversalGeneration(pId, width, height, chunkSize, chunks);
+            return new AWTraversalGeneration(pId, width, height, chunkSize, chunks,
+                pWorldGeneration: pWorldGeneration);
         }
 
         public void Dispose()

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using AncientWarfare3.core.pathfinding;
 using UnityEngine;
 
 namespace AncientWarfare3.core.performance
@@ -11,12 +12,14 @@ namespace AncientWarfare3.core.performance
         internal const string TotalsGroupId = "aw3_tick_totals";
         internal const string PhasesGroupId = "aw3_tick_phases";
         internal const string ActorsGroupId = "aw3_tick_actors";
+        internal const string PathfindingGroupId = "aw3_tick_pathfinding";
         internal const string BuildingsGroupId = "aw3_tick_buildings";
         internal const string WorldBehavioursGroupId =
             "aw3_tick_world_behaviours";
 
         internal const string TickTotalId = "tick_total";
         internal const string ActorsTotalId = "actors_total";
+        internal const string PathfindingTotalId = "pathfinding_total";
         internal const string BuildingsTotalId = "buildings_total";
         internal const string WorldBehavioursTotalId =
             "world_behaviours_total";
@@ -25,6 +28,8 @@ namespace AncientWarfare3.core.performance
         private const string BenchmarkAllId = "Benchmark All";
         private const string TickToolId = "Benchmark AW3 Tick";
         private const string ActorsToolId = "Benchmark AW3 Tick Actors";
+        private const string PathfindingToolId =
+            "Benchmark AW3 Tick Pathfinding";
         private const string BuildingsToolId =
             "Benchmark AW3 Tick Buildings";
         private const string WorldBehavioursToolId =
@@ -42,6 +47,8 @@ namespace AncientWarfare3.core.performance
             new BenchmarkGroupState(PhasesGroupId);
         private static readonly BenchmarkGroupState ActorsGroup =
             new BenchmarkGroupState(ActorsGroupId);
+        private static readonly BenchmarkGroupState PathfindingGroup =
+            new BenchmarkGroupState(PathfindingGroupId);
         private static readonly BenchmarkGroupState BuildingsGroup =
             new BenchmarkGroupState(BuildingsGroupId);
         private static readonly BenchmarkGroupState WorldBehavioursGroup =
@@ -91,6 +98,7 @@ namespace AncientWarfare3.core.performance
         {
             TryRegisterDebugTools();
             bool enabled = Bench.bench_enabled;
+            AWPathfindingProfiler.SetEnabled(enabled);
             if (!_benchStateInitialized)
             {
                 _benchStateInitialized = true;
@@ -116,6 +124,8 @@ namespace AncientWarfare3.core.performance
             _current.StartFrame = Time.frameCount;
             _current.StartedAt = Time.realtimeSinceStartupAsDouble;
             _current.Mode = pMode;
+            _current.PathfindingStart =
+                AWPathfindingProfiler.CaptureSnapshot();
         }
 
         internal static void MarkTickCompleted()
@@ -268,6 +278,8 @@ namespace AncientWarfare3.core.performance
                 pPhaseLimit);
             AppendTopRows(pBuilder, "actors", ActorsGroupId, ActorsTotalId,
                 pDetailLimit);
+            AppendTopRows(pBuilder, "pathfinding", PathfindingGroupId,
+                PathfindingTotalId, pDetailLimit);
             AppendTopRows(pBuilder, "buildings", BuildingsGroupId,
                 BuildingsTotalId, pDetailLimit);
             AppendTopRows(pBuilder, "world_beh", WorldBehavioursGroupId,
@@ -283,9 +295,12 @@ namespace AncientWarfare3.core.performance
                 pCapture.BuildingsSeconds);
             AddUnattributedOverhead(pCapture.WorldBehaviours,
                 pCapture.WorldBehavioursSeconds);
+            RecordPathfindingMetrics(pCapture);
 
             pCapture.SetTotal(TickTotalId, pCapture.TotalSeconds);
             pCapture.SetTotal(ActorsTotalId, pCapture.ActorsSeconds);
+            pCapture.SetTotal(PathfindingTotalId,
+                SumSeconds(pCapture.Pathfinding));
             pCapture.SetTotal(BuildingsTotalId,
                 pCapture.BuildingsSeconds);
             pCapture.SetTotal(WorldBehavioursTotalId,
@@ -295,6 +310,8 @@ namespace AncientWarfare3.core.performance
             PublishGroup(TotalsGroup, pCapture.Totals, previousSamples);
             PublishGroup(PhasesGroup, pCapture.Phases, previousSamples);
             PublishGroup(ActorsGroup, pCapture.ActorJobs, previousSamples);
+            PublishGroup(PathfindingGroup, pCapture.Pathfinding,
+                previousSamples);
             PublishGroup(BuildingsGroup, pCapture.BuildingJobs,
                 previousSamples);
             PublishGroup(WorldBehavioursGroup,
@@ -385,6 +402,43 @@ namespace AncientWarfare3.core.performance
             metric.Counter += pCounter;
         }
 
+        private static double SumSeconds(Dictionary<string, Metric> pEntries)
+        {
+            double total = 0d;
+            foreach (Metric metric in pEntries.Values)
+                total += Math.Max(0d, metric.Seconds);
+            return total;
+        }
+
+        private static void RecordPathfindingMetrics(TickCapture pCapture)
+        {
+            AWPathfindingProfiler.AWPathfindingProfilerSnapshot delta =
+                AWPathfindingProfiler.CaptureSnapshot().DeltaFrom(
+                    pCapture.PathfindingStart);
+            AddPathfindingMetric(pCapture.Pathfinding, "reuse", delta.Reuse);
+            AddPathfindingMetric(pCapture.Pathfinding, "reuse_miss",
+                delta.ReuseMiss);
+            AddPathfindingMetric(pCapture.Pathfinding, "create", delta.Create);
+            AddPathfindingMetric(pCapture.Pathfinding, "task_create",
+                delta.TaskCreate);
+            AddPathfindingMetric(pCapture.Pathfinding, "cancel", delta.Cancel);
+            AddPathfindingMetric(pCapture.Pathfinding, "cancel_empty",
+                delta.CancelEmpty);
+            AddPathfindingMetric(pCapture.Pathfinding, "enqueue", delta.Enqueue);
+            AddPathfindingMetric(pCapture.Pathfinding, "queue_wait",
+                delta.QueueWait);
+            AddPathfindingMetric(pCapture.Pathfinding, "background_path",
+                delta.BackgroundPath);
+        }
+
+        private static void AddPathfindingMetric(
+            Dictionary<string, Metric> pTarget, string pId,
+            AWPathfindingProfiler.AWPathfindingMetricSnapshot pMetric)
+        {
+            if (pMetric.Counter == 0L && pMetric.ElapsedTicks == 0L) return;
+            AddMetric(pTarget, pId, pMetric.Seconds, pMetric.Counter);
+        }
+
         private static void PublishGroup(BenchmarkGroupState pState,
             Dictionary<string, Metric> pEntries, int pPreviousSamples)
         {
@@ -454,6 +508,7 @@ namespace AncientWarfare3.core.performance
             ResetGroup(TotalsGroup);
             ResetGroup(PhasesGroup);
             ResetGroup(ActorsGroup);
+            ResetGroup(PathfindingGroup);
             ResetGroup(BuildingsGroup);
             ResetGroup(WorldBehavioursGroup);
         }
@@ -484,6 +539,8 @@ namespace AncientWarfare3.core.performance
                 TickTotalId);
             RegisterDebugTool(library, template, ActorsToolId, ActorsGroupId,
                 ActorsTotalId);
+            RegisterDebugTool(library, template, PathfindingToolId,
+                PathfindingGroupId, PathfindingTotalId);
             RegisterDebugTool(library, template, BuildingsToolId,
                 BuildingsGroupId, BuildingsTotalId);
             RegisterDebugTool(library, template, WorldBehavioursToolId,
@@ -637,6 +694,8 @@ namespace AncientWarfare3.core.performance
                 new Dictionary<string, Metric>(StringComparer.Ordinal);
             internal readonly Dictionary<string, Metric> ActorJobs =
                 new Dictionary<string, Metric>(StringComparer.Ordinal);
+            internal readonly Dictionary<string, Metric> Pathfinding =
+                new Dictionary<string, Metric>(StringComparer.Ordinal);
             internal readonly Dictionary<string, Metric> BuildingJobs =
                 new Dictionary<string, Metric>(StringComparer.Ordinal);
             internal readonly Dictionary<string, Metric> WorldBehaviours =
@@ -654,6 +713,8 @@ namespace AncientWarfare3.core.performance
             internal double WorldBehavioursSeconds;
             internal AWSimulationMode Mode;
             internal bool Cancelled;
+            internal AWPathfindingProfiler.AWPathfindingProfilerSnapshot
+                PathfindingStart;
 
             internal void SetTotal(string pId, double pSeconds)
             {
@@ -671,6 +732,7 @@ namespace AncientWarfare3.core.performance
                 Totals.Clear();
                 Phases.Clear();
                 ActorJobs.Clear();
+                Pathfinding.Clear();
                 BuildingJobs.Clear();
                 WorldBehaviours.Clear();
             }
@@ -680,6 +742,7 @@ namespace AncientWarfare3.core.performance
                 ResetMetrics(Totals);
                 ResetMetrics(Phases);
                 ResetMetrics(ActorJobs);
+                ResetMetrics(Pathfinding);
                 ResetMetrics(BuildingJobs);
                 ResetMetrics(WorldBehaviours);
                 SimulatedSeconds = 0f;
@@ -694,6 +757,7 @@ namespace AncientWarfare3.core.performance
                 WorldBehavioursSeconds = 0d;
                 Mode = AWSimulationMode.Native;
                 Cancelled = false;
+                PathfindingStart = default;
             }
 
             private static void ResetMetrics(

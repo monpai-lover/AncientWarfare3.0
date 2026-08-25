@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Threading;
 using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.core.pathfinding;
 using life.taxi;
 
 namespace AncientWarfare3.core.performance
@@ -131,8 +132,7 @@ namespace AncientWarfare3.core.performance
             _actorRunner = new AWCooperativeBatchRunner<BatchActors, Actor>(
                 "vanilla.actors", pAllowWorkerParallelism: true,
                 pDeferParallelToPresentation: true,
-                pPostRunner: new AWCooperativeActorPostRunner(),
-                pParallelJobRunner: new AWCooperativeActorParallelJobRunner());
+                pPostRunner: new AWCooperativeActorPostRunner());
         private readonly AWCooperativeBatchRunner<BatchBuildings, Building>
             _buildingRunner =
                 new AWCooperativeBatchRunner<BatchBuildings, Building>(
@@ -152,6 +152,8 @@ namespace AncientWarfare3.core.performance
         private readonly Action _executeCurrentStageBurstAction;
         private readonly Action _executeCurrentStageCoreAction;
         private readonly Action _executeVanillaStageBurstCoreAction;
+        private readonly Action _dispatchDeferredParallelWorkAction;
+        private readonly Action _joinBackgroundWorkAction;
 
         private MapBox _world;
         private MapBox _pendingAdmissionMap;
@@ -212,6 +214,10 @@ namespace AncientWarfare3.core.performance
             InitialActorParallelStageMilliseconds;
         private double _buildingParallelStageEstimateMilliseconds =
             InitialBuildingParallelStageMilliseconds;
+        private bool _dispatchDeferredParallelWorkResult;
+        private bool _joinBackgroundWorkResult;
+        private bool _joinActorBackgroundWork;
+        private double _joinBackgroundWorkMilliseconds;
 
         private AWCooperativeSimulationRunner()
         {
@@ -223,6 +229,9 @@ namespace AncientWarfare3.core.performance
             _executeCurrentStageCoreAction = ExecuteCurrentStageCore;
             _executeVanillaStageBurstCoreAction =
                 ExecuteVanillaStageBurstCore;
+            _dispatchDeferredParallelWorkAction =
+                DispatchDeferredParallelWork;
+            _joinBackgroundWorkAction = JoinBackgroundWork;
         }
 
         public bool Active => _stage != SimulationStage.Idle;
@@ -316,13 +325,12 @@ namespace AncientWarfare3.core.performance
                             break;
                         }
 
-                        bool dispatched = false;
+                        _dispatchDeferredParallelWorkResult = false;
                         AWFramePriorityGovernor.RunPhase(
                             AWSimulationDomain.Vanilla,
                             dispatchPhase,
-                            () => dispatched =
-                                TryBeginDeferredParallelWorkEagerly());
-                        if (!dispatched) break;
+                            _dispatchDeferredParallelWorkAction);
+                        if (!_dispatchDeferredParallelWorkResult) break;
                         continue;
                     }
 
@@ -364,19 +372,16 @@ namespace AncientWarfare3.core.performance
                             break;
                         }
 
-                        bool joined = false;
-                        double joinMilliseconds = Math.Max(
+                        _joinActorBackgroundWork = actorBackgroundPending;
+                        _joinBackgroundWorkMilliseconds = Math.Max(
                             AWPerformanceSettings.BackgroundJoinMilliseconds,
                             remainingMilliseconds);
+                        _joinBackgroundWorkResult = false;
                         AWFramePriorityGovernor.RunPhase(
                             AWSimulationDomain.Vanilla,
                             awaitPhase,
-                            () => joined = actorBackgroundPending
-                                ? _actorRunner.TryJoinBackgroundWork(
-                                    joinMilliseconds)
-                                : _buildingRunner.TryJoinBackgroundWork(
-                                    joinMilliseconds));
-                        if (!joined)
+                            _joinBackgroundWorkAction);
+                        if (!_joinBackgroundWorkResult)
                         {
                             AWFramePriorityGovernor.SetPhase(
                                 AWSimulationDomain.Vanilla, awaitPhase);
@@ -542,6 +547,21 @@ namespace AncientWarfare3.core.performance
             return true;
         }
 
+        private void DispatchDeferredParallelWork()
+        {
+            _dispatchDeferredParallelWorkResult =
+                TryBeginDeferredParallelWorkEagerly();
+        }
+
+        private void JoinBackgroundWork()
+        {
+            _joinBackgroundWorkResult = _joinActorBackgroundWork
+                ? _actorRunner.TryJoinBackgroundWork(
+                    _joinBackgroundWorkMilliseconds)
+                : _buildingRunner.TryJoinBackgroundWork(
+                    _joinBackgroundWorkMilliseconds);
+        }
+
         private static bool CanRunDeferredParallelWorkSynchronously(
             double pEstimatedMilliseconds)
         {
@@ -597,49 +617,20 @@ namespace AncientWarfare3.core.performance
         private void CompleteActorPresentationWork(
             bool pCompletedBeforeWait, string pReason)
         {
-            AWSimulationCoordinatorThread.WorkResult result =
-                _actorRunner.CompleteParallelPresentationWork();
-            Interlocked.Increment(
-                ref _actorPresentationOverlapCompletions);
-            if (!pCompletedBeforeWait)
-                Interlocked.Increment(
-                    ref _actorPresentationOverlapForcedJoins);
-            Interlocked.Add(ref _actorPresentationOverlapWallTicks,
-                result.WallTicks);
-            Interlocked.Add(ref _actorPresentationOverlapWaitTicks,
-                result.WaitTicks);
-            Interlocked.Exchange(
-                ref _lastActorPresentationOverlapWallTicks,
-                result.WallTicks);
-            Interlocked.Exchange(
-                ref _lastActorPresentationOverlapWaitTicks,
-                result.WaitTicks);
+            // Presentation work is no longer a simulation ownership boundary.
+            // Keep this method for old Harmony call sites; the converged
+            // runner has no outstanding presentation ticket to consume.
+            _ = pCompletedBeforeWait;
             _lastActorPresentationBoundaryReason =
-                string.IsNullOrEmpty(pReason) ? "unknown" : pReason;
+                string.IsNullOrEmpty(pReason) ? "disabled" : pReason;
         }
 
         private void CompleteBuildingPresentationWork(
             bool pCompletedBeforeWait, string pReason)
         {
-            AWSimulationCoordinatorThread.WorkResult result =
-                _buildingRunner.CompleteParallelPresentationWork();
-            Interlocked.Increment(
-                ref _buildingPresentationOverlapCompletions);
-            if (!pCompletedBeforeWait)
-                Interlocked.Increment(
-                    ref _buildingPresentationOverlapForcedJoins);
-            Interlocked.Add(ref _buildingPresentationOverlapWallTicks,
-                result.WallTicks);
-            Interlocked.Add(ref _buildingPresentationOverlapWaitTicks,
-                result.WaitTicks);
-            Interlocked.Exchange(
-                ref _lastBuildingPresentationOverlapWallTicks,
-                result.WallTicks);
-            Interlocked.Exchange(
-                ref _lastBuildingPresentationOverlapWaitTicks,
-                result.WaitTicks);
+            _ = pCompletedBeforeWait;
             _lastBuildingPresentationBoundaryReason =
-                string.IsNullOrEmpty(pReason) ? "unknown" : pReason;
+                string.IsNullOrEmpty(pReason) ? "disabled" : pReason;
         }
 
         public void FinishPresentationFrame()
@@ -1432,6 +1423,7 @@ namespace AncientWarfare3.core.performance
                     SimGlobals.m.interval_nutrition_decay;
 
             AWSimulationTime.CompleteTick(_world);
+            AWPathfindingBootstrap.Tick();
             if (AWPerformanceSettings.EnableActorPresentationSnapshots)
             {
                 AWActorPresentationSnapshots.CaptureIfRequested(

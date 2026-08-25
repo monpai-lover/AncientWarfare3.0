@@ -46,12 +46,11 @@ namespace AncientWarfare3.core.performance
             SpecialGovernmentWarParticipation,
             KingdomDecisionMonthly,
             TemporaryLevyMigration,
-            CityReservePool,
+            SyntheticMobilization,
             ArmyReplenishment,
             MandateMilitaryStrength,
             WarRefugee,
             ActorDeathArchive,
-            AsyncCompletionDrain,
             WarParticipantSources,
             DeferredAuthorityWork,
             SlaveCaptureScan,
@@ -89,12 +88,11 @@ namespace AncientWarfare3.core.performance
             "aw3.authority.special_government_war_participation",
             "aw3.authority.kingdom_decision_monthly",
             "aw3.authority.temporary_levy_migration",
-            "aw3.authority.city_reserve_pool",
+            "aw3.authority.synthetic_mobilization",
             "aw3.authority.army_replenishment",
             "aw3.authority.mandate_military_strength",
             "aw3.authority.war_refugee",
             "aw3.authority.actor_death_archive",
-            "aw3.authority.async_completion_drain",
             "aw3.authority.war_participant_sources",
             "aw3.authority.deferred_authority_work",
             "aw3.authority.slave_capture_scan"
@@ -236,6 +234,7 @@ namespace AncientWarfare3.core.performance
             ActorDeathArchiveService.Reset();
             PeasantRebelBanditStrongholdPopulationService.Clear();
             BanditStrongholdCityDisposalService.Clear();
+            CityLeaderVacancyRepairService.ClearRuntime();
         }
 
         private static bool CanRunAuthorityCycle(bool pPaused)
@@ -388,9 +387,9 @@ namespace AncientWarfare3.core.performance
                     MeasureAuthority("temporary_levy_migration",
                         TemporaryLevyService.ProcessLegacyMigration);
                     break;
-                case CooperativeAuthorityStage.CityReservePool:
-                    Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
-                        CityReservePoolService.ProcessAuthorityCycle);
+                case CooperativeAuthorityStage.SyntheticMobilization:
+                    MeasureAuthority("synthetic_mobilization",
+                        SyntheticMobilizationLedgerService.ProcessAuthorityCycle);
                     break;
                 case CooperativeAuthorityStage.ArmyReplenishment:
                     Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
@@ -408,10 +407,6 @@ namespace AncientWarfare3.core.performance
                 case CooperativeAuthorityStage.ActorDeathArchive:
                     Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,
                         DrainAuthorityCompletions);
-                    break;
-                case CooperativeAuthorityStage.AsyncCompletionDrain:
-                    Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,
-                        () => AWAsyncRuntime.DrainMainThread(1.0, 32));
                     break;
                 case CooperativeAuthorityStage.WarParticipantSources:
                     Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,

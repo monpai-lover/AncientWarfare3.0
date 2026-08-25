@@ -1,6 +1,12 @@
 {
   "AWPerformanceSettings": [
     {
+      "Id": "AW3_ENABLE_EXPERIMENTAL_LARGE_SIMULATION_STEP",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchLargeSimulationStep"
+    },
+    {
       "Id": "AW3_ENABLE_FRAME_PRIORITY_SCHEDULER",
       "Type": "SWITCH",
       "BoolVal": true,

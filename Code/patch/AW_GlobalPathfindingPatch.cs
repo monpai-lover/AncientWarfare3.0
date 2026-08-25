@@ -165,7 +165,11 @@ namespace AncientWarfare3.patch
             if (__instance?.data == null) return;
             CalibrationStates.TryRemove(__instance.data.id, out _);
             if (!PathfindingOwnershipService.ShouldIntercept) return;
-            AWPathMovementBridge.Cancel(__instance, AWPathFailureReason.CancelledByNewRequest);
+            lock (AWPathFinder.ActorSyncLock)
+            {
+                AWPathMovementBridge.Cancel(__instance,
+                    AWPathFailureReason.CancelledByNewRequest);
+            }
         }
 
         [HarmonyTranspiler]
@@ -411,6 +415,36 @@ namespace AncientWarfare3.patch
             AWPathfindingBootstrap.ClearWorld();
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MapChunkManager), nameof(MapChunkManager.updateDirty))]
+        private static void MapChunkManagerUpdateDirty_Prefix(
+            MapChunkManager __instance, ref bool __state)
+        {
+            __state = false;
+            if (__instance == null ||
+                !DebugConfig.isOn(DebugOption.SystemUpdateDirtyChunks) ||
+                World.world == null ||
+                (!__instance.isAllChunksDirty() &&
+                 World.world.isActionHappening()))
+                return;
+            List<MapChunk> dirtyLinks = __instance._dirty_chunks_links;
+            List<MapChunk> dirtyRegions = __instance._dirty_chunks_regions;
+            if (dirtyLinks == null || dirtyRegions == null ||
+                dirtyLinks.Count == 0 && dirtyRegions.Count == 0)
+                return;
+
+            AWPathfindingBootstrap.Cache.MarkTopologyDirty(dirtyRegions);
+            AWPathfindingBootstrap.Cache.MarkTopologyDirty(dirtyLinks);
+            __state = true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MapChunkManager), nameof(MapChunkManager.updateDirty))]
+        private static void MapChunkManagerUpdateDirty_Postfix(bool __state)
+        {
+            if (__state) AWDockTransportService.MarkTopologyDirty();
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.setTileTypes),
             new[] { typeof(TileType), typeof(TopTileType), typeof(bool) })]
@@ -446,6 +480,27 @@ namespace AncientWarfare3.patch
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.stopFire))]
         private static void StopFire_Postfix(WorldTile __instance)
+        {
+            AWPathfindingBootstrap.Cache.MarkDirty(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.setFireData))]
+        private static void SetFireData_Postfix(WorldTile __instance)
+        {
+            AWPathfindingBootstrap.Cache.MarkDirty(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.freeze))]
+        private static void Freeze_Postfix(WorldTile __instance)
+        {
+            AWPathfindingBootstrap.Cache.MarkDirty(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.unfreeze))]
+        private static void Unfreeze_Postfix(WorldTile __instance)
         {
             AWPathfindingBootstrap.Cache.MarkDirty(__instance);
         }

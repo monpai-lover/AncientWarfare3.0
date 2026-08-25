@@ -123,7 +123,37 @@ namespace AncientWarfare3.core.performance
 
         public static AWSimulationMode ResolveMode(bool pEnabled)
         {
-            return pEnabled ? AWSimulationMode.Large : AWSimulationMode.Native;
+            return ResolveCachedMode(pEnabled, false, null);
+        }
+
+        public static AWSimulationMode ResolveCachedMode(bool pSchedulerEnabled,
+            bool pLargeStepEnabled, AWSimulationMode? pEnvironmentOverride)
+        {
+            if (pEnvironmentOverride.HasValue)
+                return pEnvironmentOverride.Value;
+            if (!pSchedulerEnabled) return AWSimulationMode.Native;
+            return pLargeStepEnabled ? AWSimulationMode.Large :
+                AWSimulationMode.Fixed;
+        }
+
+        public static AWSimulationMode? ParseEnvironmentOverride(string pValue)
+        {
+            if (string.IsNullOrEmpty(pValue)) return null;
+            switch (pValue)
+            {
+                case "0":
+                case "false":
+                case "native":
+                    return AWSimulationMode.Native;
+                case "1":
+                case "true":
+                case "fixed":
+                    return AWSimulationMode.Fixed;
+                case "large":
+                    return AWSimulationMode.Large;
+                default:
+                    return null;
+            }
         }
 
         public static float ClampTargetFps(float pValue)
@@ -267,8 +297,15 @@ namespace AncientWarfare3.core.performance
                 return modCycleActive
                     ? AWPausedFrameAction.AbortReplicaCycle
                     : AWPausedFrameAction.RefreshPresentation;
+            // A UI pause (Esc/menu/window) must not drain an in-flight large
+            // step synchronously on the render thread.  Large mode may have
+            // several vanilla passes in one logical cycle; completing them
+            // here makes opening a menu look like a hang and can allocate
+            // unbounded presentation state while the UI is being opened.
+            // Keep the cycle resumable and only refresh the paused view. Save
+            // boundaries use the explicit DrainToBoundary path instead.
             if (paused && modCycleActive)
-                return AWPausedFrameAction.CompleteActiveCycle;
+                return AWPausedFrameAction.RefreshPresentation;
             if (paused && pMode != AWSimulationMode.Native)
                 return AWPausedFrameAction.RefreshPresentation;
             return AWPausedFrameAction.Continue;

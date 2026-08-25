@@ -5,6 +5,10 @@ namespace AncientWarfare3.core.performance
     public static class AWPerformanceSettings
     {
         private static bool _configSchedulerEnabled;
+        private static bool _configLargeStepEnabled;
+        private static readonly AWSimulationMode? _environmentModeOverride =
+            AWFrameSchedulerRules.ParseEnvironmentOverride(
+                Environment.GetEnvironmentVariable("AW3_FRAME_SCHEDULER"));
         private static bool _configArmyRtsEnabled = true;
         private static bool _configSyntheticMobilizationEnabled;
         private static int _configArmyRtsWarResolutionMode;
@@ -58,10 +62,13 @@ namespace AncientWarfare3.core.performance
         public const int SimulationBatchSize = 256;
 
         public static AWSimulationMode Mode =>
-            AWFrameSchedulerRules.ResolveMode(_configSchedulerEnabled);
+            AWFrameSchedulerRules.ResolveCachedMode(_configSchedulerEnabled,
+                _configLargeStepEnabled, _environmentModeOverride);
 
         public static bool EnableFramePriorityScheduler =>
             Mode != AWSimulationMode.Native;
+        public static bool EnableVanillaLargeSimulationStep =>
+            Mode == AWSimulationMode.Large;
 
         public static int TotalParallelBudget =>
             WorkerAllocation.TotalBudget;
@@ -90,8 +97,7 @@ namespace AncientWarfare3.core.performance
 
         public static void SwitchLargeSimulationStep(bool pValue)
         {
-            // Kept for existing saved configs; scheduler mode is now singular.
-            _ = pValue;
+            _configLargeStepEnabled = pValue;
         }
 
         public static void SwitchArmyRtsScheduler(bool pValue)

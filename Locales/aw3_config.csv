@@ -25,6 +25,8 @@ AW3_ENABLE_ASYNC_TRAVERSAL_BUILDS,启用异步寻路缓存,Enable asynchronous p
 AW3_ENABLE_ASYNC_TRAVERSAL_BUILDS Description,在后台构建地形寻路缓存；重启游戏后生效,Build terrain pathfinding caches in the background; takes effect after restart,在背景建置地形尋路快取；重新啟動遊戲後生效
 AW3_ENABLE_ASYNC_UI_QUERIES,启用异步界面候选计算,Enable asynchronous UI candidate queries,啟用非同步介面候選計算
 AW3_ENABLE_ASYNC_UI_QUERIES Description,在后台准备大型界面的候选列表；重启游戏后生效,Prepare large interface candidate lists in the background; takes effect after restart,在背景準備大型介面的候選清單；重新啟動遊戲後生效
+AW3_ENABLE_EXPERIMENTAL_LARGE_SIMULATION_STEP,启用实验性大步长模拟,Enable experimental large-step simulation,啟用實驗性大步長模擬
+AW3_ENABLE_EXPERIMENTAL_LARGE_SIMULATION_STEP Description,在帧优先调度基础上运行原版大步长模拟；需要先启用帧优先调度；重启游戏后生效,Run native large-step simulation on top of frame-priority scheduling; enable frame-priority scheduling first; takes effect after restart,在幀優先調度基礎上執行原版大步長模擬；需要先啟用幀優先調度；重新啟動遊戲後生效
 AW3_ENABLE_FRAME_PRIORITY_SCHEDULER,启用帧优先调度,Enable frame-priority scheduling,啟用幀優先調度
 AW3_ENABLE_FRAME_PRIORITY_SCHEDULER Description,将一次原版大步长逻辑 tick 分摊到多个渲染帧；人物移动与寻路保持原版倍速语义,Spread one native large-step logic tick across render frames while preserving movement and pathfinding speed semantics,將一次原版大步長邏輯 tick 分攤到多個渲染幀；人物移動與尋路保持原版倍速語義
 aw_frame_scheduler_confirm_title,启用帧优先调度,Enable frame-priority scheduling,啟用幀優先調度

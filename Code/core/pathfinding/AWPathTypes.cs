@@ -76,7 +76,8 @@ namespace AncientWarfare3.core.pathfinding
         Timeout,
         GeneratorException,
         Unreachable,
-        SearchLimitExceeded
+        SearchLimitExceeded,
+        ActorDead
     }
 
     public enum AWMovementMethod
@@ -161,6 +162,49 @@ namespace AncientWarfare3.core.pathfinding
         public int LandingLandTileId { get; }
     }
 
+    // Immutable transport metadata captured while a request is created.
+    // Workers and movement code can carry it without rescanning live docks.
+    internal readonly struct AWTransportRouteSnapshot
+    {
+        internal AWTransportRouteSnapshot(long pEntryPortalId,
+            long pExitPortalId, int pEntryLandTileId, int pPickupSeaTileId,
+            int pDestinationSeaTileId, int pLandingLandTileId,
+            float pEstimatedRouteTiles)
+        {
+            EntryPortalId = pEntryPortalId;
+            ExitPortalId = pExitPortalId;
+            EntryLandTileId = pEntryLandTileId;
+            PickupSeaTileId = pPickupSeaTileId;
+            DestinationSeaTileId = pDestinationSeaTileId;
+            LandingLandTileId = pLandingLandTileId;
+            EstimatedRouteTiles = pEstimatedRouteTiles;
+        }
+
+        internal long EntryPortalId { get; }
+        internal long ExitPortalId { get; }
+        internal int EntryLandTileId { get; }
+        internal int PickupSeaTileId { get; }
+        internal int DestinationSeaTileId { get; }
+        internal int LandingLandTileId { get; }
+        internal float EstimatedRouteTiles { get; }
+        internal bool IsValid => EntryLandTileId >= 0 &&
+                                  PickupSeaTileId >= 0 &&
+                                  DestinationSeaTileId >= 0 &&
+                                  LandingLandTileId >= 0 &&
+                                  !float.IsNaN(EstimatedRouteTiles) &&
+                                  !float.IsInfinity(EstimatedRouteTiles);
+
+        internal static AWTransportRouteSnapshot FromRoute(
+            AWDockRouteCandidate pRoute)
+        {
+            return new AWTransportRouteSnapshot(
+                pRoute.Entry.Id, pRoute.Exit.Id,
+                pRoute.Entry.LandTileId, pRoute.Entry.OceanTileId,
+                pRoute.Exit.OceanTileId, pRoute.Exit.LandTileId,
+                pRoute.EstimatedRouteTiles);
+        }
+    }
+
     public readonly struct AWPathPollResult
     {
         public AWPathPollResult(AWPathPollKind pKind, AWPathStep pStep = default,
@@ -183,7 +227,9 @@ namespace AncientWarfare3.core.pathfinding
         public AWPathGenerationResult(bool pSucceeded, bool pReachedTarget,
             int pEndTileId, IReadOnlyList<AWPathStep> pSteps,
             AWPathFailureReason pFailureReason = AWPathFailureReason.None,
-            Exception pError = null)
+            Exception pError = null, int pExpandedNodes = 0,
+            AWPathGenerationKind pKind = AWPathGenerationKind.Search,
+            float pEndStamina = float.NaN, float pEndHealth = float.NaN)
         {
             Succeeded = pSucceeded;
             ReachedTarget = pReachedTarget;
@@ -191,6 +237,10 @@ namespace AncientWarfare3.core.pathfinding
             Steps = pSteps ?? Array.Empty<AWPathStep>();
             FailureReason = pFailureReason;
             Error = pError;
+            ExpandedNodes = Math.Max(0, pExpandedNodes);
+            Kind = pKind;
+            EndStamina = pEndStamina;
+            EndHealth = pEndHealth;
         }
 
         public bool Succeeded { get; }
@@ -199,6 +249,10 @@ namespace AncientWarfare3.core.pathfinding
         public IReadOnlyList<AWPathStep> Steps { get; }
         public AWPathFailureReason FailureReason { get; }
         public Exception Error { get; }
+        public int ExpandedNodes { get; }
+        public AWPathGenerationKind Kind { get; }
+        public float EndStamina { get; }
+        public float EndHealth { get; }
 
         public static AWPathGenerationResult Success(int pEndTileId,
             bool pReachedTarget, IReadOnlyList<AWPathStep> pSteps)
@@ -207,12 +261,65 @@ namespace AncientWarfare3.core.pathfinding
                 pEndTileId, pSteps);
         }
 
+        public static AWPathGenerationResult Success(int pEndTileId,
+            bool pReachedTarget, IReadOnlyList<AWPathStep> pSteps,
+            int pExpandedNodes, AWPathGenerationKind pKind,
+            float pEndStamina, float pEndHealth)
+        {
+            return new AWPathGenerationResult(true, pReachedTarget,
+                pEndTileId, pSteps, AWPathFailureReason.None, null,
+                pExpandedNodes, pKind, pEndStamina, pEndHealth);
+        }
+
         public static AWPathGenerationResult Failure(
             AWPathFailureReason pReason, Exception pError = null)
         {
             return new AWPathGenerationResult(false, false, -1,
                 Array.Empty<AWPathStep>(), pReason, pError);
         }
+
+        public static AWPathGenerationResult Failure(
+            AWPathFailureReason pReason, Exception pError,
+            int pExpandedNodes)
+        {
+            return new AWPathGenerationResult(false, false, -1,
+                Array.Empty<AWPathStep>(), pReason, pError,
+                pExpandedNodes, AWPathGenerationKind.Search);
+        }
+    }
+
+    public enum AWPathSubmissionKind
+    {
+        Rejected,
+        Reused,
+        Created,
+        Replaced
+    }
+
+    public readonly struct AWPathSubmissionResult
+    {
+        public AWPathSubmissionResult(AWPathSubmissionKind pKind,
+            AWPathFailureReason pFailureReason = AWPathFailureReason.None,
+            long pSubmissionToken = 0L)
+        {
+            Kind = pKind;
+            FailureReason = pFailureReason;
+            SubmissionToken = pSubmissionToken;
+        }
+
+        public AWPathSubmissionKind Kind { get; }
+        public AWPathFailureReason FailureReason { get; }
+        public long SubmissionToken { get; }
+        public bool Accepted => Kind != AWPathSubmissionKind.Rejected;
+    }
+
+    public enum AWPathGenerationKind
+    {
+        Search,
+        StraightLine,
+        RegionCorridor,
+        Portal,
+        Transport
     }
 
     public enum AWPathProcessKind

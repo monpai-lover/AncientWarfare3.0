@@ -53,15 +53,42 @@ namespace AncientWarfare3.core.pathfinding
         internal static bool TryResolveRoute(WorldTile pStart, WorldTile pTarget,
             out AWDockRouteCandidate pCandidate)
         {
+            return TryResolveRoute(pStart, pTarget, out pCandidate, out _);
+        }
+
+        internal static bool TryResolveRoute(WorldTile pStart, WorldTile pTarget,
+            out AWDockRouteCandidate pCandidate,
+            out AWDockRouteFailureReason pReason)
+        {
             pCandidate = default;
-            if (pStart?.data == null || pTarget?.data == null ||
-                !AWDockTransportRules.ShouldAttemptDockLookup(
-                    pStart.isSameIsland(pTarget))) return false;
+            pReason = AWDockRouteFailureReason.None;
+            if (pStart?.data == null || pTarget?.data == null)
+            {
+                pReason = AWDockRouteFailureReason.InvalidEndpoints;
+                return false;
+            }
+
+            bool sameIsland;
+            try { sameIsland = pStart.isSameIsland(pTarget); }
+            catch { sameIsland = false; }
+            if (!AWDockTransportRules.ShouldAttemptDockLookup(sameIsland))
+            {
+                pReason = sameIsland
+                    ? AWDockRouteFailureReason.NoDockOrShorePair
+                    : AWDockRouteFailureReason.DifferentWaterComponents;
+                return false;
+            }
 
             EnsureTopology();
             if (TryResolveDockRoute(pStart, pTarget, out pCandidate))
                 return true;
-            return TryResolveShoreFallback(pStart, pTarget, out pCandidate);
+            if (TryResolveShoreFallback(pStart, pTarget, out pCandidate))
+                return true;
+
+            pReason = ShoreEndpoints.Count == 0
+                ? AWDockRouteFailureReason.NoStableShore
+                : AWDockRouteFailureReason.NoDockOrShorePair;
+            return false;
         }
 
         // Compatibility entry point used by the transport layer when it is

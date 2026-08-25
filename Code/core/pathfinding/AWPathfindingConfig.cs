@@ -11,6 +11,10 @@ namespace AncientWarfare3.core.pathfinding
         public int LongRangeTiles { get; set; } = 96;
         public int MaxNodesShort { get; set; } = 3000;
         public int MaxNodesLong { get; set; } = 12000;
+        public int SegmentTargetSteps { get; set; } = 24;
+        public int RegionCorridorLookaheadTiles { get; set; } = 64;
+        public int RegionRouteCacheSize { get; set; } = 512;
+        public float LongRangeHeuristicWeight { get; set; } = 1.15f;
         public int MaxNodesLongFallback { get; set; } = 60000;
         public int FallbackCorridorMinDetour { get; set; } = 32;
         public float FallbackCorridorDetourScale { get; set; } = 0.75f;

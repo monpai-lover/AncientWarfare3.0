@@ -85,6 +85,22 @@ namespace AncientWarfare3.core.performance
             }
         }
 
+        // Priority refresh only needs actors already known to be military.
+        // Keeping this separate from CopySnapshot preserves the P0 ordering
+        // (guards first, RTS members second) while avoiding a world-wide actor
+        // container scan every actor-post cycle.
+        internal static void CopyRegisteredSnapshot(List<long> destination)
+        {
+            if (destination == null) return;
+            destination.Clear();
+            for (int i = 0; i < Order.Count; i++)
+            {
+                long actorId = Order[i];
+                if (Entries.ContainsKey(actorId))
+                    destination.Add(actorId);
+            }
+        }
+
         internal static void RefreshVanillaTaxiSnapshot()
         {
             VanillaTaxiActors.Clear();

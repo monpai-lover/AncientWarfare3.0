@@ -58,15 +58,13 @@ namespace AncientWarfare3.core.performance
 
     public static class ArmyRtsExecutionBudgetRules
     {
+        private const int ControllerSliceCap = 32;
+
         public static ArmyRtsExecutionBudget Capture(
             AWSimulationMode pMode, ArmyRtsPendingWork pPending)
         {
             return new ArmyRtsExecutionBudget(
-                // In large-step mode every active army must receive its
-                // command refresh in the same authority cycle. A fixed 32
-                // item cap starves the remainder and surfaces as awaiting
-                // orders during an active war.
-                ResolveSnapshotBudget(pMode, pPending.ControllerArmies, 32),
+                ResolveControllerBudget(pPending.ControllerArmies),
                 ResolveSnapshotBudget(pMode, pPending.FirstOrders, 1),
                 ResolveSnapshotBudget(pMode,
                     pPending.ReplenishmentArrivals, 4),
@@ -78,6 +76,11 @@ namespace AncientWarfare3.core.performance
                 ResolveSnapshotBudget(pMode,
                     pPending.AssignmentReconciliations, 8),
                 ResolveSnapshotBudget(pMode, pPending.AbstractBattles, 4));
+        }
+
+        public static int ResolveControllerBudget(int pPending)
+        {
+            return Math.Min(Math.Max(0, pPending), ControllerSliceCap);
         }
 
         public static int ResolveSnapshotBudget(AWSimulationMode pMode,

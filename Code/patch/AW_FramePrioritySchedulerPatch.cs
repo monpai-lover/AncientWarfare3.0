@@ -7,6 +7,7 @@ using System.Text;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.core.performance;
 using AncientWarfare3.core.policy;
 using HarmonyLib;
@@ -84,27 +85,6 @@ namespace AncientWarfare3.patch
                 {
                     EnsureActorReadBoundary("mapbox.frame_begin");
                     EnsureBuildingReadBoundary("mapbox.frame_begin");
-                }
-
-                AWCooperativeActorParallelJobRunner.RefreshFrameVisibility();
-
-                // Actor post jobs queue validated goTo requests until the next
-                // main-thread frame boundary. Flush them before simulation
-                // admission so the native actor path state can advance.
-                if (Config.game_loaded && !SmoothLoader.isLoading() &&
-                    !replicaSession)
-                {
-                    try
-                    {
-                        AWDeferredPathRequestBatch.FlushAtFrameStart();
-                    }
-                    catch (System.Exception error)
-                    {
-                        ModClass.LogError(
-                            "AW deferred path request flush failed: " +
-                            error);
-                    }
-
                 }
 
                 AWPresentationCommandQueue.DrainMainThread();
@@ -380,6 +360,46 @@ namespace AncientWarfare3.patch
                 ModClass.LogError(
                     "AW native authority cycle failed; game paused: " +
                     error);
+            }
+        }
+
+        // Cultiway's master keeps path retries and traversal invalidation at
+        // the native updateSimulation boundary as well as the cooperative
+        // cycle boundary.  AW3's cooperative runner bypasses this vanilla
+        // method, so the ownership check prevents a duplicate path pulse.
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MapBox), "updateSimulation")]
+        private static void RunNativePathfindingAfterSimulationTick(
+            MapBox __instance)
+        {
+            if (AW3MultiplayerReplicaScope.IsReplicaSession ||
+                !Config.game_loaded || SmoothLoader.isLoading())
+            {
+                return;
+            }
+
+            AWCooperativeSimulationRunner runner =
+                AWCooperativeSimulationRunner.Instance;
+            if (runner.RequiresControl)
+            {
+                return;
+            }
+
+            try
+            {
+                EnsureSimulationTimeBound(__instance);
+                if (!AWSimulationTime.IsBound)
+                {
+                    return;
+                }
+
+                AWSimulationTime.SynchronizeFromWorld(__instance);
+                AWPathfindingBootstrap.Tick();
+            }
+            catch (Exception error)
+            {
+                ModClass.LogError(
+                    "AW native pathfinding tick failed: " + error);
             }
         }
 

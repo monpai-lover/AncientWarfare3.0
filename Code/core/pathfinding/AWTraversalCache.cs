@@ -30,6 +30,7 @@ namespace AncientWarfare3.core.pathfinding
         private bool _topologyDirty;
 
         public int GenerationId => _current?.Id ?? -1;
+        internal AWTraversalGeneration CurrentGeneration => _current;
         public long SourceRevision => _sourceRevision;
         internal long TopologySourceRevision => _topologySourceRevision;
         public int DirtyTileCount => _dirtyTiles.Count;
@@ -217,9 +218,35 @@ namespace AncientWarfare3.core.pathfinding
         {
             AssertMainThread();
             if (pTile?.data == null || _width <= 0) return;
+            AWPathNavigationGridService.MarkDirty(pTile);
             if (_initializing) IncrementSourceRevision();
             int tileId = pTile.data.tile_id;
             if (_dirtyTiles.Add(tileId)) _dirtyTileQueue.Enqueue(tileId);
+        }
+
+        public void MarkTopologyDirty(IEnumerable<MapChunk> pChunks)
+        {
+            AssertMainThread();
+            if (pChunks == null || _width <= 0) return;
+            AWPathNavigationGridService.MarkTopologyDirty(pChunks);
+            bool foundTile = false;
+            foreach (MapChunk chunk in pChunks)
+            {
+                WorldTile[] tiles = chunk?.tiles;
+                if (tiles == null) continue;
+                for (int index = 0; index < tiles.Length; index++)
+                {
+                    int tileId = tiles[index]?.data?.tile_id ?? -1;
+                    if (tileId < 0) continue;
+                    foundTile = true;
+                    if (_dirtyTiles.Add(tileId))
+                        _dirtyTileQueue.Enqueue(tileId);
+                }
+            }
+            if (!foundTile) return;
+            if (_initializing) IncrementSourceRevision();
+            _topologyDirty = true;
+            IncrementTopologySourceRevision();
         }
 
         private void IncrementSourceRevision()

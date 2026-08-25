@@ -93,8 +93,19 @@ namespace AncientWarfare3.core.pathfinding
         public AWPathReuseKey(long actorId, int startRegion,
             AWPathRequestKey request, long terrainRevision,
             long worldGeneration, bool insideBoat)
+            : this(new AWPathAgentKey(
+                    AWPathWorldKey.MainWorld(worldGeneration), actorId),
+                startRegion, request, terrainRevision, worldGeneration,
+                insideBoat)
         {
-            ActorId = actorId;
+        }
+
+        public AWPathReuseKey(AWPathAgentKey pAgentKey, int startRegion,
+            AWPathRequestKey request, long terrainRevision,
+            long worldGeneration, bool insideBoat)
+        {
+            AgentKey = pAgentKey;
+            ActorId = pAgentKey.AgentId;
             StartRegion = startRegion;
             Request = request;
             TerrainRevision = terrainRevision;
@@ -102,6 +113,7 @@ namespace AncientWarfare3.core.pathfinding
             InsideBoat = insideBoat;
         }
 
+        public AWPathAgentKey AgentKey { get; }
         public long ActorId { get; }
         public int StartRegion { get; }
         public AWPathRequestKey Request { get; }
@@ -111,7 +123,7 @@ namespace AncientWarfare3.core.pathfinding
 
         public bool Equals(AWPathReuseKey pOther)
         {
-            return ActorId == pOther.ActorId &&
+            return AgentKey == pOther.AgentKey &&
                    StartRegion == pOther.StartRegion &&
                    Request.Equals(pOther.Request) &&
                    TerrainRevision == pOther.TerrainRevision &&
@@ -128,7 +140,7 @@ namespace AncientWarfare3.core.pathfinding
         {
             unchecked
             {
-                int hash = ActorId.GetHashCode();
+                int hash = AgentKey.GetHashCode();
                 hash = hash * 397 ^ StartRegion;
                 hash = hash * 397 ^ Request.GetHashCode();
                 hash = hash * 397 ^ TerrainRevision.GetHashCode();
@@ -149,7 +161,7 @@ namespace AncientWarfare3.core.pathfinding
         {
             return ageTicks >= 0L && maximumAgeTicks >= 0L &&
                    ageTicks <= maximumAgeTicks &&
-                   pExisting.ActorId == pRequested.ActorId &&
+                   pExisting.AgentKey == pRequested.AgentKey &&
                    pExisting.Request.Equals(pRequested.Request) &&
                    pExisting.WorldGeneration == pRequested.WorldGeneration &&
                    pExisting.InsideBoat == pRequested.InsideBoat;

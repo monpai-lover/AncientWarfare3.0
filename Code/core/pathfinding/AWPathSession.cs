@@ -29,19 +29,59 @@ namespace AncientWarfare3.core.pathfinding
 
     internal readonly struct AWScheduledPathWork
     {
-        internal AWScheduledPathWork(long pOwnerId, int pQueueVersion,
-            AWPathWorkPriority pPriority)
+        internal AWScheduledPathWork(AWPathAgentKey pOwnerKey,
+            int pQueueVersion, AWPathWorkPriority pPriority)
         {
-            OwnerId = pOwnerId;
+            OwnerKey = pOwnerKey;
+            OwnerId = pOwnerKey.AgentId;
             QueueVersion = pQueueVersion;
             Priority = pPriority;
             EnqueuedAt = Stopwatch.GetTimestamp();
+#if !AW3_RULES_TESTS
+            ProfilerSession = null;
+            ProfilerEnqueuedAt = 0L;
+#endif
         }
 
+        internal AWScheduledPathWork(long pOwnerId, int pQueueVersion,
+            AWPathWorkPriority pPriority)
+            : this(new AWPathAgentKey(AWPathWorldKey.MainWorld(0L),
+                pOwnerId), pQueueVersion, pPriority)
+        {
+        }
+
+        internal AWPathAgentKey OwnerKey { get; }
         internal long OwnerId { get; }
         internal int QueueVersion { get; }
         internal AWPathWorkPriority Priority { get; }
         internal long EnqueuedAt { get; }
+#if !AW3_RULES_TESTS
+        internal AWPathfindingProfiler.AWPathfindingProfilerSession ProfilerSession { get; }
+        internal long ProfilerEnqueuedAt { get; }
+
+        internal AWScheduledPathWork WithProfiler(
+            AWPathfindingProfiler.AWPathfindingProfilerSession pSession,
+            long pEnqueuedAt)
+        {
+            return new AWScheduledPathWork(OwnerKey, QueueVersion, Priority,
+                EnqueuedAt, pSession, pEnqueuedAt);
+        }
+
+        private AWScheduledPathWork(AWPathAgentKey pOwnerKey,
+            int pQueueVersion, AWPathWorkPriority pPriority,
+            long pEnqueuedAt,
+            AWPathfindingProfiler.AWPathfindingProfilerSession pSession,
+            long pProfilerEnqueuedAt)
+        {
+            OwnerKey = pOwnerKey;
+            OwnerId = pOwnerKey.AgentId;
+            QueueVersion = pQueueVersion;
+            Priority = pPriority;
+            EnqueuedAt = pEnqueuedAt;
+            ProfilerSession = pSession;
+            ProfilerEnqueuedAt = pProfilerEnqueuedAt;
+        }
+#endif
     }
 
     internal sealed class AWPathSession
@@ -57,11 +97,21 @@ namespace AncientWarfare3.core.pathfinding
         private AWPathWorkPriority _requestedPriority =
             AWPathWorkPriority.Continuation;
 
-        internal AWPathSession(long pOwnerId)
+        internal AWPathSession(AWPathAgentKey pAgentKey,
+            bool pHasMoreSegments = true)
         {
-            OwnerId = pOwnerId;
+            AgentKey = pAgentKey;
+            OwnerId = pAgentKey.AgentId;
+            _hasMoreSegments = pHasMoreSegments;
         }
 
+        internal AWPathSession(long pOwnerId)
+            : this(new AWPathAgentKey(AWPathWorldKey.MainWorld(0L),
+                pOwnerId))
+        {
+        }
+
+        internal AWPathAgentKey AgentKey { get; }
         internal long OwnerId { get; }
 
         internal bool TrySchedule(AWPathWorkPriority pPriority,
@@ -81,7 +131,7 @@ namespace AncientWarfare3.core.pathfinding
                 if (_queued) return false;
                 _queued = true;
                 _queueVersion++;
-                pWork = new AWScheduledPathWork(OwnerId, _queueVersion,
+                pWork = new AWScheduledPathWork(AgentKey, _queueVersion,
                     pPriority);
                 return true;
             }
@@ -145,7 +195,7 @@ namespace AncientWarfare3.core.pathfinding
                 _replacementPending = false;
                 _queued = true;
                 _queueVersion++;
-                pReplacement = new AWScheduledPathWork(OwnerId,
+                pReplacement = new AWScheduledPathWork(AgentKey,
                     _queueVersion, replacementPending
                         ? AWPathWorkPriority.Initial
                         : pScheduleWhenEmpty
@@ -170,5 +220,13 @@ namespace AncientWarfare3.core.pathfinding
                 _rescheduleRequested = false;
             }
         }
+
+    internal bool IsCancelled
+    {
+        get
+        {
+            lock (_gate) return _cancelled;
+        }
     }
+}
 }
