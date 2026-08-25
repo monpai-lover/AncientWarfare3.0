@@ -9,6 +9,13 @@ using AncientWarfare3.core.presentation;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--city-military-threat-facts")
+{
+    CityMilitaryThreatFactsRulesTests.Run();
+    Console.WriteLine("City military threat facts rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--army-rts-succession")
 {
     ArmyRtsSuccessionRecoveryRulesTests.Run();
@@ -69,6 +76,13 @@ if (args.Length == 1 && args[0] == "--court-history-localization")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--historical-county-names")
+{
+    HistoricalCountyNameRulesTests.Run();
+    Console.WriteLine("Historical county name rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--mandate-capital-transfer")
 {
     MandateCapitalTransferRulesTests.Run();
@@ -88,6 +102,21 @@ if (args.Length == 1 && args[0] == "--army-replenishment-operation")
 {
     ArmyReplenishmentOperationRulesTests.Run();
     Console.WriteLine("Army replenishment operation rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--slave-state-persistence")
+{
+    SlaveStatePersistenceRulesTests.Run();
+    Console.WriteLine("Slave state persistence rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--court-candidate-budget")
+{
+    CourtCandidateBudgetRulesTests.Run();
+    OfficerCandidateCatalogRulesTests.Run();
+    Console.WriteLine("Court candidate budget rules passed.");
     return;
 }
 
@@ -153,6 +182,13 @@ if (args.Length == 1 && args[0] == "--historical-school-xia-access")
     HistoricalSchoolXiaAccessRulesTests.Run();
     HistoricalSchoolXiaAccessSourceGuardTests.Run();
     Console.WriteLine("Historical school Xia access rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--historical-school-death-runtime")
+{
+    HistoricalSchoolDeathRuntimeRulesTests.Run();
+    Console.WriteLine("Historical school death runtime rules passed.");
     return;
 }
 

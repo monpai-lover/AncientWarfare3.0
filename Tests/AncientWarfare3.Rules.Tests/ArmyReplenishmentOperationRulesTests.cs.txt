@@ -99,6 +99,20 @@ internal static class ArmyReplenishmentOperationRulesTests
             ArmyReplenishmentOperationRules.ShouldClearIneligibleOperation(
                 hasPersistedOperation: false, canUseReservePool: false),
             "an ineligible army without stale state requires no persistence write");
+        Equal(true, ArmyReplenishmentOperationRules.ShouldStartOperation(
+                liveShortage: true, reserveAvailable: true),
+            "a replenishment operation requires a live shortage and reserve");
+        Equal(false, ArmyReplenishmentOperationRules.ShouldStartOperation(
+            liveShortage: true, reserveAvailable: false),
+            "zero reserve cannot start a replenishment loop");
+        Equal(false,
+            ArmyReplenishmentOperationRules.ShouldRestartAfterConfirmedExhaustion(
+                reserveAvailable: false, exhaustionConfirmed: true),
+            "confirmed reserve exhaustion blocks an empty restart");
+        Equal(true,
+            ArmyReplenishmentOperationRules.ShouldRestartAfterConfirmedExhaustion(
+                reserveAvailable: true, exhaustionConfirmed: true),
+            "observed reserve availability permits a later retry");
 
         string root = Directory.GetCurrentDirectory();
         string controller = File.ReadAllText(Path.Combine(root, "Code",

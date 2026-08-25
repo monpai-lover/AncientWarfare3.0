@@ -2447,6 +2447,37 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
+        // Refresh P0 membership from the bounded RTS controller/army index.
+        // This closes the handoff window for a newly issued mission before
+        // the actor has reached a task-post callback, without scanning all
+        // world actors or taking ownership of native movement.
+        internal static void RefreshMilitaryPriorityIndex()
+        {
+            IReadOnlyList<long> armyIds = Controllers.SnapshotArmyIds();
+            for (int armyIndex = 0; armyIndex < armyIds.Count; armyIndex++)
+            {
+                Army army = FindArmy(armyIds[armyIndex]);
+                if (!IsLiveArmy(army) || !HasActiveMission(army.id)) continue;
+
+                Actor captain = SafeCaptain(army);
+                if (IsLiveCombatantActor(captain))
+                    TryRefreshMilitaryPriority(captain);
+
+                int count;
+                try { count = army.units?.Count ?? 0; }
+                catch { count = 0; }
+                for (int memberIndex = 0; memberIndex < count; memberIndex++)
+                {
+                    Actor member;
+                    try { member = army.units[memberIndex]; }
+                    catch { continue; }
+                    if (member == captain || !IsLiveWarriorActor(member))
+                        continue;
+                    TryRefreshMilitaryPriority(member);
+                }
+            }
+        }
+
         public static bool ShouldHoldDeploymentMove(Actor pActor)
         {
             Army army = pActor?.army;
@@ -4301,6 +4332,13 @@ namespace AncientWarfare3.core.lineage
                 }
             }
 
+            // The controller is the single strategic-route owner.  Consume
+            // at most one provider result per authority cycle so async route
+            // progress continues without reintroducing the old per-controller
+            // polling burst.
+            if (commit)
+                ProcessPendingStrategicRoute(army, record.Mission, runtime);
+
             bool preservePlayerOrder =
                 record.Mission.PlayerOrder &&
                 ShouldPreservePlayerOrder(army);
@@ -5510,7 +5548,7 @@ namespace AncientWarfare3.core.lineage
                 ArmyRouteProviderService.Cancel(pArmy.id,
                     ArmyRouteCancelReason.TargetReplaced);
                 AWArmyMarchService.ClearArmy(pArmy.id);
-                pRuntime.RouteSubmitted = true;
+                pRuntime.RouteSubmitted = false;
                 pRuntime.RouteArrived = false;
                 pRuntime.AnchorTileId = -1;
                 pRuntime.AlternateTargetTileId = -1;
@@ -5539,20 +5577,140 @@ namespace AncientWarfare3.core.lineage
                     "transport_route_unavailable");
                 return;
             }
-            if (pMission.ProposalKind == ArmyRtsProposalKind.Attack)
-                TryIssueVanillaCityAttackOrder(pArmy, pMission,
-                    targetCity);
-            ArmyRouteProviderService.Cancel(pArmy.id,
-                ArmyRouteCancelReason.TargetReplaced);
+            // An already published anchor is consumed by the actor/formation
+            // path lifecycle. Do not submit a second strategic owner while
+            // the shared route is being installed or followed.
+            if (FindTile(pRuntime.AnchorTileId) != null ||
+                pRuntime.RouteArrived || pRuntime.RouteSubmitted) return;
+
+            ArmyRouteHandle handle = AWArmyMarchService.
+                SubmitStrategicRoute(pArmy, strategicTarget);
+            if (handle.Accepted)
+            {
+                pRuntime.RouteSubmitted = true;
+                pRuntime.RouteArrived = false;
+                pRuntime.AnchorTileId = -1;
+                pRuntime.AlternateTargetTileId = -1;
+                pRuntime.TransportRouteConfirmed = false;
+                pRuntime.ForceTransportRoute = false;
+                ResetRouteRetry(pRuntime);
+                return;
+            }
+
+            // Keep the vanilla strategic target as a bounded fallback when
+            // the shared provider is unavailable or rejects a request. This
+            // preserves movement instead of leaving a captain in an empty
+            // "waiting for orders" task.
             AWArmyMarchService.ClearArmy(pArmy.id);
-            pRuntime.RouteSubmitted = true;
+            pRuntime.RouteSubmitted = false;
             pRuntime.RouteArrived = IsInsideTargetTerritory(captain,
                 targetCity);
-            pRuntime.AnchorTileId = -1;
+            pRuntime.AnchorTileId = strategicTarget.data.tile_id;
             pRuntime.AlternateTargetTileId = -1;
             pRuntime.TransportRouteConfirmed = false;
             pRuntime.ForceTransportRoute = false;
+            if (pMission.ProposalKind == ArmyRtsProposalKind.Attack)
+                TryIssueVanillaCityAttackOrder(pArmy, pMission,
+                    targetCity);
+            LogStrategicRouteFailure(pArmy, pMission, pRuntime,
+                captain, strategicTarget, ArmyRoutePollKind.Failed,
+                handle.FailureReason);
             ResetRouteRetry(pRuntime);
+        }
+
+        private static void ProcessPendingStrategicRoute(Army pArmy,
+            ArmyRtsMission pMission, RuntimeState pRuntime)
+        {
+            if (pArmy?.data == null || pMission == null || pRuntime == null ||
+                !pRuntime.RouteSubmitted ||
+                ArmyRtsTransportService.HasActiveVoyage(pArmy)) return;
+
+            WorldTile target = ResolveStableStrategicEndpoint(pArmy,
+                FindCity(pMission.TargetCityId), pRuntime);
+            if (target?.data == null) return;
+
+            // One poll is intentional: the provider is already advanced by
+            // its shared finder lifecycle, and a controller may own only one
+            // result consumption per authority cycle.
+            ArmyRoutePoll poll = AWArmyMarchService.PollStrategicRoute(pArmy);
+            if (poll.Kind == ArmyRoutePollKind.Waiting) return;
+            if (poll.Kind == ArmyRoutePollKind.StepReady)
+            {
+                if (poll.MovementMethod == AWMovementMethod.Transport)
+                {
+                    pRuntime.TransportRouteConfirmed = true;
+                    pRuntime.ForceTransportRoute = true;
+                    pRuntime.RouteSubmitted = false;
+                    pRuntime.RouteArrived = false;
+                    pRuntime.AnchorTileId = -1;
+                    AWArmyMarchService.ClearArmy(pArmy.id);
+                    Controllers.Requeue(pArmy.id);
+                }
+                else if (pRuntime.RouteProgress < int.MaxValue)
+                    pRuntime.RouteProgress++;
+                return;
+            }
+
+            if (poll.Kind == ArmyRoutePollKind.Completed)
+            {
+                bool useTransport = AWArmyMarchService.
+                    TryGetCompletedLandRouteCost(pArmy,
+                        out float landRouteCost) &&
+                    ArmyRtsTransportService.TryGetRouteEstimate(
+                        pArmy, target,
+                        out ArmyRtsTransportEstimate estimate) &&
+                    ArmyRtsRouteChoiceRules.Resolve(landRouteCost, true,
+                        estimate.PickupCost, estimate.QueueCost,
+                        estimate.SeaCost, estimate.LandingCost) ==
+                    ArmyRtsTravelChoice.Transport;
+                if (useTransport)
+                {
+                    pRuntime.TransportRouteConfirmed = true;
+                    pRuntime.ForceTransportRoute = true;
+                    pRuntime.RouteSubmitted = false;
+                    pRuntime.RouteArrived = false;
+                    pRuntime.AnchorTileId = -1;
+                    AWArmyMarchService.ClearArmy(pArmy.id);
+                    Controllers.Requeue(pArmy.id);
+                    return;
+                }
+
+                pRuntime.TransportRouteConfirmed = false;
+                pRuntime.ForceTransportRoute = false;
+                pRuntime.RouteSubmitted = false;
+                pRuntime.RouteArrived = IsInsideTargetTerritory(
+                    SafeCaptain(pArmy), FindCity(pMission.TargetCityId));
+                pRuntime.AnchorTileId = target.data.tile_id;
+                pRuntime.AlternateTargetTileId = -1;
+                if (pMission.ProposalKind == ArmyRtsProposalKind.Attack)
+                    TryIssueVanillaCityAttackOrder(pArmy, pMission,
+                        FindCity(pMission.TargetCityId));
+                ResetRouteRetry(pRuntime);
+                Controllers.Requeue(pArmy.id);
+                return;
+            }
+
+            if (poll.Kind == ArmyRoutePollKind.Failed ||
+                poll.Kind == ArmyRoutePollKind.Cancelled ||
+                poll.Kind == ArmyRoutePollKind.NoRequest)
+            {
+                Actor captain = SafeCaptain(pArmy);
+                City targetCity = FindCity(pMission.TargetCityId);
+                AWArmyMarchService.ClearArmy(pArmy.id);
+                pRuntime.RouteSubmitted = false;
+                pRuntime.RouteArrived = IsInsideTargetTerritory(captain,
+                    targetCity);
+                pRuntime.AnchorTileId = target.data.tile_id;
+                pRuntime.TransportRouteConfirmed = false;
+                pRuntime.ForceTransportRoute = false;
+                if (pMission.ProposalKind == ArmyRtsProposalKind.Attack)
+                    TryIssueVanillaCityAttackOrder(pArmy, pMission,
+                        targetCity);
+                ArmyStallWatchdogService.OnRouteFailed(pArmy.id);
+                LogStrategicRouteFailure(pArmy, pMission, pRuntime,
+                    captain, target, poll.Kind, poll.FailureReason);
+                ResetRouteRetry(pRuntime);
+            }
         }
 
         private static string BuildRouteFailureFingerprint(Army pArmy,

@@ -179,6 +179,7 @@ internal static class ArmyRtsTransportP0RulesTests
             ? transport.Substring(p0DriveStart,
                 p0DriveEnd - p0DriveStart)
             : string.Empty;
+        p0DriveBody = p0DriveBody.Replace("\r\n", "\n");
         Assert(p0DriveBody.Contains("AWPathMovementBridge.Update(pActor)",
                    StringComparison.Ordinal) &&
                p0DriveBody.Contains(

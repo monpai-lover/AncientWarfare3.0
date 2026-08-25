@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.naming;
 
 namespace AncientWarfare3.core.court
 {
@@ -90,6 +91,7 @@ namespace AncientWarfare3.core.court
             if (kingdom.capital == pCity)
             {
                 DeJureRegionStore.EnsureKingdomCapitalSeat(kingdom);
+                ApplyHistoricalCityName(pCity);
                 return true;
             }
             if (DeJureRegionStore.TryGetForCity(pCity.data.id, out _)) return true;
@@ -120,9 +122,71 @@ namespace AncientWarfare3.core.court
             }
 
             RetryIds.Remove(pCity.data.id);
+            ApplyHistoricalCityName(pCity);
             HierarchicalVassalMapModeService.MarkHierarchyDirty(kingdom);
             HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
             return true;
+        }
+
+        private static void ApplyHistoricalCityName(City pCity)
+        {
+            if (pCity?.data == null || pCity.data.custom_name ||
+                !LineageService.IsXiaKingdom(pCity.kingdom)) return;
+            try
+            {
+                string currentName = ResolveChineseCityName(pCity);
+                if (XiaHistoricalDeJureRules.IsHistoricalCountyName(
+                        XiaHistoricalDeJureCatalogService.Current,
+                        currentName)) return;
+                if (!DeJureRegionStore.TryGetForCity(pCity.data.id,
+                        out DeJureRegion region)) return;
+                var memberNames = (region.MemberCityIds ??
+                    new List<long>()).Select(ResolveChineseCityName);
+                XiaHistoricalDeJureProfile profile =
+                    XiaHistoricalDeJureRules.SelectProfile(
+                        XiaHistoricalDeJureCatalogService.Current, memberNames,
+                        StableSelector(pCity.data.id));
+                XiaHistoricalCommanderyDefinition commandery =
+                    XiaHistoricalDeJureCatalogService.Current.GetCommandery(
+                        profile.CommanderyId);
+                string[] usedNames = memberNames.ToArray();
+                int selector = StableSelector(pCity.data.id);
+                string candidate = XiaHistoricalDeJureRules.SelectUnusedCounty(
+                    commandery, usedNames, selector);
+                if (string.IsNullOrWhiteSpace(candidate))
+                    candidate = XiaHistoricalDeJureRules.SelectUnusedCountyFromCatalog(
+                        XiaHistoricalDeJureCatalogService.Current, usedNames,
+                        selector);
+                if (string.IsNullOrWhiteSpace(candidate) ||
+                    string.Equals(candidate, ResolveChineseCityName(pCity),
+                        StringComparison.Ordinal)) return;
+                // Preserve the native/generated city identity before replacing
+                // only the Chinese presentation slot with the historical
+                // county label.
+                AWLocalizedNameService.CaptureNative(pCity.data);
+                pCity.data.set(AWNameDataKeys.ChineseName, candidate);
+                AWLocalizedNameService.ProjectStored(pCity.data);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogError("Historical county name assignment failed: " +
+                    error.Message);
+            }
+        }
+
+        private static string ResolveChineseCityName(long pCityId)
+        {
+            return ResolveChineseCityName(World.world?.cities?.get(pCityId));
+        }
+
+        private static string ResolveChineseCityName(City pCity)
+        {
+            if (pCity?.data == null) return string.Empty;
+            pCity.data.get(AWNameDataKeys.ChineseName,
+                out string chineseName, string.Empty);
+            return string.IsNullOrWhiteSpace(chineseName)
+                ? pCity.data.name ?? string.Empty
+                : chineseName.Trim();
         }
 
         private static bool PrepareNeighbours(City pCity)

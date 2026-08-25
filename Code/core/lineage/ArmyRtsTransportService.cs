@@ -682,6 +682,15 @@ namespace AncientWarfare3.core.lineage
             pSubmitResult = ExecuteEvent.False;
             if (pActor?.data == null || pTarget?.data == null) return;
             bool exactTarget = SameTile(pActor.tile_target, pTarget);
+            // Vanilla transport boats own their accepted native water path.
+            // The RTS front lane may revisit them every frame, but must not
+            // cancel and resubmit that path before the native boat lifecycle
+            // consumes it.
+            if (exactTarget && pActor.asset?.is_boat == true)
+            {
+                pSubmitResult = ExecuteEvent.True;
+                return;
+            }
             bool customPathOwned = AWPathMovementBridge.HasOwnership(pActor);
             // The front lane revisits transport members every render frame.
             // Keep accepted work alive until its owner consumes the result.

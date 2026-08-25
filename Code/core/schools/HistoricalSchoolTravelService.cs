@@ -297,12 +297,18 @@ namespace AncientWarfare3.core.schools
             string school = SchoolMembershipService.GetSchool(pActor.data.id);
             HistoricalSchoolMasterDefinition master =
                 HistoricalSchoolDescentService.DefinitionFor(pActor);
-            var cheapCandidates = new List<TravelCityTarget>(pCities.Count);
-            foreach (City city in pCities)
+            int probeCount = HistoricalSchoolSchedulerRules.
+                DestinationTileProbeCount(pCities.Count);
+            IEnumerable<City> probeCities = pCities
+                .Where(city => IsLivingCity(city) &&
+                    HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(city) &&
+                    city.data.id != pState.ResidenceCityId)
+                .OrderBy(city => HistoricalSchoolRules.StableTravelCandidateOrder(
+                    pActor.data.id, city.data.id))
+                .Take(probeCount);
+            var cheapCandidates = new List<TravelCityTarget>(probeCount);
+            foreach (City city in probeCities)
             {
-                if (!IsLivingCity(city) ||
-                    !HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(city) ||
-                    city.data.id == pState.ResidenceCityId) continue;
                 WorldTile target = DestinationTile(city, pActor, school);
                 if (target == null) continue;
                 cheapCandidates.Add(new TravelCityTarget(city, target));

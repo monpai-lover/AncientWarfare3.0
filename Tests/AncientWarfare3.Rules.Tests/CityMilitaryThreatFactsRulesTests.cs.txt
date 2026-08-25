@@ -40,6 +40,15 @@ internal static class CityMilitaryThreatFactsRulesTests
         Assert(CityMilitaryThreatFactsRules.ShouldReuse(4L, 4L,
                 10.20d, 10.00d),
             "facts remain reusable when the query comes from the actor RTS path");
+        Assert(CityMilitaryThreatFactsRules.ShouldReuseAuthorityCycle(
+                true, 12L, 12L),
+            "an unchanged fact is reusable for the remainder of its authority cycle");
+        Assert(!CityMilitaryThreatFactsRules.ShouldReuseAuthorityCycle(
+                true, 12L, 13L),
+            "a fact from an earlier authority cycle is never reused");
+        Assert(!CityMilitaryThreatFactsRules.ShouldReuseAuthorityCycle(
+                false, 12L, 12L),
+            "authority-cycle reuse is disabled outside the active cycle");
     }
 
     private static void CacheEntryPointIsInstalledWithoutTileClosures()
@@ -79,8 +88,10 @@ internal static class CityMilitaryThreatFactsRulesTests
             "threat facts persist the shared physical presence snapshot");
         Assert(source.Contains("_cacheEpoch"),
             "cache freshness is independent from async planner revision");
-        Assert(source.Contains("entry.CacheEpoch, _cacheEpoch"),
+        Assert(source.Contains("CanReuse(entry.CacheEpoch, entry.CachedAt)"),
             "city and war invalidation do not expire unrelated city facts");
+        Assert(source.Contains("ShouldReuseAuthorityCycle"),
+            "city threat facts use the authority-cycle cache when active");
     }
 
     private static void LiveInvalidationUsesTheRevisionRule()

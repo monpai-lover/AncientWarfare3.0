@@ -367,7 +367,11 @@ namespace AncientWarfare3.ui.windows
 
         private static string ResolveCityName(long pCityId)
         {
-            try { return World.world?.cities?.get(pCityId)?.data?.name ?? ""; }
+            try
+            {
+                return DeJureRegionStore.ResolveCountyNameForPresentation(
+                    World.world?.cities?.get(pCityId));
+            }
             catch { return ""; }
         }
 

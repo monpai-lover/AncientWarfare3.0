@@ -40,8 +40,10 @@ foreach ($forbidden in @('LineageKeys.SHI_ID', 'SQLite', 'LineageQuery',
 if (-not $authority.Contains('ReigningRoyalLineageIndex.Reset()')) {
     throw 'world reset must clear the reigning-lineage index'
 }
-if (-not $authority.Contains(
-        'ReigningRoyalLineageIndex.ProcessAuthorityCycle()')) {
+if (-not ($authority.Contains(
+        'ReigningRoyalLineageIndex.ProcessAuthorityCycle()') -or
+    $authority.Contains(
+        'ReigningRoyalLineageIndex.ProcessAuthorityCycle)'))) {
     throw 'world load must incrementally rebuild the reigning-lineage index'
 }
 

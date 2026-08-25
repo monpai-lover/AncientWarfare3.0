@@ -38,7 +38,8 @@ namespace AncientWarfare3.core.lineage
         private const float SLAVE_CAPTURE_FAILURE_WAIT_MAX = 5f;
         private const float SLAVE_CAPTURE_SUCCESS_WAIT_MIN = 5f;
         private const float SLAVE_CAPTURE_SUCCESS_WAIT_MAX = 10f;
-        private const int SLAVE_STATE_BATCH_SIZE = 32;
+        private const int SLAVE_STATE_BATCH_SIZE =
+            SlaveStatePersistenceRules.SynchronousBatchSize;
         private static readonly System.Random Rng = new System.Random();
         private static readonly object SlaveStateBatchGate = new object();
         private static readonly Dictionary<long, List<PendingSlaveCaptureSummary>> PendingWarSlaveCaptures =

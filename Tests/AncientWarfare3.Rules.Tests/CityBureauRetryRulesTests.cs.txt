@@ -10,6 +10,10 @@ internal static class CityBureauRetryRulesTests
             "a failed city write may retry");
         Assert(!CityBureauRetryRules.ShouldRetry(false, 2, 3),
             "a failed city write must stop at the retry limit");
+        Assert(CityBureauRetryRules.ShouldSkipSameFrame(120, 120),
+            "a deferred vacancy retry must skip duplicate work in the same frame");
+        Assert(!CityBureauRetryRules.ShouldSkipSameFrame(120, 121),
+            "a deferred vacancy retry may resume on the next frame");
     }
 
     private static void Assert(bool pCondition, string pMessage)

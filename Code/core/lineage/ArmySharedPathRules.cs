@@ -173,6 +173,14 @@ namespace AncientWarfare3.core.lineage
                    !routeContainsTransportStep && !transportActive;
         }
 
+        public static bool ShouldWaitForProviderRoute(
+            bool usesProvider, bool providerComplete, int routeStepCount,
+            bool routeContainsTransportStep, bool transportActive)
+        {
+            return usesProvider && !providerComplete && routeStepCount >= 0 &&
+                   !routeContainsTransportStep && !transportActive;
+        }
+
         public static bool ShouldReuseInstalledSharedRoute(
             int installedRevision, int availableRevision,
             int localPathCount, bool actorFollowingLocalPath,

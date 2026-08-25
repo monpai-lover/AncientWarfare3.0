@@ -324,8 +324,10 @@ namespace AncientWarfare3.patch
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(Actor), "setKingdom", new[] { typeof(Kingdom) })]
-        private static bool ActorSetKingdom_Prefix(Actor __instance, Kingdom pKingdomToSet)
+        private static bool ActorSetKingdom_Prefix(Actor __instance,
+            Kingdom pKingdomToSet, out Kingdom __state)
         {
+            __state = __instance?.kingdom;
             if (AW3MultiplayerReplicaScope.IsApplying ||
                 SmoothLoader.isLoading() || !Config.game_loaded) return true;
             return HistoricalAffiliationService.CanJoinKingdom(__instance, pKingdomToSet);
@@ -334,8 +336,11 @@ namespace AncientWarfare3.patch
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Actor), "setKingdom", new[] { typeof(Kingdom) })]
         private static void ActorSetKingdom_Postfix(Actor __instance,
-            Kingdom pKingdomToSet)
+            Kingdom pKingdomToSet, Kingdom __state)
         {
+            if (!OfficerCandidateCatalogRules.ShouldInvalidate(
+                    !ReferenceEquals(__state, pKingdomToSet))) return;
+            OfficerCandidateCatalog.Invalidate(__state);
             OfficerCandidateCatalog.Invalidate(pKingdomToSet);
         }
 

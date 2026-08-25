@@ -1,0 +1,57 @@
+using System;
+using AncientWarfare3.core.naming;
+
+internal static class HistoricalCountyNameRulesTests
+{
+    internal static void Run()
+    {
+        var catalog = new XiaHistoricalDeJureCatalog(new[]
+        {
+            new XiaHistoricalStateDefinition("state", "state", new[]
+            {
+                new XiaHistoricalCommanderyDefinition("commandery", "commandery",
+                    new[] { "\u96D2\u9633", "\u8346\u9633" })
+            })
+        });
+
+        Equal("\u96D2\u9633", XiaHistoricalDeJureRules.ResolveCountyName(
+            catalog, "\u96D2\u9633", "City One", "ch"),
+            "Chinese county name uses historical catalog");
+        Equal("City One", XiaHistoricalDeJureRules.ResolveCountyName(
+            catalog, "\u96D2\u9633", "City One", "en"),
+            "non-Chinese county name uses city projection");
+        Equal("City One", XiaHistoricalDeJureRules.ResolveCountyName(
+            catalog, "missing", "City One", "ch"),
+            "unmatched Chinese county name falls back to city identity");
+        True(XiaHistoricalDeJureRules.IsHistoricalCountyName(
+            catalog, "\u96D2\u9633"),
+            "catalog recognizes persisted historical county names");
+        False(XiaHistoricalDeJureRules.IsHistoricalCountyName(
+            catalog, "City One"),
+            "generated city names are not treated as historical counties");
+        Equal("\u8346\u9633", XiaHistoricalDeJureRules.SelectUnusedCounty(
+            catalog.GetCommandery("commandery"), new[] { "\u96D2\u9633" }, 0),
+            "historical JSON supplies the next unused county name");
+        Equal("\u96D2\u9633", XiaHistoricalDeJureRules.SelectUnusedCountyFromCatalog(
+            catalog, new[] { "used" }, 0),
+            "new counties fall back to the historical JSON catalog");
+    }
+
+    private static void Equal(string pExpected, string pActual,
+        string pMessage)
+    {
+        if (!string.Equals(pExpected, pActual, StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+}

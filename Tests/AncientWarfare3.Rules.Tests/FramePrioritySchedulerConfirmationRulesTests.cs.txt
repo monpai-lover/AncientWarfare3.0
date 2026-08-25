@@ -19,8 +19,23 @@ internal static class FramePrioritySchedulerConfirmationRulesTests
                 currentValue: false, requestedValue: true),
             "enabling the scheduler requires confirmation");
         Equal(false, FramePrioritySchedulerConfirmationRules.RequiresConfirmation(
-                currentValue: true, requestedValue: false),
+            currentValue: true, requestedValue: false),
             "disabling the scheduler remains immediate");
+
+        Equal(AWPausedFrameAction.RefreshPresentation,
+            AWFrameSchedulerRules.ResolvePausedFrameAction(
+                AWSimulationMode.Large,
+                paused: true,
+                replicaSession: false,
+                modCycleActive: true),
+            "pausing a large-step cycle must leave the cycle resumable instead of draining it on the UI frame");
+        Equal(AWPausedFrameAction.RefreshPresentation,
+            AWFrameSchedulerRules.ResolvePausedFrameAction(
+                AWSimulationMode.Fixed,
+                paused: true,
+                replicaSession: false,
+                modCycleActive: true),
+            "pausing a fixed-step cycle must leave the cycle resumable instead of draining it on the UI frame");
 
         string root = Directory.GetCurrentDirectory();
         string patch = File.ReadAllText(Path.Combine(root, "Code", "patch",

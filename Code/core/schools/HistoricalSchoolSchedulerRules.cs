@@ -6,6 +6,7 @@ namespace AncientWarfare3.core.schools
     public static class HistoricalSchoolSchedulerRules
     {
         public const int MaxTravelActorsPerQuarter = 24;
+        public const int MaxDestinationTileProbes = 24;
         public const int MaxDescentAttemptsPerFrame = 1;
 
         public static int DescentAttemptBudget(bool pHasPendingDescent,
@@ -21,6 +22,13 @@ namespace AncientWarfare3.core.schools
             return Math.Min(MaxTravelActorsPerQuarter,
                 Math.Max(0, pEligibleActorCount));
         }
+
+        public static int DestinationTileProbeCount(int pCandidateCount)
+        {
+            return Math.Min(MaxDestinationTileProbes,
+                Math.Max(0, pCandidateCount));
+        }
+
     }
 
     public sealed class HistoricalSchoolSchedulerState

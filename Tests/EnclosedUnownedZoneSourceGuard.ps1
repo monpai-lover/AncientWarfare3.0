@@ -145,9 +145,9 @@ Require-Absent $repairRegion 'new List<EnclosedZoneNeighbourFacts>' `
 Require-Absent $repairRegion 'new Dictionary<long, City>' `
     'Candidate repair must not allocate boundary cities per Zone.'
 
-Require-Present $authority `
-    'EnclosedUnownedZoneRepairService.ProcessAuthorityCycle();' `
-    'Zone repair must drain inside the existing authority gate.'
+if ($authority -notmatch 'EnclosedUnownedZoneRepairService\.ProcessAuthorityCycle\s*\)?;') {
+    throw 'Zone repair must drain inside the existing authority gate.'
+}
 Require-Present $authority 'EnclosedUnownedZoneRepairService.Reset();' `
     'World lifecycle reset must clear Zone repair runtime state.'
 

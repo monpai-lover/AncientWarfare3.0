@@ -1,0 +1,28 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class SlaveStatePersistenceRulesTests
+{
+    internal static void Run()
+    {
+        Equal(0, SlaveStatePersistenceRules.ResolveSynchronousBatchSize(0),
+            "empty pending state has no batch");
+        Equal(0, SlaveStatePersistenceRules.ResolveSynchronousBatchSize(-1),
+            "negative pending state has no batch");
+        Equal(5, SlaveStatePersistenceRules.ResolveSynchronousBatchSize(5),
+            "small pending state is not over-sliced");
+        Equal(SlaveStatePersistenceRules.SynchronousBatchSize,
+            SlaveStatePersistenceRules.ResolveSynchronousBatchSize(32),
+            "synchronous fallback is bounded");
+        if (SlaveStatePersistenceRules.SynchronousBatchSize >= 32)
+            throw new InvalidOperationException(
+                "synchronous slave persistence must not restore the 32-row spike");
+    }
+
+    private static void Equal(int expected, int actual, string name)
+    {
+        if (expected != actual)
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

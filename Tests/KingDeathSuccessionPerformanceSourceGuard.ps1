@@ -188,8 +188,10 @@ if ($enqueueIndex -lt 0 -or $branchIndex -lt 0 -or
     throw 'accession law must be captured before hereditary branch reset'
 }
 if ($authority.Contains('SuccessionPreparationService') -or
-    -not $authority.Contains(
-        'SuccessionDisputePersistenceService.ProcessAuthorityCycle()')) {
+    -not ($authority.Contains(
+        'SuccessionDisputePersistenceService.ProcessAuthorityCycle()') -or
+    $authority.Contains(
+        'SuccessionDisputePersistenceService.ProcessAuthorityCycle)'))) {
     throw 'authority cycle still owns candidate snapshot work'
 }
 

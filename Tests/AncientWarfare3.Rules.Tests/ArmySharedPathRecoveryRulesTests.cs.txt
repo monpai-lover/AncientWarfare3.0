@@ -63,6 +63,21 @@ internal static class ArmySharedPathRecoveryRulesTests
                 hasPreviousTile: true, transportStep: true,
                 deltaX: 255, deltaY: 0),
             "transport owns its non-local spatial transition");
+        Assert(ArmySharedPathRules.ShouldWaitForProviderRoute(
+                usesProvider: true, providerComplete: false,
+                routeStepCount: 0, routeContainsTransportStep: false,
+                transportActive: false),
+            "captain waits while the single provider route is pending");
+        Assert(!ArmySharedPathRules.ShouldWaitForProviderRoute(
+                usesProvider: true, providerComplete: true,
+                routeStepCount: 4, routeContainsTransportStep: false,
+                transportActive: false),
+            "completed provider route can be installed by actor lifecycle");
+        Assert(!ArmySharedPathRules.ShouldWaitForProviderRoute(
+                usesProvider: true, providerComplete: false,
+                routeStepCount: 4, routeContainsTransportStep: true,
+                transportActive: false),
+            "transport steps remain owned by transport lifecycle");
 
         string root = Directory.GetCurrentDirectory();
         string controller = File.ReadAllText(Path.Combine(root, "Code",
@@ -152,9 +167,12 @@ internal static class ArmySharedPathRecoveryRulesTests
             StringComparison.Ordinal);
         string advanceBody = controller.Substring(advanceStart,
             advanceEnd - advanceStart);
-        Assert(!advanceBody.Contains("SubmitStrategicRoute(",
+        Assert(advanceBody.Contains("SubmitStrategicRoute(",
                 StringComparison.Ordinal),
-            "normal RTS marching cannot install a provider route over vanilla movement");
+            "strategic marching installs one provider route owner");
+        Assert(controller.Contains("ShouldWaitForProviderRoute",
+                StringComparison.Ordinal),
+            "captain behavior waits for provider completion before vanilla fallback");
     }
 
     private static void Assert(bool condition, string message)

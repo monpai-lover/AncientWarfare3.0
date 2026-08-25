@@ -10,15 +10,18 @@ namespace AncientWarfare3.core.lineage
         // remain bounded so a large world cannot turn this into a full-war
         // hot path.
         private const int WarsPerAuthorityCycle = 8;
+        private const int RecoveryScanIntervalCycles = 4;
         private const string QueuePrefix = "war_terminal_settlement:";
         private static readonly Dictionary<long, int> FailureCounts =
             new Dictionary<long, int>();
         private static int _recoveryCursor;
+        private static int _recoveryCyclesUntilScan;
 
         public static void ClearRuntime()
         {
             FailureCounts.Clear();
             _recoveryCursor = 0;
+            _recoveryCyclesUntilScan = 0;
         }
 
         public static bool NotifyWarChanged(War pWar)
@@ -38,6 +41,12 @@ namespace AncientWarfare3.core.lineage
             if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
             WarManager wars = World.world?.wars;
             if (wars == null) return;
+            if (_recoveryCyclesUntilScan > 0)
+            {
+                _recoveryCyclesUntilScan--;
+                return;
+            }
+            _recoveryCyclesUntilScan = RecoveryScanIntervalCycles - 1;
             try { wars.checkLists(); }
             catch { return; }
             int count = wars.list.Count;

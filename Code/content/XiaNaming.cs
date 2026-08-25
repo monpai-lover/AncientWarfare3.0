@@ -16,6 +16,8 @@ namespace AncientWarfare3.content
         {
             string modPath = ModClass.Instance.GetDeclaration().FolderPath;
             string wordDirectory = Path.Combine(modPath, "name_generators", "lib");
+            XiaHistoricalDeJureCatalogService.Initialize(modPath,
+                ModClass.LogWarning);
             foreach (AWWordLibraryAsset library in
                      AWNamingResourceLoader.LoadWordLibraries(wordDirectory,
                          ModClass.LogWarning))

@@ -61,7 +61,6 @@ namespace AncientWarfare3.core.schools
         private static readonly HashSet<long> QueuedDeathRetries = new HashSet<long>();
         private static readonly Dictionary<long, PendingSchoolDeath> PendingDeathsByActor =
             new Dictionary<long, PendingSchoolDeath>();
-        private const int MaxDeathRetryBackoffFrames = 240;
         private const int MaxDeathRetryQueueScan = 16;
         private static long _deathRetryFrame;
         private static int _standingWorkYear = -1;
@@ -415,14 +414,27 @@ namespace AncientWarfare3.core.schools
             var pending = new PendingSchoolDeath(pActor, current, affiliation, master,
                 wasQualifiedTeacher, city, year, city?.data?.id ?? -1L, cause,
                 WorldTime());
-            SchoolDeathOutcome outcome = PersistPendingDeath(pending,
-                pReconcileUnknown: false);
-            if (outcome != SchoolDeathOutcome.Committed)
+
+            // Actor.die runs on the simulation thread.  The death transaction
+            // performs multiple SQLite reads and writes; quarantine the member
+            // now and let the existing bounded retry queue persist it later.
+            if (HistoricalSchoolDeathRuntimeRules.ShouldDeferDeathPersistence(
+                    activeMembership: current.Active && current.IsValid,
+                    actorExists: pActor.data != null,
+                    deathPending: PendingDeathsByActor.ContainsKey(
+                        pActor.data.id)))
             {
                 QuarantineDeadMembership(pActor, current, year);
                 QueueDeathRetry(pending, pDestroy);
+                return SchoolDeathOutcome.Failed;
             }
-            return outcome;
+
+            // Death callbacks must never perform persistence synchronously.  The
+            // actor is already inside the vanilla destruction lifecycle, so all
+            // SQLite work stays on the bounded retry/authority queue.
+            QuarantineDeadMembership(pActor, current, year);
+            QueueDeathRetry(pending, pDestroy);
+            return SchoolDeathOutcome.Failed;
         }
 
         private static void QuarantineDeadMembership(Actor pActor,
@@ -675,7 +687,7 @@ namespace AncientWarfare3.core.schools
                 return;
             }
             pending.ReadyFrame = _deathRetryFrame +
-                DeathRetryBackoffFrames(pending.Attempts);
+                ActorDeathArchiveRules.RetryDelayFrames(pending.Attempts);
         }
 
         internal static bool FlushDeathRetriesForSave()
@@ -704,12 +716,6 @@ namespace AncientWarfare3.core.schools
                 !ReferenceEquals(pending.Actor, pActor)) return false;
             pending.DestroyRequested = true;
             return true;
-        }
-
-        private static int DeathRetryBackoffFrames(int pAttempts)
-        {
-            int exponent = Math.Max(0, Math.Min(8, pAttempts - 1));
-            return Math.Min(MaxDeathRetryBackoffFrames, 1 << exponent);
         }
 
         private static void ClearDeathRetry(long pActorId, bool pCancelQueued)

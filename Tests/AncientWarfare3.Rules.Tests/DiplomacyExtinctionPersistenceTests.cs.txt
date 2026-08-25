@@ -86,7 +86,7 @@ internal static class DiplomacyExtinctionPersistenceTests
         string chronicle = File.ReadAllText(Path.Combine(root, "Code",
             "patch", "AW_ChroniclePatch.cs"));
         int prefixStart = chronicle.IndexOf(
-            "internal static void RemoveKingdom_Prefix(",
+            "internal static bool RemoveKingdom_Prefix(",
             StringComparison.Ordinal);
         int postfixStart = chronicle.IndexOf(
             "internal static void RemoveKingdom_Postfix(",

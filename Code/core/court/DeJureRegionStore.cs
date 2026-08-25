@@ -5,6 +5,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.court
@@ -164,7 +165,7 @@ namespace AncientWarfare3.core.court
             {
                 City seat = World.world?.cities?.get(pRegion.SeatCityId);
                 string derived = RegionalGovernmentRules.RegionName(
-                    seat?.data?.name ?? string.Empty, string.Empty);
+                    ResolveCountyNameForPresentation(seat), string.Empty);
                 return string.IsNullOrWhiteSpace(derived)
                     ? (pRegion.RegionName ?? string.Empty)
                     : derived;
@@ -250,7 +251,7 @@ namespace AncientWarfare3.core.court
                     {
                         RegionId = id,
                         RegionName = RegionalGovernmentRules.RegionName(
-                            pCity.data.name ?? string.Empty, "州"),
+                            ResolveCountyNameForPresentation(pCity), "州"),
                         SeatCityId = pCity.data.id,
                         CreatedYear = year,
                         CreatedByKind = pReason ?? "power_create",
@@ -258,7 +259,8 @@ namespace AncientWarfare3.core.court
                         MemberCityIds = new List<long> { pCity.data.id }
                     };
                     if (string.IsNullOrWhiteSpace(region.RegionName))
-                        region.RegionName = pCity.data.name ?? "州";
+                        region.RegionName = ResolveCountyNameForPresentation(
+                            pCity) ?? "州";
                     _store.Regions.Add(region);
                     AddChange(id, pCity.data.id, fromRegionId, id,
                         "DeJureRegionCreated");
@@ -495,10 +497,10 @@ namespace AncientWarfare3.core.court
                     RegionalGovernmentAggregationService.Clear();
                     WarGoalPersistence.InvalidateOpenDeJureRegionGoals(
                         LineageArchiveManager.Instance?.OperatingDB,
-                        primary.RegionId);
+                        primary.RegionId, LineageService.CurTime());
                     WarGoalPersistence.InvalidateOpenDeJureRegionGoals(
                         LineageArchiveManager.Instance?.OperatingDB,
-                        secondary.RegionId);
+                        secondary.RegionId, LineageService.CurTime());
                     HierarchicalVassalMapModeService.MarkHierarchyDirty(pKingdom);
                     HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
                     ModClass.LogInfo("De jure single-city region merge committed: " +
@@ -560,7 +562,7 @@ namespace AncientWarfare3.core.court
                     RegionalGovernmentAggregationService.Clear();
                     WarGoalPersistence.InvalidateOpenDeJureRegionGoals(
                         LineageArchiveManager.Instance?.OperatingDB,
-                        region.RegionId);
+                        region.RegionId, LineageService.CurTime());
                     return true;
                 }
                 catch (Exception error)
@@ -653,7 +655,7 @@ namespace AncientWarfare3.core.court
             {
                 RegionId = id,
                 RegionName = RegionalGovernmentRules.RegionName(
-                    capital.data.name ?? string.Empty, "州"),
+                    ResolveCountyNameForPresentation(capital), "州"),
                 SeatCityId = capital.data.id,
                 CreatedYear = SafeYear(),
                 CreatedByKind = pReason ?? "capital_region_repaired",
@@ -789,7 +791,7 @@ namespace AncientWarfare3.core.court
                 {
                     KingdomId = city.kingdom.data.id,
                     CityId = city.data.id,
-                    CityName = city.data.name ?? string.Empty,
+                    CityName = ResolveCountyNameForPresentation(city),
                     Development = DevelopmentMapModeService.GetCityScore(city),
                     Population = SafePopulation(city),
                     NeighborCityIds = neighbors.Distinct().ToArray()
@@ -843,7 +845,7 @@ namespace AncientWarfare3.core.court
                     {
                         RegionId = pStore.NextRegionId++,
                         RegionName = RegionalGovernmentRules.RegionName(
-                            city.data.name ?? string.Empty, "州"),
+                            ResolveCountyNameForPresentation(city), "州"),
                         SeatCityId = city.data.id,
                         CreatedYear = SafeYear(),
                         CreatedByKind = "legacy_migration_isolated",
@@ -968,7 +970,7 @@ namespace AncientWarfare3.core.court
             City seat = World.world?.cities?.get(pRegion.SeatCityId);
             if (!IsLiveCity(seat)) return false;
             string derived = RegionalGovernmentRules.RegionName(
-                seat.data.name ?? string.Empty, string.Empty);
+                ResolveCountyNameForPresentation(seat), string.Empty);
             if (string.IsNullOrWhiteSpace(derived) ||
                 string.Equals(pRegion.RegionName, derived,
                     StringComparison.Ordinal)) return false;
@@ -977,6 +979,38 @@ namespace AncientWarfare3.core.court
             AddChange(pRegion.RegionId, seat.data.id, pRegion.RegionId,
                 pRegion.RegionId, "DeJureRegionRenamedFromSeat");
             return true;
+        }
+
+        /// <summary>
+        /// Resolves a county/lowest-level administrative name for display.
+        /// Chinese presentation uses the persisted historical JSON name;
+        /// other languages keep the city's current projected name.
+        /// </summary>
+        internal static string ResolveCountyNameForPresentation(City pCity)
+        {
+            if (pCity?.data == null) return string.Empty;
+            try
+            {
+                pCity.data.get(AWNameDataKeys.ChineseName,
+                    out string historicalChineseName, string.Empty);
+                // Keep non-Chinese county labels on the exact same projection
+                // path as the city itself.  Reading data.name directly can
+                // retain a stale Chinese projection after a language switch.
+                string projectedCityName = AWLocalizedNameService.ProjectStored(
+                    pCity.data);
+                // A player-authored city name is authoritative in every
+                // locale and must not be replaced by a historical catalog
+                // entry that happens to match its Chinese identity.
+                if (pCity.data.custom_name) return projectedCityName;
+                return XiaHistoricalDeJureRules.ResolveCountyName(
+                    XiaHistoricalDeJureCatalogService.Current,
+                    historicalChineseName, projectedCityName,
+                    AWLocalizedNameService.CurrentLanguage());
+            }
+            catch
+            {
+                return pCity.data.name ?? string.Empty;
+            }
         }
 
         private static bool SyncAllRegionNamesLocked()

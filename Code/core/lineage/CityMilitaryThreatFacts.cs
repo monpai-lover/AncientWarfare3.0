@@ -93,16 +93,21 @@ namespace AncientWarfare3.core.lineage
         private static long _invalidations;
         private static long _revision;
         private static long _cacheEpoch = 1L;
+        private static bool _authorityCycleActive;
 
         internal static long Revision => _revision;
 
         internal static void BeginAuthorityCycle()
         {
-            // Cache lifetime is revision- and time-based across authority cycles.
+            // Rotate the epoch once per pass. Facts are reusable for the whole
+            // pass, even when a long pass exceeds the short async cache window.
+            AdvanceCacheEpoch();
+            _authorityCycleActive = true;
         }
 
         internal static void EndAuthorityCycle()
         {
+            _authorityCycleActive = false;
         }
 
         internal static bool TryGet(War pWar, City pCity,
@@ -113,9 +118,7 @@ namespace AncientWarfare3.core.lineage
             if (!TryCreateKey(pWar, pCity, pKingdom, out var key))
                 return false;
             if (!Facts.TryGetValue(key, out FactEntry entry) ||
-                !CityMilitaryThreatFactsRules.ShouldReuse(
-                    entry.CacheEpoch, _cacheEpoch, RealtimeSeconds(),
-                    entry.CachedAt))
+                !CanReuse(entry.CacheEpoch, entry.CachedAt))
                 return false;
             pHostile = entry.Hostile;
             _hits++;
@@ -136,9 +139,7 @@ namespace AncientWarfare3.core.lineage
             pKingdoms = null;
             if (!TryCreatePresenceKey(pWar, pCity, out PresenceKey key) ||
                 !PresenceFacts.TryGetValue(key, out PresenceEntry entry) ||
-                !CityMilitaryThreatFactsRules.ShouldReusePresence(
-                    entry.CacheEpoch, _cacheEpoch, RealtimeSeconds(),
-                    entry.CachedAt)) return false;
+                !CanReuse(entry.CacheEpoch, entry.CachedAt)) return false;
             pKingdoms = entry.Kingdoms;
             return true;
         }
@@ -207,8 +208,19 @@ namespace AncientWarfare3.core.lineage
             _physicalScans = 0L;
             _hits = 0L;
             _invalidations = 0L;
+            _authorityCycleActive = false;
             AdvanceRevision();
             AdvanceCacheEpoch();
+        }
+
+        private static bool CanReuse(long pEntryEpoch, double pCachedAt)
+        {
+            if (_authorityCycleActive)
+                return CityMilitaryThreatFactsRules.
+                    ShouldReuseAuthorityCycle(true, pEntryEpoch,
+                        _cacheEpoch);
+            return CityMilitaryThreatFactsRules.ShouldReuse(pEntryEpoch,
+                _cacheEpoch, RealtimeSeconds(), pCachedAt);
         }
 
         private static bool TryCreateKey(War pWar, City pCity,

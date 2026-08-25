@@ -34,5 +34,24 @@ namespace AncientWarfare3.core.schools
             return activeMembership && actorExists && actorAlive && !actorWrecked &&
                    !deathPending;
         }
+
+        public static bool ShouldQueueInitialPersistence(
+            bool activeMembership,
+            bool actorExists,
+            bool actorAlive,
+            bool actorWrecked,
+            bool deathPending)
+        {
+            return activeMembership && actorExists &&
+                   (!actorAlive || actorWrecked) && !deathPending;
+        }
+
+        public static bool ShouldDeferDeathPersistence(
+            bool activeMembership,
+            bool actorExists,
+            bool deathPending)
+        {
+            return activeMembership && actorExists && !deathPending;
+        }
     }
 }

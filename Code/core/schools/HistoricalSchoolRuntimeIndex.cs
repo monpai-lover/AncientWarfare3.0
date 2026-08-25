@@ -71,8 +71,8 @@ namespace AncientWarfare3.core.schools
             new Dictionary<int, HashSet<long>>();
         private readonly Dictionary<long, HashSet<long>> _servingByKingdom =
             new Dictionary<long, HashSet<long>>();
-        private readonly SortedDictionary<int, HashSet<long>> _promotionByYear =
-            new SortedDictionary<int, HashSet<long>>();
+        private readonly SortedDictionary<int, SortedSet<long>> _promotionByYear =
+            new SortedDictionary<int, SortedSet<long>>();
         private readonly Dictionary<long, int> _directDisciplesByTeacher =
             new Dictionary<long, int>();
         private readonly HashSet<long> _livingXiaCities = new HashSet<long>();
@@ -105,7 +105,7 @@ namespace AncientWarfare3.core.schools
             if (pEntry.ServiceKingdomId >= 0)
                 Add(_servingByKingdom, pEntry.ServiceKingdomId, pEntry.ActorId);
             if (pEntry.PromotionDueYear >= 0)
-                Add(_promotionByYear, pEntry.PromotionDueYear, pEntry.ActorId);
+                AddPromotion(pEntry.PromotionDueYear, pEntry.ActorId);
             if (pEntry.DirectDiscipleship)
                 AdjustCount(_directDisciplesByTeacher, pEntry.TeacherActorId, 1);
         }
@@ -134,7 +134,7 @@ namespace AncientWarfare3.core.schools
             if (old.ServiceKingdomId >= 0)
                 Remove(_servingByKingdom, old.ServiceKingdomId, pActorId);
             if (old.PromotionDueYear >= 0)
-                Remove(_promotionByYear, old.PromotionDueYear, pActorId);
+                RemovePromotion(old.PromotionDueYear, pActorId);
             if (old.DirectDiscipleship)
                 AdjustCount(_directDisciplesByTeacher, old.TeacherActorId, -1);
             return true;
@@ -247,15 +247,13 @@ namespace AncientWarfare3.core.schools
         {
             if (pYear < 0 || _promotionByYear.Count == 0) return Array.Empty<long>();
             var result = new List<long>();
-            foreach (KeyValuePair<int, HashSet<long>> bucket in _promotionByYear)
+            foreach (KeyValuePair<int, SortedSet<long>> bucket in _promotionByYear)
             {
                 if (bucket.Key > pYear) break;
                 result.AddRange(bucket.Value);
             }
             if (result.Count == 0) return Array.Empty<long>();
-            long[] ids = result.ToArray();
-            Array.Sort(ids);
-            return ids;
+            return result.ToArray();
         }
 
         public void SetLivingXiaCity(long pCityId, bool pLivingXia)
@@ -353,6 +351,25 @@ namespace AncientWarfare3.core.schools
                 pBuckets.Add(pKey, actors);
             }
             actors.Add(pActorId);
+        }
+
+        private void AddPromotion(int pYear, long pActorId)
+        {
+            if (!_promotionByYear.TryGetValue(pYear,
+                    out SortedSet<long> actors))
+            {
+                actors = new SortedSet<long>();
+                _promotionByYear.Add(pYear, actors);
+            }
+            actors.Add(pActorId);
+        }
+
+        private void RemovePromotion(int pYear, long pActorId)
+        {
+            if (!_promotionByYear.TryGetValue(pYear,
+                    out SortedSet<long> actors)) return;
+            actors.Remove(pActorId);
+            if (actors.Count == 0) _promotionByYear.Remove(pYear);
         }
 
         private static void Remove<TKey>(

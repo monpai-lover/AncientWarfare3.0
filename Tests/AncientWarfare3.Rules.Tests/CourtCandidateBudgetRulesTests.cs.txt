@@ -1,0 +1,24 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class CourtCandidateBudgetRulesTests
+{
+    internal static void Run()
+    {
+        Equal(0, CourtCandidateBudgetRules.ResolveScanSize(0),
+            "empty catalog does not scan");
+        Equal(12, CourtCandidateBudgetRules.ResolveScanSize(32),
+            "vacancy scan is bounded below the old full window");
+        Equal(12, CourtCandidateBudgetRules.ResolveScanSize(1000),
+            "large catalog remains bounded");
+        Equal(5, CourtCandidateBudgetRules.ResolveScanSize(5),
+            "small catalog is scanned completely");
+    }
+
+    private static void Equal(int expected, int actual, string name)
+    {
+        if (expected != actual)
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

@@ -153,7 +153,8 @@ namespace AncientWarfare3.core.court
             {
                 KingdomId = pKingdom.id,
                 CityId = pCity.data.id,
-                CityName = pCity.data.name ?? string.Empty,
+                CityName = DeJureRegionStore.ResolveCountyNameForPresentation(
+                    pCity),
                 ActiveSeats = 0,
                 TotalSeats = Math.Max(1, bureau?.office_slots ?? 1),
                 Efficiency = bureau?.efficiency ?? 0f,
@@ -379,7 +380,8 @@ namespace AncientWarfare3.core.court
                 {
                     OfficeLayer = CourtOfficeLayer.City,
                     CityId = pCity.data.id,
-                    CityName = pCity.data.name ?? string.Empty,
+                    CityName = DeJureRegionStore.ResolveCountyNameForPresentation(
+                        pCity),
                     DisplayTitle = pModel.LocalLevelTitle ?? string.Empty,
                     ActorName = valid ? SafeActorName(actor) : string.Empty,
                     SchoolId = valid ? ActorSchool(actor, "") :
@@ -406,7 +408,8 @@ namespace AncientWarfare3.core.court
                 {
                     OfficeLayer = CourtOfficeLayer.City,
                     CityId = pCity.data.id,
-                    CityName = pCity.data.name ?? string.Empty,
+                    CityName = DeJureRegionStore.ResolveCountyNameForPresentation(
+                        pCity),
                     DisplayTitle = pModel.LocalLevelTitle ?? string.Empty,
                     ActorName = SafeActorName(pCity.leader),
                     SchoolId = ActorSchool(pCity.leader, ""),
@@ -747,7 +750,8 @@ namespace AncientWarfare3.core.court
                     SchoolId = school,
                     SchoolIconPath = RegisteredSchoolIconPath(school),
                     CityId = city.data.id,
-                    CityName = city.data.name ?? "",
+                    CityName = DeJureRegionStore.ResolveCountyNameForPresentation(
+                        city),
                     Influence = SafeStat(leader, "stewardship")
                 });
             }
@@ -900,7 +904,9 @@ namespace AncientWarfare3.core.court
             try
             {
                 foreach (City city in pKingdom.getCities())
-                    if (city?.data != null && city.data.id == pCityId) return city.data.name ?? "";
+                    if (city?.data != null && city.data.id == pCityId)
+                        return DeJureRegionStore.ResolveCountyNameForPresentation(
+                            city);
             }
             catch { }
             return "";

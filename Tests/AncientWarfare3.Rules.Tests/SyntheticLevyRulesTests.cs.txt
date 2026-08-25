@@ -129,10 +129,10 @@ internal static class SyntheticLevyRulesTests
         string root = RepositoryRoot();
         string tasks = File.ReadAllText(Path.Combine(root, "Code", "patch",
             "AW_WartimeMilitaryTaskPatch.cs"));
-        Equal(true, tasks.Contains(
+        Equal(false, tasks.Contains(
                 "AccessTools.Method(typeof(AiSystemActor), \"setJob\")",
                 StringComparison.Ordinal),
-            "direct job assignment is intercepted");
+            "synthetic levies do not add a global setJob hot-path poll");
         Equal(true, tasks.Contains(
                 "AccessTools.Method(typeof(AiSystemActor), \"setTask\")",
                 StringComparison.Ordinal),
@@ -155,6 +155,16 @@ internal static class SyntheticLevyRulesTests
         Equal(true, reproduction.Contains("ref Actor __result",
                 StringComparison.Ordinal),
             "blocked reproduction returns no child");
+
+        string ledger = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "SyntheticMobilizationLedgerService.cs"));
+        Equal(true, ledger.Contains(
+                "private static void ProcessDemobilization(",
+                StringComparison.Ordinal) &&
+            ledger.Contains(
+                "SyntheticLevyService.RemoveWithoutPersonalHistory(actor)",
+                StringComparison.Ordinal),
+            "synthetic demobilization is owned by the bounded war ledger");
     }
 
     private static void SyntheticSoldiersAreExcludedFromCityPopulation()

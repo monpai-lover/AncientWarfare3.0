@@ -286,6 +286,7 @@ internal static class ZhuluWarRulesTests
             "LineageKeys.cs"));
         string migrationPath = Path.Combine(lineage,
             "ZhuluWarMigrationService.cs");
+        string migration = File.ReadAllText(migrationPath);
         string coalition = File.ReadAllText(Path.Combine(lineage,
             "CoalitionWarTaskService.cs"));
         string director = File.ReadAllText(Path.Combine(lineage,
@@ -495,11 +496,11 @@ internal static class ZhuluWarRulesTests
                  "CanContinueForcedTransfer(pWar, pWinner)") &&
              forceSpecial.Contains("ResolveLiveDeclaredDefender(pWar)"),
             "zero-force fallback uses the declared defender and rechecks each transfer");
-        True(warPatch.Contains("CleanupLegacyZhuluRuntime(pWar)") &&
-             warPatch.Contains("KingdomWarDirectorService.OnWarEnded(pWar)") &&
+        True(warPatch.Contains("ZhuluWarService.OnWarEnded(pWar)") &&
+             migration.Contains("ResolveLegacyZhuluGoals(") &&
              territory.Contains("ResolveLegacyZhuluGoals(") &&
              territory.Contains("WAR_ID=@war AND GOAL_TYPE=@goal AND RESOLVED=0"),
-            "Zhulu end closes stale runtime state and only its legacy open goals");
+            "Zhulu end clears its native index while migration closes only legacy open goals");
         True(territory.Contains("WAR_ID=@w AND RESOLVED=0"),
             "resolved legacy goals no longer pollute active goal checks");
         True(locales.Contains("war_type_zhulu_war") &&

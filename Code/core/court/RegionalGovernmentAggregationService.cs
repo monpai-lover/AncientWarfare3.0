@@ -80,7 +80,8 @@ namespace AncientWarfare3.core.court
                     {
                         KingdomId = pKingdom.id,
                         CityId = city.data.id,
-                        CityName = city.data.name ?? string.Empty,
+                        CityName = DeJureRegionStore.
+                            ResolveCountyNameForPresentation(city),
                         Development = DevelopmentMapModeService.GetCityScore(city),
                         Population = SafePopulation(city),
                         NeighborCityIds = neighbors.Distinct().ToArray()

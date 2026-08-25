@@ -54,6 +54,9 @@
     <Compile Include="..\..\Code\core\lineage\MandateBorderTowerSpacingRules.cs" Link="Production\MandateBorderTowerSpacingRules.cs" />
     <Compile Include="OfficialCareerNobleIdentityRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\RegionalGovernmentRules.cs" Link="Production\RegionalGovernmentRules.cs" />
+    <Compile Include="..\..\Code\core\court\CountyNameRules.cs" Link="Production\CountyNameRules.cs" />
+    <Compile Include="..\..\Code\core\naming\XiaHistoricalDeJureCatalog.cs" Link="Production\XiaHistoricalDeJureCatalog.cs" />
+    <Compile Include="..\..\Code\core\naming\XiaHistoricalDeJureRules.cs" Link="Production\XiaHistoricalDeJureRules.cs" />
     <Compile Include="..\..\Code\core\court\RegionalGovernmentReadModel.cs" Link="Production\RegionalGovernmentReadModel.cs" />
     <Compile Include="..\..\Code\core\court\CustomLocalGovernmentRules.cs" Link="Production\CustomLocalGovernmentRules.cs" />
     <Compile Include="..\..\Code\core\court\CustomLocalGovernmentPresetRules.cs" Link="Production\CustomLocalGovernmentPresetRules.cs" />
@@ -447,6 +450,12 @@
     <Compile Include="..\..\Code\core\performance\AWMilitaryFrontLaneRules.cs" Link="Production\AWMilitaryFrontLaneRules.cs" />
     <Compile Include="OperationalPathCadenceRulesTests.cs.txt" />
     <Compile Include="ArmyRtsExecutionBudgetRulesTests.cs.txt" />
+    <Compile Include="SlaveStatePersistenceRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\SlaveStatePersistenceRules.cs" Link="Production\SlaveStatePersistenceRules.cs" />
+    <Compile Include="CourtCandidateBudgetRulesTests.cs.txt" />
+    <Compile Include="OfficerCandidateCatalogRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CourtCandidateBudgetRules.cs" Link="Production\CourtCandidateBudgetRules.cs" />
+    <Compile Include="..\..\Code\core\court\OfficerCandidateCatalogRules.cs" Link="Production\OfficerCandidateCatalogRules.cs" />
     <Compile Include="ArmyRtsFullRosterCursorRulesTests.cs.txt" />
     <Compile Include="ArmyRtsFirstOrderRecoveryRulesTests.cs.txt" />
     <Compile Include="TestArmyRoutePollKindStub.cs.txt" />
@@ -588,6 +597,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="HistoricalCountyNameRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\ShiBranchRules.cs" Link="Production\ShiBranchRules.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageDisplayNameRules.cs" Link="Production\LineageDisplayNameRules.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageGivenNameNormalizationRules.cs" Link="Production\LineageGivenNameNormalizationRules.cs" />
@@ -638,7 +648,6 @@
     <Compile Include="..\..\Code\core\lineage\MandateProjectionResumeRules.cs" Link="Production\MandateProjectionResumeRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DynastyTransitionRules.cs" Link="Production\DynastyTransitionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DynastyStateNamePersistence.cs" Link="Production\DynastyStateNamePersistence.cs" />
-    <Compile Include="..\..\Code\core\lineage\MandatePhaseRules.cs" Link="Production\MandatePhaseRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateDeclineRebellionRules.cs" Link="Production\MandateDeclineRebellionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateDeclineRules.cs" Link="Production\MandateDeclineRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateCoreTransferRules.cs" Link="Production\MandateCoreTransferRules.cs" />
@@ -978,6 +987,7 @@
     <Compile Include="..\..\Code\core\pathfinding\AWDockRouteRegistry.cs" Link="Production\AWDockRouteRegistry.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWDockTransportRules.cs" Link="Production\AWDockTransportRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathLifecycleRules.cs" Link="Production\AWPathLifecycleRules.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathIdentity.cs" Link="Production\AWPathIdentity.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWDockEndpointRules.cs" Link="Production\AWDockEndpointRules.cs" />
     <Compile Include="..\..\Code\core\performance\RuntimePerformanceBudgetRules.cs" Link="Production\RuntimePerformanceBudgetRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWEnemySearchBackoffRules.cs" Link="Production\AWEnemySearchBackoffRules.cs" />
@@ -1005,7 +1015,6 @@
     <Compile Include="..\..\Code\core\lineage\FeudatorySuccessionRules.cs" Link="Production\FeudatorySuccessionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DynasticTitleRules.cs" Link="Production\DynasticTitleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DynasticReproductionRules.cs" Link="Production\DynasticReproductionRules.cs" />
-    <Compile Include="..\..\Code\core\lineage\DynasticMaleLineContinuityRules.cs" Link="Production\DynasticMaleLineContinuityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\NobleRankRules.cs" Link="Production\NobleRankRules.cs" />
     <Compile Include="..\..\Code\core\lineage\NobleIdentityRules.cs" Link="Production\NobleIdentityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaContactRules.cs" Link="Production\XiaContactRules.cs" />
@@ -1165,5 +1174,16 @@
   <Target Name="KingdomAtlasSourceGuard" BeforeTargets="Build">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\KingdomAtlasSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\FormalOfficialNobleIdentitySourceGuard.ps1&quot;" />
+  </Target>
+  <Target Name="CultiwayPathLifecycleSourceGuards" BeforeTargets="Build">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\DirectPathLifecycleSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\PathFinderLifecycleSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\PathFinderSubmitNewSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\PathFinderWorkerLoopSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\PathTransportRouteReuseSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\ArmyRtsIndependentPathSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\PathFinderCultiwayApiSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\ReadyPathCursorPollSourceGuard.ps1&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\NativePathTickSourceGuard.ps1&quot;" />
   </Target>
 </Project>

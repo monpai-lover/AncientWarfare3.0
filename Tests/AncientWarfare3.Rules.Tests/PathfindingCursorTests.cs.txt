@@ -14,6 +14,11 @@ internal static class PathfindingCursorTests
         BoundedRegionalPathsContinueUntilFinalTarget();
         SegmentedSessionContinuesAtLowWatermark();
         RetargetedRunningWorkUsesLatestRequest();
+        CursorExecutesAndConsumesExactlyOneStep();
+        SubmissionTokenInvalidatesStaleCursor();
+        UnboundCursorInvalidatesStaleSession();
+        CursorCanAtomicallyClaimOneStep();
+        FailedCursorPollRetainsRecoveryOwner();
 
         var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
             pNeighbors: Array.Empty<int>());
@@ -198,16 +203,176 @@ internal static class PathfindingCursorTests
         finder.StopAndDrain();
     }
 
-    private static void ActiveRequestReuseAvoidsNewWork()
+    private static void CursorExecutesAndConsumesExactlyOneStep()
     {
         var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
             pNeighbors: Array.Empty<int>());
-        using var generation = AWTraversalGeneration.FromTiles(3, 1, 1,
+        using var generation = AWTraversalGeneration.FromTiles(1, 1, 1,
             new[] { tile });
+        using var finder = new AWPathFinder(new TwoStepGenerator());
+        finder.Start(1);
+        var request = new AWPathRequest(901, 0, 0,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        Assert(finder.Request(request, out bool reused) && !reused,
+            "atomic cursor request is accepted");
+        Assert(SpinUntil(() => request.Stream.Count == 2),
+            "atomic cursor request publishes steps");
+
+        AWPathPollResult poll = finder.OpenReadyCursor(901, out var cursor);
+        Assert(poll.Kind == AWPathPollKind.StepReady && cursor.IsValid,
+            "atomic cursor opens on the first step");
+        Assert(cursor.TryExecuteCurrentStep(
+                step => step.TileId, out int executedTile) &&
+               executedTile == 10,
+            "cursor executes the currently owned step");
+        cursor.Consume();
+        Assert(cursor.Poll().Kind == AWPathPollKind.StepReady &&
+               cursor.Poll().Step.TileId == 11,
+            "consuming the first step advances exactly once");
+        finder.StopAndDrain();
+    }
+
+    private static void SubmissionTokenInvalidatesStaleCursor()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(1, 1, 1,
+            new[] { tile });
+        using var finder = new AWPathFinder(new TwoStepGenerator());
+        finder.Start(1);
+        var first = new AWPathRequest(902, 0, 0,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        long token = 0L;
+        Assert(finder.Request(first, out bool reused) && !reused &&
+               finder.TryGetCurrentSubmissionToken(902, out token) &&
+               token > 0,
+            "accepted request exposes a positive submission token");
+        Assert(SpinUntil(() => first.Stream.Count == 2),
+            "token request publishes its steps");
+        Assert(finder.OpenReadyCursor(902, token, out var cursor).Kind ==
+               AWPathPollKind.StepReady,
+            "token-bound cursor opens on the accepted request");
+
+        var replacement = new AWPathRequest(902, 0, 0,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        Assert(finder.Request(replacement,
+                out AWPathSubmissionDisposition disposition) &&
+               disposition == AWPathSubmissionDisposition.ReplacedRunning,
+            "retargeting creates a newer submission token");
+        Assert(cursor.Poll().Kind == AWPathPollKind.NoRequest,
+            "the old token-bound cursor cannot observe the replacement");
+        cursor.Consume();
+        finder.StopAndDrain();
+    }
+
+    private static void CursorCanAtomicallyClaimOneStep()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(1, 1, 1,
+            new[] { tile });
+        using var finder = new AWPathFinder(new TwoStepGenerator());
+        finder.Start(1);
+        var request = new AWPathRequest(903, 0, 0,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        Assert(finder.Request(request, out bool reused) && !reused,
+            "claim cursor request is accepted");
+        Assert(SpinUntil(() => request.Stream.Count == 2),
+            "claim cursor request publishes steps");
+        Assert(finder.OpenReadyCursor(903, out var cursor).Kind ==
+               AWPathPollKind.StepReady,
+            "claim cursor opens on a ready step");
+        Assert(cursor.TryClaimCurrentStep(out AWPathStep claimed) &&
+               claimed.TileId == 10,
+            "claim cursor atomically owns and consumes the first step");
+        Assert(cursor.Poll().Kind == AWPathPollKind.StepReady &&
+               cursor.Poll().Step.TileId == 11,
+            "atomic claim leaves exactly the next step");
+        finder.StopAndDrain();
+    }
+
+    private static void FailedCursorPollRetainsRecoveryOwner()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(1, 1, 1,
+            new[] { tile });
+        using var finder = new AWPathFinder(new FailedGenerator());
+        finder.Start(1);
+        var request = new AWPathRequest(905, 0, 0,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        Assert(finder.Request(request, out bool reused) && !reused,
+            "failed cursor request is accepted");
+        Assert(SpinUntil(() => request.Stream.State == AWPathRequestState.Failed),
+            "failed cursor request reaches the terminal failure state");
+
+        AWPathPollResult poll = finder.OpenReadyCursor(905, out var cursor);
+        Assert(poll.Kind == AWPathPollKind.Failed && cursor.IsValid,
+            "failed cursor remains open for recovery ownership");
+        Assert(cursor.Poll().Kind == AWPathPollKind.Failed &&
+               finder.ActiveCount == 1,
+            "cursor polling observes failure without destroying its session");
+        Assert(cursor.Acknowledge() && finder.ActiveCount == 0,
+            "explicit acknowledgement releases the failed recovery owner");
+        finder.StopAndDrain();
+    }
+
+    private static void UnboundCursorInvalidatesStaleSession()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(1, 1, 1,
+            new[] { tile });
+        using var finder = new AWPathFinder(new TwoStepGenerator());
+        finder.Start(1);
+        var first = new AWPathRequest(904, 0, 0,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        Assert(finder.Request(first, out bool reused) && !reused,
+            "unbound cursor request is accepted");
+        Assert(SpinUntil(() => first.Stream.Count == 2),
+            "unbound cursor request publishes steps");
+        Assert(finder.OpenReadyCursor(904, out var cursor).Kind ==
+               AWPathPollKind.StepReady && cursor.IsValid,
+            "unbound cursor opens on the current session");
+
+        var replacement = new AWPathRequest(904, 0, 1,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        Assert(finder.Request(replacement,
+                out AWPathSubmissionDisposition disposition) &&
+               disposition != AWPathSubmissionDisposition.Rejected,
+            "replacement supersedes the unbound cursor session");
+        Assert(!cursor.IsValid &&
+               cursor.Poll().Kind == AWPathPollKind.NoRequest,
+            "unbound cursor cannot observe a replaced session");
+        finder.StopAndDrain();
+    }
+
+    private static void ActiveRequestReuseAvoidsNewWork()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: new[] { 1 });
+        var tile2 = new AWTileTraversalSnapshot(1, 1, 0, ground: true,
+            pNeighbors: new[] { 0 });
+        using var generation = AWTraversalGeneration.FromTiles(3, 2, 1,
+            new[] { tile, tile2 });
         var generator = new OrderedGateGenerator();
         using var finder = new AWPathFinder(generator);
         finder.Start(1);
-        var request = new AWPathRequest(1, 0, 17,
+        var request = new AWPathRequest(1, 0, 0,
             AWPathRequestOptions.Default,
             AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
             generation, 0d);
@@ -219,7 +384,7 @@ internal static class PathfindingCursorTests
             "the same active target is reused before another request is allocated");
         var changedTarget = new AWPathReuseKey(1,
             request.ReuseKey.StartRegion,
-            new AWPathRequestKey(18, pWater: false, pBlocks: false,
+            new AWPathRequestKey(1, pWater: false, pBlocks: false,
                 pLava: false, pRegionLimit: 0,
                 pBoundedMilitaryWater: false,
                 pMaximumConsecutiveWaterTiles: 0),
@@ -378,6 +543,16 @@ internal static class PathfindingCursorTests
             request.Stream.AddStep(new AWPathStep(11, AWMovementMethod.Walk,
                 AWTraversalEstimate.Direct));
             request.Stream.Complete();
+        }
+    }
+
+    private sealed class FailedGenerator : IAWPathGenerator
+    {
+        public void Generate(AWPathRequest request,
+            CancellationToken cancellation)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            request.Stream.Fail(AWPathFailureReason.Unreachable, null);
         }
     }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
@@ -17,6 +18,11 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_WarPatch
     {
+        private static readonly long WarEndDiagnosticThresholdTicks =
+            (long)(Stopwatch.Frequency * 0.005);
+        private static readonly long WarEndTotalDiagnosticThresholdTicks =
+            (long)(Stopwatch.Frequency * 0.020);
+
         private sealed class WarEndParticipantSnapshot
         {
             public readonly List<long> ParticipantIds = new List<long>();
@@ -309,48 +315,89 @@ namespace AncientWarfare3.patch
                 RecordNativeZhuluEnd(pWar, pWinner);
                 return;
             }
-            WarParticipantEntrySourceService.Instance.
-                TryEndAllActiveSourcesForWar(pWar.data.id,
-                    LineageService.CurTime());
-            CloseParticipantSources(pWar.data.id,
-                __state?.ParticipantIds);
-            ArmyReplenishmentOperationService.OnWarEnded(pWar);
-            DiplomaticWarDeclarationService.OnWarEnded(pWar);
-            KingdomWarDirectorService.OnWarEnded(pWar);
-            ArmyRtsWarLifecycleService.OnWarEnded(pWar);
-            CoalitionWarTaskService.OnWarEnded(pWar);
-            WarMilitaryFactsService.OnWarEnded(pWar);
-            ArmyLogisticsService.OnWarEnded(pWar);
-            ArmyStallWatchdogService.OnWarEnded(pWar);
-            WarBattleEpisodeService.OnWarEnded(pWar);
-            WarScoreService.EndWar(pWar, pWinner);
-            SpecialGovernmentWarParticipationService.OnWarEnded(pWar);
-            RoyalAsylumService.OnWarEnded(pWar);
-            MilitaryEmergencyService.OnWarEnded(pWar);
-            SyntheticMobilizationLedgerService.OnWarEnded(pWar);
-            CityReservePoolService.OnWarEnded(pWar);
-            TemporaryLevyService.OnReplenishmentWarEnded(pWar);
-            WartimeGarrisonService.OnWarEnded(pWar);
-            TemporarySlaveVanguardService.OnWarEnded(pWar);
-            WarRecordWriter.OnWarEnd(pWar, pWinner);
-            WarTerritoryService.OnWarEnded(pWar, pWinner);
-            AutonomousRestorationService.OnWarEnded(pWar);
-            ApplyDiplomacyWarResult(pWar, pWinner);
-            MandateIslandExileService.OnWarEnded(pWar, pWinner);
-            MandateService.OnWarEnded(pWar, pWinner);
-            MandateRebelService.OnWarEnded(pWar, pWinner);
-            FeudatoryJingnanService.OnWarEnded(pWar, pWinner);
-            CoupRestorationService.OnWarEnded(pWar, pWinner);
-            SuccessionDisputeService.OnWarEnded(pWar, pWinner);
-            GeneralService.OnWarEnded(pWar, pWinner);
-            DiplomacyConversationService.RecordWarEnded(pWar, pWinner);
-            if (!DiplomacyProposalService.RegisterCoalitionTruces(pWar,
-                    __state?.Attackers, __state?.Defenders))
+            long settlementStarted = Stopwatch.GetTimestamp();
+            MeasureWarEndStage("participant_sources", () =>
+                WarParticipantEntrySourceService.Instance.
+                    TryEndAllActiveSourcesForWar(pWar.data.id,
+                        LineageService.CurTime()));
+            MeasureWarEndStage("participant_source_close", () =>
+                CloseParticipantSources(pWar.data.id,
+                    __state?.ParticipantIds));
+            Action armyReplenishmentCleanup = () => ArmyReplenishmentOperationService.OnWarEnded(pWar);
+            MeasureWarEndStage("army_replenishment", armyReplenishmentCleanup);
+            MeasureWarEndStage("diplomatic_war_declaration", () =>
+                DiplomaticWarDeclarationService.OnWarEnded(pWar));
+            Action kingdomWarDirectorCleanup = () => KingdomWarDirectorService.OnWarEnded(pWar);
+            MeasureWarEndStage("kingdom_war_director", kingdomWarDirectorCleanup);
+            MeasureWarEndStage("rts_war_lifecycle", () =>
+                ArmyRtsWarLifecycleService.OnWarEnded(pWar));
+            MeasureWarEndStage("coalition_war_task", () =>
+                CoalitionWarTaskService.OnWarEnded(pWar));
+            MeasureWarEndStage("war_military_facts", () =>
+                WarMilitaryFactsService.OnWarEnded(pWar));
+            MeasureWarEndStage("army_logistics", () =>
+                ArmyLogisticsService.OnWarEnded(pWar));
+            MeasureWarEndStage("army_stall_watchdog", () =>
+                ArmyStallWatchdogService.OnWarEnded(pWar));
+            MeasureWarEndStage("war_battle_episode", () =>
+                WarBattleEpisodeService.OnWarEnded(pWar));
+            MeasureWarEndStage("war_score", () =>
+                WarScoreService.EndWar(pWar, pWinner));
+            MeasureWarEndStage("special_government", () =>
+                SpecialGovernmentWarParticipationService.OnWarEnded(pWar));
+            MeasureWarEndStage("royal_asylum", () =>
+                RoyalAsylumService.OnWarEnded(pWar));
+            MeasureWarEndStage("military_emergency", () =>
+                MilitaryEmergencyService.OnWarEnded(pWar));
+            MeasureWarEndStage("synthetic_mobilization", () =>
+                SyntheticMobilizationLedgerService.OnWarEnded(pWar));
+            MeasureWarEndStage("city_reserve_pool", () =>
+                CityReservePoolService.OnWarEnded(pWar));
+            MeasureWarEndStage("temporary_levy", () =>
+                TemporaryLevyService.OnReplenishmentWarEnded(pWar));
+            MeasureWarEndStage("wartime_garrison", () =>
+                WartimeGarrisonService.OnWarEnded(pWar));
+            MeasureWarEndStage("temporary_slave_vanguard", () =>
+                TemporarySlaveVanguardService.OnWarEnded(pWar));
+            MeasureWarEndStage("war_record", () =>
+                WarRecordWriter.OnWarEnd(pWar, pWinner));
+            MeasureWarEndStage("war_territory", () =>
+                WarTerritoryService.OnWarEnded(pWar, pWinner));
+            MeasureWarEndStage("autonomous_restoration", () =>
+                AutonomousRestorationService.OnWarEnded(pWar));
+            MeasureWarEndStage("diplomacy_result", () =>
+                ApplyDiplomacyWarResult(pWar, pWinner));
+            MeasureWarEndStage("mandate_island_exile", () =>
+                MandateIslandExileService.OnWarEnded(pWar, pWinner));
+            MeasureWarEndStage("mandate", () =>
+                MandateService.OnWarEnded(pWar, pWinner));
+            MeasureWarEndStage("mandate_rebel", () =>
+                MandateRebelService.OnWarEnded(pWar, pWinner));
+            MeasureWarEndStage("feudatory_jingnan", () =>
+                FeudatoryJingnanService.OnWarEnded(pWar, pWinner));
+            MeasureWarEndStage("coup_restoration", () =>
+                CoupRestorationService.OnWarEnded(pWar, pWinner));
+            MeasureWarEndStage("succession_dispute", () =>
+                SuccessionDisputeService.OnWarEnded(pWar, pWinner));
+            MeasureWarEndStage("general", () =>
+                GeneralService.OnWarEnded(pWar, pWinner));
+            MeasureWarEndStage("diplomacy_conversation", () =>
+                DiplomacyConversationService.RecordWarEnded(pWar, pWinner));
+            bool coalitionTrucesRegistered = false;
+            MeasureWarEndStage("coalition_truces", () =>
+                coalitionTrucesRegistered =
+                    DiplomacyProposalService.RegisterCoalitionTruces(pWar,
+                        __state?.Attackers, __state?.Defenders));
+            if (!coalitionTrucesRegistered)
                 ModClass.LogWarning("Coalition truce registration failed for war " +
                                     pWar.data.id + ".");
-            VassalMapModeService.DirtyMapIfActive();
-            HierarchicalVassalMapModeService.MarkHierarchyDirty();
-            ArmyRtsPlanSnapshotService.OnWarEnded(pWar);
+            MeasureWarEndStage("map_refresh", () =>
+            {
+                VassalMapModeService.DirtyMapIfActive();
+                HierarchicalVassalMapModeService.MarkHierarchyDirty();
+            });
+            MeasureWarEndStage("rts_plan_snapshot", () =>
+                ArmyRtsPlanSnapshotService.OnWarEnded(pWar));
 
             Kingdom atk = pWar.getMainAttacker();
             Kingdom def = pWar.getMainDefender();
@@ -362,6 +409,25 @@ namespace AncientWarfare3.patch
             if (def?.data != null)
                 ChronicleEvents.OnWarEnd(def, atk, atk?.name ?? "未知",
                     warName, result);
+            long settlementElapsed = Stopwatch.GetTimestamp() - settlementStarted;
+            if (settlementElapsed >= WarEndTotalDiagnosticThresholdTicks)
+                ModClass.LogInfo("[AW3 WAR PERF] war=" + pWar.data.id +
+                    " participants=" + (__state?.ParticipantIds?.Count ?? 0) +
+                    " attackers=" + (__state?.Attackers?.Count ?? 0) +
+                    " defenders=" + (__state?.Defenders?.Count ?? 0) +
+                    " total_ms=" + (settlementElapsed * 1000.0 /
+                        Stopwatch.Frequency).ToString("0.###"));
+        }
+
+        private static void MeasureWarEndStage(string pStage, Action pAction)
+        {
+            long started = Stopwatch.GetTimestamp();
+            pAction();
+            long elapsed = Stopwatch.GetTimestamp() - started;
+            if (elapsed < WarEndDiagnosticThresholdTicks) return;
+            ModClass.LogInfo("[AW3 WAR PERF] stage=" + pStage +
+                " ms=" + (elapsed * 1000.0 / Stopwatch.Frequency)
+                    .ToString("0.###"));
         }
 
         private static void OnKingdomJoinedWar(War pWar, Kingdom pKingdom, bool pDefender)

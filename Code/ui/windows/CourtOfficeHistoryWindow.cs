@@ -268,7 +268,8 @@ namespace AncientWarfare3.ui.windows
             {
                 foreach (City city in pKingdom.getCities())
                     if (city?.data?.id == pCityId)
-                        return city.data.name ?? "";
+                        return DeJureRegionStore.
+                            ResolveCountyNameForPresentation(city);
             }
             catch { }
             return "";

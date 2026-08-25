@@ -322,7 +322,9 @@ namespace AncientWarfare3.ui.windows
                     CourtDispositionService.Preview(command);
                 if (!preview.Allowed) continue;
                 long cityId = city.id;
-                string label = city.data.name + "  |  " +
+                string label = DeJureRegionStore.
+                               ResolveCountyNameForPresentation(city) +
+                               "  |  " +
                                AW_L10n.Text("aw_population", "Population") +
                                " " + SafePopulation(city);
                 BindSelection(GetSelection(index++), label, preview,

@@ -53,16 +53,30 @@ internal static class SchoolRuntimePerformanceTests
         Equal(HistoricalSchoolRecoveryRules.MaxCandidatesPerSchoolAttempt,
             HistoricalSchoolRecoveryRules.CandidateWorkBudget(99),
             "one school recovery attempt has a strict real-candidate budget");
+        Equal(24, HistoricalSchoolSchedulerRules.DestinationTileProbeCount(64),
+            "school travel probes at most twenty-four destination tiles per actor");
+        Equal(7, HistoricalSchoolSchedulerRules.DestinationTileProbeCount(7),
+            "school travel keeps the full small destination window");
+        Equal(0, HistoricalSchoolSchedulerRules.DestinationTileProbeCount(0),
+            "empty school travel candidate windows do no destination probes");
         Equal(false, HistoricalSchoolRecoveryRules.ShouldPromoteContinuityTeacher(
                 pLivingMembers: 2, pQualifiedTeachers: 1,
                 HistoricalSchoolStanding.Member, pPresent: true,
                 pMembershipYears: 20, pReputation: 80f),
             "continuity promotion never creates a redundant teacher");
         True(HistoricalSchoolRecoveryRules.ShouldPromoteContinuityTeacher(
-                pLivingMembers: 1, pQualifiedTeachers: 0,
-                HistoricalSchoolStanding.Member, pPresent: true,
-                pMembershipYears: 3, pReputation: 20f),
+            pLivingMembers: 1, pQualifiedTeachers: 0,
+            HistoricalSchoolStanding.Member, pPresent: true,
+            pMembershipYears: 3, pReputation: 20f),
             "a mature preserved-work member can restart a broken teaching chain");
+        True(HistoricalSchoolDeathRuntimeRules.ShouldDeferDeathPersistence(
+                activeMembership: true, actorExists: true,
+                deathPending: false),
+            "valid school death callbacks always defer database persistence");
+        False(HistoricalSchoolDeathRuntimeRules.ShouldDeferDeathPersistence(
+                activeMembership: true, actorExists: true,
+                deathPending: true),
+            "an already queued school death is not duplicated");
         Equal(false, HistoricalSchoolRecoveryRules.ShouldPromoteContinuityTeacher(
                 pLivingMembers: 1, pQualifiedTeachers: 0,
                 HistoricalSchoolStanding.Member, pPresent: false,
@@ -86,6 +100,13 @@ internal static class SchoolRuntimePerformanceTests
                 "HistoricalSchoolPopulationRecoveryService.ProcessYearFrame"),
             "the annual school scheduler runs bounded population recovery");
 
+        string promotionIndexSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "schools",
+            "HistoricalSchoolRuntimeIndex.cs"));
+        True(promotionIndexSource.Contains(
+                "SortedSet<long>", StringComparison.Ordinal),
+            "school promotion buckets stay ordered without annual full-array sorting");
+
         string guestOfficeSource = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "schools",
             "SchoolGuestOfficeService.cs"));
@@ -107,7 +128,16 @@ internal static class SchoolRuntimePerformanceTests
                 "MembershipWriteOperation :\n" +
                 "            IHistoricalSchoolWriteOperation"),
             "school membership persistence remains on the buffered commit operation");
-        True(!membershipSource.Contains("IHistoricalSchoolAsyncWriteOperation"),
+        int membershipWriteStart = membershipSource.IndexOf(
+            "private abstract class MembershipWriteOperation",
+            StringComparison.Ordinal);
+        int membershipWriteBody = membershipSource.IndexOf('{',
+            membershipWriteStart);
+        True(membershipWriteStart >= 0 && membershipWriteBody > membershipWriteStart &&
+             !membershipSource.Substring(membershipWriteStart,
+                 membershipWriteBody - membershipWriteStart).Contains(
+                 "IHistoricalSchoolAsyncWriteOperation",
+                 StringComparison.Ordinal),
             "school membership writes do not detach from their actor projection");
         True(!membershipSource.Contains("MembershipWriteEpochs"),
             "school membership writes do not invalidate a selected disciple by epoch");
@@ -927,6 +957,11 @@ internal static class SchoolRuntimePerformanceTests
     private static void True(bool value, string name)
     {
         if (!value) throw new InvalidOperationException($"{name}: expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException($"{name}: expected false");
     }
 
     private static void Near(double expected, double actual, double epsilon, string name)
