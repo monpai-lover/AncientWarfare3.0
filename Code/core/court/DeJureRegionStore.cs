@@ -41,6 +41,7 @@ namespace AncientWarfare3.core.court
                 RepairEmptyRegionsLocked();
                 EnsureAllKingdomCapitalSeatsLocked();
                 SyncAllRegionNamesLocked();
+                MigrateHistoricalMetadataLocked();
             }
             DeJureNewCityAssignmentService.ClearRuntime();
         }
@@ -728,6 +729,7 @@ namespace AncientWarfare3.core.court
                     EnsureAllKingdomCapitalSeatsLocked();
                     SyncAllRegionNamesLocked();
                     Migrate(_store);
+                    MigrateHistoricalMetadataLocked();
                     _migrationCompleted = true;
                 }
                 if (_store != null && HasLiveWorld() && Config.game_loaded &&
@@ -736,6 +738,7 @@ namespace AncientWarfare3.core.court
                     RepairEmptyRegionsLocked();
                     EnsureAllKingdomCapitalSeatsLocked();
                     SyncAllRegionNamesLocked();
+                    MigrateHistoricalMetadataLocked();
                 }
             }
             if (_store != null && HasLiveWorld() && Config.game_loaded &&
@@ -962,6 +965,71 @@ namespace AncientWarfare3.core.court
                 .ThenByDescending(SafePopulation)
                 .ThenBy(p => p.data.id)
                 .Select(p => p.data.id).DefaultIfEmpty(-1L).First();
+        }
+
+        private static XiaHistoricalDeJureProfile ResolveHistoricalProfileLocked(
+            City pCity)
+        {
+            return XiaHistoricalDeJureRules.SelectProfile(
+                XiaHistoricalDeJureCatalogService.Current,
+                new[] { pCity?.data?.name ?? string.Empty },
+                StableHistoricalSelector(pCity?.data?.id ?? 0L));
+        }
+
+        private static void MigrateHistoricalMetadataLocked()
+        {
+            if (_store?.Regions == null) return;
+            bool changed = false;
+            foreach (DeJureRegion region in _store.Regions)
+            {
+                if (region == null || !region.Active) continue;
+                if (region.SeatCityId >= 0L && !region.SeatLocked)
+                {
+                    region.SeatLocked = true;
+                    changed = true;
+                }
+                City seat = World.world?.cities?.get(region.SeatCityId);
+                if (string.IsNullOrWhiteSpace(region.HistoricalStateId) &&
+                    seat?.data != null)
+                {
+                    XiaHistoricalDeJureProfile profile =
+                        ResolveHistoricalProfileLocked(seat);
+                    if (!string.IsNullOrWhiteSpace(profile.StateId))
+                    {
+                        region.HistoricalStateId = profile.StateId;
+                        region.HistoricalCommanderyId = profile.CommanderyId;
+                        if (string.IsNullOrWhiteSpace(region.RegionName))
+                        {
+                            region.RegionName = profile.StateName;
+                            region.RegionNameSource =
+                                DeJureHistoricalProfileRules.HistoricalDefault;
+                        }
+                        changed = true;
+                    }
+                }
+                if (string.IsNullOrWhiteSpace(region.RegionNameSource))
+                {
+                    region.RegionNameSource =
+                        DeJureHistoricalProfileRules.LegacyPreserved;
+                    changed = true;
+                }
+            }
+            if (!changed) return;
+            _store.StoreRevision++;
+            RegionalGovernmentAggregationService.Clear();
+        }
+
+        private static int StableHistoricalSelector(long pCityId)
+        {
+            unchecked
+            {
+                ulong value = (ulong)pCityId ^
+                    ((ulong)(uint)MapBox.current_world_seed_id << 32);
+                value ^= value >> 33;
+                value *= 0xff51afd7ed558ccdUL;
+                value ^= value >> 33;
+                return (int)(value ^ (value >> 32));
+            }
         }
 
         private static bool SyncRegionNameFromSeatLocked(DeJureRegion pRegion)

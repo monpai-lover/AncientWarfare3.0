@@ -2,6 +2,7 @@ using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.county;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -225,6 +226,7 @@ namespace AncientWarfare3.patch
                 BeginContinuousScope();
             try
             {
+                CountyAdministrationStore.MarkCityDirty(__instance?.data?.id ?? -1L);
                 HierarchicalVassalMapModeService.MarkCityZoneGeometryDirty(__instance, pZone);
             }
             finally
@@ -253,6 +255,7 @@ namespace AncientWarfare3.patch
         public static void NewCityEvent_Postfix(City __instance)
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
+            CountyAdministrationStore.MarkCityDirty(__instance?.data?.id ?? -1L);
             KingdomMilitaryReadinessService.OnCityKingdomChanged(
                 __instance, null, __instance?.kingdom);
             ArmyRetreatService.OnCityControlChanged(__instance, null);

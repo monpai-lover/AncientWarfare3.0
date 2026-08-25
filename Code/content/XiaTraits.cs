@@ -104,6 +104,9 @@ namespace AncientWarfare3.content
             guizu.base_stats["birth_rate"] = 2f;
             guizu.base_stats["health"] = 500f;
 
+            NewSocialIdentity(LineageKeys.TRAIT_SHIDAFU,
+                TraitIconUsageRules.IconForTrait(LineageKeys.TRAIT_SHIDAFU));
+
             // slave 奴隶:不出生(rate_birth=0)、世袭(rate_inherit=100)、周期强制职业=Slave
             var slave = NewSocialIdentity("slave", "ui/policy/start_slaves");
             slave.rate_birth = 0;

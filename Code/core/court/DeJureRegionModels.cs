@@ -19,7 +19,11 @@ namespace AncientWarfare3.core.court
     {
         public long RegionId { get; set; } = -1L;
         public string RegionName { get; set; } = string.Empty;
+        public string HistoricalStateId { get; set; } = string.Empty;
+        public string HistoricalCommanderyId { get; set; } = string.Empty;
+        public string RegionNameSource { get; set; } = string.Empty;
         public long SeatCityId { get; set; } = -1L;
+        public bool SeatLocked { get; set; }
         public List<long> MemberCityIds { get; set; } = new List<long>();
         public int CreatedYear { get; set; } = -1;
         public string CreatedByKind { get; set; } = string.Empty;

@@ -4,6 +4,7 @@ using System.Linq;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.naming;
+using AncientWarfare3.core.performance;
 
 namespace AncientWarfare3.core.court
 {
@@ -131,7 +132,10 @@ namespace AncientWarfare3.core.court
         private static void ApplyHistoricalCityName(City pCity)
         {
             if (pCity?.data == null || pCity.data.custom_name ||
-                !LineageService.IsXiaKingdom(pCity.kingdom)) return;
+                !LineageService.IsXiaKingdom(pCity.kingdom) ||
+                !XiaHistoricalDeJureRules.ShouldNameCity(
+                    AWPerformanceSettings.EnableHistoricalDeJureCityNames,
+                    !pCity.data.custom_name)) return;
             try
             {
                 string currentName = ResolveChineseCityName(pCity);

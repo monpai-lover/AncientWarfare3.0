@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.court
@@ -7,6 +8,8 @@ namespace AncientWarfare3.core.court
     {
         public long KingdomId { get; set; } = -1L;
         public long CityId { get; set; } = -1L;
+        public List<CountyRecord> Counties { get; set; } =
+            new List<CountyRecord>();
         public string CityName { get; set; } = string.Empty;
         public string TemplateId { get; set; } = string.Empty;
         public string TemplateName { get; set; } = string.Empty;

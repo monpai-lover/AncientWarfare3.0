@@ -9,19 +9,18 @@ internal static class DeJureSeatRenameSourceGuardTests
         string renamePatch = Read("Code/patch/AW_KingdomRenamePatch.cs");
 
         Contains(store,
-            "internal static bool SyncSeatName(City pCity, string pCommittedName)");
-        Contains(store,
-            "RegionalGovernmentRules.RegionName(pCommittedName,");
+            "internal static bool SyncSeatName(City pCity, string pCommittedName,");
+        Contains(store, "pTrackedRename");
+        Contains(store, "ShouldApplyTrackedSeatRename");
+        Contains(store, "DeJureRegionRenamedFromSeat");
         Contains(store, "\"\\u5dde\")");
         Contains(store, "p != null && p.Active &&");
         Contains(store, "p.SeatCityId == pCity.data.id");
-        Contains(store, "string.Equals(region.RegionName,");
-        Contains(store, "region.Version++");
-        Contains(store, "_store.StoreRevision++");
-        Contains(store, "DeJureRegionRenamedFromSeat");
+        Contains(store, "RegionNameSource");
+        Contains(store, "ManualSeatRename");
         Contains(store, "RegionalGovernmentAggregationService.Clear()");
         Contains(renamePatch,
-            "DeJureRegionStore.SyncSeatName(city, committedCityName)");
+            "DeJureRegionStore.SyncSeatName(city, committedCityName,");
         Contains(renamePatch,
             "HierarchicalVassalMapModeService.MarkCityDirty(city)");
     }

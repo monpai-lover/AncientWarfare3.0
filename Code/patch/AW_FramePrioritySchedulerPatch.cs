@@ -6,6 +6,7 @@ using System.Reflection.Emit;
 using System.Text;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.asyncwork;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.core.performance;
@@ -161,6 +162,9 @@ namespace AncientWarfare3.patch
 
                 RefreshControlledPresentation(__instance);
                 AWWorldTimeRateTracker.Update(__instance);
+                // County partitions are rebuilt only for cities dirtied by a
+                // zone mutation; never scan all cities in the frame loop.
+                CountyAdministrationStore.RepairDirtyCities();
                 AWSimulationTickBenchmark.SyncCaptureState();
                 TryLogSchedulerDiagnostics();
             }

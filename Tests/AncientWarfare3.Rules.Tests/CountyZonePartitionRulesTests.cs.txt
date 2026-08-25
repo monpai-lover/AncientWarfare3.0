@@ -1,0 +1,43 @@
+using AncientWarfare3.core.county;
+
+internal static class CountyZonePartitionRulesTests
+{
+    public static void Run()
+    {
+        Equal(1, CountyZonePartitionRules.Partition(new long[] { 1, 2, 3 }, null).Count,
+            "a small city has one county");
+        var twentyFive = CountyZonePartitionRules.Partition(Range(1, 25), null);
+        Equal(1, twentyFive.Count, "25 zones remain one county");
+        var twentySix = CountyZonePartitionRules.Partition(Range(1, 26), null);
+        Equal(2, twentySix.Count, "26 zones split into two counties");
+        var fifty = CountyZonePartitionRules.Partition(Range(1, 50), null);
+        Equal(2, fifty.Count, "50 zones split into two counties");
+        foreach (var county in twentySix)
+            True(county.Count <= CountyZonePartitionRules.MaximumZonesPerCounty,
+                "a county never exceeds the zone cap");
+        Equal(string.Join(",", twentySix[0]), string.Join(",",
+            CountyZonePartitionRules.Partition(Range(1, 26), null)[0]),
+            "partitioning is deterministic");
+        Equal("长安县", CountyNameRules.Build("长安", 0, "长安"),
+            "historical name gets county suffix once");
+        Equal("长安县2", CountyNameRules.Build("长安", 1, "长安"),
+            "duplicate fallback gets stable ordinal");
+        Equal("手工县名", CountyNameRules.PreserveManual("手工县名", "长安", 0),
+            "manual county names are preserved");
+    }
+    private static long[] Range(long pStart, long pEnd)
+    {
+        var values = new long[pEnd - pStart + 1];
+        for (long i = 0; i < values.Length; i++) values[i] = pStart + i;
+        return values;
+    }
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new System.InvalidOperationException(pMessage);
+    }
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual)) throw new System.InvalidOperationException(
+            $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

@@ -222,6 +222,10 @@ namespace AncientWarfare3.core.court
                     slots, pYear, out IReadOnlyList<long> officerActorIds,
                     out pHasVacancy))
                 return false;
+            if (!LocalCourtAppointmentService.ReconcileCounties(pKingdom,
+                    pCity, pYear, out int countyVacancies))
+                return false;
+            pHasVacancy = pHasVacancy || countyVacancies > 0;
             int filled = officerActorIds.Count;
             float efficiency = CourtBureauRules.BureauEfficiency(slots,
                 filled);

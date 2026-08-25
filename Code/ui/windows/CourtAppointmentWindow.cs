@@ -18,6 +18,7 @@ namespace AncientWarfare3.ui.windows
         private static string _officeId = "";
         private static string _officeLayer = CourtOfficeLayer.Central;
         private static long _cityId = -1L;
+        private static long _countyId = -1L;
         private static long _expectedIncumbentActorId = -1L;
         private static CourtManualAppointmentResult? _feedback;
         private static bool _commandPending;
@@ -48,12 +49,12 @@ namespace AncientWarfare3.ui.windows
             long pExpectedIncumbentActorId)
         {
             Open(pKingdomId, pOfficeId, pExpectedIncumbentActorId,
-                CourtOfficeLayer.Central, -1L);
+                CourtOfficeLayer.Central, -1L, -1L);
         }
 
         public static void Open(long pKingdomId, string pOfficeId,
             long pExpectedIncumbentActorId, string pOfficeLayer,
-            long pCityId)
+            long pCityId, long pCountyId = -1L)
         {
             _kingdomId = pKingdomId;
             _officeId = pOfficeId ?? "";
@@ -61,6 +62,7 @@ namespace AncientWarfare3.ui.windows
             _officeLayer = string.IsNullOrEmpty(pOfficeLayer)
                 ? CourtOfficeLayer.Central : pOfficeLayer;
             _cityId = pCityId;
+            _countyId = pCountyId;
             _feedback = null;
             if (Instance == null)
                 CreateAndInit(AW_LineageWindowIds.COURT_APPOINTMENT);
@@ -97,11 +99,14 @@ namespace AncientWarfare3.ui.windows
                 AW3MultiplayerCommandFacade.DispatchFromUi(
                 AW3CommandRequest.AppointCourtOfficer(_kingdomId,
                         pActorId, _officeId,
-                        _expectedIncumbentActorId, _officeLayer, _cityId));
+                        _expectedIncumbentActorId, _officeLayer, _cityId,
+                        _countyId));
             if (result.Status == AW3CommandStatus.Accepted)
             {
                 _feedback = null;
-                if (_officeLayer == CourtOfficeLayer.City && _cityId >= 0)
+                if ((_officeLayer == CourtOfficeLayer.City ||
+                     _officeLayer == CourtOfficeLayer.County) &&
+                    _cityId >= 0)
                     CourtWindow.OpenCity(_kingdomId, _cityId);
                 else
                     CourtWindow.OpenAndRefresh(_kingdomId);
@@ -126,7 +131,7 @@ namespace AncientWarfare3.ui.windows
             ResetCandidateWork();
             _candidateQueryKey = _queryState.Begin(_kingdomId,
                 _officeLayer + ":" + _cityId + ":" + _officeId + ":" +
-                _expectedIncumbentActorId,
+                _expectedIncumbentActorId + ":" + _countyId,
                 KingdomStrategyRevisionService.Current(_kingdomId));
             ClearList();
             ApplyTitle();
@@ -146,7 +151,7 @@ namespace AncientWarfare3.ui.windows
             CourtManualAppointmentResult target =
                 CourtService.BeginManualAppointmentScan(kingdom, _officeId,
                     _expectedIncumbentActorId, _officeLayer, _cityId,
-                    out _candidateScan);
+                    _countyId, out _candidateScan);
             _visibleFeedback = _feedback ??
                 (target == CourtManualAppointmentResult.Success
                     ? (CourtManualAppointmentResult?)null

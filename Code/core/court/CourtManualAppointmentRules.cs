@@ -132,6 +132,8 @@ namespace AncientWarfare3.core.court
                     StringComparison.Ordinal))
                 return pCityId < 0L;
             return string.Equals(pLayer, CourtOfficeLayer.City,
+                       StringComparison.Ordinal) && pCityId >= 0L ||
+                   string.Equals(pLayer, CourtOfficeLayer.County,
                        StringComparison.Ordinal) && pCityId >= 0L;
         }
 

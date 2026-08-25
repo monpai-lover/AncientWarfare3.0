@@ -7,7 +7,8 @@ namespace AncientWarfare3.core.policy
     internal enum CityAdministrationMapLevel
     {
         Regions,
-        Cities
+        Cities,
+        Counties
     }
 
     internal enum CityAdministrationMapClickAction
@@ -22,15 +23,19 @@ namespace AncientWarfare3.core.policy
     {
         private long _focusedKingdomId = -1L;
         private readonly List<long> _regionBreadcrumbs = new List<long>();
+        private long _focusedCountyId = -1L;
 
         internal bool IsCountryLevel => _focusedKingdomId < 0L;
         internal bool IsRegionLevel => _focusedKingdomId >= 0L &&
             _regionBreadcrumbs.Count == 0;
         internal bool IsCityLevel => _focusedKingdomId >= 0L &&
-            _regionBreadcrumbs.Count > 0;
+            _regionBreadcrumbs.Count > 0 && _focusedCountyId < 0L;
+        internal bool IsCountyLevel => _focusedKingdomId >= 0L &&
+            _regionBreadcrumbs.Count > 0 && _focusedCountyId >= 0L;
         internal long FocusKingdomId => _focusedKingdomId;
         internal long FocusSeatCityId => IsCityLevel
             ? _regionBreadcrumbs[_regionBreadcrumbs.Count - 1] : -1L;
+        internal long FocusCountyId => IsCountyLevel ? _focusedCountyId : -1L;
         internal IReadOnlyList<long> RegionBreadcrumbs => _regionBreadcrumbs;
 
         internal bool PushKingdom(long pKingdomId)
@@ -45,6 +50,7 @@ namespace AncientWarfare3.core.policy
             if (IsCountryLevel) return false;
             _focusedKingdomId = -1L;
             _regionBreadcrumbs.Clear();
+            _focusedCountyId = -1L;
             return true;
         }
 
@@ -58,7 +64,19 @@ namespace AncientWarfare3.core.policy
         internal bool PopRegion()
         {
             if (IsRegionLevel) return false;
+            if (IsCountyLevel)
+            {
+                _focusedCountyId = -1L;
+                return true;
+            }
             _regionBreadcrumbs.RemoveAt(_regionBreadcrumbs.Count - 1);
+            return true;
+        }
+
+        internal bool PushCounty(long pCountyId)
+        {
+            if (pCountyId < 0L || !IsCityLevel) return false;
+            _focusedCountyId = pCountyId;
             return true;
         }
 
@@ -66,6 +84,7 @@ namespace AncientWarfare3.core.policy
         {
             _focusedKingdomId = -1L;
             _regionBreadcrumbs.Clear();
+            _focusedCountyId = -1L;
         }
     }
 
@@ -115,6 +134,19 @@ namespace AncientWarfare3.core.policy
             if (pIsRegionLevel)
                 return CityAdministrationMapClickAction.FocusRegion;
             return pClickedRegionSeatCityId == pFocusSeatCityId
+                ? CityAdministrationMapClickAction.InspectCity
+                : CityAdministrationMapClickAction.PopToRegions;
+        }
+
+        internal static CityAdministrationMapClickAction ResolveCountyClick(
+            bool pIsCityLevel, long pFocusedCountyId,
+            long pClickedCountyId, bool pClickedMapped)
+        {
+            if (!pClickedMapped)
+                return pIsCityLevel ? CityAdministrationMapClickAction.None :
+                    CityAdministrationMapClickAction.PopToRegions;
+            if (pIsCityLevel) return CityAdministrationMapClickAction.InspectCity;
+            return pClickedCountyId == pFocusedCountyId
                 ? CityAdministrationMapClickAction.InspectCity
                 : CityAdministrationMapClickAction.PopToRegions;
         }

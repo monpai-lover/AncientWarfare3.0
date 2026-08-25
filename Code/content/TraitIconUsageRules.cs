@@ -12,6 +12,7 @@ namespace AncientWarfare3.content
                 case "formerking": return "ui/Icons/traits/iconformerking";
                 case "zhuhou": return "ui/Icons/traits/iconzhuhou";
                 case "fanwang": return "ui/Icons/traits/iconzhuhou";
+                case "shidafu": return "ui/Icons/traits/iconshidafu";
                 default: return "";
             }
         }

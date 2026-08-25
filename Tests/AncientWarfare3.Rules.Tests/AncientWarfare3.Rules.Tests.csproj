@@ -598,6 +598,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="HistoricalCountyNameRulesTests.cs.txt" />
+    <Compile Include="XiaHistoricalDeJureRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\DeJureHistoricalProfileRules.cs" Link="Production\DeJureHistoricalProfileRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ShiBranchRules.cs" Link="Production\ShiBranchRules.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageDisplayNameRules.cs" Link="Production\LineageDisplayNameRules.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageGivenNameNormalizationRules.cs" Link="Production\LineageGivenNameNormalizationRules.cs" />

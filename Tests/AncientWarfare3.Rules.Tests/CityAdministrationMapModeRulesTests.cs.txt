@@ -14,7 +14,12 @@ internal static class CityAdministrationMapModeRulesTests
         True(state.PushRegion(42L), "region focus pushes seat city");
         Equal(42L, state.FocusSeatCityId, "focused seat is stable");
         True(state.IsCityLevel, "region focus enters prefecture level");
+        True(state.PushCounty(88L), "city focus enters county level");
+        True(state.IsCountyLevel, "county focus is distinct from city level");
+        Equal(88L, state.FocusCountyId, "focused county is stable");
         True(state.PopRegion(), "outside click pops to commandery level");
+        True(state.IsCityLevel, "first pop restores city level");
+        True(state.PopRegion(), "second pop restores commandery level");
         True(state.IsRegionLevel, "pop restores commandery level");
         True(state.PopKingdom(), "outside click pops to country level");
         True(state.IsCountryLevel, "pop restores country level");
@@ -47,6 +52,18 @@ internal static class CityAdministrationMapModeRulesTests
             CityAdministrationMapModeRules.ResolveClick(
                 true, -1L, -1L, false),
             "unmapped region-level click does not affect kingdom hierarchy");
+        Equal(CityAdministrationMapClickAction.InspectCity,
+            CityAdministrationMapModeRules.ResolveCountyClick(
+                true, -1L, 88L, true),
+            "mapped city click opens county layer");
+        Equal(CityAdministrationMapClickAction.None,
+            CityAdministrationMapModeRules.ResolveCountyClick(
+                true, -1L, -1L, false),
+            "empty city click does not clear county labels");
+        Equal(CityAdministrationMapClickAction.PopToRegions,
+            CityAdministrationMapModeRules.ResolveCountyClick(
+                false, 88L, 99L, true),
+            "different county returns to city level");
         Equal("#4A6FA5", CityAdministrationMapModeRules.RegionColorHex(0L),
             "first commandery uses the stable region palette");
         True(CityAdministrationMapModeRules.RegionColorHex(0L) !=
