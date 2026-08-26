@@ -13,6 +13,8 @@ internal static class CourtVacancySourceGuardTests
             "Code/core/court/CourtVacancyReconciliationService.cs");
         string authority = Read(
             "Code/core/performance/AWAuthorityCycleService.cs");
+        string promotion = Read("Code/patch/AW_PromotionPatch.cs");
+        string customRuntime = Read("Code/core/court/CustomCourtRuntime.cs");
 
         Contains(session, "OfficerCandidateCatalog.GetOrBuild",
             "one reconciliation cycle must reuse the kingdom catalog");
@@ -39,6 +41,19 @@ internal static class CourtVacancySourceGuardTests
             "technical retries must be delayed to a later frame");
         Contains(authority, "DrainDueRetryTickets",
             "authority cycle must drain court retry tickets");
+        Contains(court, "if (cleanupPrior != null)",
+            "reassignment must publish the released office after commit");
+        Contains(court, "RegisterVacancy(cleanupPrior)",
+            "released central/local office must wake reconciliation");
+        Contains(court, "pPersistCareer &&",
+            "durable close must gate vacancy publication");
+        Contains(promotion, "RegisterCityVacancies",
+            "native leader removal must publish exact local vacancies");
+        False(promotion.Contains("CityLeaderVacancyRepairService.Request",
+                StringComparison.Ordinal),
+            "promotion path cannot use retired self-rescheduling repair");
+        Contains(customRuntime, "RefreshKingdomDefinitions",
+            "template migration must refresh vacancy definitions once");
     }
 
     private static string MethodBody(string pText, string pMethodName)

@@ -2267,6 +2267,8 @@ namespace AncientWarfare3.core.court
                 CourtDB == null) return false;
 
             string reason = pReason ?? "court_disposition";
+            var releasedPrior = new OfficialCareerPrior(courtKingdomId,
+                courtCityId, layer, office);
             var request = new OfficialCareerCloseRequest(pActor.data.id,
                 pKingdom.id, layer, office, Date.getCurrentYear(),
                 LineageService.CurTime(), reason);
@@ -2292,9 +2294,9 @@ namespace AncientWarfare3.core.court
             bool result = remainingKingdomId < 0 &&
                    string.IsNullOrEmpty(remainingOffice) &&
                    (layer != CourtOfficeLayer.City || !pActor.isCityLeader());
-            if (result && layer == CourtOfficeLayer.City && courtCityId >= 0L)
-                CityBureauAnnualWorkService.RequestImmediateReconcile(
-                    pKingdom, courtCityId);
+            if (result && reason != "kingdom_fell")
+                CourtVacancyReconciliationService.RegisterVacancy(
+                    releasedPrior);
             return result;
         }
 
@@ -2417,6 +2419,8 @@ namespace AncientWarfare3.core.court
             if (targetNeedsReconcile)
                 RoyalMedicalCareService.ReconcileTargets(pKingdom);
             CityShiInfluenceSnapshotService.MarkActorDirty(pActor);
+            if (cleanupPrior != null)
+                CourtVacancyReconciliationService.RegisterVacancy(cleanupPrior);
             return true;
         }
 
@@ -2443,6 +2447,8 @@ namespace AncientWarfare3.core.court
             pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             Kingdom courtKingdom = courtKingdomId >= 0 ? World.world?.kingdoms?.get(courtKingdomId) : null;
+            var releasedPrior = new OfficialCareerPrior(courtKingdomId,
+                courtCityId, layer, office);
             bool alive = pActor.isAlive() && !pActor.isRekt();
             if (!alive && pArchive) LineageService.ArchiveActor(pActor, pAlive: false);
 
@@ -2473,10 +2479,10 @@ namespace AncientWarfare3.core.court
             if (courtKingdom?.data != null) CourtDirectionService.MarkDirty(courtKingdom);
             CitySchoolSnapshotService.MarkActorDirty(pActor);
             CityShiInfluenceSnapshotService.MarkActorDirty(pActor);
-            if (courtKingdom?.data != null && layer == CourtOfficeLayer.City &&
-                courtCityId >= 0L && pReason != "kingdom_fell")
-                CityBureauAnnualWorkService.RequestImmediateReconcile(
-                    courtKingdom, courtCityId);
+            if (courtKingdom?.data != null && pPersistCareer &&
+                pReason != "kingdom_fell")
+                CourtVacancyReconciliationService.RegisterVacancy(
+                    releasedPrior);
             if (courtKingdom?.data != null && office == CourtOfficeId.ImperialPhysician)
                 RoyalMedicalCareService.ReconcileTargets(courtKingdom);
         }

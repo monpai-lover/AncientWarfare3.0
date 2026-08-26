@@ -32,8 +32,8 @@ namespace AncientWarfare3.core.court
 
                     CityGovernorPlacementService.OnCommittedAssignment(
                         pCity, pCandidate);
-                    CityBureauAnnualWorkService.RequestImmediateReconcile(
-                        pKingdom, pCity.data.id);
+                    CourtVacancyReconciliationService.RegisterCityVacancies(
+                        pKingdom, pCity);
                     RegionalGovernmentAggregationService.Invalidate(pKingdom);
                     HierarchicalVassalMapModeService.MarkCityDirty(pCity);
                     return true;
@@ -90,8 +90,8 @@ namespace AncientWarfare3.core.court
             catch { }
 
             if (!formerLeaderRestored)
-                CityBureauAnnualWorkService.RequestImmediateReconcile(
-                    pKingdom, pCity.data.id);
+                CourtVacancyReconciliationService.RegisterCityVacancies(
+                    pKingdom, pCity);
         }
     }
 }

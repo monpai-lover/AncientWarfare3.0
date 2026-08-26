@@ -25,6 +25,24 @@ namespace AncientWarfare3.core.court
             Request(FindKingdom(pKey.KingdomId));
         }
 
+        internal static void RegisterVacancy(OfficialCareerPrior pPrior)
+        {
+            if (pPrior == null || pPrior.KingdomId < 0L ||
+                string.IsNullOrEmpty(pPrior.OfficeId)) return;
+            bool local = pPrior.Layer == CourtOfficeLayer.City;
+            if (!local && pPrior.Layer != CourtOfficeLayer.Central &&
+                pPrior.Layer != CourtOfficeLayer.Military) return;
+            City city = local && pPrior.CityId >= 0L
+                ? World.world?.cities?.get(pPrior.CityId) : null;
+            bool chief = local && city?.data != null &&
+                CourtService.ResolveCityOffice(
+                    World.world?.kingdoms?.get(pPrior.KingdomId), city) ==
+                pPrior.OfficeId;
+            RegisterVacancy(new CourtVacancyKey(pPrior.KingdomId,
+                local ? pPrior.CityId : -1L, -1L, pPrior.Layer,
+                pPrior.OfficeId, chief));
+        }
+
         internal static void RegisterCityVacancies(Kingdom pKingdom,
             City pCity)
         {

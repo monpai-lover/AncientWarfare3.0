@@ -143,8 +143,8 @@ namespace AncientWarfare3.core.court
                 pTemplateId);
             pCity.data.set(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_MANUAL,
                 pManual);
-            CityBureauAnnualWorkService.RequestImmediateReconcile(pKingdom,
-                pCity.data.id);
+            CourtVacancyReconciliationService.RegisterCityVacancies(
+                pKingdom, pCity);
             return true;
         }
 
@@ -307,9 +307,9 @@ namespace AncientWarfare3.core.court
                             city);
                     CourtTemplateOfficerMigrationService.TryMigrateLocal(
                         kingdom, city, source, target);
-                    CityBureauAnnualWorkService.RequestImmediateReconcile(
-                        kingdom, city.data.id);
                 }
+                CourtVacancyReconciliationService.RefreshKingdomDefinitions(
+                    kingdom);
                 RegionalGovernmentAggregationService.Invalidate(kingdom);
                 PersistTemplateMetadata(kingdom, next);
                 return true;
