@@ -1,0 +1,54 @@
+using AncientWarfare3.core.court;
+
+internal static class CourtVacancyRulesTests
+{
+    internal static void Run()
+    {
+        var central = new CourtVacancyKey(7L, -1L, -1L,
+            CourtOfficeLayer.Central, "minister");
+        var chief = new CourtVacancyKey(7L, 11L, -1L,
+            CourtOfficeLayer.City, "governor", pIsLocalChief: true);
+        var local = new CourtVacancyKey(7L, 11L, -1L,
+            CourtOfficeLayer.City, "clerk");
+        var countyA = new CourtVacancyKey(7L, 11L, 21L,
+            CourtOfficeLayer.County, CourtOfficeId.CountyMagistrate);
+        var countyB = new CourtVacancyKey(7L, 11L, 22L,
+            CourtOfficeLayer.County, CourtOfficeId.CountyMagistrate);
+
+        Equal(CourtVacancyPriority.Central,
+            CourtVacancyRules.Priority(central), "central priority");
+        Equal(CourtVacancyPriority.LocalChief,
+            CourtVacancyRules.Priority(chief), "local chief priority");
+        Equal(CourtVacancyPriority.LocalOffice,
+            CourtVacancyRules.Priority(local), "local office priority");
+        True(!countyA.Equals(countyB),
+            "county identity includes county id");
+        Equal(2, CourtVacancyRules.MissingSeats(3, 1),
+            "missing repeated seats");
+        Equal(0, CourtVacancyRules.MissingSeats(1, 3),
+            "occupied seats clamp missing count");
+        Equal(9, CourtVacancyRules.CascadeLimit(9),
+            "cascade is bounded by valid office count");
+        True(CourtVacancyRules.ShouldRetry(
+                CourtVacancyOutcome.TechnicalFailure, 0),
+            "first technical failure retries");
+        True(!CourtVacancyRules.ShouldRetry(
+                CourtVacancyOutcome.NoCandidate, 0),
+            "no-candidate outcome remains dormant");
+        True(!CourtVacancyRules.ShouldRetry(
+                CourtVacancyOutcome.TechnicalFailure, 1),
+            "second technical failure does not retry");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                ": expected " + pExpected + ", got " + pActual);
+    }
+}
