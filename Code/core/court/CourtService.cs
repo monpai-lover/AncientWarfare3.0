@@ -215,6 +215,64 @@ namespace AncientWarfare3.core.court
                 CourtOfficeLayer.Military);
         }
 
+        internal static HashSet<long> BuildActiveOfficerActorSetForKingdom(
+            Kingdom pKingdom)
+        {
+            var result = new HashSet<long>();
+            if (pKingdom?.data == null || pKingdom.isRekt()) return result;
+            foreach (CourtOfficerView officer in GetActiveOfficers(pKingdom,
+                         int.MaxValue))
+            {
+                if (officer == null || officer.actor_id < 0L) continue;
+                Actor actor = World.world?.units?.get(officer.actor_id);
+                if (IsValidActiveOfficeActor(actor, pKingdom,
+                        officer.layer, officer.office_id))
+                    result.Add(officer.actor_id);
+            }
+            return result;
+        }
+
+        internal static bool IsExplicitConcurrentOffice(Actor pActor,
+            CourtVacancyKey pVacancy)
+        {
+            if (pActor?.data == null || pVacancy.KingdomId < 0L ||
+                pActor.kingdom?.id != pVacancy.KingdomId) return false;
+            pActor.data.get(LineageKeys.COURT_CITY_ID, out long cityId, -1L);
+            pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
+            pActor.data.get(LineageKeys.COURT_OFFICE_ID,
+                out string officeId, "");
+            return pVacancy.Layer == CourtOfficeLayer.City &&
+                   pVacancy.IsLocalChief && cityId == pVacancy.CityId &&
+                   layer == CourtOfficeLayer.City &&
+                   officeId == pVacancy.OfficeId && pActor.isCityLeader();
+        }
+
+        internal static CourtVacancyOutcome TryFillRegisteredCentralVacancy(
+            Kingdom pKingdom, CourtVacancyKey pVacancy,
+            CourtCandidateSession pSession)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
+                pSession == null || pVacancy.KingdomId != pKingdom.id ||
+                (pVacancy.Layer != CourtOfficeLayer.Central &&
+                 pVacancy.Layer != CourtOfficeLayer.Military) ||
+                string.IsNullOrEmpty(pVacancy.OfficeId))
+                return CourtVacancyOutcome.Invalid;
+            if (IsWesternElective(pKingdom))
+                return CourtVacancyOutcome.NoCandidate;
+
+            List<Actor> roster = pSession.Actors.ToList();
+            HashSet<string> occupied = BuildActiveOfficeSet(pKingdom, roster);
+            if (occupied.Contains(pVacancy.OfficeId))
+                return CourtVacancyOutcome.Invalid;
+            bool committed = FillCentralOffice(pKingdom, roster, occupied,
+                pVacancy.OfficeId, CourtProfileRegistry.PreferredSchoolFor(
+                    pKingdom, pVacancy.OfficeId), null,
+                pSession.ReservedActorIds, pAllowActing: true,
+                new CandidateSelectionCache(), pVacancy.Layer);
+            return committed ? CourtVacancyOutcome.Filled :
+                CourtVacancyOutcome.NoCandidate;
+        }
+
         internal static string ResolveCityOffice(Kingdom pKingdom,
             City pCity)
         {

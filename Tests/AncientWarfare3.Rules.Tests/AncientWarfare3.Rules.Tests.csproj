@@ -133,6 +133,8 @@
     <Compile Include="DeJureSeatNameSyncSourceGuardTests.cs.txt" />
     <Compile Include="GlobalDeJureEmptyClickSourceGuardTests.cs.txt" />
     <Compile Include="CourtVacancyRulesTests.cs.txt" />
+    <Compile Include="CourtVacancySourceGuardTests.cs.txt" />
+    <Compile Include="CourtVacancySourceGuardTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CourtVacancyRules.cs" Link="Production\CourtVacancyRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtVacancyRegistry.cs" Link="Production\CourtVacancyRegistry.cs" />
     <Compile Include="CourtImmediateVacancyModeRulesTests.cs.txt" />

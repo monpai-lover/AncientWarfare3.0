@@ -1,0 +1,66 @@
+using System;
+using System.IO;
+
+internal static class CourtVacancySourceGuardTests
+{
+    internal static void Run()
+    {
+        string session = Read("Code/core/court/CourtCandidateSession.cs");
+        string court = Read("Code/core/court/CourtService.cs");
+        string local = Read(
+            "Code/core/court/LocalCourtAppointmentService.cs");
+
+        Contains(session, "OfficerCandidateCatalog.GetOrBuild",
+            "one reconciliation cycle must reuse the kingdom catalog");
+        Contains(session, "ReservedActorIds",
+            "candidate session must reserve appointed actors");
+        Contains(court, "TryFillRegisteredCentralVacancy",
+            "central court must expose a one-vacancy adapter");
+        Contains(court, "BuildActiveOfficerActorSetForKingdom",
+            "candidate reservation must be kingdom scoped");
+        Contains(local, "TryFillRegisteredLocalVacancy",
+            "local court must expose a one-vacancy adapter");
+        Contains(local, "DiscoverVacancies",
+            "local court must expose vacancy discovery");
+        Contains(local, "SelectCandidate(pSession.Actors",
+            "event filling must use the cycle snapshot");
+        False(MethodBody(local, "TryFillRegisteredLocalVacancy")
+                .Contains("CandidateScanState", StringComparison.Ordinal),
+            "event filling cannot use rotating candidate scans");
+    }
+
+    private static string MethodBody(string pText, string pMethodName)
+    {
+        int method = pText.IndexOf(pMethodName, StringComparison.Ordinal);
+        if (method < 0) return string.Empty;
+        int open = pText.IndexOf('{', method);
+        if (open < 0) return string.Empty;
+        int depth = 0;
+        for (int index = open; index < pText.Length; index++)
+        {
+            if (pText[index] == '{') depth++;
+            else if (pText[index] == '}' && --depth == 0)
+                return pText.Substring(open, index - open + 1);
+        }
+        return pText.Substring(open);
+    }
+
+    private static string Read(string pRelativePath)
+    {
+        return File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+            pRelativePath.Replace('/', Path.DirectorySeparatorChar)))
+            .Replace("\r\n", "\n");
+    }
+
+    private static void Contains(string pText, string pNeedle,
+        string pMessage)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage + ": " + pNeedle);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+}

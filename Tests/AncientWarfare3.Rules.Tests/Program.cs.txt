@@ -370,6 +370,7 @@ if (args.Length == 1 && args[0] == "--court-immediate-vacancies")
 if (args.Length == 1 && args[0] == "--court-vacancy-events")
 {
     CourtVacancyRulesTests.Run();
+    CourtVacancySourceGuardTests.Run();
     Console.WriteLine("Court vacancy event tests passed.");
     return;
 }
@@ -9344,5 +9345,6 @@ HistoricalSchoolXiaAccessSourceGuardTests.Run();
 WarRefugeeRulesTests.Run();
 CityShiInfluenceSourceGuardTests.Run();
 CourtVacancyRulesTests.Run();
+CourtVacancySourceGuardTests.Run();
 
 Console.WriteLine("Rule tests passed.");
