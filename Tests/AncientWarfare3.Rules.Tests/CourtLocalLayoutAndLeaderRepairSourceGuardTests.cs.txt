@@ -11,6 +11,7 @@ internal static class CourtLocalLayoutAndLeaderRepairSourceGuardTests
         string promotion = Read("Code/patch/AW_PromotionPatch.cs");
         string courtService = Read("Code/core/court/CourtService.cs");
         string localAppointments = Read("Code/core/court/LocalCourtAppointmentService.cs");
+        string readModel = Read("Code/core/court/CourtReadModelService.cs");
         string governorProjection = Read("Code/core/court/CityGovernorProjectionRepairService.cs");
         string csv = Read("Locales/aw3_court.csv");
         string chronicle = Read("Code/patch/AW_ChroniclePatch.cs");
@@ -40,6 +41,23 @@ internal static class CourtLocalLayoutAndLeaderRepairSourceGuardTests
         Contains(localAppointments,
             "LocalChiefOfficeResolver.ResolveOrderedSeats",
             "local reconciliation uses the same ordered seats as chief projection");
+        Contains(readModel,
+            "bool rootLeader = index == 0 && IsCurrentCityLeader(pCity,",
+            "the local root seat must recognize the live city leader");
+        Contains(readModel,
+            "bool valid = rootLeader || IsValid(actor, pKingdom);",
+            "the live city leader cannot be hidden by court-affiliation filtering");
+        Contains(readModel,
+            "Actor governor = seatCity?.leader;",
+            "central regional cards must read the current seat leader before cached ids");
+        False(readModel.Contains(
+                "pCity.leader.kingdom != pKingdom",
+                StringComparison.Ordinal),
+            "a live controlled city leader cannot be hidden by a stale actor kingdom pointer");
+        False(readModel.Contains(
+                "pActor.kingdom != pKingdom)",
+                StringComparison.Ordinal),
+            "a live regional seat leader cannot be hidden by a stale actor kingdom pointer");
         Contains(governorProjection,
             "CourtService.ResolveCityOffice(",
             "governor projection uses the shared chief office");

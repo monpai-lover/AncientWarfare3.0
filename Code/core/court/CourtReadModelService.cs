@@ -104,9 +104,12 @@ namespace AncientWarfare3.core.court
             int order = 0;
             foreach (RegionalGovernmentReadModel region in regions)
             {
-                Actor governor = World.world?.units?.get(
-                    region.GovernorActorId);
                 City seatCity = FindCity(pKingdom, region.EffectiveSeatCityId);
+                Actor governor = seatCity?.leader;
+                if (!IsCurrentRegionalGovernor(governor, pKingdom,
+                        seatCity) && region.GovernorActorId >= 0L)
+                    governor = World.world?.units?.get(
+                        region.GovernorActorId);
                 bool liveGovernor = IsCurrentRegionalGovernor(governor,
                     pKingdom, seatCity);
                 string nodeId = "regional-folder:" + pKingdom.id + ":" +
@@ -372,12 +375,14 @@ namespace AncientWarfare3.core.court
                 if (officer != null) remaining.Remove(officer);
                 Actor actor = officer == null ? null :
                     World.world?.units?.get(officer.actor_id);
-                if (index == 0 && IsCurrentCityLeader(pCity, pKingdom))
+                bool rootLeader = index == 0 && IsCurrentCityLeader(pCity,
+                    pKingdom);
+                if (rootLeader)
                 {
                     officer = null;
                     actor = pCity.leader;
                 }
-                bool valid = IsValid(actor, pKingdom);
+                bool valid = rootLeader || IsValid(actor, pKingdom);
                 int graphRank = ranks != null &&
                     ranks.TryGetValue(officeId, out int resolvedRank)
                     ? resolvedRank : index;
@@ -828,7 +833,7 @@ namespace AncientWarfare3.core.court
         {
             if (pActor?.data == null || pSeatCity?.data == null ||
                 pKingdom?.data == null || pSeatCity.kingdom != pKingdom ||
-                pActor.kingdom != pKingdom)
+                pSeatCity.leader != pActor)
                 return false;
             bool live;
             try { live = pActor.isAlive() && !pActor.isRekt(); }
@@ -842,8 +847,7 @@ namespace AncientWarfare3.core.court
             Kingdom pKingdom)
         {
             if (pCity?.data == null || pKingdom?.data == null ||
-                pCity.kingdom != pKingdom || pCity.leader?.data == null ||
-                pCity.leader.kingdom != pKingdom)
+                pCity.kingdom != pKingdom || pCity.leader?.data == null)
                 return false;
             bool live;
             try { live = pCity.leader.isAlive() && !pCity.leader.isRekt(); }
