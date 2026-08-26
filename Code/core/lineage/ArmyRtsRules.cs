@@ -501,6 +501,12 @@ namespace AncientWarfare3.core.lineage
             return routeSubmitted || routeArrived || transportActive;
         }
 
+        public static bool ShouldRetryStrategicRouteAfterPoll(
+            bool terminalResult, bool missionValid, bool retryCoolingDown)
+        {
+            return terminalResult && missionValid && !retryCoolingDown;
+        }
+
         public static bool ShouldLatchRetreatArrival(
             bool exactCityZone, bool borderCityZone)
         {

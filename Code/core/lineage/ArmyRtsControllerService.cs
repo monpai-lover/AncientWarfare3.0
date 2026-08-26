@@ -5586,16 +5586,8 @@ namespace AncientWarfare3.core.lineage
                 pRuntime.RouteArrived = false;
                 pRuntime.TransportRouteConfirmed = false;
                 pRuntime.ForceTransportRoute = false;
-                pRuntime.RouteFailureFingerprint = routeFingerprint;
-                pRuntime.RouteFailureCount = Math.Min(
-                    pRuntime.RouteFailureCount + 1, 10);
-                pRuntime.NextRouteAttemptAt =
-                    CurrentRealtime() +
-                    Math.Min(MaximumRouteRetryCooldownSeconds,
-                        InitialRouteRetryCooldownSeconds * Math.Pow(2d,
-                            Math.Max(0, pRuntime.RouteFailureCount - 1)));
-                pRuntime.LastRouteFailureReason =
-                    "transport_route_unavailable";
+                RegisterRouteFailure(pRuntime, routeFingerprint,
+                    "transport_route_unavailable");
                 LogStrategicRouteFailure(pArmy, pMission, pRuntime,
                     captain, strategicTarget, ArmyRoutePollKind.Failed,
                     "transport_route_unavailable");
@@ -5636,10 +5628,11 @@ namespace AncientWarfare3.core.lineage
             if (pMission.ProposalKind == ArmyRtsProposalKind.Attack)
                 TryIssueVanillaCityAttackOrder(pArmy, pMission,
                     targetCity);
+            RegisterRouteFailure(pRuntime, routeFingerprint,
+                handle.FailureReason);
             LogStrategicRouteFailure(pArmy, pMission, pRuntime,
                 captain, strategicTarget, ArmyRoutePollKind.Failed,
                 handle.FailureReason);
-            ResetRouteRetry(pRuntime);
         }
 
         private static void ProcessPendingStrategicRoute(Army pArmy,
@@ -5730,10 +5723,21 @@ namespace AncientWarfare3.core.lineage
                 if (pMission.ProposalKind == ArmyRtsProposalKind.Attack)
                     TryIssueVanillaCityAttackOrder(pArmy, pMission,
                         targetCity);
-                ArmyStallWatchdogService.OnRouteFailed(pArmy.id);
-                LogStrategicRouteFailure(pArmy, pMission, pRuntime,
-                    captain, target, poll.Kind, poll.FailureReason);
-                ResetRouteRetry(pRuntime);
+                bool terminal = poll.Kind == ArmyRoutePollKind.Failed ||
+                                poll.Kind == ArmyRoutePollKind.Cancelled;
+                if (ArmyRtsRules.ShouldRetryStrategicRouteAfterPoll(
+                        terminal, targetCity?.data != null,
+                        retryCoolingDown: false))
+                {
+                    string fingerprint = BuildRouteFailureFingerprint(
+                        pArmy, pMission, target,
+                        SafeSameIsland(captain?.current_tile, target));
+                    RegisterRouteFailure(pRuntime, fingerprint,
+                        poll.FailureReason);
+                    ArmyStallWatchdogService.OnRouteFailed(pArmy.id);
+                    LogStrategicRouteFailure(pArmy, pMission, pRuntime,
+                        captain, target, poll.Kind, poll.FailureReason);
+                }
             }
         }
 
@@ -5754,6 +5758,27 @@ namespace AncientWarfare3.core.lineage
             pRuntime.RouteFailureCount = 0;
             pRuntime.NextRouteAttemptAt = 0d;
             pRuntime.LastRouteFailureReason = string.Empty;
+            pRuntime.TransportAttemptActive = false;
+        }
+
+        private static void RegisterRouteFailure(RuntimeState pRuntime,
+            string pFingerprint, string pReason)
+        {
+            if (pRuntime == null) return;
+            string fingerprint = pFingerprint ?? string.Empty;
+            if (string.Equals(fingerprint,
+                    pRuntime.RouteFailureFingerprint,
+                    StringComparison.Ordinal))
+                pRuntime.RouteFailureCount = Math.Min(
+                    pRuntime.RouteFailureCount + 1, 10);
+            else
+                pRuntime.RouteFailureCount = 1;
+            pRuntime.RouteFailureFingerprint = fingerprint;
+            pRuntime.NextRouteAttemptAt = CurrentRealtime() +
+                Math.Min(MaximumRouteRetryCooldownSeconds,
+                    InitialRouteRetryCooldownSeconds * Math.Pow(2d,
+                        Math.Max(0, pRuntime.RouteFailureCount - 1)));
+            pRuntime.LastRouteFailureReason = pReason ?? string.Empty;
             pRuntime.TransportAttemptActive = false;
         }
 

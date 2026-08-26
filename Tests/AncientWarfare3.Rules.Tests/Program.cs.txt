@@ -77,6 +77,13 @@ if (args.Length == 1 && args[0] == "--court-history-localization")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--rts-authority-log-regression")
+{
+    RtsAuthorityLogRegressionTests.Run();
+    Console.WriteLine("RTS and authority log regression guards passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--local-court-county-map-fixes")
 {
     CountyZonePartitionRulesTests.Run();

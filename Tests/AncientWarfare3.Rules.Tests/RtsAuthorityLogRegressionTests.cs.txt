@@ -1,0 +1,41 @@
+using System;
+using System.IO;
+
+internal static class RtsAuthorityLogRegressionTests
+{
+    internal static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        string rules = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsRules.cs"));
+        string ledger = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "SyntheticMobilizationLedgerService.cs"));
+
+        Require(rules.Contains("ShouldRetryStrategicRouteAfterPoll(",
+                StringComparison.Ordinal),
+            "RTS poll failures must use a bounded retry rule");
+        Require(!controller.Contains(
+                "ArmyStallWatchdogService.OnRouteFailed(pArmy.id);\n                LogStrategicRouteFailure(pArmy, pMission, pRuntime,\n                    captain, target, poll.Kind, poll.FailureReason);\n                ResetRouteRetry(pRuntime);",
+                StringComparison.Ordinal),
+            "a failed strategic route must not clear its retry backoff");
+        Require(controller.Contains("RegisterRouteFailure(pRuntime, fingerprint",
+                StringComparison.Ordinal),
+            "route failures must retain a stable fingerprint");
+
+        Require(ledger.Contains("_loadRecordKeys", StringComparison.Ordinal),
+            "load reconciliation must use a stable record-key snapshot");
+        Require(!ledger.Contains("Records.GetEnumerator()",
+                StringComparison.Ordinal),
+            "load reconciliation must not retain a live dictionary enumerator");
+        Require(ledger.Contains("LoadRecordReconciliationBatchLimit",
+                StringComparison.Ordinal),
+            "load reconciliation must remain batch bounded");
+    }
+
+    private static void Require(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

@@ -158,8 +158,12 @@ namespace AncientWarfare3.core.lineage
         private static bool _loadActorReconciliationPending;
         private static int _loadActorReconciliationCursor;
         private static LoadReconciliationPhase _loadReconciliationPhase;
-        private static IEnumerator<KeyValuePair<string,
-            SyntheticMobilizationRecord>> _loadRecordEnumerator;
+        // Keep a stable key snapshot between authority slices. A live
+        // Dictionary enumerator becomes invalid when record enrollment or
+        // restoration mutates Records on a later slice.
+        private static readonly List<string> _loadRecordKeys =
+            new List<string>();
+        private static int _loadRecordKeyCursor;
         private static bool _warEnrollmentScanActive;
         private static bool _warEnrollmentScanRequested;
         private static int _warEnrollmentScanCursor;
@@ -560,17 +564,18 @@ namespace AncientWarfare3.core.lineage
         {
             int processed = 0;
             while (processed < LoadRecordReconciliationBatchLimit &&
-                   _loadRecordEnumerator != null &&
-                   _loadRecordEnumerator.MoveNext())
+                   _loadRecordKeyCursor < _loadRecordKeys.Count)
             {
-                SyntheticMobilizationRecord record =
-                    _loadRecordEnumerator.Current.Value;
-                record.ActorIds.Clear();
-                record.LiveSynthetic = 0;
+                string key = _loadRecordKeys[_loadRecordKeyCursor++];
+                if (Records.TryGetValue(key,
+                        out SyntheticMobilizationRecord record))
+                {
+                    record.ActorIds.Clear();
+                    record.LiveSynthetic = 0;
+                }
                 processed++;
             }
-            if (_loadRecordEnumerator != null && processed >=
-                LoadRecordReconciliationBatchLimit) return;
+            if (_loadRecordKeyCursor < _loadRecordKeys.Count) return;
             DisposeLoadRecordEnumerator();
             _loadReconciliationPhase = LoadReconciliationPhase.ScanActors;
         }
@@ -579,24 +584,22 @@ namespace AncientWarfare3.core.lineage
         {
             int processed = 0;
             while (processed < LoadRecordReconciliationBatchLimit &&
-                   _loadRecordEnumerator != null &&
-                   _loadRecordEnumerator.MoveNext())
+                   _loadRecordKeyCursor < _loadRecordKeys.Count)
             {
-                KeyValuePair<string, SyntheticMobilizationRecord> entry =
-                    _loadRecordEnumerator.Current;
-                SyntheticMobilizationRecord record = entry.Value;
-                if (record.Phase != SyntheticMobilizationPhase.Complete &&
+                string key = _loadRecordKeys[_loadRecordKeyCursor++];
+                if (Records.TryGetValue(key,
+                        out SyntheticMobilizationRecord record) &&
+                    record.Phase != SyntheticMobilizationPhase.Complete &&
                     !IsActiveParticipant(record.WarId,
                         ResolveKingdom(record.KingdomId)))
                 {
                     record.ReplacementRemaining = 0;
                     record.Phase = SyntheticMobilizationPhase.Demobilizing;
-                    EnqueueRecord(entry.Key);
+                    EnqueueRecord(key);
                 }
                 processed++;
             }
-            if (_loadRecordEnumerator != null && processed >=
-                LoadRecordReconciliationBatchLimit) return;
+            if (_loadRecordKeyCursor < _loadRecordKeys.Count) return;
             FinishLoadActorReconciliation();
         }
 
@@ -611,13 +614,14 @@ namespace AncientWarfare3.core.lineage
         private static void ResetLoadRecordEnumerator()
         {
             DisposeLoadRecordEnumerator();
-            _loadRecordEnumerator = Records.GetEnumerator();
+            _loadRecordKeys.AddRange(Records.Keys);
+            _loadRecordKeyCursor = 0;
         }
 
         private static void DisposeLoadRecordEnumerator()
         {
-            _loadRecordEnumerator?.Dispose();
-            _loadRecordEnumerator = null;
+            _loadRecordKeys.Clear();
+            _loadRecordKeyCursor = 0;
         }
 
         private static void ProcessOrphanSyntheticActors()
