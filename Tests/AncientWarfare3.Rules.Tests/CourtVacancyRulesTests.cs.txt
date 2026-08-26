@@ -1,0 +1,111 @@
+using AncientWarfare3.core.court;
+
+internal static class CourtVacancyRulesTests
+{
+    internal static void Run()
+    {
+        var central = new CourtVacancyKey(7L, -1L, -1L,
+            CourtOfficeLayer.Central, "minister");
+        var chief = new CourtVacancyKey(7L, 11L, -1L,
+            CourtOfficeLayer.City, "governor", pIsLocalChief: true);
+        var local = new CourtVacancyKey(7L, 11L, -1L,
+            CourtOfficeLayer.City, "clerk");
+        var countyA = new CourtVacancyKey(7L, 11L, 21L,
+            CourtOfficeLayer.County, CourtOfficeId.CountyMagistrate);
+        var countyB = new CourtVacancyKey(7L, 11L, 22L,
+            CourtOfficeLayer.County, CourtOfficeId.CountyMagistrate);
+
+        Equal(CourtVacancyPriority.Central,
+            CourtVacancyRules.Priority(central), "central priority");
+        Equal(CourtVacancyPriority.LocalChief,
+            CourtVacancyRules.Priority(chief), "local chief priority");
+        Equal(CourtVacancyPriority.LocalOffice,
+            CourtVacancyRules.Priority(local), "local office priority");
+        True(!countyA.Equals(countyB),
+            "county identity includes county id");
+        var countyPrior = new OfficialCareerPrior(7L, 11L,
+            CourtOfficeLayer.County, CourtOfficeId.CountyMagistrate, 21L);
+        Equal(21L, countyPrior.CountyId,
+            "released county office preserves county identity");
+        Equal(2, CourtVacancyRules.MissingSeats(3, 1),
+            "missing repeated seats");
+        Equal(0, CourtVacancyRules.MissingSeats(1, 3),
+            "occupied seats clamp missing count");
+        Equal(9, CourtVacancyRules.CascadeLimit(9),
+            "cascade is bounded by valid office count");
+        True(CourtVacancyRules.ShouldRetry(
+                CourtVacancyOutcome.TechnicalFailure, 0),
+            "first technical failure retries");
+        True(!CourtVacancyRules.ShouldRetry(
+                CourtVacancyOutcome.NoCandidate, 0),
+            "no-candidate outcome remains dormant");
+        True(!CourtVacancyRules.ShouldRetry(
+                CourtVacancyOutcome.TechnicalFailure, 1),
+            "second technical failure does not retry");
+
+        var state = new CourtVacancyRegistryState();
+        state.Upsert(local, 2);
+        state.Upsert(local, 2);
+        Equal(1, state.ForKingdom(7L).Count,
+            "duplicate vacancy events coalesce");
+        Equal(2, state.ForKingdom(7L)[0].MissingSeats,
+            "registry preserves repeated missing seats");
+        state.Upsert(local, 0);
+        Equal(0, state.ForKingdom(7L).Count,
+            "zero missing seats removes vacancy");
+        state.Upsert(countyA, 1);
+        state.Upsert(countyB, 1);
+        Equal(2, state.ForKingdom(7L).Count,
+            "county vacancies remain independently scoped");
+        state.RemoveCity(7L, 11L);
+        Equal(0, state.ForKingdom(7L).Count,
+            "city removal clears city and county vacancies");
+
+        var ordered = new[]
+        {
+            new CourtVacancyEntry(central, 1),
+            new CourtVacancyEntry(local, 1),
+            new CourtVacancyEntry(chief, 1)
+        };
+        var processed = new HashSet<CourtVacancyKey>();
+        CourtVacancyEntry? next = CourtVacancyCycleRules.Next(ordered,
+            processed, 0, 3);
+        Equal(central, next.Value.Key,
+            "central vacancy is selected before local vacancies");
+        processed.Add(central);
+        next = CourtVacancyCycleRules.Next(ordered, processed, 1, 3);
+        Equal(chief, next.Value.Key,
+            "local chief is selected before lower local office");
+        processed.Add(chief);
+        next = CourtVacancyCycleRules.Next(ordered, processed, 2, 3);
+        Equal(local, next.Value.Key,
+            "lower local office follows local chief");
+        processed.Add(local);
+        True(!CourtVacancyCycleRules.Next(ordered, processed, 3, 3).HasValue,
+            "cycle stops at valid-office bound");
+
+        var gate = new CourtVacancyRestoreGenerationGate();
+        int firstGeneration = gate.BeginGeneration();
+        True(gate.TryComplete(firstGeneration),
+            "first restore generation completes");
+        True(!gate.TryComplete(firstGeneration),
+            "same restore generation cannot complete twice");
+        int secondGeneration = gate.BeginGeneration();
+        True(secondGeneration != firstGeneration,
+            "new restore generation gets a new token");
+        True(gate.TryComplete(secondGeneration),
+            "second restore generation completes");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                ": expected " + pExpected + ", got " + pActual);
+    }
+}

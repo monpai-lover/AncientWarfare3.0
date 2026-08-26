@@ -174,7 +174,8 @@ namespace AncientWarfare3.patch
             CourtDirectionService.MarkDirty(__state?.kingdom);
             if (__instance?.data != null && __instance.kingdom?.data != null &&
                 !__instance.isRekt() && !__instance.isGettingCaptured())
-                CityLeaderVacancyRepairService.Request(__instance);
+                CourtVacancyReconciliationService.RegisterCityVacancies(
+                    __instance.kingdom, __instance);
         }
 
         private static void InvalidateRegionalGovernmentCache(City pCity,

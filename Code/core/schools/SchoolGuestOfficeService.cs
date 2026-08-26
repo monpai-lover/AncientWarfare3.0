@@ -15,8 +15,6 @@ namespace AncientWarfare3.core.schools
     /// </summary>
     internal static class SchoolGuestOfficeService
     {
-        private const int MaxAppointmentsPerHostPerYear = 4;
-        private const int MaxHostKingdomsPerYear = 96;
         private const int MaxHostCitiesPerYear = 128;
         private const int MaxGuestCandidatesPerHost = 192;
         private const int MaxServiceSweepPerYear = 512;
@@ -50,9 +48,20 @@ namespace AncientWarfare3.core.schools
             public long[] ServingActorIds { get; }
             public int ServiceStart { get; }
             public HistoricalSchoolBoundedWorkCursor ServiceCursor { get; }
-            public Kingdom[] Hosts { get; set; } = Array.Empty<Kingdom>();
-            public bool HostsLoaded { get; set; }
-            public int HostIndex { get; set; }
+        }
+
+        internal sealed class VacancyCandidateSession
+        {
+            internal VacancyCandidateSession(
+                List<GuestCandidateProfile> pCandidates,
+                HashSet<long> pAppointedActors)
+            {
+                Candidates = pCandidates ?? new List<GuestCandidateProfile>();
+                AppointedActors = pAppointedActors ?? new HashSet<long>();
+            }
+
+            internal List<GuestCandidateProfile> Candidates { get; }
+            internal HashSet<long> AppointedActors { get; }
         }
 
         public static void LoadState()
@@ -133,19 +142,7 @@ namespace AncientWarfare3.core.schools
                     return false;
                 }
 
-                if (!work.HostsLoaded)
-                {
-                    work.Hosts = HostKingdoms().ToArray();
-                    work.HostsLoaded = true;
-                }
-                if (work.HostIndex >= work.Hosts.Length)
-                    return FinishAnnualWork(work);
-
-                Kingdom host = work.Hosts[work.HostIndex++];
-                ProcessHostAppointments(host, pYear, pAllowActing: true);
-                return work.HostIndex >= work.Hosts.Length
-                    ? FinishAnnualWork(work)
-                    : false;
+                return FinishAnnualWork(work);
             }
             catch (Exception error)
             {
@@ -223,11 +220,47 @@ namespace AncientWarfare3.core.schools
             EndGuestOfficer(state.ActorId, actor, host, reason, pYear);
         }
 
-        internal static void FillVacanciesAfterCivilServiceExam(Kingdom pHost,
-            bool pAllowActing)
+        internal static VacancyCandidateSession CreateVacancyCandidateSession(
+            Kingdom pHost)
         {
-            if (pHost?.data == null || pHost.isRekt()) return;
-            ProcessHostAppointments(pHost, Date.getCurrentYear(), pAllowActing);
+            int year = Date.getCurrentYear();
+            return new VacancyCandidateSession(BuildCandidateIndex(pHost, year),
+                new HashSet<long>(Pending.Values.Where(p => p != null &&
+                        !p.PersistenceCleanFailure &&
+                        p.EndExpectedAffiliation == null &&
+                        p.HostKingdomId == (pHost?.id ?? -1L))
+                    .Select(p => p.ActorId)));
+        }
+
+        internal static CourtVacancyOutcome TryFillRegisteredVacancy(
+            Kingdom pHost, string pOfficeId,
+            VacancyCandidateSession pSession)
+        {
+            if (pHost?.data == null || pHost.isRekt() ||
+                string.IsNullOrEmpty(pOfficeId) || pSession == null)
+                return CourtVacancyOutcome.Invalid;
+            if (CourtService.GetActiveOfficers(pHost, 96).Any(row =>
+                    row != null && row.layer == CourtOfficeLayer.Central &&
+                    row.office_id == pOfficeId) ||
+                IsOfficeReserved(pHost.id, pOfficeId))
+                return CourtVacancyOutcome.Invalid;
+
+            int year = Date.getCurrentYear();
+            GuestCandidate candidate = SelectCandidate(pHost, pOfficeId, year,
+                pSession.Candidates, pSession.AppointedActors,
+                pAllowActing: true);
+            if (candidate == null) return CourtVacancyOutcome.NoCandidate;
+            City residence = HistoricalAffiliationService.ResidenceCity(
+                candidate.Actor);
+            int term = SchoolGuestOfficeRules.TermYears(
+                candidate.Actor.data.id, pHost.id, year);
+            GuestOfficeSubmissionOutcome submission = TryAppointAndRecord(
+                candidate.Actor, pHost, pOfficeId, residence, year, term,
+                "guest_service_started", candidate.IsActing);
+            if (!SchoolGuestOfficeRules.ReservesOffice(submission))
+                return CourtVacancyOutcome.TechnicalFailure;
+            pSession.AppointedActors.Add(candidate.Actor.data.id);
+            return CourtVacancyOutcome.Filled;
         }
 
         internal static bool IsOfficeReserved(long pHostKingdomId,
@@ -241,71 +274,6 @@ namespace AncientWarfare3.core.schools
                     pending.HostKingdomId == pHostKingdomId &&
                     pending.OfficeId == pOfficeId) return true;
             return false;
-        }
-
-        private static HashSet<string> PendingOfficeIds(long pHostKingdomId)
-        {
-            var result = new HashSet<string>(StringComparer.Ordinal);
-            foreach (PendingGuestOffice pending in Pending.Values)
-                if (pending != null && !pending.PersistenceCleanFailure &&
-                    pending.EndExpectedAffiliation == null &&
-                    pending.HostKingdomId == pHostKingdomId &&
-                    !string.IsNullOrEmpty(pending.OfficeId))
-                    result.Add(pending.OfficeId);
-            return result;
-        }
-
-        private static void ProcessHostAppointments(Kingdom pHost, int pYear,
-            bool pAllowActing)
-        {
-            if (pHost?.data == null || pHost.isRekt()) return;
-            if (CourtService.IsWesternElective(pHost))
-            {
-                WesternCourtElectionService.QueueKingdomVacancies(pHost);
-                return;
-            }
-            string[] offices =
-                CourtService.CentralOfficeIdsForCurrentProfile(pHost);
-            if (offices.Length == 0) return;
-            HashSet<string> occupied = new HashSet<string>(
-                CourtService.GetActiveOfficers(pHost, 96)
-                    .Where(p => !string.IsNullOrEmpty(p.office_id))
-                    .Select(p => p.office_id), StringComparer.Ordinal);
-            occupied.UnionWith(PendingOfficeIds(pHost.id));
-            int vacancyCount = 0;
-            for (int officeIndex = 0; officeIndex < offices.Length; officeIndex++)
-                if (!occupied.Contains(offices[officeIndex]))
-                    vacancyCount++;
-            int appointmentBudget = SchoolGuestOfficeRules.AppointmentBudgetForHost(
-                vacancyCount, MaxAppointmentsPerHostPerYear);
-            if (appointmentBudget <= 0) return;
-            List<GuestCandidateProfile> hostCandidates = BuildCandidateIndex(pHost,
-                pYear);
-            if (hostCandidates.Count == 0) return;
-            var appointedActors = new HashSet<long>(Pending.Values
-                .Where(p => p != null && !p.PersistenceCleanFailure &&
-                            p.EndExpectedAffiliation == null &&
-                            p.HostKingdomId == pHost.id)
-                .Select(p => p.ActorId));
-            foreach (string office in offices)
-            {
-                if (appointmentBudget <= 0) break;
-                if (occupied.Contains(office)) continue;
-                GuestCandidate candidate = SelectCandidate(pHost, office, pYear,
-                    hostCandidates, appointedActors, pAllowActing);
-                if (candidate == null) continue;
-                City residence = HistoricalAffiliationService.ResidenceCity(
-                    candidate.Actor);
-                int term = SchoolGuestOfficeRules.TermYears(candidate.Actor.data.id,
-                    pHost.id, pYear);
-                GuestOfficeSubmissionOutcome submission = TryAppointAndRecord(
-                    candidate.Actor, pHost, office, residence, pYear, term,
-                    "guest_service_started", candidate.IsActing);
-                if (!SchoolGuestOfficeRules.ReservesOffice(submission)) continue;
-                occupied.Add(office);
-                appointedActors.Add(candidate.Actor.data.id);
-                appointmentBudget--;
-            }
         }
 
         private static bool TryRenew(Actor pActor, Kingdom pHost,
@@ -1374,24 +1342,6 @@ namespace AncientWarfare3.core.schools
                    CourtAffiliationResolver.CanServe(pActor, pHost, layer);
         }
 
-        private static IEnumerable<Kingdom> HostKingdoms()
-        {
-            var result = new List<Kingdom>();
-            try
-            {
-                if (World.world?.kingdoms == null) return result;
-                foreach (Kingdom kingdom in World.world.kingdoms)
-                    if (kingdom?.data != null && !kingdom.isRekt() && !kingdom.isNeutral() &&
-                        (CourtService.HasOfficialCourt(kingdom) ||
-                         CourtService.HasPrimitiveCourt(kingdom))) result.Add(kingdom);
-            }
-            catch (Exception error)
-            {
-                ModClass.LogWarning("Historical school host scan failed: " + error.Message);
-            }
-            return result.OrderBy(p => p.id).Take(MaxHostKingdomsPerYear);
-        }
-
         private static Actor FindActor(long pId)
         {
             try { return pId >= 0 ? World.world?.units?.get(pId) : null; }
@@ -1620,7 +1570,7 @@ namespace AncientWarfare3.core.schools
             public bool IsActing { get; }
         }
 
-        private sealed class GuestCandidateProfile
+        internal sealed class GuestCandidateProfile
         {
             public GuestCandidateProfile(Actor pActor,
                 HistoricalSchoolAffiliationSnapshot pState,

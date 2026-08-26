@@ -10,8 +10,6 @@ internal static class ManualLocalChiefAppointmentSourceGuardTests
             "Code/core/court/ManualLocalChiefAppointmentService.cs");
         string window = Read("Code/ui/windows/CourtAppointmentWindow.cs");
         string leader = Read("Code/patch/AW_CityLeaderPatch.cs");
-        string vacancy = Read(
-            "Code/core/court/CityLeaderVacancyRepairService.cs");
         string local = Read(
             "Code/core/court/LocalCourtAppointmentService.cs");
 
@@ -28,14 +26,14 @@ internal static class ManualLocalChiefAppointmentSourceGuardTests
         Contains(service,
             "CityGovernorPlacementService.OnCommittedAssignment");
         Contains(service,
-            "CityBureauAnnualWorkService.RequestImmediateReconcile");
+            "CourtVacancyReconciliationService.RegisterCityVacancies");
         DoesNotContain(window, ".setLeader(");
-        Contains(leader, "LocalCourtAppointmentService.ReconcileCity");
+        Contains(leader,
+            "CourtVacancyReconciliationService.RegisterCityVacancies");
         DoesNotContain(leader, "pCity.getUnits()");
-        Contains(vacancy, "AW_CityLeaderPatch");
-        DoesNotContain(vacancy, "PickLocalOfficer");
-        Contains(local, "TryRepairCityLeader");
-        Contains(local, "LoadAllCandidates(pKingdom, pCity,");
+        DoesNotContain(local, "CandidateScanState");
+        DoesNotContain(local, "LoadAllCandidates(");
+        Contains(local, "TryFillRegisteredLocalVacancy");
     }
 
     private static string Read(string pPath) => File.ReadAllText(

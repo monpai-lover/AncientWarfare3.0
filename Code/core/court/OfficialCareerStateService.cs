@@ -707,6 +707,7 @@ namespace AncientWarfare3.core.court
 
             if (!CommitAnnualMutations(mutations)) return;
             bool influenceChanged = false;
+            bool eligibilityChanged = false;
             foreach (AnnualMutation mutation in mutations)
             {
                 ProjectHotState(mutation.Actor, mutation.Rank, mutation.State.Track,
@@ -718,6 +719,8 @@ namespace AncientWarfare3.core.court
                     mutation.LocalGradeReviewYear);
                 influenceChanged |= mutation.Rank != mutation.PreviousRank ||
                                     Math.Abs(mutation.Merit - mutation.State.Merit) > 0.0001f;
+                eligibilityChanged |= mutation.Rank != mutation.PreviousRank ||
+                                     mutation.LocalGrade != mutation.State.LocalGrade;
                 if (mutation.Evaluated)
                     RecordEvaluation(pKingdom, mutation);
                 else if (OfficialCareerBiographyRules.ShouldRecordRankAdvance(
@@ -730,6 +733,9 @@ namespace AncientWarfare3.core.court
             if (rotationPlan?.Count > 0)
                 ProcessDueGovernorRotations(pKingdom, rotationPlan, year);
             if (influenceChanged) CourtDirectionService.MarkDirty(pKingdom);
+            if (eligibilityChanged)
+                CourtVacancyReconciliationService.CandidatePoolChanged(
+                    pKingdom);
             pKingdom.data.set(LineageKeys.OFFICIAL_CAREER_LAST_YEAR, year);
         }
 

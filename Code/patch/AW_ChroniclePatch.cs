@@ -106,6 +106,8 @@ namespace AncientWarfare3.patch
             ArmyRetreatService.OnKingdomDestroying(pKingdom);
             CivilServiceExamService.OnKingdomDestroying(pKingdom);
             CourtService.OnKingdomDestroying(pKingdom);
+            CourtVacancyReconciliationService.KingdomDestroyed(
+                pKingdom?.id ?? -1L);
             FormerHeirService.ArchiveAndClear(pKingdom);
             ChronicleEvents.OnKingdomDestroyed(pKingdom);
             return true;
@@ -171,6 +173,8 @@ namespace AncientWarfare3.patch
                 __state?.id ?? -1L,
                 (__instance?.kingdom ?? pKingdom)?.id ?? -1L);
             CitySchoolSnapshotService.MarkDirty(__instance);
+            CourtVacancyReconciliationService.CityChangedKingdom(
+                __instance, __state, __instance?.kingdom ?? pKingdom);
             HierarchicalVassalMapModeService.MarkCityOwnershipChanged(
                 __instance, __state, __instance?.kingdom ?? pKingdom);
         }
@@ -215,6 +219,9 @@ namespace AncientWarfare3.patch
         public static void DestroyCity_Postfix(City __instance,
             Kingdom __state)
         {
+            if (__instance?.data != null && __state?.data != null)
+                CourtVacancyRegistry.RemoveCity(__state.id,
+                    __instance.data.id);
             HierarchicalVassalMapModeService.RemoveCity(__instance, __state);
         }
 
