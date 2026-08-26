@@ -73,8 +73,6 @@ namespace AncientWarfare3.core.lineage
                         snapshot?.PrinceActorId ?? -1L));
             }
             catch { }
-            foreach (long holderId in ActiveMaleTitleHolders)
-                RequestContinuation(ResolveActor(holderId));
         }
 
         public static void OnTitleProjectionChanged(Actor pHolder)
@@ -111,9 +109,15 @@ namespace AncientWarfare3.core.lineage
         public static void OnActorLoaded(Actor pActor)
         {
             if (pActor?.data == null) return;
-            if (!IsHereditaryHolder(pActor) || !SafeIsAlive(pActor)) return;
-            ActiveMaleTitleHolders.Add(pActor.data.id);
-            EnqueueHolder(pActor.data.id);
+            if (IsHereditaryHolder(pActor) && SafeIsAlive(pActor))
+            {
+                ActiveMaleTitleHolders.Add(pActor.data.id);
+                EnqueueHolder(pActor.data.id);
+            }
+            if (!pActor.isSexMale()) return;
+            QueueParentHolder(pActor.data.parent_id_1);
+            if (pActor.data.parent_id_2 != pActor.data.parent_id_1)
+                QueueParentHolder(pActor.data.parent_id_2);
         }
 
         public static void ProcessAuthorityCycle()
