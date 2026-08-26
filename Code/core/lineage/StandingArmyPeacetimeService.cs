@@ -25,8 +25,6 @@ namespace AncientWarfare3.core.lineage
 
         private const string PatrolCursorKey =
             "aw_standing_army_peacetime_patrol_cursor";
-        private const string ReproductionFirstObservedYearKey =
-            "aw_reproduction_task_first_observed_year";
         private const int MaxTileChecks = 16;
         private const int MaxActorsPerWorkItem = 16;
         private const double BoundaryRefreshRetrySeconds = 8d;
@@ -303,63 +301,6 @@ namespace AncientWarfare3.core.lineage
             if (!AssetManager.job_actor.has(jobId)) return;
             try { pActor.ai.setJob(jobId); }
             catch { }
-        }
-
-        private static bool HandleActiveReproduction(Actor pActor,
-            bool pObserveTimeout, string pTaskId)
-        {
-            int currentYear = SafeYear();
-            pActor.data.get(ReproductionFirstObservedYearKey,
-                out int firstObservedYear, -1);
-            if (firstObservedYear < 0 || firstObservedYear > currentYear)
-            {
-                firstObservedYear = currentYear;
-                pActor.data.set(ReproductionFirstObservedYearKey,
-                    currentYear);
-            }
-
-            if (DynasticReproductionRules
-                .ShouldPreservePeacetimeReproduction(
-                    pObserveTimeout, pTaskId,
-                    firstObservedYear, currentYear)) return true;
-
-            ClearReproductionObservation(pActor);
-            if (DynasticReproductionRules
-                .ShouldRecoverStuckReproduction(
-                    pObserveTimeout, pTaskId,
-                    firstObservedYear, currentYear))
-            {
-                ResetReproductionActor(pActor.lover);
-                ResetReproductionActor(pActor);
-            }
-            return false;
-        }
-
-        private static void ResetReproductionActor(Actor pActor)
-        {
-            if (pActor?.data == null || pActor.ai == null ||
-                !DynasticReproductionRules.IsSexualReproductionTask(
-                    pActor.ai.task?.id)) return;
-            ClearReproductionObservation(pActor);
-            pActor.cancelAllBeh();
-            try { pActor.ai.setJob(Actor.nextJobActor(pActor)); }
-            catch { pActor.ai.clearJob(); }
-        }
-
-        private static void ClearReproductionObservation(Actor pActor)
-        {
-            if (pActor?.data == null) return;
-            pActor.data.get(ReproductionFirstObservedYearKey,
-                out int firstObservedYear, -1);
-            if (!DynasticReproductionRules.ShouldClearReproductionObservation(
-                    firstObservedYear)) return;
-            pActor.data.set(ReproductionFirstObservedYearKey, -1);
-        }
-
-        private static int SafeYear()
-        {
-            try { return Math.Max(0, Date.getCurrentYear()); }
-            catch { return 0; }
         }
 
         public static void RestoreMilitaryJob(Actor pActor)

@@ -6,22 +6,22 @@ internal static class ActorAgeWorkRulesTests
     {
         Equal(false, ActorAgeWorkRules.ShouldTrack(
                 wasTracked: false, dirty: false, dynasticEligible: false,
-                warrior: false, reproductionRecoveryActive: false),
+                warrior: false),
             "ordinary civilians do not enter AW3 annual Actor tracking");
         Equal(true, ActorAgeWorkRules.ShouldTrack(
                 wasTracked: false, dirty: false, dynasticEligible: true,
-                warrior: false, reproductionRecoveryActive: false),
+                warrior: false),
             "dynastic civilians remain eligible for annual work");
         Equal(true, ActorAgeWorkRules.ShouldTrack(
                 wasTracked: true, dirty: false, dynasticEligible: false,
-                warrior: false, reproductionRecoveryActive: false),
+                warrior: false),
             "previously tracked Actors receive one cleanup transition");
 
         var same = new ActorAgeWorkState(isAdult: true, profession: 2,
             inPermanentArmy: true, atWar: true, dynasticEligible: false,
             shouldUsePeacetimeJob: false,
             shouldReleaseMilitaryRole: false,
-            needsAnnualReproductionRecovery: false, yearBucket: 12);
+            yearBucket: 12);
         Equal(ActorAgeWorkStage.None,
             ActorAgeWorkRules.Resolve(same, same, force: false),
             "unchanged Actor state performs no AW3 age work");
@@ -30,12 +30,12 @@ internal static class ActorAgeWorkRulesTests
             inPermanentArmy: false, atWar: false, dynasticEligible: true,
             shouldUsePeacetimeJob: false,
             shouldReleaseMilitaryRole: false,
-            needsAnnualReproductionRecovery: false, yearBucket: 12);
+            yearBucket: 12);
         var adult = new ActorAgeWorkState(isAdult: true, profession: 2,
             inPermanentArmy: false, atWar: false, dynasticEligible: true,
             shouldUsePeacetimeJob: false,
             shouldReleaseMilitaryRole: false,
-            needsAnnualReproductionRecovery: false, yearBucket: 12);
+            yearBucket: 12);
         Has(ActorAgeWorkRules.Resolve(child, adult, force: false),
             ActorAgeWorkStage.DynasticTitle,
             "adulthood triggers dynastic-title work");
@@ -44,7 +44,7 @@ internal static class ActorAgeWorkRulesTests
             profession: 2, inPermanentArmy: true, atWar: false,
             dynasticEligible: false, shouldUsePeacetimeJob: true,
             shouldReleaseMilitaryRole: false,
-            needsAnnualReproductionRecovery: false, yearBucket: 12);
+            yearBucket: 12);
         Has(ActorAgeWorkRules.Resolve(same, jobChanged, force: false),
             ActorAgeWorkStage.StandingArmyJob,
             "peacetime job decision changes trigger job refresh");
@@ -53,7 +53,7 @@ internal static class ActorAgeWorkRulesTests
             profession: 2, inPermanentArmy: false, atWar: false,
             dynasticEligible: true, shouldUsePeacetimeJob: false,
             shouldReleaseMilitaryRole: true,
-            needsAnnualReproductionRecovery: false, yearBucket: 12);
+            yearBucket: 12);
         Has(ActorAgeWorkRules.Resolve(adult, releaseChanged, force: false),
             ActorAgeWorkStage.MilitaryRoleRelease,
             "reproduction protection changes trigger military release");
@@ -62,32 +62,22 @@ internal static class ActorAgeWorkRulesTests
             inPermanentArmy: true, atWar: true, dynasticEligible: false,
             shouldUsePeacetimeJob: false,
             shouldReleaseMilitaryRole: false,
-            needsAnnualReproductionRecovery: false, yearBucket: 13);
+            yearBucket: 13);
         ActorAgeWorkStage annual = ActorAgeWorkRules.Resolve(same, nextYear,
             force: false);
         Equal(ActorAgeWorkStage.None, annual,
             "ordinary year rollover performs no AW3 age work");
 
-        var reproductionRecovery = new ActorAgeWorkState(isAdult: true,
-            profession: 2, inPermanentArmy: true, atWar: false,
-            dynasticEligible: false, shouldUsePeacetimeJob: true,
-            shouldReleaseMilitaryRole: false,
-            needsAnnualReproductionRecovery: true, yearBucket: 13);
-        Equal(ActorAgeWorkStage.StandingArmyJob,
-            ActorAgeWorkRules.Resolve(jobChanged, reproductionRecovery,
-                force: false),
-            "annual fallback checks only active reproduction recovery");
-
         var releasePreviousYear = new ActorAgeWorkState(isAdult: true,
             profession: 2, inPermanentArmy: false, atWar: false,
             dynasticEligible: false, shouldUsePeacetimeJob: false,
             shouldReleaseMilitaryRole: true,
-            needsAnnualReproductionRecovery: false, yearBucket: 12);
+            yearBucket: 12);
         var releaseNextYear = new ActorAgeWorkState(isAdult: true,
             profession: 2, inPermanentArmy: false, atWar: false,
             dynasticEligible: false, shouldUsePeacetimeJob: false,
             shouldReleaseMilitaryRole: true,
-            needsAnnualReproductionRecovery: false, yearBucket: 13);
+            yearBucket: 13);
         Equal(ActorAgeWorkStage.MilitaryRoleRelease,
             ActorAgeWorkRules.Resolve(releasePreviousYear, releaseNextYear,
                 force: false),
@@ -97,7 +87,7 @@ internal static class ActorAgeWorkRulesTests
             profession: 2, inPermanentArmy: false, atWar: false,
             dynasticEligible: true, shouldUsePeacetimeJob: false,
             shouldReleaseMilitaryRole: false,
-            needsAnnualReproductionRecovery: false, yearBucket: 13);
+            yearBucket: 13);
         Equal(ActorAgeWorkStage.DynasticTitle,
             ActorAgeWorkRules.Resolve(adult, dynasticNextYear,
                 force: false),
@@ -107,7 +97,7 @@ internal static class ActorAgeWorkRulesTests
             inPermanentArmy: false, atWar: false,
             dynasticEligible: false, shouldUsePeacetimeJob: false,
             shouldReleaseMilitaryRole: false,
-            needsAnnualReproductionRecovery: false, yearBucket: 12);
+            yearBucket: 12);
         Equal(ActorAgeWorkStage.None,
             ActorAgeWorkRules.Resolve(ordinary, ordinary, force: true),
             "forced refresh skips unrelated ordinary Actors");
@@ -116,7 +106,7 @@ internal static class ActorAgeWorkRulesTests
             inPermanentArmy: true, atWar: false, dynasticEligible: true,
             shouldUsePeacetimeJob: true,
             shouldReleaseMilitaryRole: true,
-            needsAnnualReproductionRecovery: true, yearBucket: 12);
+            yearBucket: 12);
         Equal(ActorAgeWorkStage.All,
             ActorAgeWorkRules.Resolve(relevant, relevant, force: true),
             "forced refresh selects every currently relevant age stage");

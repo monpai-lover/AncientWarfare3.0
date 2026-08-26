@@ -180,6 +180,11 @@ internal static class WarArmyReturnRulesTests
         True(peacetime.Contains("WarArmyReturnService.IsActive(army)",
                 StringComparison.Ordinal),
             "standing-army peacetime jobs must yield to active return intent");
+        False(peacetime.Contains("HandleActiveReproduction(",
+                StringComparison.Ordinal) ||
+              peacetime.Contains("ReproductionFirstObservedYearKey",
+                StringComparison.Ordinal),
+            "unused reproduction recovery cannot remain in the annual actor path");
         string peacetimeContent = File.ReadAllText(Path.Combine(root,
             "Code", "content", "StandingArmyPeacetimeContent.cs"));
         string peacetimeBehaviour = File.ReadAllText(Path.Combine(root,
@@ -296,7 +301,7 @@ internal static class WarArmyReturnRulesTests
             "return arrival requires the friendly safe city and its bounded center radius");
         string peacetimeRefresh = Section(peacetime,
             "public static void RefreshJob(Actor pActor)",
-            "private static bool HandleActiveReproduction(");
+            "public static void RestoreMilitaryJob(Actor pActor)");
         True(peacetimeRefresh.Contains(
                  "ReleaseLegacyPeacetimePatrol(pActor,",
                  StringComparison.Ordinal) &&
