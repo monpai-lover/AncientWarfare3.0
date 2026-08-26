@@ -154,11 +154,27 @@ namespace AncientWarfare3.core.court
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (string raw in pParts ?? Array.Empty<string>())
             {
-                string part = CanonicalOfficeLabel((raw ?? "").Trim());
+                string candidate = (raw ?? "").Trim();
+                if (IsPresentationOnlyOfficeId(candidate)) continue;
+                string part = CanonicalOfficeLabel(candidate);
                 if (part.Length == 0 || !seen.Add(part)) continue;
                 parts.Add(part);
             }
             return string.Join(" · ", parts.ToArray());
+        }
+
+        public static bool IsPresentationOnlyOfficeId(string pOfficeId)
+        {
+            return (pOfficeId ?? "").Trim().StartsWith(
+                "regional-folder:", StringComparison.Ordinal);
+        }
+
+        public static string ResolveVisibleOfficeTitle(string pOfficeId,
+            string pDisplayTitle, string pResolvedOfficeName)
+        {
+            return IsPresentationOnlyOfficeId(pOfficeId)
+                ? (pDisplayTitle ?? "").Trim()
+                : (pResolvedOfficeName ?? "").Trim();
         }
 
         private static string CanonicalOfficeLabel(string pLabel)

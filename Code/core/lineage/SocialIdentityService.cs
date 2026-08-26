@@ -41,7 +41,8 @@ namespace AncientWarfare3.core.lineage
                 if (pActor.hasTrait(LineageKeys.TRAIT_SHIDAFU))
                     pActor.removeTrait(LineageKeys.TRAIT_SHIDAFU);
                 if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
-                    pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+                    pActor.addTrait(LineageKeys.TRAIT_GUIZU,
+                        pRemoveOpposites: true);
                 pActor.data.set(LineageKeys.SOCIAL_IDENTITY, NobleValue);
             }
             else if (pIdentity == SocialIdentityClass.ScholarOfficial)
@@ -49,7 +50,8 @@ namespace AncientWarfare3.core.lineage
                 if (pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
                     pActor.removeTrait(LineageKeys.TRAIT_GUIZU);
                 if (!pActor.hasTrait(LineageKeys.TRAIT_SHIDAFU))
-                    pActor.addTrait(LineageKeys.TRAIT_SHIDAFU);
+                    pActor.addTrait(LineageKeys.TRAIT_SHIDAFU,
+                        pRemoveOpposites: true);
                 pActor.data.set(LineageKeys.SOCIAL_IDENTITY,
                     ScholarOfficialValue);
             }

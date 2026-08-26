@@ -570,9 +570,11 @@ namespace AncientWarfare3.ui.items
             string namedRank = OfficialNamedRankName(pNode.OfficialTrack,
                 pNode.OfficialRank);
             string grade = OfficialRankName(pNode.OfficialRank);
-            string office = string.IsNullOrEmpty(pNode.OfficeId)
+            string resolvedOffice = string.IsNullOrEmpty(pNode.OfficeId)
                 ? ""
                 : OfficeName(pKingdom, pNode.OfficeId);
+            string office = OfficialCareerRankRules.ResolveVisibleOfficeTitle(
+                pNode.OfficeId, pNode.DisplayTitle, resolvedOffice);
             if (pNode.OfficeId == CourtOfficeId.Governor &&
                 !string.IsNullOrEmpty(pNode.CityName))
                 office = pNode.CityName + " " + office;

@@ -131,7 +131,8 @@ namespace AncientWarfare3.core.lineage
                     pTarget.data.set(LineageKeys.LINEAGE_STATUS,
                         LineageStatus.NOBLE);
                     if (!pTarget.hasTrait(LineageKeys.TRAIT_GUIZU))
-                        pTarget.addTrait(LineageKeys.TRAIT_GUIZU);
+                        pTarget.addTrait(LineageKeys.TRAIT_GUIZU,
+                            pRemoveOpposites: true);
                 }
                 Invalidate(pKingdom.id, pTarget.data.id);
                 pSnapshot = new VirtualNobleTitleSnapshot(titleId,

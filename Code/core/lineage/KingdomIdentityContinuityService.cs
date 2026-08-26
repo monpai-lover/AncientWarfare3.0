@@ -364,7 +364,8 @@ namespace AncientWarfare3.core.lineage
             pClaimant.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pClaimant.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             if (!pClaimant.hasTrait(LineageKeys.TRAIT_GUIZU))
-                pClaimant.addTrait(LineageKeys.TRAIT_GUIZU);
+                pClaimant.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
         }
 
         private static void ApplyIdentity(Kingdom pKingdom, City pCapital, Actor pClaimant,

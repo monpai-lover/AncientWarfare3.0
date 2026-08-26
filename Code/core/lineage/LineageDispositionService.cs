@@ -48,7 +48,8 @@ namespace AncientWarfare3.core.lineage
                 actor.data.set(LineageKeys.LINEAGE_STATUS,
                     LineageStatus.NOBLE);
                 if (!actor.hasTrait(LineageKeys.TRAIT_GUIZU))
-                    actor.addTrait(LineageKeys.TRAIT_GUIZU);
+                    actor.addTrait(LineageKeys.TRAIT_GUIZU,
+                        pRemoveOpposites: true);
                 if (actor.clan != pRuler.clan) actor.setClan(pRuler.clan);
                 LineageService.ArchiveActor(actor, pAlive: true);
                 CityShiInfluenceSnapshotService.MarkActorDirty(actor);

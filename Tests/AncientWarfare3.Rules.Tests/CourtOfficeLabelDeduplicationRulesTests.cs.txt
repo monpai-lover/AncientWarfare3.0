@@ -13,6 +13,15 @@ internal static class CourtOfficeLabelDeduplicationRulesTests
         Equal("中散大夫 · 郡守",
             OfficialCareerRankRules.ComposeJointTitle("中散大夫", "郡守"),
             "different scattered rank and substantive office stay visible");
+        Equal("\u4E2D\u6563\u5927\u592B",
+            OfficialCareerRankRules.ComposeJointTitle("\u4E2D\u6563\u5927\u592B",
+                "regional-folder:6:20"),
+            "presentation-only regional folder ids never enter visible titles");
+        Equal("\u5DDE\u7267",
+            OfficialCareerRankRules.ResolveVisibleOfficeTitle(
+                "regional-folder:6:20", "\u5DDE\u7267",
+                "regional-folder:6:20"),
+            "regional governor titles use their display title");
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pMessage)

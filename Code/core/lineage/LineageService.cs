@@ -869,7 +869,9 @@ namespace AncientWarfare3.core.lineage
             // 本人即贵族:距离归零、加 guizu、状态 noble。
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
-            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pActor.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             ApplyDisplayName(pActor);
             if (IsKingdomIntegrated(pActor.kingdom))
@@ -985,7 +987,8 @@ namespace AncientWarfare3.core.lineage
             pHeir.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pHeir.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             if (!pHeir.hasTrait(LineageKeys.TRAIT_GUIZU))
-                pHeir.addTrait(LineageKeys.TRAIT_GUIZU);
+                pHeir.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
             ApplyDisplayName(pHeir);
             FamilyTreeProjectionPendingStore.IncludePrerequisite(
                 pHeir.data.id,
@@ -1275,7 +1278,9 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
-            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pActor.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             ApplyDisplayName(pActor);
             RenameClanByLeader(pActor.clan, pActor);
@@ -1371,7 +1376,9 @@ namespace AncientWarfare3.core.lineage
             // 无论是否分封,城主本人都是当代贵族:距离归零、加 guizu。
             pChild.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pChild.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
-            if (!pChild.hasTrait(LineageKeys.TRAIT_GUIZU)) pChild.addTrait(LineageKeys.TRAIT_GUIZU);
+            if (!pChild.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pChild.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             ApplyDisplayName(pChild);
             if (branchCreated)
@@ -1454,7 +1461,8 @@ namespace AncientWarfare3.core.lineage
             pPrince.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pPrince.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             if (!pPrince.hasTrait(LineageKeys.TRAIT_GUIZU))
-                pPrince.addTrait(LineageKeys.TRAIT_GUIZU);
+                pPrince.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
             RepairFeudatoryBranchDescendants(pPrince, lineageId, currentShiId,
                 newShiId, clanName);
             return newShiId;
@@ -1604,7 +1612,9 @@ namespace AncientWarfare3.core.lineage
             pKing.data.set(LineageKeys.CLAN_NAME, seed.ClanName);
             pKing.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pKing.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
-            if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU)) pKing.addTrait(LineageKeys.TRAIT_GUIZU);
+            if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pKing.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             pKing.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, newShiId);
 
@@ -1680,7 +1690,8 @@ namespace AncientWarfare3.core.lineage
             pKing.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             pKing.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, newShiId);
             if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU))
-                pKing.addTrait(LineageKeys.TRAIT_GUIZU);
+                pKing.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             try { World.world.clans.newClan(pKing, pAddDefaultTraits: true); }
             catch { }
@@ -1733,7 +1744,9 @@ namespace AncientWarfare3.core.lineage
             pKing.data.set(LineageKeys.RESTORED_SHI_ID, legitimateShi);
             pKing.data.set(LineageKeys.COLLATERAL_NONAGNATIC, false);
             pKingdom.data.set(LineageKeys.KINGDOM_RESTORED_SHI_ID, legitimateShi);
-            if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU)) pKing.addTrait(LineageKeys.TRAIT_GUIZU);
+            if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pKing.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             ApplyDisplayName(pKing);
             ArchiveActor(pKing, pAlive: true);
@@ -2377,7 +2390,9 @@ namespace AncientWarfare3.core.lineage
             }
             else
             {
-                if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+                if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
+                    pActor.addTrait(LineageKeys.TRAIT_GUIZU,
+                        pRemoveOpposites: true);
                 pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             }
 

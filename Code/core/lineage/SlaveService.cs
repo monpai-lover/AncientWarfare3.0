@@ -518,7 +518,8 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
-                pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+                pActor.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
             pActor.beh_actor_target = null;
             pActor.clearAttackTarget();
             UpsertSlaveState(pActor, pActive: false, pActor.city,
@@ -1146,7 +1147,9 @@ namespace AncientWarfare3.core.lineage
 
             pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
-            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pActor.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             string color = HistoryColors.FromKingdom(pKingdom ?? pActor.kingdom);
             pActor.data.set(LineageKeys.CAPTIVE_NOBLE_TITLE,
