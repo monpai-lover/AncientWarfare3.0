@@ -23,6 +23,10 @@ internal static class CourtVacancyRulesTests
             CourtVacancyRules.Priority(local), "local office priority");
         True(!countyA.Equals(countyB),
             "county identity includes county id");
+        var countyPrior = new OfficialCareerPrior(7L, 11L,
+            CourtOfficeLayer.County, CourtOfficeId.CountyMagistrate, 21L);
+        Equal(21L, countyPrior.CountyId,
+            "released county office preserves county identity");
         Equal(2, CourtVacancyRules.MissingSeats(3, 1),
             "missing repeated seats");
         Equal(0, CourtVacancyRules.MissingSeats(1, 3),

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.core.schools;
 
 namespace AncientWarfare3.core.court
 {
@@ -7,6 +8,8 @@ namespace AncientWarfare3.core.court
     {
         internal readonly IReadOnlyList<Actor> Actors;
         internal readonly HashSet<long> ReservedActorIds;
+        private SchoolGuestOfficeService.VacancyCandidateSession
+            _guestCandidates;
 
         internal CourtCandidateSession(Kingdom pKingdom)
         {
@@ -29,6 +32,13 @@ namespace AncientWarfare3.core.court
             if (pActor?.data != null &&
                 !CourtService.IsExplicitConcurrentOffice(pActor, pVacancy))
                 ReservedActorIds.Add(pActor.data.id);
+        }
+
+        internal SchoolGuestOfficeService.VacancyCandidateSession
+            GuestCandidates(Kingdom pKingdom)
+        {
+            return _guestCandidates ??= SchoolGuestOfficeService.
+                CreateVacancyCandidateSession(pKingdom);
         }
     }
 }

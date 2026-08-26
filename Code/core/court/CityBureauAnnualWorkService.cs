@@ -45,47 +45,6 @@ namespace AncientWarfare3.core.court
             Enqueue(pKingdom.id);
         }
 
-        internal static void RequestImmediateReconcile(Kingdom pKingdom,
-            long pCityId)
-        {
-            if (pKingdom?.data == null || pKingdom.isRekt() ||
-                pCityId < 0L || !CourtService.HasOfficialCourt(pKingdom))
-                return;
-            // The deferred callback may run after the Kingdom object has
-            // been replaced or torn down. Capture its stable id now instead
-            // of dereferencing the mutable object inside the closure.
-            long kingdomId = pKingdom.id;
-            string key = "city-bureau-vacancy:" + kingdomId + ":" +
-                         pCityId;
-            DeferredRuntimeWorkService.EnqueueCoalesced(key,
-                DeferredWorkClass.Persistent,
-                () => ProcessImmediate(kingdomId, pCityId, 0));
-        }
-
-        private static void ProcessImmediate(long pKingdomId, long pCityId,
-            int pAttempt)
-        {
-            Kingdom kingdom = ResolveKingdom(pKingdomId);
-            City city = ResolveCity(pCityId);
-            if (kingdom?.data == null || city?.data == null ||
-                kingdom.isRekt() || city.isRekt() || city.kingdom != kingdom)
-                return;
-            bool hasVacancy;
-            bool completed = ProcessCity(kingdom, city, 0f,
-                Date.getCurrentYear(), out hasVacancy);
-            if (completed)
-            {
-                return;
-            }
-            if (!CityBureauRetryRules.ShouldRetry(completed, pAttempt,
-                    MaximumWriteAttempts)) return;
-            string key = "city-bureau-vacancy:" + pKingdomId + ":" +
-                         pCityId;
-            DeferredRuntimeWorkService.EnqueueCoalesced(key,
-                DeferredWorkClass.Persistent,
-                () => ProcessImmediate(pKingdomId, pCityId, pAttempt + 1));
-        }
-
         internal static void ClearRuntime()
         {
             foreach (PendingWork work in Pending.Values) Dispose(work);

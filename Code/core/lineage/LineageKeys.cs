@@ -731,6 +731,7 @@ namespace AncientWarfare3.core.lineage
         public const string CITY_LOCAL_COURT_TEMPLATE_MANUAL =
             "aw_city_local_court_template_manual";
         public const string COURT_CITY_ID = "aw_court_city_id";
+        public const string COURT_COUNTY_ID = "aw_court_county_id";
         public const string OFFICER_RANK = "aw_officer_rank";
         public const string OFFICER_TRACK = "aw_officer_track";
         public const string OFFICER_MERIT = "aw_officer_merit";

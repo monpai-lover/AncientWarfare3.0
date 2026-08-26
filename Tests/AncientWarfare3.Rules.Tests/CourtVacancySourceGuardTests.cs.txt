@@ -9,6 +9,8 @@ internal static class CourtVacancySourceGuardTests
         string court = Read("Code/core/court/CourtService.cs");
         string local = Read(
             "Code/core/court/LocalCourtAppointmentService.cs");
+        string cityBureau = Read(
+            "Code/core/court/CityBureauAnnualWorkService.cs");
         string coordinator = Read(
             "Code/core/court/CourtVacancyReconciliationService.cs");
         string authority = Read(
@@ -24,13 +26,19 @@ internal static class CourtVacancySourceGuardTests
             "Code/core/court/CourtVacancyRestoreService.cs");
         string pipeline = Read(
             "Code/core/multiplayer/AW3RuntimeRestorePipeline.cs");
+        string guest = Read(
+            "Code/core/schools/SchoolGuestOfficeService.cs");
 
         Contains(session, "OfficerCandidateCatalog.GetOrBuild",
             "one reconciliation cycle must reuse the kingdom catalog");
         Contains(session, "ReservedActorIds",
             "candidate session must reserve appointed actors");
+        Contains(session, "GuestCandidates",
+            "candidate session must lazily reuse guest candidates");
         Contains(court, "TryFillRegisteredCentralVacancy",
             "central court must expose a one-vacancy adapter");
+        Contains(court, "TryFillRegisteredVacancy",
+            "central vacancy filling must preserve guest appointments");
         Contains(court, "BuildActiveOfficerActorSetForKingdom",
             "candidate reservation must be kingdom scoped");
         Contains(local, "TryFillRegisteredLocalVacancy",
@@ -42,6 +50,15 @@ internal static class CourtVacancySourceGuardTests
         False(MethodBody(local, "TryFillRegisteredLocalVacancy")
                 .Contains("CandidateScanState", StringComparison.Ordinal),
             "event filling cannot use rotating candidate scans");
+        False(local.Contains("CandidateScanState",
+                StringComparison.Ordinal),
+            "retired rotating candidate scan state must be removed");
+        False(local.Contains("LoadAllCandidates(",
+                StringComparison.Ordinal),
+            "local vacancy filling must use the shared candidate session");
+        False(cityBureau.Contains("RequestImmediateReconcile",
+                StringComparison.Ordinal),
+            "city bureau cannot retain an immediate full reconciliation path");
         Contains(coordinator, "RegisterVacancy",
             "vacancy events must enter the shared coordinator");
         Contains(coordinator, "CandidatePoolChanged",
@@ -54,6 +71,13 @@ internal static class CourtVacancySourceGuardTests
             "reassignment must publish the released office after commit");
         Contains(court, "RegisterVacancy(cleanupPrior)",
             "released central/local office must wake reconciliation");
+        Contains(court, "CloseDeadOfficerAfterDeath",
+            "officer death must defer durable career closure");
+        True(court.IndexOf("OfficialCareerPersistence.Close(",
+                 StringComparison.Ordinal) <
+             court.IndexOf("closed.Prior ?? pPrior",
+                 StringComparison.Ordinal),
+            "death vacancy publication must follow durable career closure");
         Contains(court, "pPersistCareer &&",
             "durable close must gate vacancy publication");
         Contains(promotion, "RegisterCityVacancies",
@@ -76,6 +100,14 @@ internal static class CourtVacancySourceGuardTests
         False(exam.Contains("FillVacanciesAfterCivilServiceExam",
                 StringComparison.Ordinal),
             "exam completion cannot run a full vacancy scan");
+        Contains(guest, "CreateVacancyCandidateSession",
+            "guest candidates must be built once per vacancy cycle");
+        False(guest.Contains("ProcessHostAppointments",
+                StringComparison.Ordinal),
+            "guest annual work cannot scan hosts for vacancies");
+        False(guest.Contains("HostKingdoms()",
+                StringComparison.Ordinal),
+            "guest annual work cannot enumerate every court kingdom");
         Contains(restore, "CourtVacancyRestoreGenerationGate",
             "restore uses a generation gate");
         Contains(pipeline, "court_vacancies",
@@ -115,5 +147,10 @@ internal static class CourtVacancySourceGuardTests
     private static void False(bool pValue, string pMessage)
     {
         if (pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
     }
 }

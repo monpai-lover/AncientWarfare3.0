@@ -122,15 +122,15 @@ internal static class CustomLocalGovernmentRulesTests
             "AW_CityLeaderPatch.cs"));
         string death = File.ReadAllText(Path.Combine(root, "Code", "patch",
             "AW_HistoricalSchoolPatch.cs"));
-        True(annual.Contains("RequestImmediateReconcile",
+        True(annual.Contains("DiscoverVacancies",
                 StringComparison.Ordinal),
-            "city bureau must expose an immediate vacancy reconciliation entry");
-        True(court.Contains("RequestImmediateReconcile",
+            "city bureau must discover and register local vacancies");
+        True(court.Contains("RegisterVacancy",
                 StringComparison.Ordinal),
-            "court lifecycle must request local vacancy reconciliation");
-        True(leader.Contains("RequestImmediateReconcile",
+            "court lifecycle must publish committed vacancies");
+        True(leader.Contains("RegisterCityVacancies",
                 StringComparison.Ordinal),
-            "new city leaders must trigger local vacancy reconciliation");
+            "new city leaders must trigger local vacancy registration");
         True(death.Contains("RequestLocalOfficerDeathReconcile",
                 StringComparison.Ordinal),
             "dead local officials must trigger local vacancy reconciliation");
