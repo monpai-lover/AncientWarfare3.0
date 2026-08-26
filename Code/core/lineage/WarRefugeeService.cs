@@ -93,12 +93,17 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null || pCity?.data == null) return;
             try
             {
+                pActor.data.get(LineageKeys.WAR_REFUGEE_JOURNEY_ID,
+                    out long journeyId, -1L);
+                if (journeyId < 0L) return;
                 LineageArchiveManager archive = LineageArchiveManager.Instance;
                 if (archive?.OperatingDB == null ||
                     !WarRefugeePersistence.TryGetActiveJourneyForActor(
-                        archive.OperatingDB, pActor.data.id, out long journeyId) ||
+                        archive.OperatingDB, pActor.data.id,
+                        out long activeJourneyId) ||
                     !WarRefugeePersistence.TryLoadJourney(archive.OperatingDB,
-                        journeyId, out WarRefugeeJourneySnapshot journey)) return;
+                        activeJourneyId,
+                        out WarRefugeeJourneySnapshot journey)) return;
                 if (journey.DestinationCityId != pCity.id)
                     HandleUnexpectedCityChange(archive.OperatingDB, journey,
                         pActor, pCity);
