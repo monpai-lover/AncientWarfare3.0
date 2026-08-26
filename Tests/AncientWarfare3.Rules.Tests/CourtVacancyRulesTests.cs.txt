@@ -38,6 +38,24 @@ internal static class CourtVacancyRulesTests
         True(!CourtVacancyRules.ShouldRetry(
                 CourtVacancyOutcome.TechnicalFailure, 1),
             "second technical failure does not retry");
+
+        var state = new CourtVacancyRegistryState();
+        state.Upsert(local, 2);
+        state.Upsert(local, 2);
+        Equal(1, state.ForKingdom(7L).Count,
+            "duplicate vacancy events coalesce");
+        Equal(2, state.ForKingdom(7L)[0].MissingSeats,
+            "registry preserves repeated missing seats");
+        state.Upsert(local, 0);
+        Equal(0, state.ForKingdom(7L).Count,
+            "zero missing seats removes vacancy");
+        state.Upsert(countyA, 1);
+        state.Upsert(countyB, 1);
+        Equal(2, state.ForKingdom(7L).Count,
+            "county vacancies remain independently scoped");
+        state.RemoveCity(7L, 11L);
+        Equal(0, state.ForKingdom(7L).Count,
+            "city removal clears city and county vacancies");
     }
 
     private static void True(bool pValue, string pMessage)
