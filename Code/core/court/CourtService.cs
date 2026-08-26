@@ -579,10 +579,8 @@ namespace AncientWarfare3.core.court
 
             int year = Date.getCurrentYear();
             pKingdom.data.get(LineageKeys.COURT_LAST_REFRESH_YEAR, out int lastYear, -1);
-            bool hasCentralVacancy = HasCentralVacancy(pKingdom);
             if (!CourtRules.ShouldRefreshCourt(year, lastYear,
-                    CourtRules.DefaultRefreshIntervalYears) &&
-                !hasCentralVacancy) return;
+                    CourtRules.DefaultRefreshIntervalYears)) return;
             pKingdom.data.set(LineageKeys.COURT_LAST_REFRESH_YEAR, year);
 
             string targetMode = HasOfficialCourt(pKingdom) ? "official" : "primitive";
@@ -612,25 +610,6 @@ namespace AncientWarfare3.core.court
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtOfficerValidateIndex, benchmark); }
 
             benchmark = UpdateAgeBenchmark.Begin();
-            try
-            {
-                if (IsWesternElective(pKingdom))
-                {
-                    WesternCourtElectionService.QueueKingdomVacancies(pKingdom);
-                }
-                else
-                {
-                    HashSet<string> occupiedOffices = BuildActiveOfficeSet(
-                        pKingdom, yearRoster);
-                    HashSet<long> occupiedActors =
-                        BuildActiveOfficerActorSet();
-                    EnsureMinimumCourt(pKingdom, yearRoster, occupiedOffices,
-                        tier, occupiedActors);
-                }
-            }
-            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtCandidateRefreshIndex, benchmark); }
-
-            benchmark = UpdateAgeBenchmark.Begin();
             List<CourtOfficerView> activeOfficers = GetActiveOfficers(pKingdom, 96);
             try
             {
@@ -651,38 +630,6 @@ namespace AncientWarfare3.core.court
 
             EvaluateStrongEvent(pKingdom, snapshot);
             UpsertCourtSnapshot(pKingdom);
-        }
-
-        public static void FillVacanciesAfterCivilServiceExam(
-            Kingdom pKingdom)
-        {
-            if (pKingdom?.data == null || pKingdom.isRekt() ||
-                !KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom) ||
-                !LineageArchiveManager.Instance.IsOperational) return;
-
-            string tier = ResolveTier(pKingdom);
-            List<Actor> roster = BuildYearRoster(pKingdom);
-            ValidateOfficers(pKingdom, roster, tier);
-            if (IsWesternElective(pKingdom))
-            {
-                WesternCourtElectionService.QueueKingdomVacancies(pKingdom);
-                return;
-            }
-            HashSet<string> occupied = BuildActiveOfficeSet(pKingdom, roster);
-            HashSet<long> occupiedActors = BuildActiveOfficerActorSet();
-            EnsureMinimumCourt(pKingdom, roster, occupied, tier,
-                occupiedActors, pAllowActing: false);
-            SchoolGuestOfficeService.FillVacanciesAfterCivilServiceExam(
-                pKingdom, pAllowActing: false);
-            SchoolGuestOfficeService.FillVacanciesAfterCivilServiceExam(
-                pKingdom, pAllowActing: true);
-            occupied = BuildActiveOfficeSet(pKingdom, roster);
-            occupiedActors = BuildActiveOfficerActorSet();
-            EnsureMinimumCourt(pKingdom, roster, occupied, tier,
-                occupiedActors, pAllowActing: true);
-            AW_CityLeaderPatch.FillVacanciesAfterCivilServiceExam(pKingdom);
-            CourtAristocraticGroupService.Refresh(pKingdom,
-                GetActiveOfficers(pKingdom, 96));
         }
 
         internal static CourtImmediateVacancyOutcome
@@ -2838,19 +2785,6 @@ namespace AncientWarfare3.core.court
                 p.layer == pLayer && p.office_id == pOfficeId &&
                 IsValidActiveOfficeActor(World.world?.units?.get(p.actor_id),
                     pKingdom, p.layer, p.office_id));
-        }
-
-        private static bool HasCentralVacancy(Kingdom pKingdom)
-        {
-            HashSet<string> activeOffices = BuildActiveOfficeSet(
-                pKingdom, pRoster: null);
-            foreach (string office in CentralOfficeIdsForCurrentProfile(pKingdom))
-                if (!activeOffices.Contains(office))
-                    return true;
-            foreach (string office in MilitaryOfficeIdsForCurrentProfile(pKingdom))
-                if (!activeOffices.Contains(office))
-                    return true;
-            return false;
         }
 
         private static Actor FindActiveOfficeActor(Kingdom pKingdom,

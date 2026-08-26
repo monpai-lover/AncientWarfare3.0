@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 
@@ -23,8 +24,6 @@ namespace AncientWarfare3.core.court
 
         private static readonly Dictionary<long, PendingWork> Pending =
             new Dictionary<long, PendingWork>();
-        private static readonly HashSet<string> PendingVacancyRetries =
-            new HashSet<string>(StringComparer.Ordinal);
 
         internal static void Schedule(Kingdom pKingdom,
             float pCourtEfficiency)
@@ -76,11 +75,6 @@ namespace AncientWarfare3.core.court
                 Date.getCurrentYear(), out hasVacancy);
             if (completed)
             {
-                string completedKey = VacancyKey(pKingdomId, pCityId);
-                if (!hasVacancy)
-                    PendingVacancyRetries.Remove(completedKey);
-                else
-                    PendingVacancyRetries.Add(completedKey);
                 return;
             }
             if (!CityBureauRetryRules.ShouldRetry(completed, pAttempt,
@@ -96,7 +90,6 @@ namespace AncientWarfare3.core.court
         {
             foreach (PendingWork work in Pending.Values) Dispose(work);
             Pending.Clear();
-            PendingVacancyRetries.Clear();
             LocalCourtAppointmentService.ClearRuntime();
         }
 
@@ -133,8 +126,6 @@ namespace AncientWarfare3.core.court
                     if (retryCity?.data != null)
                     {
                         work.CompletedCityIds.Add(retryCity.data.id);
-                        UpdateVacancyRetry(kingdom.id, retryCity.data.id,
-                            retryHasVacancy);
                     }
                     ClearRetry(work);
                 }
@@ -189,7 +180,6 @@ namespace AncientWarfare3.core.court
                     Enqueue(pKingdomId);
                     return;
                 }
-                UpdateVacancyRetry(kingdom.id, city.data.id, hasVacancy);
                 work.CompletedCityIds.Add(city.data.id);
             }
             Enqueue(pKingdomId);
@@ -218,14 +208,19 @@ namespace AncientWarfare3.core.court
                                  CourtSchoolId.None;
             if (schoolSnapshot == null)
                 CitySchoolSnapshotService.MarkDirty(pCity);
-            if (!LocalCourtAppointmentService.ReconcileCity(pKingdom, pCity,
-                    slots, pYear, out IReadOnlyList<long> officerActorIds,
-                    out pHasVacancy))
-                return false;
-            if (!LocalCourtAppointmentService.ReconcileCounties(pKingdom,
-                    pCity, pYear, out int countyVacancies))
-                return false;
-            pHasVacancy = pHasVacancy || countyVacancies > 0;
+            IReadOnlyList<CourtVacancyKey> discovered =
+                LocalCourtAppointmentService.DiscoverVacancies(
+                    pKingdom, pCity, slots, pYear);
+            foreach (IGrouping<CourtVacancyKey, CourtVacancyKey> group in
+                     discovered.GroupBy(key => key))
+                CourtVacancyRegistry.Register(group.Key, group.Count());
+            pHasVacancy = discovered.Count > 0;
+            IReadOnlyList<long> officerActorIds = CourtService.
+                GetActiveOfficers(pKingdom, int.MaxValue)
+                .Where(row => row != null &&
+                    row.layer == CourtOfficeLayer.City &&
+                    row.city_id == pCity.data.id)
+                .Select(row => row.actor_id).Distinct().ToArray();
             int filled = officerActorIds.Count;
             float efficiency = CourtBureauRules.BureauEfficiency(slots,
                 filled);
@@ -287,21 +282,6 @@ namespace AncientWarfare3.core.court
                 ChronicleEvents.OnCourtCityBureau(pKingdom,
                     pCity.data.name ?? "", localSchool ?? "");
             return true;
-        }
-
-        private static string VacancyKey(long pKingdomId, long pCityId)
-        {
-            return pKingdomId + ":" + pCityId;
-        }
-
-        private static void UpdateVacancyRetry(long pKingdomId, long pCityId,
-            bool pHasVacancy)
-        {
-            string key = VacancyKey(pKingdomId, pCityId);
-            if (pHasVacancy)
-                PendingVacancyRetries.Add(key);
-            else
-                PendingVacancyRetries.Remove(key);
         }
 
         private static bool TryRestart(PendingWork pWork, Kingdom pKingdom)

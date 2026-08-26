@@ -235,7 +235,6 @@ namespace AncientWarfare3.core.performance
             PeasantRebelBanditStrongholdPopulationService.Clear();
             BanditStrongholdCityDisposalService.Clear();
             CourtVacancyReconciliationService.ClearRuntime();
-            CityLeaderVacancyRepairService.ClearRuntime();
         }
 
         private static bool CanRunAuthorityCycle(bool pPaused)
