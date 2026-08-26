@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -46,28 +45,6 @@ namespace AncientWarfare3.core.lineage
 
             pAsset = GetFallbackAsset();
             return pAsset != null;
-        }
-
-        public static void RepairLoadedKingdoms()
-        {
-            try
-            {
-                if (World.world?.kingdoms == null) return;
-                foreach (Kingdom kingdom in World.world.kingdoms.ToList())
-                {
-                    if (kingdom == null || kingdom.data == null ||
-                        kingdom.isRekt()) continue;
-                    if (KingdomFounderSpeciesSafetyRules.IsUsableAssetId(
-                            kingdom.data.original_actor_asset)) continue;
-                    TryResolve(kingdom, out _);
-                }
-            }
-            catch (Exception error)
-            {
-                ModClass.LogWarning(
-                    "Kingdom founder asset maintenance failed: " +
-                    error.Message);
-            }
         }
 
         public static void ClearRuntime()

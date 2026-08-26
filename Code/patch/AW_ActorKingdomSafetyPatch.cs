@@ -149,7 +149,6 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.Update))]
         private static void DrainActorKingdomRepairs_Prefix()
         {
-            KingdomFounderSpeciesSafetyService.RepairLoadedKingdoms();
             long benchmark = RecentFeatureBenchmark.BeginOutsideFrameStage();
             try
             {

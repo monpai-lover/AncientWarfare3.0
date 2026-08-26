@@ -35,6 +35,10 @@ internal static class RuntimeRegressionSourceGuardTests
             "AWHistoricalReadService.cs");
         string deferredRuntimePatch = Read("Code", "patch",
             "AW_DeferredRuntimeWorkPatch.cs");
+        string actorKingdomSafetyPatch = Read("Code", "patch",
+            "AW_ActorKingdomSafetyPatch.cs");
+        string founderSpeciesSafety = Read("Code", "core", "lineage",
+            "KingdomFounderSpeciesSafetyService.cs");
 
         Assert(bootstrap.Contains("TraversalCache.DirtyTileCount") &&
                bootstrap.Contains("DirtyTileBudgetForFrame"),
@@ -109,6 +113,20 @@ internal static class RuntimeRegressionSourceGuardTests
         Assert(deferredRuntimePatch.Contains(
                 "AWHistoricalReadService.PendingDrainCount"),
             "the frame drain must run when only historical read callbacks remain");
+        Assert(!actorKingdomSafetyPatch.Contains(
+                   "KingdomFounderSpeciesSafetyService.RepairLoadedKingdoms();"),
+            "MapBox.Update must not scan every kingdom for founder species");
+        Assert(!founderSpeciesSafety.Contains(
+                   "public static void RepairLoadedKingdoms()"),
+            "the unused whole-world founder-species repair entry must be removed");
+        Assert(actorKingdomSafetyPatch.Contains(
+                   "KingdomGetFounderSpecies_Prefix") &&
+               actorKingdomSafetyPatch.Contains(
+                   "KingdomFounderSpeciesSafetyService.TryResolve"),
+            "invalid legacy founder species must still be repaired on demand");
+        Assert(actorKingdomSafetyPatch.Contains(
+                   "ActorKingdomSafetyService.DrainPendingRepairs()"),
+            "actor kingdom repair draining must remain intact");
     }
 
     private static string Read(params string[] pParts)
