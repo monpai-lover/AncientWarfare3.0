@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace AncientWarfare3.core.court
 {
@@ -97,6 +98,45 @@ namespace AncientWarfare3.core.court
         {
             return pOutcome == CourtVacancyOutcome.TechnicalFailure &&
                    pAttempt == 0;
+        }
+    }
+
+    internal static class CourtVacancyCycleRules
+    {
+        internal static CourtVacancyEntry? Next(
+            IReadOnlyList<CourtVacancyEntry> pEntries,
+            ISet<CourtVacancyKey> pProcessed, int pProcessedSteps,
+            int pValidOfficeCount)
+        {
+            if (pEntries == null || pProcessedSteps >=
+                CourtVacancyRules.CascadeLimit(pValidOfficeCount))
+                return null;
+            CourtVacancyEntry? best = null;
+            for (int index = 0; index < pEntries.Count; index++)
+            {
+                CourtVacancyEntry entry = pEntries[index];
+                if (entry.MissingSeats <= 0 ||
+                    pProcessed?.Contains(entry.Key) == true) continue;
+                if (!best.HasValue || Compare(entry, best.Value) < 0)
+                    best = entry;
+            }
+            return best;
+        }
+
+        private static int Compare(CourtVacancyEntry pLeft,
+            CourtVacancyEntry pRight)
+        {
+            int result = CourtVacancyRules.Priority(pLeft.Key).CompareTo(
+                CourtVacancyRules.Priority(pRight.Key));
+            if (result != 0) return result;
+            result = pLeft.Key.CityId.CompareTo(pRight.Key.CityId);
+            if (result != 0) return result;
+            result = pLeft.Key.CountyId.CompareTo(pRight.Key.CountyId);
+            if (result != 0) return result;
+            result = string.CompareOrdinal(pLeft.Key.Layer,
+                pRight.Key.Layer);
+            return result != 0 ? result : string.CompareOrdinal(
+                pLeft.Key.OfficeId, pRight.Key.OfficeId);
         }
     }
 }

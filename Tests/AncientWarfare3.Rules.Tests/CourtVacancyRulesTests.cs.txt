@@ -56,6 +56,29 @@ internal static class CourtVacancyRulesTests
         state.RemoveCity(7L, 11L);
         Equal(0, state.ForKingdom(7L).Count,
             "city removal clears city and county vacancies");
+
+        var ordered = new[]
+        {
+            new CourtVacancyEntry(central, 1),
+            new CourtVacancyEntry(local, 1),
+            new CourtVacancyEntry(chief, 1)
+        };
+        var processed = new HashSet<CourtVacancyKey>();
+        CourtVacancyEntry? next = CourtVacancyCycleRules.Next(ordered,
+            processed, 0, 3);
+        Equal(central, next.Value.Key,
+            "central vacancy is selected before local vacancies");
+        processed.Add(central);
+        next = CourtVacancyCycleRules.Next(ordered, processed, 1, 3);
+        Equal(chief, next.Value.Key,
+            "local chief is selected before lower local office");
+        processed.Add(chief);
+        next = CourtVacancyCycleRules.Next(ordered, processed, 2, 3);
+        Equal(local, next.Value.Key,
+            "lower local office follows local chief");
+        processed.Add(local);
+        True(!CourtVacancyCycleRules.Next(ordered, processed, 3, 3).HasValue,
+            "cycle stops at valid-office bound");
     }
 
     private static void True(bool pValue, string pMessage)

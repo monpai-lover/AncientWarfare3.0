@@ -9,6 +9,10 @@ internal static class CourtVacancySourceGuardTests
         string court = Read("Code/core/court/CourtService.cs");
         string local = Read(
             "Code/core/court/LocalCourtAppointmentService.cs");
+        string coordinator = Read(
+            "Code/core/court/CourtVacancyReconciliationService.cs");
+        string authority = Read(
+            "Code/core/performance/AWAuthorityCycleService.cs");
 
         Contains(session, "OfficerCandidateCatalog.GetOrBuild",
             "one reconciliation cycle must reuse the kingdom catalog");
@@ -27,6 +31,14 @@ internal static class CourtVacancySourceGuardTests
         False(MethodBody(local, "TryFillRegisteredLocalVacancy")
                 .Contains("CandidateScanState", StringComparison.Ordinal),
             "event filling cannot use rotating candidate scans");
+        Contains(coordinator, "RegisterVacancy",
+            "vacancy events must enter the shared coordinator");
+        Contains(coordinator, "CandidatePoolChanged",
+            "candidate changes must wake the affected kingdom");
+        Contains(coordinator, "NotBeforeFrame",
+            "technical retries must be delayed to a later frame");
+        Contains(authority, "DrainDueRetryTickets",
+            "authority cycle must drain court retry tickets");
     }
 
     private static string MethodBody(string pText, string pMethodName)
