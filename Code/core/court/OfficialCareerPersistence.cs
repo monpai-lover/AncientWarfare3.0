@@ -57,7 +57,8 @@ namespace AncientWarfare3.core.court
 
         public OfficialCareerPrior ToPrior()
         {
-            return new OfficialCareerPrior(KingdomId, CityId, Layer, OfficeId);
+            return new OfficialCareerPrior(KingdomId, CityId, Layer, OfficeId,
+                CountyId);
         }
 
         public bool Exact(OfficialCareerRecord pOther, bool pRequireOfficerId = true)

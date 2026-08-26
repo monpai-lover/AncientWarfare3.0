@@ -1107,6 +1107,9 @@ namespace AncientWarfare3.core.policy
 
         internal static bool IsFocused => !State.IsRoot;
 
+        internal static long FocusedCountyId =>
+            CityAdministrationState.FocusCountyId;
+
         internal static long FocusKingdomId => State.FocusKingdomId;
 
         public static bool HandleZoneClick(WorldTile pTile, string pPowerId)

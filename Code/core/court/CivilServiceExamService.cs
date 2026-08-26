@@ -460,7 +460,7 @@ namespace AncientWarfare3.core.court
             RecordCommittedTopRanks(kingdom, session, rankedCandidates,
                 rankings);
             CivilServiceQualificationService.RebuildRuntimeProjections();
-            CourtService.FillVacanciesAfterCivilServiceExam(kingdom);
+            CourtVacancyReconciliationService.CandidatePoolChanged(kingdom);
             ChronicleEvents.OnCivilServiceExamCompleted(kingdom,
                 session.CycleYear, session.Mode);
             pReasonKey = "aw_civil_service_exam_submit_success";
@@ -626,7 +626,8 @@ namespace AncientWarfare3.core.court
                 {
                     CivilServiceQualificationService.
                         RebuildRuntimeProjections();
-                    CourtService.FillVacanciesAfterCivilServiceExam(pKingdom);
+                    CourtVacancyReconciliationService.CandidatePoolChanged(
+                        pKingdom);
                     ChronicleEvents.OnCivilServiceExamCompleted(pKingdom,
                         pSession.CycleYear, pSession.Mode);
                 }

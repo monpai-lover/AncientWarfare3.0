@@ -9,7 +9,6 @@ internal static class CourtLocalLayoutAndLeaderRepairSourceGuardTests
         string statistics = Read("Code/ui/windows/CourtStatisticsWindow.cs");
         string leader = Read("Code/patch/AW_CityLeaderPatch.cs");
         string promotion = Read("Code/patch/AW_PromotionPatch.cs");
-        string vacancy = Read("Code/core/court/CityLeaderVacancyRepairService.cs");
         string courtService = Read("Code/core/court/CourtService.cs");
         string localAppointments = Read("Code/core/court/LocalCourtAppointmentService.cs");
         string governorProjection = Read("Code/core/court/CityGovernorProjectionRepairService.cs");
@@ -22,17 +21,19 @@ internal static class CourtLocalLayoutAndLeaderRepairSourceGuardTests
             "button layout must distinguish local court context");
         Contains(leader, "CourtOfficeLayer.City",
             "city leader repair must inspect local-layer officers");
-        Contains(leader, "LocalCourtAppointmentService.ReconcileCity",
-            "city leader repair must use the local court reconciler");
+        Contains(leader, "CourtVacancyReconciliationService.RegisterCityVacancies",
+            "city leader repair must register local vacancies");
         Contains(promotion, "RemoveLeader_Postfix",
             "leader removal must trigger immediate vacancy repair");
-        Contains(promotion, "CityLeaderVacancyRepairService.Request",
-            "leader removal must enqueue the immediate repair service");
-        Contains(vacancy, "AW_CityLeaderPatch",
-            "vacancy repair must delegate to the shared local court pipeline");
-        False(vacancy.Contains("PickLocalOfficer",
+        False(promotion.Contains("CityLeaderVacancyRepairService.Request",
                 StringComparison.Ordinal),
-            "vacancy repair cannot maintain a second candidate selector");
+            "leader removal cannot enqueue the retired repair service");
+        False(File.Exists(Path.Combine(Directory.GetCurrentDirectory(),
+                "Code/core/court/CityLeaderVacancyRepairService.cs")),
+            "periodic city leader repair service must be removed");
+        False(localAppointments.Contains("CandidateScanState",
+                StringComparison.Ordinal),
+            "local appointment service cannot retain rotating scan state");
         Contains(courtService,
             "LocalChiefOfficeResolver.ResolveChiefOffice(pKingdom, pCity)",
             "CourtService exposes the shared local-chief result");

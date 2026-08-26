@@ -9,27 +9,6 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_CityLeaderPatch
     {
-        internal static int FillVacanciesAfterCivilServiceExam(
-            Kingdom pKingdom)
-        {
-            if (pKingdom?.data == null || pKingdom.isRekt()) return 0;
-            int attempts = 0;
-            foreach (City city in pKingdom.getCities())
-            {
-                if (city?.data == null || city.isRekt()) continue;
-                bool shouldAttempt = CivilServiceExamRules.
-                    ShouldAttemptCityVacancyFill(city.hasLeader(),
-                        city.isGettingCaptured(), city.kingdom == pKingdom,
-                        CivilServiceExamRules.CityVacancyFillBudget - attempts);
-                if (!shouldAttempt) continue;
-                attempts++;
-                CheckFindLeader_Prefix(city);
-                if (attempts >= CivilServiceExamRules.CityVacancyFillBudget)
-                    break;
-            }
-            return attempts;
-        }
-
         [HarmonyPrefix]
         [HarmonyPatch(typeof(CityBehCheckLeader), "checkFindLeader")]
         public static bool CheckFindLeader_Prefix(City pCity)
@@ -44,8 +23,8 @@ namespace AncientWarfare3.patch
             }
             if (pCity.isGettingCaptured()) return false;
             Kingdom kingdom = pCity.kingdom;
-            LocalCourtAppointmentService.ReconcileCity(kingdom, pCity, 1,
-                Date.getCurrentYear(), out _, out _);
+            CourtVacancyReconciliationService.RegisterCityVacancies(
+                kingdom, pCity);
             return false;
         }
 

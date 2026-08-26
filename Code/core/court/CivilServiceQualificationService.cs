@@ -70,7 +70,15 @@ namespace AncientWarfare3.core.court
                 if (actor?.data == null || kingdom?.data == null ||
                     actor.kingdom != kingdom || !actor.isAlive() ||
                     actor.isRekt()) continue;
+                actor.data.get(LineageKeys.CIVIL_SERVICE_QUALIFICATION,
+                    out string previousQualification, "none");
                 Project(actor, record);
+                actor.data.get(LineageKeys.CIVIL_SERVICE_QUALIFICATION,
+                    out string currentQualification, "none");
+                if (!string.Equals(previousQualification,
+                        currentQualification, StringComparison.OrdinalIgnoreCase))
+                    CourtVacancyReconciliationService.CandidatePoolChanged(
+                        kingdom);
             }
         }
 

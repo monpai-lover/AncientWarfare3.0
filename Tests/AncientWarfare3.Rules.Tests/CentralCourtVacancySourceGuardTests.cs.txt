@@ -16,14 +16,9 @@ internal static class CentralCourtVacancySourceGuardTests
             "career rank must be treated as an appointment credential");
         Contains(service, "IsCandidatePreferred(",
             "vacancy selection must prioritize ranked officials");
-        Contains(service, "OrderByDescending(actor =>",
-            "annual roster must put ranked officials before the fallback budget");
-        Contains(service, "HasCentralVacancy(pKingdom)",
-            "annual court work must wake up while a central seat is vacant");
-        Contains(service, "cleanupPrior.Layer == CourtOfficeLayer.City",
-            "central reassignment must recognize a released local office");
-        Contains(service, "RequestImmediateReconcile(cleanupKingdom",
-            "central reassignment must enqueue local vacancy repair");
+        False(service.Contains("HasCentralVacancy(pKingdom)",
+                StringComparison.Ordinal),
+            "annual court work cannot scan for central vacancies");
         string schoolPatch = Read("Code/patch/AW_HistoricalSchoolPatch.cs");
         Contains(schoolPatch, "OfficerCandidateCatalog.Invalidate(pKingdomToSet)",
             "actor kingdom changes must invalidate the yearly candidate catalog");

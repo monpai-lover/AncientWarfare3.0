@@ -234,7 +234,7 @@ namespace AncientWarfare3.core.performance
             ActorDeathArchiveService.Reset();
             PeasantRebelBanditStrongholdPopulationService.Clear();
             BanditStrongholdCityDisposalService.Clear();
-            CityLeaderVacancyRepairService.ClearRuntime();
+            CourtVacancyReconciliationService.ClearRuntime();
         }
 
         private static bool CanRunAuthorityCycle(bool pPaused)
@@ -443,6 +443,7 @@ namespace AncientWarfare3.core.performance
 
         private static void DrainDeferredAuthorityWork()
         {
+            CourtVacancyReconciliationService.DrainDueRetryTickets();
             PeasantRebelBanditStrongholdPopulationService.
                 ProcessAuthorityCycle();
             BanditStrongholdCityDisposalService.ProcessAuthorityCycle();

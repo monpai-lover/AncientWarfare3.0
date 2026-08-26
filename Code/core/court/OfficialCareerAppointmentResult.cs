@@ -18,16 +18,18 @@ namespace AncientWarfare3.core.court
     public sealed class OfficialCareerPrior
     {
         public OfficialCareerPrior(long pKingdomId, long pCityId, string pLayer,
-            string pOfficeId)
+            string pOfficeId, long pCountyId = -1L)
         {
             KingdomId = pKingdomId;
             CityId = pCityId;
+            CountyId = pCountyId;
             Layer = pLayer ?? "";
             OfficeId = pOfficeId ?? "";
         }
 
         public long KingdomId { get; }
         public long CityId { get; }
+        public long CountyId { get; }
         public string Layer { get; }
         public string OfficeId { get; }
     }
