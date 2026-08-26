@@ -43,8 +43,17 @@ Vacancy keys are:
 
 - Central: `kingdomId + officeLayer + officeId`
 - Local: `kingdomId + cityId + officeLayer + officeId`
+- County-scoped local office: `kingdomId + cityId + countyId + officeLayer +
+  officeId`
 
-Duplicate registrations coalesce by key. Registry ordering is deterministic:
+Each registry entry also stores the current missing-seat count. This preserves
+custom templates that contain more than one seat with the same `officeId`
+without treating repeated event notifications as additional vacancies. The
+count is refreshed from the current template and durable active rows whenever
+the key is reconciled.
+
+Duplicate event registrations coalesce by key. Registry ordering is
+deterministic:
 
 1. Central offices
 2. Local chief offices
