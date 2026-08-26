@@ -192,11 +192,28 @@ namespace AncientWarfare3.ui.windows
                          GetComponents<LayoutGroup>())
                 layout.enabled = false;
             RectTransform background = BackgroundTransform as RectTransform;
-            if (background != null) background.sizeDelta = new Vector2(380f, 220f);
+            Vector2 windowSize = new Vector2(380f, 220f);
+            if (background != null) background.sizeDelta = windowSize;
+            Transform titleBackground = BackgroundTransform?.Find(
+                "TitleBackground");
+            RectTransform titleRect = titleBackground?.GetComponent<
+                RectTransform>();
+            if (titleRect != null)
+            {
+                titleBackground.gameObject.SetActive(true);
+                titleRect.sizeDelta = new Vector2(windowSize.x * 0.56f, 30f);
+                titleRect.localPosition = new Vector3(0f,
+                    windowSize.y * 0.5f - 16f, 0f);
+            }
             ScrollWindow scroll = GetComponent<ScrollWindow>();
             if (scroll?.titleText != null)
+            {
                 scroll.titleText.text = AW_L10n.Text(
                     "aw_county_rename_title", "Rename County");
+                scroll.titleText.transform.localPosition = new Vector3(0f,
+                    windowSize.y * 0.5f - 16f, 0f);
+                scroll.titleText.raycastTarget = false;
+            }
 
             _currentName = MakeText("CurrentName", ContentTransform, 14,
                 TextAnchor.MiddleCenter);

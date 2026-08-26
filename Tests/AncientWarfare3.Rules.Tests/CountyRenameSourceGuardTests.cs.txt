@@ -45,6 +45,9 @@ internal static class CountyRenameSourceGuardTests
         Contains(window, "AW3CommandRequest.RenameCounty");
         Contains(window, "CountyRenameRules.Validate");
         Contains(window, "RestoreHistorical");
+        Contains(window, "TitleBackground");
+        Contains(window, "titleRect.localPosition");
+        Contains(window, "titleText.transform.localPosition");
         Contains(overlay, "CountyRenameWindow.Open(county.CountyId)");
         Contains(overlay, "HierarchicalVassalMapModeService.FocusedCountyId");
         Contains(overlay, "HierarchicalVassalMapModeService.IsCityCountyLayer");

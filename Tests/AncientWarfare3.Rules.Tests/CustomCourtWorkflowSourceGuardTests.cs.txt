@@ -131,6 +131,7 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "_toolPanel.localScale = Vector3.one * ToolbarScale;");
         Contains(window, "CourtWorkflowVacancyCard.Create");
         Contains(window, "CustomCourtWorkflowLayoutRules.Resolve(");
+        Contains(window, "Layout(_status.rectTransform, 8f, 550f, 148f,");
         Contains(window,
             "_toolViewport.anchorMin = new Vector2(0f, 0f)");
         Contains(window,

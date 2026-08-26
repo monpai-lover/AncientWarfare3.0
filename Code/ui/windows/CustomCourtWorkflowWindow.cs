@@ -456,8 +456,8 @@ namespace AncientWarfare3.ui.windows
                     ToolbarScrollbarWidth, 0f);
                 _toolScrollbar.transform.SetAsLastSibling();
             }
-            Layout(_status.rectTransform, 8f, 460f, 148f,
-                Mathf.Max(1f, ToolbarContentHeight - 468f));
+            Layout(_status.rectTransform, 8f, 550f, 148f,
+                Mathf.Max(1f, ToolbarContentHeight - 558f));
             _canvasRect.GetComponent<TreeDragPanHandler>().Setup(_workspaceRect,
                 _canvasRect);
             _chrome?.RepositionResizeHandle();
