@@ -423,7 +423,7 @@
     <Compile Include="DeferredRuntimeWorkRulesTests.cs.txt" />
     <Compile Include="PathfindingRuntimeModeRulesTests.cs.txt" />
     <Compile Include="ActorRacePerformanceRulesTests.cs.txt" />
-    <Compile Include="ActorBatchPerformanceRulesTests.cs.txt" />
+    <Compile Include="ActorBatchSchedulerSourceGuardTests.cs.txt" />
     <Compile Include="ActorLoadCitySafetyRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\ActorLoadCitySafetyRules.cs" Link="Production\ActorLoadCitySafetyRules.cs" />
     <Compile Include="ArmyRtsControllerPerformanceRulesTests.cs.txt" />
@@ -1036,7 +1036,6 @@
     <Compile Include="..\..\Code\core\lineage\WartimeGarrisonRules.cs" Link="Production\WartimeGarrisonRules.cs" />
     <Compile Include="..\..\Code\core\policy\RecentFeatureBenchmarkRules.cs" Link="Production\RecentFeatureBenchmarkRules.cs" />
     <Compile Include="..\..\Code\core\policy\ActorRacePerformanceRules.cs" Link="Production\ActorRacePerformanceRules.cs" />
-    <Compile Include="..\..\Code\core\policy\ActorBatchPerformanceRules.cs" Link="Production\ActorBatchPerformanceRules.cs" />
     <Compile Include="..\..\Code\core\policy\ArmyRtsControllerPerformanceRules.cs" Link="Production\ArmyRtsControllerPerformanceRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWFrameSchedulerRules.cs" Link="Production\AWFrameSchedulerRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWThirdPartySchedulerFaultRules.cs" Link="Production\AWThirdPartySchedulerFaultRules.cs" />

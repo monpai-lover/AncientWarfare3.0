@@ -249,8 +249,8 @@ if (args.Length == 1 && args[0] == "--frame-priority-confirmation")
 
 if (args.Length == 1 && args[0] == "--actor-batch-phase-budget")
 {
-    ActorBatchPerformanceRulesTests.Run();
-    Console.WriteLine("Actor batch phase budget rules passed.");
+    ActorBatchSchedulerSourceGuardTests.Run();
+    Console.WriteLine("Actor batch scheduler source guards passed.");
     return;
 }
 
@@ -9197,7 +9197,7 @@ WesternLineageAdmissionPersistenceSqlTests.Run();
 WesternPolicyEffectRulesTests.Run();
 PathfindingRuntimeModeRulesTests.Run();
 ActorRacePerformanceRulesTests.Run();
-ActorBatchPerformanceRulesTests.Run();
+ActorBatchSchedulerSourceGuardTests.Run();
 ArmyRtsControllerPerformanceRulesTests.Run();
 CityMilitaryThreatFactsRulesTests.Run();
 CityOccupationThreatRulesTests.Run();
