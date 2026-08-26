@@ -81,7 +81,8 @@ namespace AncientWarfare3.core.lineage
         internal static bool TryPlan(City pMother, Kingdom pBandit,
             Kingdom pOrigin, Actor pRuler,
             out PeasantRebelBanditStrongholdPlan pPlan,
-            out string pFailureKey)
+            out string pFailureKey,
+            bool pIgnoreSuppressionCooldown = false)
         {
             pPlan = null;
             pFailureKey = "aw_bandit_stronghold_invalid_city";
@@ -92,6 +93,17 @@ namespace AncientWarfare3.core.lineage
                 pRuler.city != pMother || pRuler.kingdom != pMother.kingdom ||
                 World.world?.cities == null ||
                 TopTileLibrary.wall_wild == null) return false;
+            pMother.data.get(
+                LineageKeys.MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
+                out int suppressionUntilYear, int.MinValue);
+            if (!PeasantRebelBanditSpawnRules.CanCreateInCity(
+                    Date.getCurrentYear(), suppressionUntilYear,
+                    pIgnoreSuppressionCooldown))
+            {
+                pFailureKey =
+                    "aw_bandit_stronghold_suppression_cooldown";
+                return false;
+            }
             if (pMother.kingdom != pBandit && pMother.kingdom != pOrigin)
                 return false;
             if (HasStronghold(pBandit) || IsStronghold(pMother) ||
@@ -360,16 +372,19 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool TryCreateDirect(City pMother,
             out Kingdom pBandit, out City pStronghold,
-            out string pFailureKey)
+            out string pFailureKey,
+            bool pIgnoreSuppressionCooldown = false)
         {
             return TryCreateDirect(pMother, out pBandit, out pStronghold,
-                out pFailureKey, out _, pAllowClaimRedirect: true);
+                out pFailureKey, out _, pAllowClaimRedirect: true,
+                pIgnoreSuppressionCooldown: pIgnoreSuppressionCooldown);
         }
 
         internal static bool TryCreateDirect(City pMother,
             out Kingdom pBandit, out City pStronghold,
             out string pFailureKey, out bool restorationRedirected,
-            bool pAllowClaimRedirect = true)
+            bool pAllowClaimRedirect = true,
+            bool pIgnoreSuppressionCooldown = false)
         {
             pBandit = null;
             pStronghold = null;
@@ -413,7 +428,7 @@ namespace AncientWarfare3.core.lineage
             }
             if (!TryPlan(pMother, origin, origin, ruler,
                     out PeasantRebelBanditStrongholdPlan plan,
-                    out pFailureKey))
+                    out pFailureKey, pIgnoreSuppressionCooldown))
                 return false;
 
             bool rulerWasMotherCityLeader = pMother.leader == ruler;
@@ -1306,6 +1321,13 @@ namespace AncientWarfare3.core.lineage
                 pState.Raid.CarriedFoodByActorId.Clear();
                 if (!PeasantRebelBanditStateStore.Write(pBandit, pState))
                     return false;
+                int suppressionUntilYear = PeasantRebelBanditSpawnRules.
+                    ResolveSuppressionExpiryYear(Date.getCurrentYear(),
+                        pRecordSuppressionChronicle);
+                if (suppressionUntilYear != int.MinValue)
+                    mother.data.set(LineageKeys.
+                        MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
+                        suppressionUntilYear);
                 if (!pStronghold.isRekt())
                     BanditStrongholdCityDisposalService.Schedule(
                         pStronghold.getID(),

@@ -1116,7 +1116,9 @@ namespace AncientWarfare3.content
             if (!PeasantRebelBanditStrongholdService.TryCreateDirect(city,
                     out Kingdom bandit, out City stronghold,
                     out string failureKey,
-                    out bool restorationRedirected))
+                    out bool restorationRedirected,
+                    pAllowClaimRedirect: true,
+                    pIgnoreSuppressionCooldown: true))
             {
                 Tip(AW_L10n.Text(failureKey,
                     "Bandit stronghold creation failed"));

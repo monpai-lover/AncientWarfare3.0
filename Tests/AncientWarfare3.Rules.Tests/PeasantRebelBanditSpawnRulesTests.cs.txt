@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using AncientWarfare3.core.lineage;
 
 internal static class PeasantRebelBanditSpawnRulesTests
@@ -16,6 +17,38 @@ internal static class PeasantRebelBanditSpawnRulesTests
         {
             new BanditLoyaltyCityCandidate(7, -50, true), new BanditLoyaltyCityCandidate(6, -90, false)
         }), "only live cities below threshold qualify");
+        False(PeasantRebelBanditSpawnRules.CanCreateInCity(
+            149, 150, false),
+            "automatic spawning remains blocked before expiry");
+        True(PeasantRebelBanditSpawnRules.CanCreateInCity(
+            150, 150, false),
+            "automatic spawning resumes at the expiry year");
+        True(PeasantRebelBanditSpawnRules.CanCreateInCity(
+            101, 150, true),
+            "manual spawning bypasses suppression cooldown");
+        True(PeasantRebelBanditSpawnRules.CanCreateInCity(
+            101, int.MinValue, false),
+            "a city without suppression history remains eligible");
+        Equal(150,
+            PeasantRebelBanditSpawnRules.ResolveSuppressionExpiryYear(
+                100, true),
+            "suppression creates a fifty-year cooldown");
+        Equal(int.MinValue,
+            PeasantRebelBanditSpawnRules.ResolveSuppressionExpiryYear(
+                100, false),
+            "ordinary government cleanup creates no cooldown");
+
+        string strongholdService = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "PeasantRebelBanditStrongholdService.cs"));
+        string godPower = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "content",
+            "GodPowerLibrary.cs"));
+        Contains(strongholdService,
+            "MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR");
+        Contains(strongholdService, "pIgnoreSuppressionCooldown");
+        Contains(strongholdService, "ResolveSuppressionExpiryYear");
+        Contains(godPower, "pIgnoreSuppressionCooldown: true");
     }
 
     private static void True(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
@@ -23,5 +56,13 @@ internal static class PeasantRebelBanditSpawnRulesTests
     private static void Equal<T>(T expected, T actual, string message)
     {
         if (!Equals(expected, actual)) throw new InvalidOperationException(message + ": expected " + expected + ", got " + actual);
+    }
+
+    private static void Contains(string pText, string pExpected)
+    {
+        if (pText == null || !pText.Contains(pExpected,
+                StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "missing source integration: " + pExpected);
     }
 }
