@@ -415,15 +415,12 @@ namespace AncientWarfare3.core.policy
                     if (IsCityCountryLayer) PublishNativeCountryLabels();
                     else if (IsCityMemberLayer || IsCityCountyLayer)
                         PublishNativeCityLabels();
-                    else if (IsCityRegionLayer && !IsCityGlobalRegionLayer)
+                    else if (IsCityRegionLayer)
                         PublishNativeCityLabels();
                     else if (!IsCityGlobalRegionLayer)
                         PublishNativeCountryLabels();
                     published = true;
                 }
-                if (IsCityGlobalRegionLayer)
-                    HierarchicalVassalMapModeLabelLayer.
-                        HideNativeLabelsExcept(null);
             }
             catch (Exception error)
             {

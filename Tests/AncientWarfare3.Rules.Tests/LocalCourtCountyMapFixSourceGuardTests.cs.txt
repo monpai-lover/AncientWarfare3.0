@@ -23,6 +23,12 @@ internal static class LocalCourtCountyMapFixSourceGuardTests
             "county naming must reuse the city's persisted commandery");
         Contains(county, "SelectUnusedCountyFromCatalog(",
             "unmatched legacy cities must still receive historical county names");
+        string courtService = Read("Code/core/court/CourtService.cs");
+        Contains(courtService,
+            "pAllowLocalLowerQualification:\n" +
+            "                                pLayer == CourtOfficeLayer.City ||\n" +
+            "                                pLayer == CourtOfficeLayer.County",
+            "county magistrate eligibility must receive the low-office qualification bypass");
         string partition = Read("Code/core/county/CountyZonePartitionRules.cs");
         Contains(partition, "MaximumCountiesPerCity = 3",
             "a city must cap its county count at three");

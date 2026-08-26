@@ -5703,6 +5703,15 @@ Equal(false, SchoolNameplateRenderRules.CanRender("none", 12f, false),
 var eligibleCourtCandidate = CourtFacts();
 True(CourtManualAppointmentRules.CanListCandidate(eligibleCourtCandidate),
     "an eligible domestic man appears in the manual appointment list");
+Equal(false, CourtManualAppointmentRules.CanUseLayerCandidate(
+        CourtOfficeLayer.County, isCityLeader: true),
+    "city leaders cannot be selected as county magistrates");
+True(CourtManualAppointmentRules.CanUseLayerCandidate(
+        CourtOfficeLayer.County, isCityLeader: false),
+    "ordinary eligible actors remain available for county magistrate");
+True(CourtManualAppointmentRules.CanUseLayerCandidate(
+        CourtOfficeLayer.City, isCityLeader: true),
+    "city leaders remain available for their authoritative city office");
 True(CourtManualAppointmentRules.IsSchoolEligible("", "medical"),
     "a schoolless actor remains eligible for every office");
 True(CourtManualAppointmentRules.IsSchoolEligible("ru", "medical"),

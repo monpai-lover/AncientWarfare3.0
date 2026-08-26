@@ -1503,13 +1503,18 @@ namespace AncientWarfare3.core.court
             CivilServiceQualificationRecord pQualification = null,
             bool pQualificationsCaptured = false)
         {
+            if (!CourtManualAppointmentRules.CanUseLayerCandidate(pLayer,
+                    pActor?.isCityLeader() == true)) return false;
             return IsCentralCandidateEligibleWithoutQualification(pActor,
                        pKingdom, pOfficeId, pUnavailableActorIds, pLayer) &&
                    CivilServiceQualificationService.
-                       CanReceiveFormalCivilAppointment(pActor, pKingdom,
-                           pLayer, pOfficeId,
-                           pAllowVacancyPromotion, pQualification,
-                           pQualificationsCaptured);
+                        CanReceiveFormalCivilAppointment(pActor, pKingdom,
+                            pLayer, pOfficeId,
+                            pAllowVacancyPromotion, pQualification,
+                            pQualificationsCaptured,
+                            pAllowLocalLowerQualification:
+                                pLayer == CourtOfficeLayer.City ||
+                                pLayer == CourtOfficeLayer.County);
         }
 
         private static bool IsActingCentralCandidateEligible(Actor pActor,

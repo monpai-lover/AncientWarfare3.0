@@ -542,7 +542,8 @@ namespace AncientWarfare3.core.policy
             _pendingRegionSources = (_refreshKind ==
                 HierarchicalVassalLabelRefreshKind.RootCities ||
                 _refreshKind == HierarchicalVassalLabelRefreshKind.ActiveView) &&
-                HierarchicalVassalMapModeService.IsCityRegionLayer
+                HierarchicalVassalMapModeService.IsCityRegionLayer &&
+                !HierarchicalVassalMapModeService.IsCityGlobalRegionLayer
                 ? result.RegionSources : null;
             _pendingCitySources = _refreshKind ==
                 HierarchicalVassalLabelRefreshKind.RootCities ||

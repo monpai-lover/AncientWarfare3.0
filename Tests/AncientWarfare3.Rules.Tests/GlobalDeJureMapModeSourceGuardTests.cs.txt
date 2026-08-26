@@ -33,9 +33,16 @@ internal static class GlobalDeJureMapModeSourceGuardTests
         True(layer.Contains("HierarchicalVassalMapLabelRuntime.ProcessFrame();",
                  StringComparison.Ordinal),
             "map label layer advances the asynchronous label pipeline");
-        True(!service.Contains("else if (IsCityGlobalRegionLayer) PublishNativeCityLabels();",
+        True(service.Contains("else if (IsCityRegionLayer)\n                        PublishNativeCityLabels();",
                  StringComparison.Ordinal),
-            "global region overview does not publish duplicate native labels");
+            "global region overview publishes seat-anchored native labels");
+        True(!service.Contains("if (IsCityGlobalRegionLayer)\n                    HierarchicalVassalMapModeLabelLayer.\n                        HideNativeLabelsExcept(null);",
+                 StringComparison.Ordinal),
+            "global region overview must not hide its published native labels");
+        True(runtime.Contains(
+                "HierarchicalVassalMapModeService.IsCityRegionLayer &&\n                !HierarchicalVassalMapModeService.IsCityGlobalRegionLayer",
+                StringComparison.Ordinal),
+            "global region overview must not enqueue duplicate async labels");
         True(service.Contains("BuildGlobalDeJureRegionSources", StringComparison.Ordinal) &&
              service.Contains("pKingdomId < 0L", StringComparison.Ordinal),
             "global city layer discovers regions without a kingdom focus");

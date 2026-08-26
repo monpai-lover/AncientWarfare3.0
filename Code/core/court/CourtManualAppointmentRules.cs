@@ -180,6 +180,13 @@ namespace AncientWarfare3.core.court
             return candidateActorId >= 0 && candidateActorId != incumbentActorId;
         }
 
+        public static bool CanUseLayerCandidate(string pLayer,
+            bool isCityLeader)
+        {
+            return !string.Equals(pLayer, CourtOfficeLayer.County,
+                       StringComparison.Ordinal) || !isCityLeader;
+        }
+
         public static bool IsMilitaryCentralOffice(string pOfficeId)
         {
             return string.Equals(pOfficeId, CourtOfficeId.SiMa,
