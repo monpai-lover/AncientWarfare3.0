@@ -20,6 +20,10 @@ internal static class CourtVacancySourceGuardTests
             "Code/core/court/CivilServiceQualificationService.cs");
         string exam = Read("Code/core/court/CivilServiceExamService.cs");
         string career = Read("Code/core/court/OfficialCareerStateService.cs");
+        string restore = Read(
+            "Code/core/court/CourtVacancyRestoreService.cs");
+        string pipeline = Read(
+            "Code/core/multiplayer/AW3RuntimeRestorePipeline.cs");
 
         Contains(session, "OfficerCandidateCatalog.GetOrBuild",
             "one reconciliation cycle must reuse the kingdom catalog");
@@ -72,6 +76,10 @@ internal static class CourtVacancySourceGuardTests
         False(exam.Contains("FillVacanciesAfterCivilServiceExam",
                 StringComparison.Ordinal),
             "exam completion cannot run a full vacancy scan");
+        Contains(restore, "CourtVacancyRestoreGenerationGate",
+            "restore uses a generation gate");
+        Contains(pipeline, "court_vacancies",
+            "restore pipeline executes court vacancy restore");
     }
 
     private static string MethodBody(string pText, string pMethodName)

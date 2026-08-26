@@ -79,6 +79,18 @@ internal static class CourtVacancyRulesTests
         processed.Add(local);
         True(!CourtVacancyCycleRules.Next(ordered, processed, 3, 3).HasValue,
             "cycle stops at valid-office bound");
+
+        var gate = new CourtVacancyRestoreGenerationGate();
+        int firstGeneration = gate.BeginGeneration();
+        True(gate.TryComplete(firstGeneration),
+            "first restore generation completes");
+        True(!gate.TryComplete(firstGeneration),
+            "same restore generation cannot complete twice");
+        int secondGeneration = gate.BeginGeneration();
+        True(secondGeneration != firstGeneration,
+            "new restore generation gets a new token");
+        True(gate.TryComplete(secondGeneration),
+            "second restore generation completes");
     }
 
     private static void True(bool pValue, string pMessage)
