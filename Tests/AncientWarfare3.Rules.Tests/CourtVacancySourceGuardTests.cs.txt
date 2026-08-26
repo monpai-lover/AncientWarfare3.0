@@ -15,6 +15,11 @@ internal static class CourtVacancySourceGuardTests
             "Code/core/performance/AWAuthorityCycleService.cs");
         string promotion = Read("Code/patch/AW_PromotionPatch.cs");
         string customRuntime = Read("Code/core/court/CustomCourtRuntime.cs");
+        string eventPatch = Read("Code/patch/AW_CourtVacancyEventPatch.cs");
+        string qualification = Read(
+            "Code/core/court/CivilServiceQualificationService.cs");
+        string exam = Read("Code/core/court/CivilServiceExamService.cs");
+        string career = Read("Code/core/court/OfficialCareerStateService.cs");
 
         Contains(session, "OfficerCandidateCatalog.GetOrBuild",
             "one reconciliation cycle must reuse the kingdom catalog");
@@ -54,6 +59,19 @@ internal static class CourtVacancySourceGuardTests
             "promotion path cannot use retired self-rescheduling repair");
         Contains(customRuntime, "RefreshKingdomDefinitions",
             "template migration must refresh vacancy definitions once");
+        Contains(eventPatch, "eventBecomeAdult",
+            "native adulthood must wake the candidate pool");
+        Contains(eventPatch, "CandidatePoolChanged",
+            "adulthood hook must notify vacancy reconciliation");
+        Contains(qualification, "CandidatePoolChanged",
+            "committed qualification must wake vacancy reconciliation");
+        Contains(exam, "CandidatePoolChanged",
+            "exam completion must publish candidate-pool change");
+        Contains(career, "CandidatePoolChanged",
+            "committed rank or grade change must wake vacancies");
+        False(exam.Contains("FillVacanciesAfterCivilServiceExam",
+                StringComparison.Ordinal),
+            "exam completion cannot run a full vacancy scan");
     }
 
     private static string MethodBody(string pText, string pMethodName)

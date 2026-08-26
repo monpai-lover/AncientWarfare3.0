@@ -338,10 +338,14 @@ namespace AncientWarfare3.patch
         private static void ActorSetKingdom_Postfix(Actor __instance,
             Kingdom pKingdomToSet, Kingdom __state)
         {
+            if (SmoothLoader.isLoading() || !Config.game_loaded) return;
             if (!OfficerCandidateCatalogRules.ShouldInvalidate(
                     !ReferenceEquals(__state, pKingdomToSet))) return;
             OfficerCandidateCatalog.Invalidate(__state);
             OfficerCandidateCatalog.Invalidate(pKingdomToSet);
+            CourtVacancyReconciliationService.ActorLeftKingdom(__state);
+            CourtVacancyReconciliationService.CandidatePoolChanged(
+                pKingdomToSet);
         }
 
         [HarmonyPostfix]
