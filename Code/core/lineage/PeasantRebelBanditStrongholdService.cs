@@ -965,7 +965,7 @@ namespace AncientWarfare3.core.lineage
                                  .ToList())
                     {
                         if (building?.data == null) continue;
-                        World.world.buildings.removeObject(building);
+                        building.removeBuildingFinal();
                     }
                 foreach (TileZone zone in zones)
                     if (zone?.tiles != null)
@@ -1919,12 +1919,11 @@ namespace AncientWarfare3.core.lineage
             {
                 foreach (Building tower in pTransaction.Towers)
                     if (tower?.data != null)
-                        World.world.buildings.removeObject(tower);
+                        tower.removeBuildingFinal();
                 foreach (TileSnapshot snapshot in pTransaction.WallTiles)
                     snapshot.Tile?.setTopTileType(snapshot.TopType);
                 if (pTransaction.BuiltMotherCore?.data != null)
-                    World.world.buildings.removeObject(
-                        pTransaction.BuiltMotherCore);
+                    pTransaction.BuiltMotherCore.removeBuildingFinal();
                 foreach (TileZone zone in plan.InteriorZones)
                     if (zone != null) plan.Context.Mother.addZone(zone);
                 if (pTransaction.Stronghold?.data != null &&
