@@ -23,6 +23,15 @@ internal static class LocalCourtCountyMapFixSourceGuardTests
             "county naming must reuse the city's persisted commandery");
         Contains(county, "SelectUnusedCountyFromCatalog(",
             "unmatched legacy cities must still receive historical county names");
+        Contains(county, "CollectRegionCountyNames(",
+            "county naming must reserve names already used elsewhere in the state");
+        Contains(county, "SelectCityCommandery(",
+            "each city in a state must receive its own stable historical commandery");
+        Contains(county, "usedCommanderyIds.Add(region.HistoricalCommanderyId);",
+            "member cities must reserve the legal seat's historical commandery during first-load repair");
+        string countyModels = Read("Code/core/county/CountyModels.cs");
+        Contains(countyModels, "HistoricalCommanderyId",
+            "city-commandery assignments must survive save and reload");
         string courtService = Read("Code/core/court/CourtService.cs");
         Contains(courtService,
             "pAllowLocalLowerQualification:\n" +
@@ -35,6 +44,10 @@ internal static class LocalCourtCountyMapFixSourceGuardTests
         Contains(partition, "int countyCount = Math.Min(MaximumCountiesPerCity",
             "county count must be determined from the 25-zone threshold");
         string map = Read("Code/core/policy/HierarchicalVassalMapModeService.cs");
+        Contains(map,
+            "if (IsCityMemberLayer && !IsCityInFocusedRegion(pCity))\n" +
+            "                    return null;",
+            "member-layer rendering must hide cities outside the focused region");
         Contains(map, "KeepNativeLabelsVisible();",
             "empty global clicks must preserve existing labels");
         Contains(map, "IsCityCountyLayer ? 0.72f : 1f",

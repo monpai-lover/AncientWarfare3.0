@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.multiplayer.commands
@@ -29,8 +30,55 @@ namespace AncientWarfare3.core.multiplayer.commands
                     return ApplyCustomCourtTemplate(request);
                 case AW3CommandKind.GrantBanditAmnesty:
                     return GrantBanditAmnesty(request);
+                case AW3CommandKind.RenameCounty:
+                    return RenameCounty(request);
                 default:
                     return Invalid();
+            }
+        }
+
+        private static AW3CommandResult RenameCounty(
+            AW3CommandRequest request)
+        {
+            CountyRenameResult result = CountyRenameService.TryApply(
+                request.CountryId, request.SecondaryId, request.Text,
+                request.BoolValue, out CountyRecord updated);
+            if (result == CountyRenameResult.Success)
+                return AW3CommandResult.Success(
+                    request.BoolValue
+                        ? "aw_county_restore_success"
+                        : "aw_county_rename_success",
+                    updated?.CountyId ?? request.SecondaryId, (int)result);
+            AW3CommandError error = result == CountyRenameResult.CountyNotFound
+                ? AW3CommandError.NotFound
+                : result == CountyRenameResult.Unauthorized
+                    ? AW3CommandError.Unauthorized
+                    : result == CountyRenameResult.DuplicateName
+                        ? AW3CommandError.Conflict
+                        : result == CountyRenameResult.PersistenceFailed
+                            ? AW3CommandError.ExecutionFailed
+                            : AW3CommandError.IllegalTarget;
+            return AW3CommandResult.Rejected(error,
+                CountyRenameErrorKey(result), request.SecondaryId,
+                (int)result);
+        }
+
+        private static string CountyRenameErrorKey(CountyRenameResult pResult)
+        {
+            switch (pResult)
+            {
+                case CountyRenameResult.CountyNotFound:
+                    return "aw_county_rename_inactive";
+                case CountyRenameResult.Unauthorized:
+                    return "aw_county_rename_unauthorized";
+                case CountyRenameResult.EmptyName:
+                    return "aw_county_rename_empty";
+                case CountyRenameResult.DuplicateName:
+                    return "aw_county_rename_duplicate";
+                case CountyRenameResult.InvalidRegion:
+                    return "aw_county_rename_invalid_region";
+                default:
+                    return "aw_county_rename_failed";
             }
         }
 

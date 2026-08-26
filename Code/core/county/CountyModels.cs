@@ -4,7 +4,7 @@ namespace AncientWarfare3.core.county
 {
     internal sealed class CountyAdministrationSnapshot
     {
-        public int SchemaVersion { get; set; } = 1;
+        public int SchemaVersion { get; set; } = 2;
         public long NextCountyId { get; set; } = 1L;
         public long Revision { get; set; }
         public List<CountyRecord> Counties { get; set; } = new List<CountyRecord>();
@@ -15,6 +15,7 @@ namespace AncientWarfare3.core.county
         public long CountyId { get; set; } = -1L;
         public long CityId { get; set; } = -1L;
         public long RegionId { get; set; } = -1L;
+        public string HistoricalCommanderyId { get; set; } = string.Empty;
         public int Ordinal { get; set; }
         public string Name { get; set; } = string.Empty;
         public bool ManualName { get; set; }

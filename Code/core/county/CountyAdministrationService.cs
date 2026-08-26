@@ -36,7 +36,6 @@ namespace AncientWarfare3.core.county
             IReadOnlyList<IReadOnlyList<long>> groups =
                 CountyZonePartitionRules.Partition(valid, adjacency);
             var used = new HashSet<long>();
-            var usedNames = new HashSet<string>(StringComparer.Ordinal);
             string historicalCityName = pCity.data.name ?? string.Empty;
             pCity.data.get(AWNameDataKeys.ChineseName,
                 out string storedChineseName, string.Empty);
@@ -44,12 +43,37 @@ namespace AncientWarfare3.core.county
                 historicalCityName = storedChineseName.Trim();
             XiaHistoricalDeJureCatalog catalog =
                 XiaHistoricalDeJureCatalogService.Current;
-            XiaHistoricalCommanderyDefinition commandery = null;
+            DeJureRegion region = null;
             if (DeJureRegionStore.TryGetForCity(cityId,
-                    out DeJureRegion region) &&
+                    out DeJureRegion resolvedRegion))
+                region = resolvedRegion;
+            var usedNames = CollectRegionCountyNames(region, cityId);
+            var usedCommanderyIds = region?.SeatCityId == cityId
+                ? new HashSet<string>(StringComparer.Ordinal)
+                : CollectRegionCommanderyIds(region, cityId);
+            if (region != null && region.SeatCityId != cityId &&
                 !string.IsNullOrWhiteSpace(region.HistoricalCommanderyId))
-                commandery = catalog.GetCommandery(
-                    region.HistoricalCommanderyId);
+                usedCommanderyIds.Add(region.HistoricalCommanderyId);
+            string persistedCommanderyId = existing.Where(p => p != null &&
+                    !string.IsNullOrWhiteSpace(p.HistoricalCommanderyId))
+                .OrderBy(p => p.Ordinal)
+                .Select(p => p.HistoricalCommanderyId).FirstOrDefault() ??
+                string.Empty;
+            string stateId = region?.HistoricalStateId ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(stateId) &&
+                !string.IsNullOrWhiteSpace(region?.HistoricalCommanderyId))
+                stateId = catalog.States.FirstOrDefault(state => state != null &&
+                    state.Commanderies.Any(item => string.Equals(item.Id,
+                        region.HistoricalCommanderyId,
+                        StringComparison.Ordinal)))?.Id ?? string.Empty;
+            XiaHistoricalCommanderyDefinition commandery =
+                XiaHistoricalDeJureRules.SelectCityCommandery(catalog,
+                    stateId, persistedCommanderyId,
+                    region?.SeatCityId == cityId
+                        ? region.HistoricalCommanderyId
+                        : string.Empty,
+                    historicalCityName, usedCommanderyIds,
+                    unchecked((int)pCity.data.id));
             if (commandery == null)
             {
                 XiaHistoricalDeJureProfile profile =
@@ -85,6 +109,9 @@ namespace AncientWarfare3.core.county
                     used.Add(match.CountyId);
 
                 match.CityId = cityId;
+                match.RegionId = region?.RegionId ?? -1L;
+                match.HistoricalCommanderyId = commandery?.Id ??
+                    string.Empty;
                 match.Ordinal = ordinal;
                 match.ZoneIds = group.ToList();
                 match.Active = true;
@@ -93,8 +120,9 @@ namespace AncientWarfare3.core.county
                 else
                 {
                     string historicalName = SelectHistoricalCountyName(
-                        catalog, commandery, historicalCityName, usedNames,
-                        ordinal, unchecked((int)(cityId * 397L + ordinal)));
+                        catalog, stateId, commandery, historicalCityName,
+                        usedNames, ordinal,
+                        unchecked((int)(cityId * 397L + ordinal)));
                     match.Name = string.IsNullOrWhiteSpace(historicalName)
                         ? CountyNameRules.Build(pCity.data.name, ordinal,
                             pHistoricalName: null)
@@ -119,8 +147,44 @@ namespace AncientWarfare3.core.county
             }
         }
 
+        private static HashSet<string> CollectRegionCountyNames(
+            DeJureRegion pRegion, long pExcludedCityId)
+        {
+            var result = new HashSet<string>(StringComparer.Ordinal);
+            foreach (long memberCityId in pRegion?.MemberCityIds ??
+                     new List<long>())
+            {
+                if (memberCityId == pExcludedCityId) continue;
+                foreach (CountyRecord county in CountyAdministrationStore.
+                             ForCity(memberCityId))
+                    if (county != null && !string.IsNullOrWhiteSpace(
+                            county.Name))
+                        result.Add(county.Name);
+            }
+            return result;
+        }
+
+        private static HashSet<string> CollectRegionCommanderyIds(
+            DeJureRegion pRegion, long pExcludedCityId)
+        {
+            var result = new HashSet<string>(StringComparer.Ordinal);
+            foreach (long memberCityId in pRegion?.MemberCityIds ??
+                     new List<long>())
+            {
+                if (memberCityId == pExcludedCityId) continue;
+                CountyRecord county = CountyAdministrationStore.
+                    ForCity(memberCityId).FirstOrDefault(item => item != null &&
+                        !string.IsNullOrWhiteSpace(
+                            item.HistoricalCommanderyId));
+                if (county != null)
+                    result.Add(county.HistoricalCommanderyId);
+            }
+            return result;
+        }
+
         private static string SelectHistoricalCountyName(
             XiaHistoricalDeJureCatalog pCatalog,
+            string pStateId,
             XiaHistoricalCommanderyDefinition pCommandery,
             string pCityName, ISet<string> pUsedNames, int pOrdinal,
             int pStableSelector)
@@ -140,6 +204,10 @@ namespace AncientWarfare3.core.county
                     selected = available[Math.Min(Math.Max(0, pOrdinal),
                         available.Length - 1)];
             }
+            if (string.IsNullOrWhiteSpace(selected))
+                selected = XiaHistoricalDeJureRules.
+                    SelectUnusedCountyFromState(pCatalog, pStateId, used,
+                        pStableSelector);
             if (string.IsNullOrWhiteSpace(selected))
                 selected = XiaHistoricalDeJureRules.
                     SelectUnusedCountyFromCatalog(pCatalog, used,

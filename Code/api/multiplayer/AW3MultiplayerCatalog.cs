@@ -168,6 +168,8 @@ namespace AncientWarfare3.api.multiplayer
                     AW3WindowCategory.Mandate, Country()),
                 Command(AW3CommandKind.MergeDeJureRegions,
                     AW3WindowCategory.Domestic, Country()),
+                Command(AW3CommandKind.RenameCounty,
+                    AW3WindowCategory.Domestic, Country()),
                 Command(AW3CommandKind.AppointCourtOfficer,
                     AW3WindowCategory.Domestic, Country() |
                     AW3WindowContextRequirement.Actor |
@@ -273,11 +275,12 @@ namespace AncientWarfare3.api.multiplayer
 
         public static AW3CommandDescriptor GetCommand(AW3CommandKind kind)
         {
-            int index = (int)kind;
-            if (index < 0 || index >= CommandDescriptors.Count ||
-                CommandDescriptors[index].Kind != kind)
-                throw new ArgumentOutOfRangeException(nameof(kind));
-            return CommandDescriptors[index];
+            for (int index = 0; index < CommandDescriptors.Count; index++)
+            {
+                AW3CommandDescriptor descriptor = CommandDescriptors[index];
+                if (descriptor.Kind == kind) return descriptor;
+            }
+            throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
         private static AW3WindowDescriptor Window(AW3WindowKind kind,

@@ -9,6 +9,9 @@
     <WorldBoxManaged Condition="'$(WorldBoxManaged)' == ''">D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed</WorldBoxManaged>
   </PropertyGroup>
 	<ItemGroup>
+		<Compile Include="CountyRenameRulesTests.cs.txt" />
+		<Compile Include="CountyRenameSourceGuardTests.cs.txt" />
+		<Compile Include="..\..\Code\core\county\CountyRenameRules.cs" Link="Production\CountyRenameRules.cs" />
 		<Compile Include="IslandEscapeBehaviourRulesTests.cs.txt" />
 		<Compile Include="..\..\Code\core\lineage\IslandEscapeBehaviourRules.cs" Link="Production\IslandEscapeBehaviourRules.cs" />
     <Compile Include="MandateIslandExileRulesTests.cs.txt" />

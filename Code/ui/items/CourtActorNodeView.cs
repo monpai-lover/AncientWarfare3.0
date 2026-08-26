@@ -35,6 +35,9 @@ namespace AncientWarfare3.ui.items
         private GameObject _dispositionObject;
         private Button _dispositionButton;
         private TipButton _dispositionTip;
+        private GameObject _renameCountyObject;
+        private Button _renameCountyButton;
+        private TipButton _renameCountyTip;
         private long _boundActorId = -1L;
 
         public bool HasPortrait => _avatar != null;
@@ -89,6 +92,35 @@ namespace AncientWarfare3.ui.items
                 ? VacancyOfficeName(pNode, pKingdom) + " - " +
                   AW_L10n.Text("aw_court_no_officer", "Vacant")
                 : pNode.ActorName;
+            bool countyOffice = pNode.OfficeLayer == CourtOfficeLayer.County &&
+                                pNode.CountyId >= 0L;
+            _renameCountyObject.SetActive(countyOffice);
+            _name.rectTransform.sizeDelta = new Vector2(
+                countyOffice ? Width - 34f : Width - 12f, 16f);
+            _renameCountyButton.onClick.RemoveAllListeners();
+            if (countyOffice)
+            {
+                long countyId = pNode.CountyId;
+                _renameCountyButton.onClick.AddListener(() =>
+                    CountyRenameWindow.Open(countyId));
+                _renameCountyTip.enabled = true;
+                _renameCountyTip.type = AW_RawTooltip.TYPE;
+                _renameCountyTip.hoverAction = () => Tooltip.show(
+                    _renameCountyObject, AW_RawTooltip.TYPE,
+                    new TooltipData
+                    {
+                        tip_name = AW_L10n.Text("aw_county_rename_title",
+                            "Rename County"),
+                        tip_description = AW_L10n.Text(
+                            "aw_county_rename_card_tip",
+                            "Rename this county")
+                    });
+            }
+            else
+            {
+                _renameCountyTip.enabled = false;
+                _renameCountyTip.hoverAction = null;
+            }
             string roleLine = RoleLine(pNode, pKingdom);
             string jointTitle = live && CanShowOfficialJointTitle(pKingdom, pNode)
                 ? OfficialJointTitle(pKingdom, pNode, actor, compact: true)
@@ -333,6 +365,39 @@ namespace AncientWarfare3.ui.items
             _name.resizeTextForBestFit = true;
             _name.resizeTextMinSize = 7;
             _name.resizeTextMaxSize = 10;
+            _renameCountyObject = new GameObject("RenameCounty",
+                typeof(RectTransform), typeof(Image), typeof(Button),
+                typeof(TipButton));
+            _renameCountyObject.transform.SetParent(transform, false);
+            RectTransform renameRect =
+                _renameCountyObject.GetComponent<RectTransform>();
+            renameRect.anchorMin = new Vector2(1f, 1f);
+            renameRect.anchorMax = new Vector2(1f, 1f);
+            renameRect.pivot = new Vector2(1f, 1f);
+            renameRect.anchoredPosition = new Vector2(-5f, -61f);
+            renameRect.sizeDelta = new Vector2(18f, 18f);
+            AW_UIStyle.ApplyButton(
+                _renameCountyObject.GetComponent<Image>(), 0.96f);
+            _renameCountyButton =
+                _renameCountyObject.GetComponent<Button>();
+            _renameCountyTip =
+                _renameCountyObject.GetComponent<TipButton>();
+            _renameCountyTip.showOnClick = false;
+            Image renameIcon = new GameObject("Icon", typeof(RectTransform),
+                typeof(Image)).GetComponent<Image>();
+            renameIcon.transform.SetParent(_renameCountyObject.transform,
+                false);
+            renameIcon.rectTransform.anchorMin = Vector2.zero;
+            renameIcon.rectTransform.anchorMax = Vector2.one;
+            renameIcon.rectTransform.offsetMin = new Vector2(2f, 2f);
+            renameIcon.rectTransform.offsetMax = new Vector2(-2f, -2f);
+            renameIcon.sprite = SpriteTextureLoader.getSprite(
+                                    "ui/icons/iconEdit") ??
+                                SpriteTextureLoader.getSprite(
+                                    "ui/icons/iconDocument");
+            renameIcon.preserveAspect = true;
+            renameIcon.raycastTarget = false;
+            _renameCountyObject.SetActive(false);
             _roles = CreateText("Roles", new Vector2(4f, -79f), new Vector2(Width - 8f, 22f),
                 8, TextAnchor.UpperCenter);
             _roles.color = new Color(0.95f, 0.86f, 0.58f, 1f);

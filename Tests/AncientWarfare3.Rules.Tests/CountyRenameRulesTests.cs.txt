@@ -1,0 +1,48 @@
+using AncientWarfare3.core.county;
+
+internal static class CountyRenameRulesTests
+{
+    internal static void Run()
+    {
+        Equal("江陵县", CountyRenameRules.NormalizeName(" 江陵 "),
+            "normalization trims and appends the county suffix");
+        Equal("江陵县", CountyRenameRules.NormalizeName("江陵县"),
+            "normalization does not duplicate the county suffix");
+        Equal(CountyRenameValidationResult.Empty,
+            CountyRenameRules.Validate("   ", 1L, 10L,
+                Array.Empty<CountyRenameEntry>(), out string emptyName),
+            "blank county names are rejected");
+        Equal(string.Empty, emptyName,
+            "blank validation returns an empty normalized name");
+
+        CountyRenameEntry[] entries =
+        {
+            new CountyRenameEntry(1L, 10L, "江陵县", true),
+            new CountyRenameEntry(2L, 10L, "夷陵县", true),
+            new CountyRenameEntry(3L, 20L, "公安县", true),
+            new CountyRenameEntry(4L, 10L, "临沮县", false)
+        };
+        Equal(CountyRenameValidationResult.Duplicate,
+            CountyRenameRules.Validate("夷陵", 1L, 10L, entries,
+                out string duplicateName),
+            "another active county in the same region blocks the name");
+        Equal("夷陵县", duplicateName,
+            "duplicate validation exposes the normalized name");
+        Equal(CountyRenameValidationResult.Success,
+            CountyRenameRules.Validate("江陵", 1L, 10L, entries, out _),
+            "the current county is excluded from duplicate checks");
+        Equal(CountyRenameValidationResult.Success,
+            CountyRenameRules.Validate("公安", 1L, 10L, entries, out _),
+            "the same name in another de jure region is allowed");
+        Equal(CountyRenameValidationResult.Success,
+            CountyRenameRules.Validate("临沮", 1L, 10L, entries, out _),
+            "inactive county records do not reserve names");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                $" (expected={pExpected}, actual={pActual})");
+    }
+}

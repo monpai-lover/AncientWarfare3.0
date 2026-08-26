@@ -109,6 +109,22 @@ namespace AncientWarfare3.core.county
                     p.ZoneIds != null && p.ZoneIds.Contains(pZoneId));
         }
 
+        internal static CountyRecord FindById(long pCountyId)
+        {
+            EnsureInitialized();
+            lock (Gate)
+                return Clone(_snapshot.Counties.FirstOrDefault(p => p != null &&
+                    p.Active && p.CountyId == pCountyId));
+        }
+
+        internal static IReadOnlyList<CountyRecord> ForRegion(long pRegionId)
+        {
+            EnsureInitialized();
+            lock (Gate)
+                return _snapshot.Counties.Where(p => p != null && p.Active &&
+                    p.RegionId == pRegionId).Select(Clone).ToArray();
+        }
+
         internal static CountyRecord Upsert(CountyRecord pRecord)
         {
             if (pRecord == null) return null;
@@ -190,6 +206,7 @@ namespace AncientWarfare3.core.county
         private static void Normalize(CountyAdministrationSnapshot pSnapshot)
         {
             if (pSnapshot == null) return;
+            pSnapshot.SchemaVersion = 2;
             if (pSnapshot.Counties == null) pSnapshot.Counties = new List<CountyRecord>();
             pSnapshot.NextCountyId = Math.Max(1L, pSnapshot.NextCountyId);
             long maxId = pSnapshot.Counties.Where(p => p != null)
@@ -198,6 +215,7 @@ namespace AncientWarfare3.core.county
             foreach (CountyRecord county in pSnapshot.Counties)
             {
                 if (county == null) continue;
+                county.HistoricalCommanderyId ??= string.Empty;
                 if (county.ZoneIds == null) county.ZoneIds = new List<long>();
                 county.ZoneIds = county.ZoneIds.Distinct().OrderBy(p => p).ToList();
             }
@@ -210,6 +228,7 @@ namespace AncientWarfare3.core.county
             {
                 CountyId = pRecord.CountyId, CityId = pRecord.CityId,
                 RegionId = pRecord.RegionId, Ordinal = pRecord.Ordinal,
+                HistoricalCommanderyId = pRecord.HistoricalCommanderyId,
                 Name = pRecord.Name, ManualName = pRecord.ManualName,
                 ZoneIds = pRecord.ZoneIds == null ? new List<long>() :
                     new List<long>(pRecord.ZoneIds),

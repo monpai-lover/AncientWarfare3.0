@@ -350,8 +350,9 @@ namespace AncientWarfare3.api.multiplayer
         ApplyCustomCourtTemplate = 34,
         GrantBanditAmnesty = 35,
         CommitDomesticHousehold = 36,
-        FillCentralCourtVacancies = 37
-        ,MergeDeJureRegions = 38
+        FillCentralCourtVacancies = 37,
+        MergeDeJureRegions = 38,
+        RenameCounty = 39
     }
 
     public enum AW3CommandStatus : byte
@@ -492,6 +493,13 @@ namespace AncientWarfare3.api.multiplayer
             cityId: Positive(primaryRegionId, nameof(primaryRegionId)),
             secondaryId: Positive(secondaryRegionId,
                 nameof(secondaryRegionId)));
+
+        public static AW3CommandRequest RenameCounty(long countryId,
+            long countyId, string countyName, bool restoreHistorical = false) =>
+            Create(AW3CommandKind.RenameCounty, countryId,
+                secondaryId: Positive(countyId, nameof(countyId)),
+                text: countyName?.Trim() ?? string.Empty,
+                boolValue: restoreHistorical);
 
         public static AW3CommandRequest AppointCourtOfficer(long countryId,
             long actorId, string officeId,

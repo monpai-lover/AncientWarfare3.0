@@ -41,9 +41,11 @@ namespace AncientWarfare3.core.naming
         public string Id { get; }
         public string Name { get; }
         public IReadOnlyList<XiaHistoricalCommanderyDefinition> Commanderies { get; }
+        public IReadOnlyList<string> CountyNames { get; }
 
         public XiaHistoricalStateDefinition(string pId, string pName,
-            IEnumerable<XiaHistoricalCommanderyDefinition> pCommanderies)
+            IEnumerable<XiaHistoricalCommanderyDefinition> pCommanderies,
+            IEnumerable<string> pCountyNames = null)
         {
             Id = (pId ?? string.Empty).Trim();
             Name = (pName ?? string.Empty).Trim();
@@ -52,6 +54,11 @@ namespace AncientWarfare3.core.naming
                 .Where(p => p != null && p.Id.Length > 0)
                 .GroupBy(p => p.Id, StringComparer.Ordinal)
                 .Select(p => p.First())
+                .ToArray();
+            CountyNames = (pCountyNames ?? Array.Empty<string>())
+                .Select(p => (p ?? string.Empty).Trim())
+                .Where(p => p.Length > 0)
+                .Distinct(StringComparer.Ordinal)
                 .ToArray();
         }
     }
@@ -100,7 +107,7 @@ namespace AncientWarfare3.core.naming
                         pState.name, pState.commanderies?.Select(pCommandery =>
                             new XiaHistoricalCommanderyDefinition(
                                 pCommandery.id, pCommandery.name,
-                                pCommandery.cities)))));
+                                pCommandery.cities)), pState.countyNames)));
             }
             catch (Exception pError)
             {
@@ -127,6 +134,7 @@ namespace AncientWarfare3.core.naming
         {
             public string id { get; set; }
             public string name { get; set; }
+            public List<string> countyNames { get; set; }
             public List<CommanderyDocument> commanderies { get; set; }
         }
 

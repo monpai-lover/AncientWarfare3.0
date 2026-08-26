@@ -139,7 +139,7 @@ namespace AncientWarfare3.core.court
             try
             {
                 string currentName = ResolveChineseCityName(pCity);
-                if (XiaHistoricalDeJureRules.IsHistoricalCountyName(
+                if (XiaHistoricalDeJureRules.IsHistoricalCityName(
                         XiaHistoricalDeJureCatalogService.Current,
                         currentName)) return;
                 if (!DeJureRegionStore.TryGetForCity(pCity.data.id,
@@ -150,17 +150,16 @@ namespace AncientWarfare3.core.court
                     XiaHistoricalDeJureRules.SelectProfile(
                         XiaHistoricalDeJureCatalogService.Current, memberNames,
                         StableSelector(pCity.data.id));
-                XiaHistoricalCommanderyDefinition commandery =
-                    XiaHistoricalDeJureCatalogService.Current.GetCommandery(
-                        profile.CommanderyId);
                 string[] usedNames = memberNames.ToArray();
                 int selector = StableSelector(pCity.data.id);
-                string candidate = XiaHistoricalDeJureRules.SelectUnusedCounty(
-                    commandery, usedNames, selector);
-                if (string.IsNullOrWhiteSpace(candidate))
-                    candidate = XiaHistoricalDeJureRules.SelectUnusedCountyFromCatalog(
-                        XiaHistoricalDeJureCatalogService.Current, usedNames,
-                        selector);
+                string stateId = string.IsNullOrWhiteSpace(
+                        region.HistoricalStateId)
+                    ? profile.StateId
+                    : region.HistoricalStateId;
+                string candidate = XiaHistoricalDeJureRules.
+                    SelectHistoricalCityName(
+                        XiaHistoricalDeJureCatalogService.Current, stateId,
+                        usedNames, selector);
                 if (string.IsNullOrWhiteSpace(candidate) ||
                     string.Equals(candidate, ResolveChineseCityName(pCity),
                         StringComparison.Ordinal)) return;
@@ -173,7 +172,7 @@ namespace AncientWarfare3.core.court
             }
             catch (Exception error)
             {
-                ModClass.LogError("Historical county name assignment failed: " +
+                ModClass.LogError("Historical city name assignment failed: " +
                     error.Message);
             }
         }
