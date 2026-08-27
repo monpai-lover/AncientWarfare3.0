@@ -123,6 +123,31 @@ namespace AncientWarfare3.patch
             HistoricalSchoolRuntime.EnqueueWorldYear();
         }
 
+        // The cooperative simulation advances MapStats directly and does not
+        // invoke MapBox.updateObjectAge. Keep school annual work attached to
+        // the actual world-time source so both simulation paths enqueue years.
+        [HarmonyPostfix]
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyPatch(typeof(MapStats), "updateWorldTime")]
+        private static void WorldTimeUpdated_Postfix()
+        {
+            HistoricalSchoolRuntime.EnqueueWorldYear();
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MapBox), "Update")]
+        private static void NativeMapBoxUpdate_Postfix()
+        {
+            if (!Config.game_loaded || SmoothLoader.isLoading()) return;
+            if (AWCooperativeSimulationRunner.Instance.RequiresControl) return;
+            try { HistoricalSchoolRuntime.ProcessVanillaFrame(); }
+            catch (Exception error)
+            {
+                HistoricalSchoolRuntime.LogAnnualStageFailure(
+                    "native_frame", error);
+            }
+        }
+
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(Actor), "die",
             new[] { typeof(bool), typeof(AttackType), typeof(bool), typeof(bool) })]

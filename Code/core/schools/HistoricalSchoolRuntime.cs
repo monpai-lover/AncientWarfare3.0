@@ -79,6 +79,32 @@ namespace AncientWarfare3.core.schools
             if (World.world == null) return;
             if (AWAsyncRuntime.State != AWAsyncLifecycleState.Running) return;
             if (!_loaded) return;
+            ProcessFrameCore();
+        }
+
+        // Native simulation mode does not enter AWAuthorityCycleService. Keep
+        // the school lifecycle alive from the vanilla MapBox.Update hook.
+        public static void ProcessVanillaFrame()
+        {
+            if (World.world == null) return;
+            if (!_loaded)
+            {
+                try { LoadState(); }
+                catch (Exception error)
+                {
+                    LogAnnualStageFailure("native_bootstrap", error);
+                    return;
+                }
+            }
+            ProcessFrameCore();
+        }
+
+        private static void ProcessFrameCore()
+        {
+            // AW3's cooperative runner advances world time without calling
+            // MapBox.updateObjectAge. Enqueue here as a path-independent
+            // fallback; the scheduler state coalesces duplicate years.
+            EnqueueWorldYear();
             HistoricalSchoolAcademyConstructionService.ProcessPendingRebuilds();
             HistoricalSchoolScheduler.ProcessFrame();
             HistoricalSchoolEducationJourneyService.
@@ -149,9 +175,9 @@ namespace AncientWarfare3.core.schools
         public static void EnqueueWorldYear()
         {
             long started = Stopwatch.GetTimestamp();
-            HistoricalSchoolScheduler.EnqueueYear(Date.getCurrentYear());
-            HistoricalSchoolDiagnostics.RecordYearEnqueue(
-                Stopwatch.GetTimestamp() - started);
+            if (HistoricalSchoolScheduler.EnqueueYear(Date.getCurrentYear()))
+                HistoricalSchoolDiagnostics.RecordYearEnqueue(
+                    Stopwatch.GetTimestamp() - started);
         }
 
         internal static List<City> LivingXiaCities()

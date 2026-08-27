@@ -13,6 +13,8 @@ internal static class HistoricalSchoolXiaAccessSourceGuardTests
         string lectures = Read("Code/core/schools/HistoricalSchoolActivityQueue.cs");
         string actions = Read("Code/core/schools/HistoricalSchoolActionService.cs");
         string venues = Read("Code/core/schools/HistoricalSchoolVenueProvider.cs");
+        string runtime = Read("Code/core/schools/HistoricalSchoolRuntime.cs");
+        string patch = Read("Code/patch/AW_HistoricalSchoolPatch.cs");
         string xiaization = Read("Code/core/lineage/XiaizationService.cs");
 
         Contains(academy,
@@ -68,6 +70,24 @@ internal static class HistoricalSchoolXiaAccessSourceGuardTests
         Contains(xiaization,
             "HistoricalSchoolXiaAccessService.NotifyAccessChanged(pCity);",
             "full Xiaization must invalidate school destination and venue caches");
+        Contains(patch,
+            "[HarmonyPatch(typeof(MapStats), \"updateWorldTime\")]",
+            "school year enqueue must follow the cooperative world-time path");
+        Contains(patch,
+            "HistoricalSchoolRuntime.EnqueueWorldYear();",
+            "world-time patch must enqueue the school year");
+        Contains(runtime,
+            "EnqueueWorldYear();\n            HistoricalSchoolAcademyConstructionService.ProcessPendingRebuilds();",
+            "school frame must enqueue years on the cooperative simulation path");
+        Contains(runtime,
+            "if (HistoricalSchoolScheduler.EnqueueYear(Date.getCurrentYear()))",
+            "duplicate world-time callbacks must not count as new year tokens");
+        Contains(runtime,
+            "public static void ProcessVanillaFrame()",
+            "schools must expose a native MapBox update entry point");
+        Contains(patch,
+            "HistoricalSchoolRuntime.ProcessVanillaFrame();",
+            "native MapBox updates must run school construction and annual work");
     }
 
     private static string Read(string pRelative)
