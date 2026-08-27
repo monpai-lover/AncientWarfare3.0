@@ -1305,13 +1305,25 @@ namespace AncientWarfare3.core.pathfinding
                             _diagnostics?.OnCompleted();
                         else if (task.Request.Stream.State == AWPathRequestState.Failed)
                         {
-                            _diagnostics?.OnFailed();
+                            _diagnostics?.OnFailed(
+                                task.Request.Stream.FailureReason);
                             Exception error = task.Request.Stream.Error;
                             if (error != null)
+                            {
                                 _diagnostics?.Enqueue(new AWPathDiagnosticEvent(
                                     task.Request.ActorId,
                                     task.Request.Stream.FailureReason,
                                     error.GetType().Name + ": " + error.Message));
+#if !AW3_RULES_TESTS
+                                AncientWarfare3.ModClass.LogError(
+                                    "[AW3 path GeneratorException] actor=" +
+                                    task.Request.ActorId +
+                                    " start=" + task.Request.StartTileId +
+                                    " target=" + task.Request.TargetTileId +
+                                    " work_class=" + task.Request.WorkClass +
+                                    " error=" + error);
+#endif
+                            }
                         }
                         task.ReleaseWorker();
 

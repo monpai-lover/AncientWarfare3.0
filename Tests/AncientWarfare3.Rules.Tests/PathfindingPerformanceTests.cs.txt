@@ -113,18 +113,21 @@ internal static class PathfindingPerformanceTests
             Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
             "AWStreamingPathGenerator.cs"));
         Assert(generator.Contains("[ThreadStatic]", StringComparison.Ordinal) &&
-               generator.Contains("ReusablePathSteps", StringComparison.Ordinal),
-            "path generation keeps a thread-local reusable output buffer");
+               generator.Contains("ReusablePathSteps", StringComparison.Ordinal) &&
+               !generator.Contains("_threadStraightPath", StringComparison.Ordinal),
+            "path generation keeps reuse internal to the worker workspace");
         Assert(generator.Contains(
                 "out IReadOnlyList<AWPathStep> pSteps",
                 StringComparison.Ordinal) &&
-               !generator.Contains(
+               generator.Contains(
                    "var buffer = new AWPathStep[pMaximumSteps];",
                    StringComparison.Ordinal),
-            "straight path generation does not allocate a temporary array per request");
-        Assert(generator.Contains("PathView(outputCount)",
+            "straight path generation publishes an owned snapshot instead of a reused buffer");
+        Assert(generator.Contains("workspace.BuildPath(result.NodeIndex)",
+                   StringComparison.Ordinal) &&
+               generator.Contains("CopyPrefix(fullRoute, outputCount)",
                    StringComparison.Ordinal),
-            "A* path generation exposes the workspace path view without copying complete routes");
+             "A* path generation publishes immutable route snapshots");
     }
 
     private static void CultiwayRoutingStagesMatchReference()
@@ -156,16 +159,13 @@ internal static class PathfindingPerformanceTests
                    StringComparison.Ordinal),
             "path workers use the master worker lifecycle priority");
         int partialPath = generator.IndexOf(
-            "IReadOnlyList<AWPathStep> steps = workspace.PathView(outputCount);",
+            "IReadOnlyList<AWPathStep> steps = outputCount == stepCount",
             StringComparison.Ordinal);
         int routeCopy = generator.IndexOf(
-            "var fullRoute = new AWPathStep[stepCount];", StringComparison.Ordinal);
-        int finalTargetGuard = generator.IndexOf(
-            "if (searchTargetId == target.Id)", partialPath,
+            "AWPathStep[] fullRoute = workspace.BuildPath(result.NodeIndex);",
             StringComparison.Ordinal);
-        Assert(partialPath >= 0 && finalTargetGuard > partialPath &&
-               routeCopy > finalTargetGuard,
-            "intermediate region segments avoid copying an unused full route");
+        Assert(routeCopy >= 0 && partialPath > routeCopy,
+             "full route is materialized before any bounded segment is published");
     }
 
     private static void MasterSchedulerAndActorPostRemainConverged()

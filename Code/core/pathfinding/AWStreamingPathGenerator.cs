@@ -10,7 +10,6 @@ namespace AncientWarfare3.core.pathfinding
     {
         private const float Epsilon = 0.001f;
         [ThreadStatic] private static SearchWorkspace _threadWorkspace;
-        [ThreadStatic] private static ReusablePathSteps _threadStraightPath;
         private readonly AWPathfindingConfig _config;
         private readonly AWRegionRouteCache _regionRouteCache;
 
@@ -233,37 +232,25 @@ namespace AncientWarfare3.core.pathfinding
                         result.ExpandedNodes);
                 }
 
-                int stepCount = workspace.BuildPath(result.NodeIndex);
+                // Materialize the search result before publishing it. The
+                // workspace is reused by the next request; exposing its
+                // mutable path view can let a re-entrant request overwrite
+                // the route while it is being copied.
+                AWPathStep[] fullRoute = workspace.BuildPath(result.NodeIndex);
+                int stepCount = fullRoute.Length;
                 int maximumSteps = Math.Max(1, pMaximumSteps);
                 int outputCount = Math.Min(stepCount, maximumSteps);
-                if (outputCount == stepCount)
-                {
-                    return BuildSuccess(pRequest,
-                        stepCount > 0 ? workspace.PathStep(stepCount - 1).TileId
-                            : pRequest.StartTileId,
-                        result.ReachedTarget && searchTargetId == target.Id,
-                        workspace.PathView(outputCount), result.ExpandedNodes,
-                        corridor != null
-                            ? AWPathGenerationKind.RegionCorridor
-                            : AWPathGenerationKind.Search);
-                }
-                IReadOnlyList<AWPathStep> steps = workspace.PathView(outputCount);
                 // A corridor waypoint is only a bounded intermediate search.
                 // Cache a full route only when this search actually targets
                 // the actor's destination; otherwise the copied remainder is
                 // discarded as soon as the waypoint is reached.
-                if (searchTargetId == target.Id)
-                {
-                    var fullRoute = new AWPathStep[stepCount];
-                    for (int i = 0; i < stepCount; i++)
-                    {
-                        pCancellation.ThrowIfCancellationRequested();
-                        fullRoute[i] = workspace.PathStep(i);
-                    }
+                if (searchTargetId == target.Id && outputCount < stepCount)
                     pRequest.CacheRoute(fullRoute, outputCount,
                         true, currentTerrainRevision,
                         currentWorldGeneration, pRequest.InsideBoat);
-                }
+                IReadOnlyList<AWPathStep> steps = outputCount == stepCount
+                    ? fullRoute
+                    : CopyPrefix(fullRoute, outputCount);
                 int endTileId = outputCount > 0
                     ? steps[outputCount - 1].TileId
                     : pRequest.StartTileId;
@@ -284,6 +271,15 @@ namespace AncientWarfare3.core.pathfinding
                 return AWPathGenerationResult.Failure(
                     AWPathFailureReason.GeneratorException, error);
             }
+        }
+
+        private static AWPathStep[] CopyPrefix(AWPathStep[] pRoute,
+            int pCount)
+        {
+            int count = Math.Max(0, Math.Min(pCount, pRoute?.Length ?? 0));
+            var result = new AWPathStep[count];
+            if (count > 0) Array.Copy(pRoute, result, count);
+            return result;
         }
 
         private static AWPathGenerationResult BuildSuccess(
@@ -403,9 +399,9 @@ namespace AncientWarfare3.core.pathfinding
             out IReadOnlyList<AWPathStep> pSteps, out int pEndTileId)
         {
             pMaximumSteps = Math.Max(1, pMaximumSteps);
-            ReusablePathSteps buffer = _threadStraightPath ??=
-                new ReusablePathSteps(pMaximumSteps);
-            buffer.Clear();
+            // The result can outlive this call while another request runs on
+            // the same worker thread. Do not expose a thread-reused buffer.
+            var buffer = new AWPathStep[pMaximumSteps];
             int count = 0;
             int x = pStart.X, y = pStart.Y;
             int targetX = pTarget.X, targetY = pTarget.Y;
@@ -434,13 +430,21 @@ namespace AncientWarfare3.core.pathfinding
                     : next.Liquid || next.Ocean
                         ? AWMovementMethod.Swim
                         : AWMovementMethod.Walk;
-                buffer.Add(new AWPathStep(next.Id, method,
-                    estimate, pPlannedTileFlags: AWPathTileFlagsExtensions.FromSnapshot(next)));
-                count++;
+                buffer[count++] = new AWPathStep(next.Id, method,
+                    estimate, pPlannedTileFlags: AWPathTileFlagsExtensions.FromSnapshot(next));
                 currentId = next.Id;
             }
             pEndTileId = currentId;
-            pSteps = buffer;
+            if (count == buffer.Length)
+            {
+                pSteps = buffer;
+            }
+            else
+            {
+                var snapshot = new AWPathStep[count];
+                if (count > 0) Array.Copy(buffer, snapshot, count);
+                pSteps = snapshot;
+            }
             return count > 0 || pStart.Id == pTarget.Id;
         }
 
@@ -921,7 +925,7 @@ namespace AncientWarfare3.core.pathfinding
 
             public SearchNode Node(int pIndex) => _nodes[pIndex];
 
-            public int BuildPath(int pNodeIndex)
+            public AWPathStep[] BuildPath(int pNodeIndex)
             {
                 int count = 0;
                 SearchNode node = _nodes[pNodeIndex];
@@ -939,15 +943,9 @@ namespace AncientWarfare3.core.pathfinding
                         node.Method, node.Estimate);
                     node = _nodes[node.ParentIndex];
                 }
-                return count;
-            }
-
-            public AWPathStep PathStep(int pIndex) => _path[pIndex];
-
-            public IReadOnlyList<AWPathStep> PathView(int pCount)
-            {
-                _path.SetCount(pCount);
-                return _path;
+                var snapshot = new AWPathStep[count];
+                for (int i = 0; i < count; i++) snapshot[i] = _path[i];
+                return snapshot;
             }
 
             private int AddNode(SearchNode pNode)
