@@ -349,6 +349,11 @@ namespace AncientWarfare3.core.pathfinding
             new Dictionary<long, ArmyRouteHandle>();
         private readonly Dictionary<long, ArmyRoutePoll> _terminalAfterStep =
             new Dictionary<long, ArmyRoutePoll>();
+        // Consuming the final streamed step can retire the finder session.
+        // Preserve that ownership transition until the RTS controller polls
+        // again, otherwise NoRequest is mistaken for a failed route.
+        private readonly HashSet<long> _consumedStepPending =
+            new HashSet<long>();
         private long _nextRequestId;
         private bool _disposed;
 
@@ -381,6 +386,7 @@ namespace AncientWarfare3.core.pathfinding
                 return ArmyRouteHandle.Rejected(request.ArmyId,
                     _disposed ? "provider_disposed" : "invalid_request");
             _terminalAfterStep.Remove(request.ArmyId);
+            _consumedStepPending.Remove(request.ArmyId);
             Army army = FindArmy(request.ArmyId);
             Actor captain = SafeCaptain(army);
             if (captain?.data == null || captain.current_tile?.data == null)
@@ -458,29 +464,37 @@ namespace AncientWarfare3.core.pathfinding
                     return new ArmyRoutePoll(ArmyRoutePollKind.Waiting);
                 case AWPathPollKind.StepReady:
                     bool consumed = _finder.Consume(finderRequestId);
-                    AWPathPollResult observed = _finder.Poll(
-                        finderRequestId);
-                    if (ArmyRouteProviderRules.
-                            TryResolveTerminalAfterConsumedStep(consumed,
-                                ToArmyRoutePoll(observed),
-                                out ArmyRoutePoll terminal))
-                        _terminalAfterStep[armyId] = terminal;
+                    if (!consumed)
+                    {
+                        _handles.Remove(armyId);
+                        _consumedStepPending.Remove(armyId);
+                        return new ArmyRoutePoll(ArmyRoutePollKind.Failed,
+                            failureReason: "step_consume_failed");
+                    }
+                    _consumedStepPending.Remove(armyId);
+                    _consumedStepPending.Add(armyId);
                     return new ArmyRoutePoll(ArmyRoutePollKind.StepReady,
                         poll.Step.TileId,
-                        movementMethod: poll.Step.Method);
+                        movementMethod: poll.Step.Method,
+                        estimate: poll.Step.Estimate);
                 case AWPathPollKind.Completed:
                     _handles.Remove(armyId);
+                    _consumedStepPending.Remove(armyId);
                     return new ArmyRoutePoll(ArmyRoutePollKind.Completed);
                 case AWPathPollKind.Failed:
                     _handles.Remove(armyId);
+                    _consumedStepPending.Remove(armyId);
                     return new ArmyRoutePoll(ArmyRoutePollKind.Failed,
                         failureReason: poll.FailureReason.ToString());
                 case AWPathPollKind.Cancelled:
                     _handles.Remove(armyId);
+                    _consumedStepPending.Remove(armyId);
                     return new ArmyRoutePoll(ArmyRoutePollKind.Cancelled,
                         failureReason: poll.FailureReason.ToString());
                 default:
                     _handles.Remove(armyId);
+                    if (_consumedStepPending.Remove(armyId))
+                        return new ArmyRoutePoll(ArmyRoutePollKind.Completed);
                     return new ArmyRoutePoll(ArmyRoutePollKind.NoRequest);
             }
         }
@@ -492,6 +506,7 @@ namespace AncientWarfare3.core.pathfinding
                 ToPathFailure(reason));
             _handles.Remove(armyId);
             _terminalAfterStep.Remove(armyId);
+            _consumedStepPending.Remove(armyId);
         }
 
         public void ClearWorld()
@@ -503,6 +518,7 @@ namespace AncientWarfare3.core.pathfinding
                 CancelSharedRequests(AWPathFailureReason.WorldCleared);
             _handles.Clear();
             _terminalAfterStep.Clear();
+            _consumedStepPending.Clear();
         }
 
         public void Dispose()
@@ -521,6 +537,7 @@ namespace AncientWarfare3.core.pathfinding
             }
             _handles.Clear();
             _terminalAfterStep.Clear();
+            _consumedStepPending.Clear();
         }
 
         private static ArmyRoutePoll ToArmyRoutePoll(
