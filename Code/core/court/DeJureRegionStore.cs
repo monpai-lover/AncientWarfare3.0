@@ -100,6 +100,7 @@ namespace AncientWarfare3.core.court
 
         internal static void RepairAfterWorldLoaded()
         {
+            bool continuityChanged = false;
             try
             {
                 EnsureInitialized();
@@ -115,9 +116,18 @@ namespace AncientWarfare3.core.court
                         Migrate(_store);
                         _migrationCompleted = true;
                     }
+                    continuityChanged = RepairDisconnectedRegionsLocked();
+                    if (continuityChanged) _store.StoreRevision++;
                     SyncAllRegionNamesLocked();
                     MigrateHistoricalMetadataLocked();
                     _worldLoadRepairCompleted = true;
+                }
+                if (continuityChanged)
+                {
+                    RegionalGovernmentAggregationService.Clear();
+                    HierarchicalVassalMapModeService.MarkHierarchyDirty();
+                    HierarchicalVassalMapModeService.
+                        RefreshAfterDeJureMutation();
                 }
                 DeJureNewCityAssignmentService.RepairUnassignedCities();
             }
@@ -691,6 +701,8 @@ namespace AncientWarfare3.core.court
                 if (region == null) return false;
                 if (!region.Active) return true;
                 if (!HasLiveWorld()) return false;
+                if (RepairDisconnectedRegionsLocked(pRegionId))
+                    changed = true;
                 region.MemberCityIds ??= new List<long>();
                 region.MemberCityIds = region.MemberCityIds.Distinct().ToList();
                 bool hasLiveMember = region.MemberCityIds.Any(id =>
@@ -1020,6 +1032,134 @@ namespace AncientWarfare3.core.court
                     capital?.data?.id)
                 .ThenBy(region => region.RegionId)
                 .FirstOrDefault();
+        }
+
+        private static bool RepairDisconnectedRegionsLocked()
+        {
+            return RepairDisconnectedRegionsLocked(-1L);
+        }
+
+        private static bool RepairDisconnectedRegionsLocked(long pRegionId)
+        {
+            if (_store?.Regions == null || !HasLiveWorld()) return false;
+            var detached = new List<(City City, long FromRegionId)>();
+            bool changed = false;
+            foreach (DeJureRegion region in _store.Regions
+                         .Where(item => item != null && item.Active &&
+                             (pRegionId < 0L || item.RegionId == pRegionId))
+                         .OrderBy(item => item.RegionId).ToArray())
+            {
+                List<City> members = (region.MemberCityIds ?? new List<long>())
+                    .Select(id => World.world?.cities?.get(id))
+                    .Where(IsDeJureEligibleCity)
+                    .OrderBy(city => city.data.id).ToList();
+                if (members.Count <= 1) continue;
+                if (!PrepareRegionNeighbours(members)) continue;
+                long seatId = members.Any(city =>
+                        city.data.id == region.SeatCityId)
+                    ? region.SeatCityId
+                    : ChooseSeat(members.Select(city => city.data.id));
+                var adjacency = members.ToDictionary(
+                    city => city.data.id,
+                    city => (IReadOnlyCollection<long>)members
+                        .Where(other => other != city &&
+                            AreAdjacent(city, other))
+                        .Select(other => other.data.id).OrderBy(id => id)
+                        .ToArray());
+                var retained = new HashSet<long>(
+                    DeJureRegionContinuityRules.SelectConnectedMembers(
+                        seatId, members.Select(city => city.data.id),
+                        adjacency,
+                        RegionalGovernmentRules.MaximumRegionCityCount));
+                List<City> removed = members.Where(city =>
+                    !retained.Contains(city.data.id)).ToList();
+                if (removed.Count == 0) continue;
+                foreach (City city in removed)
+                {
+                    region.MemberCityIds.Remove(city.data.id);
+                    detached.Add((city, region.RegionId));
+                    AddChange(region.RegionId, city.data.id, region.RegionId,
+                        -1L, "DeJureDisconnectedMemberDetached");
+                }
+                region.MemberCityIds = region.MemberCityIds.Distinct().ToList();
+                region.Version++;
+                changed = true;
+            }
+
+            foreach ((City city, long fromRegionId) in detached
+                         .OrderBy(item => item.City.data.id))
+            {
+                DeJureRegion target = FindContinuityRepairTargetLocked(city);
+                if (target == null)
+                {
+                    long id = Math.Max(1L, _store.NextRegionId++);
+                    target = new DeJureRegion
+                    {
+                        RegionId = id,
+                        RegionName = RegionalGovernmentRules.RegionName(
+                            ResolveCountyNameForPresentation(city), "州"),
+                        SeatCityId = city.data.id,
+                        CreatedYear = SafeYear(),
+                        CreatedByKind = "contiguity_repair_isolated",
+                        CreatedByKingdomId = city.kingdom?.data?.id ?? -1L,
+                        MemberCityIds = new List<long> { city.data.id }
+                    };
+                    _store.Regions.Add(target);
+                    AddChange(id, city.data.id, fromRegionId, id,
+                        "DeJureContiguityRegionCreated");
+                    continue;
+                }
+                target.MemberCityIds.Add(city.data.id);
+                target.MemberCityIds = target.MemberCityIds.Distinct().ToList();
+                target.Version++;
+                AddChange(target.RegionId, city.data.id, fromRegionId,
+                    target.RegionId, "DeJureContiguityMemberReassigned");
+            }
+            return changed;
+        }
+
+        private static DeJureRegion FindContinuityRepairTargetLocked(City pCity)
+        {
+            if (pCity?.data == null) return null;
+            var candidates = new List<DeJureNewCityRegionCandidate>();
+            foreach (DeJureRegion region in _store.Regions.Where(item =>
+                         item != null && item.Active &&
+                         item.MemberCityIds != null &&
+                         !item.MemberCityIds.Contains(pCity.data.id)))
+            {
+                List<City> members = region.MemberCityIds.Select(id =>
+                        World.world?.cities?.get(id))
+                    .Where(IsDeJureEligibleCity).ToList();
+                if (members.Count >= RegionalGovernmentRules.
+                        MaximumRegionCityCount) continue;
+                int adjacentCount = members.Count(member =>
+                    AreAdjacent(pCity, member));
+                if (adjacentCount <= 0) continue;
+                City seat = members.FirstOrDefault(member =>
+                    member.data.id == region.SeatCityId);
+                candidates.Add(new DeJureNewCityRegionCandidate(
+                    region.RegionId, seat != null && AreAdjacent(pCity, seat),
+                    adjacentCount, 0L,
+                    DistanceSquared(pCity, seat), true));
+            }
+            long targetId = DeJureNewCityAssignmentRules.Select(candidates);
+            return _store.Regions.FirstOrDefault(region =>
+                region != null && region.Active &&
+                region.RegionId == targetId);
+        }
+
+        private static bool PrepareRegionNeighbours(IEnumerable<City> pCities)
+        {
+            try
+            {
+                foreach (City city in pCities)
+                {
+                    city.recalculateNeighbourZones();
+                    city.recalculateNeighbourCities();
+                }
+                return true;
+            }
+            catch { return false; }
         }
 
         private static long DistanceSquared(City pFirst, City pSecond)

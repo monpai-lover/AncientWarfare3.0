@@ -41,27 +41,47 @@ namespace AncientWarfare3.core.court
         {
             List<DeJureNewCityRegionCandidate> eligible = (pCandidates ??
                 Array.Empty<DeJureNewCityRegionCandidate>())
-                .Where(p => p.Eligible && p.RegionId >= 0L)
+                .Where(p => p.Eligible && p.RegionId >= 0L &&
+                    p.AdjacentMemberCount > 0)
                 .ToList();
             if (eligible.Count == 0) return -1L;
-
-            List<DeJureNewCityRegionCandidate> adjacentSeats = eligible
-                .Where(p => p.HasAdjacentSeat)
-                .OrderBy(p => p.RegionId)
-                .ToList();
-            if (adjacentSeats.Count > 0)
-            {
-                int index = pSelector == int.MinValue
-                    ? 0
-                    : (int)((uint)pSelector % (uint)adjacentSeats.Count);
-                return adjacentSeats[index].RegionId;
-            }
-
             return eligible
-                .OrderBy(p => p.NearestMemberSquaredDistance)
+                .OrderByDescending(p => p.AdjacentMemberCount)
                 .ThenBy(p => p.SeatSquaredDistance)
                 .ThenBy(p => p.RegionId)
                 .First().RegionId;
+        }
+    }
+
+    internal static class DeJureRegionContinuityRules
+    {
+        internal static IReadOnlyList<long> SelectConnectedMembers(
+            long pSeatCityId, IEnumerable<long> pMemberCityIds,
+            IReadOnlyDictionary<long, IReadOnlyCollection<long>> pAdjacency,
+            int pCapacity)
+        {
+            if (pSeatCityId < 0L || pCapacity <= 0)
+                return Array.Empty<long>();
+            var members = new HashSet<long>((pMemberCityIds ??
+                Array.Empty<long>()).Where(id => id >= 0L));
+            if (!members.Contains(pSeatCityId)) return Array.Empty<long>();
+
+            var result = new List<long>(Math.Min(pCapacity, members.Count));
+            var queued = new HashSet<long> { pSeatCityId };
+            var queue = new Queue<long>();
+            queue.Enqueue(pSeatCityId);
+            while (queue.Count > 0 && result.Count < pCapacity)
+            {
+                long current = queue.Dequeue();
+                result.Add(current);
+                if (pAdjacency == null ||
+                    !pAdjacency.TryGetValue(current, out
+                        IReadOnlyCollection<long> neighbors)) continue;
+                foreach (long neighbor in (neighbors ?? Array.Empty<long>())
+                         .Where(members.Contains).OrderBy(id => id))
+                    if (queued.Add(neighbor)) queue.Enqueue(neighbor);
+            }
+            return result;
         }
     }
 }

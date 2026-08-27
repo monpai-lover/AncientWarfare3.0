@@ -109,8 +109,17 @@ namespace AncientWarfare3.core.court
             long targetId = SelectRegion(pCity, kingdom);
             if (targetId < 0L)
             {
+                if (!DeJureRegionStore.CreateState(pCity,
+                        "city_created_isolated_region", out _, out _))
+                {
+                    QueueRetry(pCity, allowRetry);
+                    return false;
+                }
                 RetryIds.Remove(pCity.data.id);
-                return false;
+                ApplyHistoricalCityName(pCity);
+                HierarchicalVassalMapModeService.MarkHierarchyDirty(kingdom);
+                HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
+                return true;
             }
             if (!DeJureRegionStore.AssignCityAutomatically(targetId, pCity,
                     "city_created_auto_assign", out string error))
@@ -232,12 +241,16 @@ namespace AncientWarfare3.core.court
                 long nearest = members.Select(city => Distance(cityTile,
                     city.getTile())).DefaultIfEmpty(long.MaxValue).Min();
                 City seat = members.FirstOrDefault(city =>
-                    city.data.id == region.SeatCityId);
+                    city.data.id == region.SeatCityId) ??
+                    allMembers.FirstOrDefault(city =>
+                        city.data.id == region.SeatCityId);
                 bool adjacentSeat = seat?.data != null &&
                     adjacent.Contains(seat.data.id);
+                int adjacentMemberCount = members.Count(city =>
+                    adjacent.Contains(city.data.id));
                 long seatDistance = Distance(cityTile, seat?.getTile());
                 facts.Add(new DeJureNewCityRegionCandidate(region.RegionId,
-                    adjacentSeat, adjacentSeat ? 1 : 0, nearest,
+                    adjacentSeat, adjacentMemberCount, nearest,
                     seatDistance,
                     allMembers.Count < RegionalGovernmentRules.
                         MaximumRegionCityCount));

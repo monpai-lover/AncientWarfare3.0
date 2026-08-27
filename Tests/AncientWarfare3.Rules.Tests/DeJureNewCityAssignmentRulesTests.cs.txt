@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using AncientWarfare3.core.court;
 
 internal static class DeJureNewCityAssignmentRulesTests
@@ -8,41 +10,33 @@ internal static class DeJureNewCityAssignmentRulesTests
     {
         long adjacent = DeJureNewCityAssignmentRules.Select(new[]
         {
-            new DeJureNewCityRegionCandidate(2L, true, 1, 900, 900, true),
+            new DeJureNewCityRegionCandidate(2L, false, 2, 900, 900, true),
             new DeJureNewCityRegionCandidate(1L, true, 1, 1200, 1200, true)
-        }, pSelector: 0);
-        Equal(1L, adjacent,
-            "the first adjacent capital is selected by the deterministic selector");
+        });
+        Equal(2L, adjacent,
+            "the region sharing more adjacent members is selected");
 
-        long adjacentSecond = DeJureNewCityAssignmentRules.Select(new[]
+        long nonAdjacent = DeJureNewCityAssignmentRules.Select(new[]
         {
-            new DeJureNewCityRegionCandidate(2L, true, 1, 900, 900, true),
-            new DeJureNewCityRegionCandidate(1L, true, 1, 1200, 1200, true)
-        }, pSelector: 1);
-        Equal(2L, adjacentSecond,
-            "multiple adjacent capitals can select the other candidate");
+            new DeJureNewCityRegionCandidate(2L, false, 0, 100, 100, true),
+            new DeJureNewCityRegionCandidate(1L, false, 0, 200, 200, true)
+        });
+        Equal(-1L, nonAdjacent,
+            "a city never joins a region without a shared border");
 
         long nearestMember = DeJureNewCityAssignmentRules.Select(new[]
         {
-            new DeJureNewCityRegionCandidate(7L, false, 0, 900, 900, true),
-            new DeJureNewCityRegionCandidate(3L, false, 0, 1200, 1200, true)
-        }, pSelector: 0);
+            new DeJureNewCityRegionCandidate(7L, false, 1, 900, 900, true),
+            new DeJureNewCityRegionCandidate(3L, false, 1, 1200, 1200, true)
+        });
         Equal(7L, nearestMember,
             "nearest adjacent member breaks adjacent-count ties");
-
-        long noAdjacentSeat = DeJureNewCityAssignmentRules.Select(new[]
-        {
-            new DeJureNewCityRegionCandidate(2L, false, 0, 400, 300, true),
-            new DeJureNewCityRegionCandidate(1L, false, 0, 200, 500, true)
-        }, pSelector: 0);
-        Equal(1L, noAdjacentSeat,
-            "a city without an adjacent capital joins the nearest state");
 
         long seatTie = DeJureNewCityAssignmentRules.Select(new[]
         {
             new DeJureNewCityRegionCandidate(9L, false, 1, 100, 400, true),
             new DeJureNewCityRegionCandidate(4L, false, 1, 100, 200, true)
-        }, pSelector: 0);
+        });
         Equal(4L, seatTie,
             "seat distance breaks adjacent-seat ties");
 
@@ -50,26 +44,54 @@ internal static class DeJureNewCityAssignmentRulesTests
         {
             new DeJureNewCityRegionCandidate(9L, false, 1, 100, 200, true),
             new DeJureNewCityRegionCandidate(4L, false, 1, 100, 200, true)
-        }, pSelector: 0);
+        });
         Equal(4L, idTie, "region ID makes ties deterministic");
 
         long excluded = DeJureNewCityAssignmentRules.Select(new[]
         {
             new DeJureNewCityRegionCandidate(2L, true, 1, 1, 1, false),
             new DeJureNewCityRegionCandidate(1L, false, 0, 1, 1, false)
-        }, pSelector: 0);
+        });
         Equal(-1L, excluded,
             "foreign, retired, empty, or ineligible candidates are excluded");
 
         Equal(-1L, DeJureNewCityAssignmentRules.Select(
-            Array.Empty<DeJureNewCityRegionCandidate>(), pSelector: 0),
+            Array.Empty<DeJureNewCityRegionCandidate>()),
             "no candidate leaves a city unassigned");
 
         Equal(-1L, DeJureNewCityAssignmentRules.Select(new[]
         {
             new DeJureNewCityRegionCandidate(8L, true, 1, 1, 1, false)
-        }, pSelector: 0),
+        }),
             "a six-city region is excluded from automatic assignment");
+
+        var adjacency = new Dictionary<long, IReadOnlyCollection<long>>
+        {
+            [1L] = new[] { 2L },
+            [2L] = new[] { 1L, 3L },
+            [3L] = new[] { 2L },
+            [4L] = Array.Empty<long>()
+        };
+        long[] connected = DeJureRegionContinuityRules.SelectConnectedMembers(
+            1L, new[] { 4L, 3L, 2L, 1L }, adjacency, 6).ToArray();
+        SequenceEqual(new[] { 1L, 2L, 3L }, connected,
+            "only the legal-seat connected component remains in the region");
+
+        var wideAdjacency = new Dictionary<long, IReadOnlyCollection<long>>
+        {
+            [1L] = new[] { 7L, 2L, 6L, 3L, 5L, 4L },
+            [2L] = new[] { 1L }, [3L] = new[] { 1L },
+            [4L] = new[] { 1L }, [5L] = new[] { 1L },
+            [6L] = new[] { 1L }, [7L] = new[] { 1L }
+        };
+        long[] capped = DeJureRegionContinuityRules.SelectConnectedMembers(
+            1L, Enumerable.Range(1, 7).Select(p => (long)p), wideAdjacency,
+            6).ToArray();
+        SequenceEqual(new[] { 1L, 2L, 3L, 4L, 5L, 6L }, capped,
+            "connected repair retains at most six members deterministically");
+        SequenceEqual(capped, DeJureRegionContinuityRules.
+                SelectConnectedMembers(1L, capped, wideAdjacency, 6).ToArray(),
+            "connected repair is idempotent");
 
         string service = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "court",
@@ -91,13 +113,20 @@ internal static class DeJureNewCityAssignmentRulesTests
              store.Contains("member.kingdom == pCity.kingdom",
                  StringComparison.Ordinal),
             "automatic state writes reject cross-kingdom targets");
-        True(store.Contains("EnsureAllKingdomCapitalSeatsLocked();\n                    Migrate(_store)",
-                StringComparison.Ordinal),
+        int ensureSeats = store.IndexOf("EnsureAllKingdomCapitalSeatsLocked();",
+            StringComparison.Ordinal);
+        int migrate = store.IndexOf("Migrate(_store)", StringComparison.Ordinal);
+        True(ensureSeats >= 0 && migrate > ensureSeats,
             "legacy migration establishes kingdom capitals before grouping");
         False(store.Contains("legacy_single_city", StringComparison.Ordinal),
             "legacy migration never creates an independent state for every city");
-        False(service.Contains("CreateState(pCity"),
-            "new-city assignment does not implicitly create a state");
+        True(service.Contains("CreateState(pCity", StringComparison.Ordinal),
+            "an isolated city creates a new contiguous state");
+        True(store.Contains("RepairDisconnectedRegionsLocked();",
+                StringComparison.Ordinal) &&
+             store.Contains("RepairDisconnectedRegionsLocked(pRegionId)",
+                 StringComparison.Ordinal),
+            "world-load and dirty-region maintenance repair disconnected states");
     }
 
     private static void Equal(long expected, long actual, string message)
@@ -105,6 +134,15 @@ internal static class DeJureNewCityAssignmentRulesTests
         if (expected != actual)
             throw new InvalidOperationException(message +
                 $": expected {expected}, got {actual}");
+    }
+
+    private static void SequenceEqual(long[] expected, long[] actual,
+        string message)
+    {
+        if (!expected.SequenceEqual(actual))
+            throw new InvalidOperationException(message + ": expected [" +
+                string.Join(",", expected) + "], got [" +
+                string.Join(",", actual) + "]");
     }
 
     private static void True(bool value, string message)

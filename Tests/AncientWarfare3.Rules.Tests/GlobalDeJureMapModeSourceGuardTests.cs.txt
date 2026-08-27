@@ -13,14 +13,42 @@ internal static class GlobalDeJureMapModeSourceGuardTests
         string store = Read("Code/core/court/DeJureRegionStore.cs");
         string assignment = Read(
             "Code/core/court/DeJureNewCityAssignmentService.cs");
+        string prepare = Slice(service,
+            "internal static void PrepareForDeJureInteraction",
+            "internal static void RefreshAfterDeJureMutation");
+        True(prepare.Contains("long focusKingdomId = pCity.kingdom.id",
+                StringComparison.Ordinal) &&
+             !prepare.Contains("ResolveRepresentative", StringComparison.Ordinal),
+            "domestic de jure entry preserves the clicked physical kingdom");
+        string focusedKingdom = Slice(service,
+            "private static bool IsCityInFocusedKingdom",
+            "private static IMetaObject GetCityRegionMeta");
+        True(focusedKingdom.Contains("pCity.kingdom.id ==",
+                StringComparison.Ordinal) &&
+             focusedKingdom.Contains(
+                 "CityAdministrationState.FocusKingdomId",
+                 StringComparison.Ordinal) &&
+             !focusedKingdom.Contains("ResolveRepresentative",
+                 StringComparison.Ordinal),
+            "domestic region filtering preserves vassal ownership context");
+        True(service.Contains("region.EffectiveSeatCityId",
+                StringComparison.Ordinal),
+            "domestic region labels and metadata use the effective seat");
+        True(service.Contains("EffectiveSeatCityId = legal.SeatCityId",
+                StringComparison.Ordinal),
+            "global region labels remain anchored to the legal seat");
         True(state.Contains("IsGlobalRegionOverview", StringComparison.Ordinal),
             "city layer exposes an explicit global region overview state");
         True(service.Contains("IsCityGlobalRegionLayer", StringComparison.Ordinal),
             "city layer root uses the global region state");
-        True(service.Contains("FindCity(region.SeatCityId)", StringComparison.Ordinal),
+        string globalSources = Slice(service,
+            "BuildGlobalDeJureRegionSources(IReadOnlyList<City> pCities)",
+            "internal static bool IsLabelDiscoveryKingdom");
+        True(globalSources.Contains("FindCity(legal.SeatCityId)",
+                StringComparison.Ordinal),
             "region labels are anchored at the legal seat city");
         True(runtime.Contains("source.RegionAnchor", StringComparison.Ordinal) &&
-             runtime.Contains("CreateFromZones(source.EntityId, source.DisplayName,\n                            source.Zones, !source.Country, source.RegionAnchor)",
+             runtime.Contains("source.Zones, !source.Country, source.RegionAnchor",
                  StringComparison.Ordinal),
             "region label jobs receive an explicit seat anchor");
         True(runtime.Contains("RegionId", StringComparison.Ordinal),
@@ -33,20 +61,26 @@ internal static class GlobalDeJureMapModeSourceGuardTests
         True(layer.Contains("HierarchicalVassalMapLabelRuntime.ProcessFrame();",
                  StringComparison.Ordinal),
             "map label layer advances the asynchronous label pipeline");
-        True(service.Contains("else if (IsCityRegionLayer)\n                        PublishNativeCityLabels();",
+        True(service.Contains("else if (IsCityRegionLayer)",
+                 StringComparison.Ordinal) &&
+             service.Contains("PublishNativeCityLabels();",
                  StringComparison.Ordinal),
             "global region overview publishes seat-anchored native labels");
-        True(service.Contains(
-                "Vector2 center = IsCityRegionLayer\n" +
-                "                    ? new Vector2(city.city_center.x, city.city_center.y)",
-                StringComparison.Ordinal),
+        True(service.Contains("Vector2 center = IsCityRegionLayer",
+                StringComparison.Ordinal) &&
+             service.Contains(
+                 "? new Vector2(city.city_center.x, city.city_center.y)",
+                 StringComparison.Ordinal),
             "native region labels must use the legal seat center rather than a territory centroid");
         True(!service.Contains("if (IsCityGlobalRegionLayer)\n                    HierarchicalVassalMapModeLabelLayer.\n                        HideNativeLabelsExcept(null);",
                  StringComparison.Ordinal),
             "global region overview must not hide its published native labels");
         True(runtime.Contains(
-                "HierarchicalVassalMapModeService.IsCityRegionLayer &&\n                !HierarchicalVassalMapModeService.IsCityGlobalRegionLayer",
-                StringComparison.Ordinal),
+                "HierarchicalVassalMapModeService.IsCityRegionLayer &&",
+                StringComparison.Ordinal) &&
+             runtime.Contains(
+                 "!HierarchicalVassalMapModeService.IsCityGlobalRegionLayer",
+                 StringComparison.Ordinal),
             "global region overview must not enqueue duplicate async labels");
         True(service.Contains("BuildGlobalDeJureRegionSources", StringComparison.Ordinal) &&
              service.Contains("pKingdomId < 0L", StringComparison.Ordinal),
@@ -88,6 +122,16 @@ internal static class GlobalDeJureMapModeSourceGuardTests
     private static string Read(string pPath)
     {
         return File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(), pPath));
+    }
+
+    private static string Slice(string pSource, string pStart, string pEnd)
+    {
+        int start = pSource.IndexOf(pStart, StringComparison.Ordinal);
+        int end = start < 0 ? -1 : pSource.IndexOf(pEnd, start,
+            StringComparison.Ordinal);
+        return start >= 0 && end > start
+            ? pSource.Substring(start, end - start)
+            : string.Empty;
     }
 
     private static void True(bool pValue, string pMessage)

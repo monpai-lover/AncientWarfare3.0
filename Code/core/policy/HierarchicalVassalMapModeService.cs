@@ -186,9 +186,7 @@ namespace AncientWarfare3.core.policy
             if (pCity?.data == null || pCity.isRekt() ||
                 pCity.kingdom?.data == null || pCity.kingdom.isRekt()) return;
             _selectedLayer = HierarchicalVassalMapModeLayer.Cities;
-            EnsureHierarchyIndex();
-            long focusKingdomId = _hierarchyIndex?.ResolveRepresentative(
-                pCity.kingdom.id) ?? pCity.kingdom.id;
+            long focusKingdomId = pCity.kingdom.id;
             if (focusKingdomId < 0L) focusKingdomId = pCity.kingdom.id;
             CityAdministrationState.Reset();
             CityAdministrationState.PushKingdom(focusKingdomId);
@@ -284,21 +282,19 @@ namespace AncientWarfare3.core.policy
             }
             if (IsCityRegionLayer)
             {
-                EnsureHierarchyIndex();
-                long regionKingdomId = _hierarchyIndex?.ResolveRepresentative(
-                    pPhysicalKingdom.id) ?? pPhysicalKingdom.id;
                 if (!IsCityGlobalRegionLayer &&
-                    regionKingdomId != CityAdministrationState.FocusKingdomId)
+                    pPhysicalKingdom.id != CityAdministrationState.FocusKingdomId)
                 {
-                    Kingdom outsideKingdom = GetKingdom(regionKingdomId);
-                    return IsValidKingdom(outsideKingdom)
-                        ? outsideKingdom : pPhysicalKingdom;
+                    return pPhysicalKingdom;
                 }
                 if (!RegionalGovernmentAggregationService.TryFindRegion(
                         pPhysicalKingdom, pCity.data.id,
                         out RegionalGovernmentReadModel region)) return null;
-                City seat = FindCity(region.SeatCityId) ??
-                    FindCity(pPhysicalKingdom, region.SeatCityId);
+                long anchorCityId = IsCityGlobalRegionLayer
+                    ? region.LegalSeatCityId
+                    : region.EffectiveSeatCityId;
+                City seat = FindCity(anchorCityId) ??
+                    FindCity(pPhysicalKingdom, anchorCityId);
                 return GetCityRegionMeta(region, seat ?? pCity);
             }
             if (IsCityCountryLayer || IsCityMemberLayer)
@@ -350,8 +346,11 @@ namespace AncientWarfare3.core.policy
                     !RegionalGovernmentAggregationService.TryFindRegion(
                         city.kingdom, city.id,
                         out RegionalGovernmentReadModel region)) return;
-                City seat = FindCity(region.SeatCityId) ??
-                    FindCity(city.kingdom, region.SeatCityId) ?? city;
+                long anchorCityId = IsCityGlobalRegionLayer
+                    ? region.LegalSeatCityId
+                    : region.EffectiveSeatCityId;
+                City seat = FindCity(anchorCityId) ??
+                    FindCity(city.kingdom, anchorCityId) ?? city;
                 if (!NativeCityLabels.TryGetValue(seat.id,
                         out NativeCityLabelEntry regionEntry))
                 {
@@ -799,7 +798,7 @@ namespace AncientWarfare3.core.policy
                     if (!zones.Any(zone => zone.tiles_with_ground > 0))
                         continue;
                     City seat = members.FirstOrDefault(city => city.id ==
-                        region.SeatCityId) ?? members[0];
+                        region.EffectiveSeatCityId) ?? members[0];
                     result.Add(new HierarchicalVassalMapLabelRegionSource(
                         region, seat, zones, zoneIds, true));
                 }
@@ -1146,10 +1145,7 @@ namespace AncientWarfare3.core.policy
                 }
                 if (IsCityCountryLayer)
                 {
-                    EnsureHierarchyIndex();
-                    long countryKingdomId = _hierarchyIndex?.
-                        ResolveRepresentative(physical.id) ?? -1L;
-                    Kingdom clickedKingdom = GetKingdom(countryKingdomId);
+                    Kingdom clickedKingdom = physical;
                     if (!IsValidKingdom(clickedKingdom)) return false;
                     if (!CityAdministrationState.PushKingdom(
                             clickedKingdom.id)) return false;
@@ -1174,10 +1170,7 @@ namespace AncientWarfare3.core.policy
                 }
                 if (IsCityRegionLayer)
                 {
-                    EnsureHierarchyIndex();
-                    long clickedRepresentativeId = _hierarchyIndex?.
-                        ResolveRepresentative(city.kingdom.id) ?? -1L;
-                    if (clickedRepresentativeId != CityAdministrationState.
+                    if (city.kingdom.id != CityAdministrationState.
                             FocusKingdomId)
                     {
                         bool popped = CityAdministrationState.PopKingdom();
@@ -1192,7 +1185,7 @@ namespace AncientWarfare3.core.policy
                     CityAdministrationMapModeRules.ResolveClick(
                         CityAdministrationState.IsRegionLevel,
                         CityAdministrationState.FocusSeatCityId,
-                        mapped ? clickedRegion.SeatCityId : -1L,
+                        mapped ? clickedRegion.EffectiveSeatCityId : -1L,
                         mapped);
                 if (action == CityAdministrationMapClickAction.FocusRegion)
                     return HandleCityRegionClick(city);
@@ -1293,7 +1286,8 @@ namespace AncientWarfare3.core.policy
                 !RegionalGovernmentAggregationService.TryFindRegion(
                     pCity.kingdom, pCity.id,
                     out RegionalGovernmentReadModel region) ||
-                !CityAdministrationState.PushRegion(region.SeatCityId))
+                !CityAdministrationState.PushRegion(
+                    region.EffectiveSeatCityId))
                 return false;
             RefreshView();
             return true;
@@ -1318,23 +1312,22 @@ namespace AncientWarfare3.core.policy
             return RegionalGovernmentAggregationService.TryFindRegion(
                 pCity.kingdom, pCity.id,
                 out RegionalGovernmentReadModel region) &&
-                region.SeatCityId == CityAdministrationState.FocusSeatCityId;
+                region.EffectiveSeatCityId ==
+                    CityAdministrationState.FocusSeatCityId;
         }
 
         private static bool IsCityInFocusedKingdom(City pCity)
         {
             if (pCity?.kingdom == null || IsCityCountryLayer) return false;
-            EnsureHierarchyIndex();
-            return _hierarchyIndex?.ResolveRepresentative(
-                pCity.kingdom.id) == CityAdministrationState.FocusKingdomId;
+            return pCity.kingdom.id ==
+                CityAdministrationState.FocusKingdomId;
         }
 
         private static IMetaObject GetCityRegionMeta(
             RegionalGovernmentReadModel pRegion, City pSeatCity)
         {
             if (pRegion == null || pSeatCity?.data == null) return null;
-            long seatCityId = pRegion.SeatCityId >= 0L
-                ? pRegion.SeatCityId : pSeatCity.data.id;
+            long seatCityId = pSeatCity.data.id;
             string name = RegionalGovernmentRules.AdministrativeLabel(
                 pRegion.RegionName, pRegion.RegionTitle);
             if (!CityRegionMetaCache.TryGetValue(seatCityId,
