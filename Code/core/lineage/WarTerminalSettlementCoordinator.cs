@@ -10,15 +10,18 @@ namespace AncientWarfare3.core.lineage
         // remain bounded so a large world cannot turn this into a full-war
         // hot path.
         private const int WarsPerAuthorityCycle = 8;
+        private const int RecoveryScanIntervalCycles = 4;
         private const string QueuePrefix = "war_terminal_settlement:";
         private static readonly Dictionary<long, int> FailureCounts =
             new Dictionary<long, int>();
         private static int _recoveryCursor;
+        private static int _recoveryCyclesUntilScan;
 
         public static void ClearRuntime()
         {
             FailureCounts.Clear();
             _recoveryCursor = 0;
+            _recoveryCyclesUntilScan = 0;
         }
 
         public static bool NotifyWarChanged(War pWar)
@@ -38,6 +41,12 @@ namespace AncientWarfare3.core.lineage
             if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
             WarManager wars = World.world?.wars;
             if (wars == null) return;
+            if (_recoveryCyclesUntilScan > 0)
+            {
+                _recoveryCyclesUntilScan--;
+                return;
+            }
+            _recoveryCyclesUntilScan = RecoveryScanIntervalCycles - 1;
             try { wars.checkLists(); }
             catch { return; }
             int count = wars.list.Count;
@@ -60,9 +69,11 @@ namespace AncientWarfare3.core.lineage
 
         private static bool ShouldQueue(War pWar)
         {
-            if (ZhuluWarService.IsZhuluWar(pWar))
-                return WarForceEliminationSettlementService
-                    .TryGetConfirmedDecision(pWar, out _);
+            if (WarTerritoryService.HasOpenMandateConquestGoal(pWar))
+                return false;
+            if (PeasantRebelBanditSuppressionSettlementService.IsReady(pWar))
+                return true;
+            if (ZhuluWarService.IsZhuluWar(pWar)) return false;
             return TryReadDecision(pWar, out _, out _);
         }
 
@@ -76,15 +87,16 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            if (ZhuluWarService.IsZhuluWar(war))
+            if (WarTerritoryService.HasOpenMandateConquestGoal(war))
+                return;
+
+            if (PeasantRebelBanditSuppressionSettlementService.IsReady(war))
             {
-                WarForceSpecialSettlementResult zhulu =
-                    WarForceSpecialSettlementService
-                        .TrySettleZhuluZeroForce(war);
-                if (zhulu == WarForceSpecialSettlementResult.Failed)
-                    RecordFailure(pWarId, "special_zhulu_settlement_failed");
-                else if (zhulu == WarForceSpecialSettlementResult.Handled)
+                if (PeasantRebelBanditSuppressionSettlementService.TryExecuteImmediate(war))
                     FailureCounts.Remove(pWarId);
+                else
+                    RecordFailure(pWarId,
+                        "bandit_leadership_collapse_failed");
                 return;
             }
 
@@ -163,6 +175,14 @@ namespace AncientWarfare3.core.lineage
                     new WarTerminalSettlementFacts(false, snapshot.Score,
                         1, 1, false));
                 return true;
+            }
+            if (!guarded && WarTerminalSettlementRules.IsDecisiveScore(
+                    snapshot.Score))
+            {
+                pDecision = WarTerminalSettlementRules.Resolve(
+                    new WarTerminalSettlementFacts(false, snapshot.Score,
+                        attackers, defenders, false));
+                return pDecision.IsTerminal;
             }
             bool affordableGoal = !guarded &&
                 WarGoalSettlementRuntimeService.HasAffordableGoal(pWar);

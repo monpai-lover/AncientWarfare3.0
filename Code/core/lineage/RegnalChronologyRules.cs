@@ -81,5 +81,11 @@ namespace AncientWarfare3.core.lineage
                 ? formal
                 : (pLocalRegnalChronology ?? "").Trim();
         }
+
+        public static bool ShouldUseEraName(bool isXiaProfile,
+            bool isBandit, bool isRebel)
+        {
+            return isXiaProfile && !isBandit && !isRebel;
+        }
     }
 }

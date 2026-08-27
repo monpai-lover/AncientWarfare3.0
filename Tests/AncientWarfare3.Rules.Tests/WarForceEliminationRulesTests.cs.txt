@@ -92,10 +92,12 @@ internal static class WarForceEliminationRulesTests
              !central.Contains("CountSideReserves") &&
              !central.Contains("CityReservePoolService.CountAvailable"),
             "ordinary force exhaustion uses only native War force facts");
-        True(coordinator.Contains("TrySettleZhuluZeroForce(war)") &&
+        True(coordinator.Contains(
+                 "if (ZhuluWarService.IsZhuluWar(pWar)) return false;") &&
+             router.Contains("TrySettleZhuluZeroForce(") &&
              router.Contains("ResolveZeroForceFallback(") &&
              !router.Contains("ZhuluWarSettlementService"),
-            "Zhulu uses only its direct zero-force liveness fallback");
+            "Zhulu stays outside AW3 settlement while retaining its bounded fallback");
         True(rebellion.Contains("QueueForceElimination") &&
              rebellion.Contains("WarForceEliminationDecision"),
             "rebellion exposes a force-elimination adapter");

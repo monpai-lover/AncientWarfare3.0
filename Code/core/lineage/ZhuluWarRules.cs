@@ -122,6 +122,8 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldEnrollInAw3WarSystems(string pWarType,
             bool active)
         {
+            // Zhulu is a native WorldBox war.  AW3 only records its identity
+            // and must not attach RTS, levy, logistics, or settlement jobs.
             return active && !string.Equals(pWarType, WarTypeId,
                 StringComparison.Ordinal);
         }

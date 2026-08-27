@@ -45,6 +45,15 @@ internal static class MandateSuccessionRegressionRulesTests
             "a nested vassal retains only its own value because it cannot be an independent candidate");
         Equal(80f, powers[3],
             "an unrelated independent candidate remains isolated");
+
+        float[] cyclic = MandatePowerRules.AggregateCompetitionPowersByRoot(
+            new[] { 100f, 40f, 20f }, new[] { 2, 0, 1 });
+        Equal(100f, cyclic[0],
+            "a malformed vassal cycle does not duplicate power into a root");
+        Equal(40f, cyclic[1],
+            "cycle members retain their own value when no independent root exists");
+        Equal(20f, cyclic[2],
+            "every cycle member is counted exactly once in its own row");
     }
 
     private static void ActiveMandateSuccessionRefreshesInstalledRuler()

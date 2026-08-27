@@ -12,6 +12,7 @@ namespace AncientWarfare3.core.court
         public string ActorName = "";
         public long KingdomId;
         public long CityId;
+        public long CountyId = -1L;
         public string Layer = "";
         public string OfficeId = "";
         public string SchoolId = "";
@@ -32,6 +33,7 @@ namespace AncientWarfare3.core.court
         public long ActorId;
         public string ActorName = "";
         public long CityId;
+        public long CountyId = -1L;
         public string Layer = "";
         public string OfficeId = "";
         public string SchoolId = "";
@@ -55,7 +57,8 @@ namespace AncientWarfare3.core.court
 
         public OfficialCareerPrior ToPrior()
         {
-            return new OfficialCareerPrior(KingdomId, CityId, Layer, OfficeId);
+            return new OfficialCareerPrior(KingdomId, CityId, Layer, OfficeId,
+                CountyId);
         }
 
         public bool Exact(OfficialCareerRecord pOther, bool pRequireOfficerId = true)
@@ -64,6 +67,7 @@ namespace AncientWarfare3.core.court
             return (!pRequireOfficerId || OfficerId == pOther.OfficerId) &&
                    KingdomId == pOther.KingdomId && ActorId == pOther.ActorId &&
                    ActorName == pOther.ActorName && CityId == pOther.CityId &&
+                   CountyId == pOther.CountyId &&
                    Layer == pOther.Layer && OfficeId == pOther.OfficeId &&
                    SchoolId == pOther.SchoolId &&
                    InstitutionAtAppointment == pOther.InstitutionAtAppointment &&
@@ -258,7 +262,7 @@ namespace AncientWarfare3.core.court
             string table = CourtOfficerTableItem.GetTableName();
             using var command = new SQLiteCommand(pDb);
             command.CommandText = "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID," +
-                "ACTOR_NAME,CITY_ID,LAYER,OFFICE_ID,SCHOOL_ID,INFLUENCE," +
+                "ACTOR_NAME,CITY_ID,IFNULL(COUNTY_ID,-1),LAYER,OFFICE_ID,SCHOOL_ID,INFLUENCE," +
                 "APPOINTED_YEAR,APPOINTED_TIME,ENDED_YEAR,ENDED_TIME," +
                 "ACTIVE,END_REASON,UPDATED_TIME,RANK_AT_APPOINTMENT," +
                 "LOCAL_GRADE_AT_APPOINTMENT," +
@@ -629,7 +633,7 @@ namespace AncientWarfare3.core.court
             SQLiteTransaction transaction, string pTable, long pActorId, string pLayer)
         {
             using var command = new SQLiteCommand(pDb) { Transaction = transaction };
-            command.CommandText = "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID,ACTOR_NAME,CITY_ID," +
+            command.CommandText = "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID,ACTOR_NAME,CITY_ID,IFNULL(COUNTY_ID,-1)," +
                 "LAYER,OFFICE_ID,SCHOOL_ID,INFLUENCE,APPOINTED_YEAR,APPOINTED_TIME," +
                 "ENDED_YEAR,ENDED_TIME,ACTIVE,END_REASON,UPDATED_TIME," +
                 "RANK_AT_APPOINTMENT,LOCAL_GRADE_AT_APPOINTMENT," +
@@ -652,7 +656,7 @@ namespace AncientWarfare3.core.court
                 Transaction = pTransaction
             };
             command.CommandText = "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID," +
-                "ACTOR_NAME,CITY_ID,LAYER,OFFICE_ID,SCHOOL_ID,INFLUENCE," +
+                "ACTOR_NAME,CITY_ID,IFNULL(COUNTY_ID,-1),LAYER,OFFICE_ID,SCHOOL_ID,INFLUENCE," +
                 "APPOINTED_YEAR,APPOINTED_TIME,ENDED_YEAR,ENDED_TIME," +
                 "ACTIVE,END_REASON,UPDATED_TIME,RANK_AT_APPOINTMENT," +
                 "LOCAL_GRADE_AT_APPOINTMENT," +
@@ -678,7 +682,7 @@ namespace AncientWarfare3.core.court
                 Transaction = pTransaction
             };
             command.CommandText = "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID," +
-                "ACTOR_NAME,CITY_ID,LAYER,OFFICE_ID,SCHOOL_ID,INFLUENCE," +
+                "ACTOR_NAME,CITY_ID,IFNULL(COUNTY_ID,-1),LAYER,OFFICE_ID,SCHOOL_ID,INFLUENCE," +
                 "APPOINTED_YEAR,APPOINTED_TIME,ENDED_YEAR,ENDED_TIME," +
                 "ACTIVE,END_REASON,UPDATED_TIME,RANK_AT_APPOINTMENT," +
                 "LOCAL_GRADE_AT_APPOINTMENT," +
@@ -701,7 +705,7 @@ namespace AncientWarfare3.core.court
                 Transaction = pTransaction
             };
             command.CommandText = "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID," +
-                "ACTOR_NAME,CITY_ID,LAYER,OFFICE_ID,SCHOOL_ID,INFLUENCE," +
+                "ACTOR_NAME,CITY_ID,IFNULL(COUNTY_ID,-1),LAYER,OFFICE_ID,SCHOOL_ID,INFLUENCE," +
                 "APPOINTED_YEAR,APPOINTED_TIME,ENDED_YEAR,ENDED_TIME," +
                 "ACTIVE,END_REASON,UPDATED_TIME,RANK_AT_APPOINTMENT," +
                 "LOCAL_GRADE_AT_APPOINTMENT," +
@@ -790,7 +794,7 @@ namespace AncientWarfare3.core.court
             SQLiteTransaction pTransaction, string pTable, long pOfficerId)
         {
             using var command = new SQLiteCommand(pDb) { Transaction = pTransaction };
-            command.CommandText = "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID,ACTOR_NAME,CITY_ID," +
+            command.CommandText = "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID,ACTOR_NAME,CITY_ID,IFNULL(COUNTY_ID,-1)," +
                 "LAYER,OFFICE_ID,SCHOOL_ID,INFLUENCE,APPOINTED_YEAR,APPOINTED_TIME," +
                 "ENDED_YEAR,ENDED_TIME,ACTIVE,END_REASON,UPDATED_TIME," +
                 "RANK_AT_APPOINTMENT,LOCAL_GRADE_AT_APPOINTMENT," +
@@ -812,23 +816,24 @@ namespace AncientWarfare3.core.court
                 ActorId = Long(pReader, 2, -1L),
                 ActorName = Text(pReader, 3),
                 CityId = Long(pReader, 4, -1L),
-                Layer = Text(pReader, 5),
-                OfficeId = Text(pReader, 6),
-                SchoolId = Text(pReader, 7),
-                Influence = Double(pReader, 8, 0d),
-                AppointedYear = Int(pReader, 9, -1),
-                AppointedTime = Double(pReader, 10, -1d),
-                EndedYear = Int(pReader, 11, -1),
-                EndedTime = Double(pReader, 12, -1d),
-                Active = Int(pReader, 13, 0),
-                EndReason = Text(pReader, 14),
-                UpdatedTime = Double(pReader, 15, -1d),
+                CountyId = Long(pReader, 5, -1L),
+                Layer = Text(pReader, 6),
+                OfficeId = Text(pReader, 7),
+                SchoolId = Text(pReader, 8),
+                Influence = Double(pReader, 9, 0d),
+                AppointedYear = Int(pReader, 10, -1),
+                AppointedTime = Double(pReader, 11, -1d),
+                EndedYear = Int(pReader, 12, -1),
+                EndedTime = Double(pReader, 13, -1d),
+                Active = Int(pReader, 14, 0),
+                EndReason = Text(pReader, 15),
+                UpdatedTime = Double(pReader, 16, -1d),
                 RankAtAppointment = OfficialCareerRankRules.ClampRank(
-                    Int(pReader, 16, OfficialCareerRankRules.Unranked)),
+                    Int(pReader, 17, OfficialCareerRankRules.Unranked)),
                 LocalGradeAtAppointment = NineRankRules.ClampGrade(
-                    Int(pReader, 17, NineRankRules.Unranked)),
-                InstitutionAtAppointment = Text(pReader, 18),
-                IsActing = Int(pReader, 19, 0) == 1
+                    Int(pReader, 18, NineRankRules.Unranked)),
+                InstitutionAtAppointment = Text(pReader, 19),
+                IsActing = Int(pReader, 20, 0) == 1
             };
         }
 
@@ -853,6 +858,7 @@ namespace AncientWarfare3.core.court
                 ActorId = pAppointment.ActorId,
                 ActorName = pAppointment.ActorName,
                 CityId = pAppointment.CityId,
+                CountyId = pAppointment.CountyId,
                 Layer = pAppointment.Layer,
                 OfficeId = pAppointment.OfficeId,
                 SchoolId = pAppointment.SchoolId,
@@ -924,12 +930,12 @@ namespace AncientWarfare3.core.court
         {
             using var command = new SQLiteCommand(pDb) { Transaction = pTransaction };
             command.CommandText = "INSERT INTO " + pTable +
-                " (OFFICER_ID,KINGDOM_ID,ACTOR_ID,ACTOR_NAME,CITY_ID,LAYER,OFFICE_ID," +
+                " (OFFICER_ID,KINGDOM_ID,ACTOR_ID,ACTOR_NAME,CITY_ID,COUNTY_ID,LAYER,OFFICE_ID," +
                 "SCHOOL_ID,INFLUENCE,APPOINTED_YEAR,APPOINTED_TIME,ENDED_YEAR,ENDED_TIME," +
                 "ACTIVE,END_REASON,UPDATED_TIME,RANK_AT_APPOINTMENT," +
                 "LOCAL_GRADE_AT_APPOINTMENT,INSTITUTION_AT_APPOINTMENT," +
                 "IS_ACTING) " +
-                "VALUES (@id,@kingdom,@actor,@name,@city," +
+                "VALUES (@id,@kingdom,@actor,@name,@city,@county," +
                 "@layer,@office,@school,@influence,@year,@time,-1,-1,1,'',@time," +
                 "@rank,@grade,@institution,@acting)";
             command.Parameters.AddWithValue("@id", pCareer.OfficerId);
@@ -937,6 +943,7 @@ namespace AncientWarfare3.core.court
             command.Parameters.AddWithValue("@actor", pCareer.ActorId);
             command.Parameters.AddWithValue("@name", pCareer.ActorName);
             command.Parameters.AddWithValue("@city", pCareer.CityId);
+            command.Parameters.AddWithValue("@county", pCareer.CountyId);
             command.Parameters.AddWithValue("@layer", pCareer.Layer);
             command.Parameters.AddWithValue("@office", pCareer.OfficeId);
             command.Parameters.AddWithValue("@school", pCareer.SchoolId);

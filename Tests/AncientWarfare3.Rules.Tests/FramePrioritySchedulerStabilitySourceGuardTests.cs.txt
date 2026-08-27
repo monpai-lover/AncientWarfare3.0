@@ -1,0 +1,176 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.performance;
+
+internal static class FramePrioritySchedulerStabilitySourceGuardTests
+{
+    internal static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string runner = File.ReadAllText(Path.Combine(root,
+            "Code/core/performance/AWCooperativeSimulationRunner.cs"));
+        string governor = File.ReadAllText(Path.Combine(root,
+            "Code/core/performance/AWFramePriorityGovernor.cs"));
+        string actorPost = File.ReadAllText(Path.Combine(root,
+            "Code/core/performance/AWCooperativeActorPostRunner.cs"));
+
+        Contains(runner,
+            "AWFramePriorityGovernor.RunPhase(domain, phase,\n" +
+            "                        _executeCurrentStageAction);");
+        Contains(runner,
+            "JobConst.MAX_ELEMENTS = AWPerformanceSettings.SimulationBatchSize;");
+        Contains(runner,
+            "AWPerformanceSettings.ApplyParallelBudget(pMap);");
+        DoesNotContain(runner,
+            "AWFramePriorityGovernor.RunPhase(domain, phase,\n" +
+            "                        _executeCurrentStageBurstAction);");
+        DoesNotContain(runner, "MaximumStagesPerBurst");
+        DoesNotContain(runner, "ExecuteCurrentStageBurst");
+        DoesNotContain(runner, "ExecuteVanillaStageBurstCore");
+        Contains(governor,
+            "double previousFrameOverrun = Math.Max(0d,\n" +
+            "                _lastFrameDeltaMilliseconds - " +
+            "targetMilliseconds - 1d);");
+        Contains(governor,
+            "AWFrameSchedulerRules.ResolveStarvationFrameInterval(pDomain)");
+        Contains(governor,
+            "AWFrameSchedulerRules.ResolveStarvationSliceMilliseconds(\n" +
+            "                    pDomain)");
+        AssertEqual(8, AWFrameSchedulerRules.ResolveStarvationFrameInterval(
+                AWSimulationDomain.Vanilla),
+            "vanilla starvation remains Cultiway-compatible");
+        AssertEqual(1, AWFrameSchedulerRules.ResolveStarvationFrameInterval(
+                AWSimulationDomain.RtsP0),
+            "RTS P0 starvation remains responsive");
+        AssertEqual(8, AWFrameSchedulerRules.ResolveStarvationFrameInterval(
+                AWSimulationDomain.Aw3Authority),
+            "ordinary AW3 authority follows Cultiway fairness");
+        AssertEqual(0.5d,
+            AWFrameSchedulerRules.ResolveStarvationSliceMilliseconds(
+                AWSimulationDomain.Vanilla),
+            "vanilla starvation budget remains Cultiway-compatible");
+        AssertEqual(2d,
+            AWFrameSchedulerRules.ResolveStarvationSliceMilliseconds(
+                AWSimulationDomain.RtsP0),
+            "RTS P0 starvation budget remains responsive");
+        AssertEqual(0.5d,
+            AWFrameSchedulerRules.ResolveStarvationSliceMilliseconds(
+                AWSimulationDomain.Aw3Authority),
+            "ordinary AW3 authority follows Cultiway budget");
+        Contains(runner,
+            "return _stage == SimulationStage.Aw3RtsLogicalPulse\n" +
+            "                ? AWSimulationDomain.RtsP0");
+        Contains(runner,
+            "? AWSimulationDomain.Aw3Authority\n" +
+            "                    : AWSimulationDomain.Vanilla;");
+        DoesNotContain(governor, "_lastFrameSimulationMilliseconds");
+
+        string settings = File.ReadAllText(Path.Combine(root,
+            "Code/core/performance/AWPerformanceSettings.cs"));
+        Contains(settings, "public const int SimulationBatchSize = 64;");
+
+        Contains(actorPost,
+            "private static int militaryPriorityRefreshFrame = -1;");
+        Contains(actorPost,
+            "RefreshMilitaryPriorityInputsForFrame();");
+        Contains(actorPost,
+            "if (militaryPriorityRefreshFrame == UnityEngine.Time.frameCount)");
+        Contains(actorPost, "PostStage.MilitaryP0");
+        Contains(actorPost, "RunMilitaryP0Chunk(elapsed);");
+        Contains(actorPost, "PostStage.AfterEnemySearch");
+        Contains(actorPost,
+            "workItems[index].Search(aggressionCandidates);");
+        Contains(actorPost,
+            "private readonly List<BaseSimObject> aggressionCandidates =");
+        string actorPostStart = SliceBetween(actorPost,
+            "public void Start(",
+            "private static void RefreshMilitaryPriorityInputsForFrame()");
+        string actorPostStep = SliceBetween(actorPost,
+            "public bool Step()",
+            "private bool LegacyStep()");
+        string beginEnemySearch = SliceBetween(actorPost,
+            "private void BeginEnemySearch()",
+            "private void RunEnemyPrepareWorkItemAt(int index)");
+        string runPostJob = SliceBetween(actorPost,
+            "private void RunPostJob(",
+            "private int RunInsideBoatJob(");
+        DoesNotContain(actorPostStart, "PrepareActiveBehaviorPartitions");
+        DoesNotContain(actorPostStart, "ValidateUpdateEligibilityJobs");
+        DoesNotContain(actorPostStart, "ValidateActorGateJobs");
+        DoesNotContain(actorPostStep, "PrepareUpdateEligibilityWorkItems");
+        DoesNotContain(actorPostStep, "RunActorGateJobs");
+        DoesNotContain(actorPostStep, "RunTaskVerifierJobs");
+        DoesNotContain(actorPostStep, "PrepareTileActionWorkItems");
+        DoesNotContain(beginEnemySearch,
+            "PrepareEnemySearchClassifications");
+        DoesNotContain(runPostJob, "RunTileActionJob");
+        DoesNotContain(runPostJob, "TryRunActiveBehaviorJob");
+        DoesNotContain(actorPost,
+            "workItems[index].Search();");
+
+        string authority = File.ReadAllText(Path.Combine(root,
+            "Code/core/performance/AWAuthorityCycleService.cs"));
+        Contains(authority,
+            "CourtVacancyReconciliationService.DrainDueRetryTickets(1);");
+        Contains(authority,
+            "ProcessAuthorityCycle(1);");
+        DoesNotContain(authority,
+            "ResolveCatchUpItemsPerAuthorityFrame(pending)");
+
+        string strongholdPopulation = File.ReadAllText(Path.Combine(root,
+            "Code/core/lineage/PeasantRebelBanditStrongholdPopulationService.cs"));
+        Contains(strongholdPopulation,
+            "if (snapshotCount >= cityIds.Length) break;");
+        DoesNotContain(strongholdPopulation, "Pending.CopyTo(cityIds);");
+
+        string strongholdDisposal = File.ReadAllText(Path.Combine(root,
+            "Code/core/lineage/BanditStrongholdCityDisposalService.cs"));
+        Contains(strongholdDisposal,
+            "if (index >= snapshot.Length) break;");
+    }
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "frame-priority stability guard missing: " + pNeedle);
+    }
+
+    private static void DoesNotContain(string pText, string pNeedle)
+    {
+        if (pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "frame-priority stability guard rejected: " + pNeedle);
+    }
+
+    private static string SliceBetween(string pText, string pStart,
+        string pEnd)
+    {
+        int start = pText.IndexOf(pStart, StringComparison.Ordinal);
+        int end = start < 0
+            ? -1
+            : pText.IndexOf(pEnd, start + pStart.Length,
+                StringComparison.Ordinal);
+        if (start < 0 || end <= start)
+            throw new InvalidOperationException(
+                "frame-priority stability guard could not slice: " +
+                pStart + " -> " + pEnd);
+        return pText.Substring(start, end - start);
+    }
+
+    private static void AssertEqual(int pExpected, int pActual,
+        string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(pName +
+                $": expected {pExpected}, got {pActual}");
+    }
+
+    private static void AssertEqual(double pExpected, double pActual,
+        string pName)
+    {
+        if (Math.Abs(pExpected - pActual) > 0.0001d)
+            throw new InvalidOperationException(pName +
+                $": expected {pExpected}, got {pActual}");
+    }
+}

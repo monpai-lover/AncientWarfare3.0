@@ -260,11 +260,13 @@ namespace AncientWarfare3.core.lineage
         public static void OnActorKingdomChanged(Actor pActor, Kingdom pOldKingdom)
         {
             if (pActor?.data == null || pActor.kingdom == pOldKingdom) return;
-            long actorId = pActor.data.id;
-            OnMemberInvalidated(pActor);
-            DeferredRuntimeWorkService.EnqueueCoalesced(
-                DeferredRuntimeWorkRules.CoalescingKey("slave_vanguard_transfer", actorId),
-                DeferredWorkClass.Runtime, () => PersistTransferredSlave(actorId));
+            bool member = IsMember(pActor);
+            bool slave = SlaveService.IsSlave(pActor);
+            if (!member && !slave) return;
+            if (member) OnMemberInvalidated(pActor);
+            if (slave)
+                SlaveService.QueueSlaveStatePersistence(pActor, pActive: true,
+                    pActor.city, pActor.kingdom);
         }
 
         public static void OnWarriorStatusLost(Actor pActor)
@@ -274,14 +276,6 @@ namespace AncientWarfare3.core.lineage
             if (SlaveService.IsSlave(pActor))
                 SlaveService.QueueSlaveStatePersistence(pActor, pActive: true,
                     pActor.city, pActor.kingdom);
-        }
-
-        private static void PersistTransferredSlave(long pActorId)
-        {
-            Actor actor = ResolveActor(pActorId);
-            if (!SlaveService.IsSlave(actor)) return;
-            SlaveService.QueueSlaveStatePersistence(actor, pActive: true,
-                actor.city, actor.kingdom);
         }
 
         public static void OnWarStarted(War pWar)

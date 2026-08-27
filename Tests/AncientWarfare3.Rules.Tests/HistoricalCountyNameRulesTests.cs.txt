@@ -1,0 +1,182 @@
+using System;
+using AncientWarfare3.core.naming;
+
+internal static class HistoricalCountyNameRulesTests
+{
+    internal static void Run()
+    {
+        var catalog = new XiaHistoricalDeJureCatalog(new[]
+        {
+            new XiaHistoricalStateDefinition("state", "state", new[]
+            {
+                new XiaHistoricalCommanderyDefinition("commandery", "commandery",
+                    new[] { "\u96D2\u9633", "\u8346\u9633" })
+            })
+        });
+
+        Equal("\u96D2\u9633", XiaHistoricalDeJureRules.ResolveCountyName(
+            catalog, "\u96D2\u9633", "City One", "ch"),
+            "Chinese county name uses historical catalog");
+        Equal("City One", XiaHistoricalDeJureRules.ResolveCountyName(
+            catalog, "\u96D2\u9633", "City One", "en"),
+            "non-Chinese county name uses city projection");
+        Equal("City One", XiaHistoricalDeJureRules.ResolveCountyName(
+            catalog, "missing", "City One", "ch"),
+            "unmatched Chinese county name falls back to city identity");
+        True(XiaHistoricalDeJureRules.IsHistoricalCountyName(
+            catalog, "\u96D2\u9633"),
+            "catalog recognizes persisted historical county names");
+        False(XiaHistoricalDeJureRules.IsHistoricalCountyName(
+            catalog, "City One"),
+            "generated city names are not treated as historical counties");
+        Equal("\u8346\u9633", XiaHistoricalDeJureRules.SelectUnusedCounty(
+            catalog.GetCommandery("commandery"), new[] { "\u96D2\u9633" }, 0),
+            "historical JSON supplies the next unused county name");
+        Equal("\u96D2\u9633", XiaHistoricalDeJureRules.SelectUnusedCountyFromCatalog(
+            catalog, new[] { "used" }, 0),
+            "new counties fall back to the historical JSON catalog");
+
+        var statePoolCatalog = new XiaHistoricalDeJureCatalog(new[]
+        {
+            new XiaHistoricalStateDefinition("sili", "Sili", new[]
+            {
+                new XiaHistoricalCommanderyDefinition("henan", "Henan",
+                    new[] { "Luoyang" })
+            }, new[] { "Linlu", "Hongnong" })
+        });
+        True(XiaHistoricalDeJureRules.IsHistoricalCountyName(
+            statePoolCatalog, "Linlu"),
+            "state-level county pools are recognized as historical names");
+        Equal("Hongnong", XiaHistoricalDeJureRules.SelectUnusedCountyFromState(
+            statePoolCatalog, "sili", new[] { "Linlu" }, 0),
+            "county generation can use the selected state's county pool");
+        var cityNamingCatalog = new XiaHistoricalDeJureCatalog(new[]
+        {
+            new XiaHistoricalStateDefinition("yu", "Yu", new[]
+            {
+                new XiaHistoricalCommanderyDefinition("runan", "Runan",
+                    new[] { "Pingyu", "Xincai" }),
+                new XiaHistoricalCommanderyDefinition("liang", "Liang",
+                    new[] { "Suiyang" })
+            }, new[] { "Pingyu", "Xincai", "Suiyang" })
+        });
+        Equal("Runan", XiaHistoricalDeJureRules.SelectHistoricalCityName(
+            cityNamingCatalog, "yu", Array.Empty<string>(), 0),
+            "city naming uses an unused commandery name first");
+        Equal("Suiyang", XiaHistoricalDeJureRules.SelectHistoricalCityName(
+            cityNamingCatalog, "yu", new[] { "Runan", "Liang" }, 2),
+            "city naming falls back to a county after commanderies repeat");
+        True(XiaHistoricalDeJureRules.IsHistoricalCityName(
+            cityNamingCatalog, "Runan"),
+            "a commandery-named city is protected from later renaming");
+        var legacyCityNamingCatalog = new XiaHistoricalDeJureCatalog(new[]
+        {
+            new XiaHistoricalStateDefinition("legacy", "Legacy", new[]
+            {
+                new XiaHistoricalCommanderyDefinition("old", "Old",
+                    new[] { "CountyFallback" })
+            })
+        });
+        Equal("CountyFallback", XiaHistoricalDeJureRules.
+            SelectHistoricalCityName(legacyCityNamingCatalog, "legacy",
+                new[] { "Old" }, 0),
+            "legacy states without a state pool still fall back to counties");
+        var stateOnlyCatalog = new XiaHistoricalDeJureCatalog(new[]
+        {
+            new XiaHistoricalStateDefinition("jiao", "Jiao",
+                Array.Empty<XiaHistoricalCommanderyDefinition>(),
+                new[] { "Panyu" })
+        });
+        Equal("Panyu", XiaHistoricalDeJureRules.
+            SelectUnusedCountyFromCatalog(stateOnlyCatalog,
+                Array.Empty<string>(), 0),
+            "a state-only county pool remains a valid global fallback");
+
+        string repositoryCatalogPath = System.IO.Path.Combine(
+            System.IO.Directory.GetCurrentDirectory(), "name_generators",
+            "lib", "Xia\u5386\u53f2\u5dde\u90e1.json");
+        XiaHistoricalDeJureCatalog repositoryCatalog =
+            XiaHistoricalDeJureCatalog.LoadFromFile(repositoryCatalogPath);
+        True(XiaHistoricalDeJureRules.IsHistoricalCountyName(
+            repositoryCatalog, "\u6797\u8651"),
+            "the imported Sili list contributes Linlu");
+        True(XiaHistoricalDeJureRules.IsHistoricalCountyName(
+            repositoryCatalog, "\u5317\u5B9C\u6625"),
+            "the imported Yuzhou list contributes Beiyichun");
+        True(XiaHistoricalDeJureRules.IsHistoricalCountyName(
+            repositoryCatalog, "\u756A\u79BA"),
+            "the imported Jiaozhou list contributes Panyu");
+        Equal(7, repositoryCatalog.GetState("\u53F8\u5DDE").Commanderies.Count,
+            "the imported Sili state contains all seven commanderies");
+        Equal(105, repositoryCatalog.States
+            .Where(state => state.Id != "\u96CD\u5DDE")
+            .SelectMany(state => state.Commanderies).Count(),
+            "the imported catalog contains every commandery");
+        Equal(1179, repositoryCatalog.States
+            .Where(state => state.Id != "\u96CD\u5DDE")
+            .SelectMany(state => state.CountyNames).Count(),
+            "the imported state pools contain every distinct county");
+        Equal(1180, repositoryCatalog.States
+            .Where(state => state.Id != "\u96CD\u5DDE")
+            .SelectMany(state => state.Commanderies)
+            .SelectMany(commandery => commandery.CityNames).Count(),
+            "the imported commanderies contain every county entry");
+        var henan = repositoryCatalog.GetState("\u53F8\u5DDE")
+            .Commanderies.First(item => item.Name == "\u6CB3\u5357\u5C39");
+        Equal("\u6CB3\u5357\u90E1", henan.Id,
+            "legacy commandery id remains stable after the name update");
+        Equal("\u6CB3\u5357\u5C39", henan.Name,
+            "legacy commandery id retains the new historical display name");
+
+        var regionalCatalog = new XiaHistoricalDeJureCatalog(new[]
+        {
+            new XiaHistoricalStateDefinition("jing", "Jing", new[]
+            {
+                new XiaHistoricalCommanderyDefinition("nan", "Nan",
+                    new[] { "Jiangling", "Yiling" }),
+                new XiaHistoricalCommanderyDefinition("jiangxia", "Jiangxia",
+                    new[] { "Xiling", "Anlu" })
+            })
+        });
+        Equal("nan", XiaHistoricalDeJureRules.SelectCityCommandery(
+            regionalCatalog, "jing", "", "nan", "Jiangling",
+            Array.Empty<string>(), 0)?.Id,
+            "the legal seat keeps the state's preferred commandery");
+        Equal("jiangxia", XiaHistoricalDeJureRules.SelectCityCommandery(
+            regionalCatalog, "jing", "", "", "Xiling",
+            new[] { "nan" }, 0)?.Id,
+            "another city in the state receives an unused commandery");
+        Equal("jiangxia", XiaHistoricalDeJureRules.SelectCityCommandery(
+            regionalCatalog, "jing", "jiangxia", "", "missing",
+            Array.Empty<string>(), 0)?.Id,
+            "a persisted city-commandery mapping remains stable");
+        Equal("jiangxia", XiaHistoricalDeJureRules.SelectCityCommandery(
+            regionalCatalog, "jing", "nan", "", "missing",
+            new[] { "nan" }, 0)?.Id,
+            "a member city cannot reuse the commandery reserved for the legal seat");
+    }
+
+    private static void Equal(string pExpected, string pActual,
+        string pMessage)
+    {
+        if (!string.Equals(pExpected, pActual, StringComparison.Ordinal))
+            throw new InvalidOperationException(pMessage + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+
+    private static void Equal(int pExpected, int pActual, string pMessage)
+    {
+        if (pExpected != pActual) throw new InvalidOperationException(
+            pMessage + ": expected " + pExpected + ", got " + pActual);
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+}

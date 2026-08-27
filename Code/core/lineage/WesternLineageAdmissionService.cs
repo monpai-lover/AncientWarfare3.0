@@ -138,7 +138,8 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.LINEAGE_STATUS,
                 LineageStatus.NOBLE);
             if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
-                pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+                pActor.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
             bool clanSynchronized = SynchronizeOriginalClan(pActor,
                 identity, result.LineageId, result.ShiId, pRuler);
             if (!clanSynchronized)

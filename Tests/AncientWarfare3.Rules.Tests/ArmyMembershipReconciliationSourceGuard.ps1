@@ -19,7 +19,7 @@ $authorityCycle = Get-Content -Raw -LiteralPath (Join-Path $repo `
 $armyService = Get-Content -Raw -LiteralPath (Join-Path $repo `
     'Code/core/lineage/AWArmyService.cs')
 $dirtyPatch = Get-Content -Raw -LiteralPath (Join-Path $repo `
-    'Code/patch/AW_DirtyMetaActorIndexPatch.cs')
+    'Code/patch/AW_ArmyMembershipReconciliationPatch.cs')
 
 if ($actorPatch -notmatch 'ArmyMembershipReconciliationService\.Enqueue') {
     throw 'Actor.setKingdom must enqueue its affected army.'

@@ -57,6 +57,7 @@ namespace AncientWarfare3.core.policy
             KingdomFoodReliefService.ClearRuntime();
             AsyncKingdomStrategyService.ClearRuntime();
             CityBureauAnnualWorkService.ClearRuntime();
+            NobleRemarriageService.ClearRuntimeState();
             BanditGreatUprisingService.ClearRuntime();
             PeasantRebelBanditIslandMigrationService.ClearRuntime();
         }
@@ -285,7 +286,12 @@ namespace AncientWarfare3.core.policy
         private static void RunNobleRemarriage(Kingdom pKingdom)
         {
             MeasureDiagnostic("annual_noble_remarriage",
-                () => NobleRemarriageService.OnKingdomYear(pKingdom));
+                () =>
+                {
+                    NobleRemarriageService.OnKingdomYear(pKingdom);
+                    DynasticMaleLineContinuityService.OnKingdomYear(
+                        pKingdom);
+                });
         }
 
         private static void RunDiplomaticOperation(Kingdom pKingdom)

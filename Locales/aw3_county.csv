@@ -1,0 +1,22 @@
+key,cz,en,ch
+aw_court_office_county_magistrate,县令,County Magistrate,縣令
+aw_county_label,县,County,縣
+aw_county_term,任期,Term,任期
+aw_county_rename_title,县改名,Rename County,縣改名
+aw_county_rename_input,新县名,New county name,新縣名
+aw_county_rename_current,当前县名,Current county,當前縣名
+aw_county_rename_placeholder,请输入新的县名,Enter a new county name,請輸入新的縣名
+aw_county_restore_historical,恢复历史县名,Restore Historical Name,恢復歷史縣名
+aw_county_rename_confirm,确认改名,Confirm,確認改名
+aw_county_rename_cancel,取消,Cancel,取消
+aw_county_rename_empty,请输入县名,Enter a county name,請輸入縣名
+aw_county_rename_duplicate,同一州内已有同名县,This county name is already used in the same region,同一州內已有同名縣
+aw_county_rename_inactive,该县已不存在或已撤销,This county no longer exists or is inactive,該縣已不存在或已撤銷
+aw_county_rename_unauthorized,该县不属于当前国家,This county is not controlled by the selected realm,該縣不屬於當前國家
+aw_county_rename_invalid_region,该县未归属有效州法理,The county has no valid de jure region,該縣未歸屬有效州法理
+aw_county_rename_failed,县改名失败,County rename failed,縣改名失敗
+aw_county_rename_pending,正在应用县名…,Applying county name...,正在應用縣名…
+aw_county_rename_success,县名已更新,County name updated,縣名已更新
+aw_county_restore_success,已恢复历史县名,Historical county name restored,已恢復歷史縣名
+aw_county_rename_map_tip,修改当前选中县的名称,Rename the selected county,修改當前選中縣的名稱
+aw_county_rename_card_tip,修改该县的名称,Rename this county,修改該縣的名稱

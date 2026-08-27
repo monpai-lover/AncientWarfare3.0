@@ -38,6 +38,8 @@
   "AWPerformanceSettings": "AW3 效能設定",
   "aw_settings_btn": "AW3 設定",
   "aw_settings_btn Description": "開啟 AW3 模組設定",
+  "AW3_ENABLE_EXPERIMENTAL_LARGE_SIMULATION_STEP": "啟用實驗性大步長模擬",
+  "AW3_ENABLE_EXPERIMENTAL_LARGE_SIMULATION_STEP Description": "在幀優先調度基礎上執行原版大步長模擬；需要先啟用幀優先調度；重新啟動遊戲後生效",
   "AW3_ENABLE_FRAME_PRIORITY_SCHEDULER": "啟用幀優先調度",
   "AW3_ENABLE_FRAME_PRIORITY_SCHEDULER Description": "將一次原版大步長邏輯 tick 分攤到多個渲染幀；人物移動與尋路保持原版倍速語義",
   "aw_frame_scheduler_confirm_title": "啟用幀優先調度",

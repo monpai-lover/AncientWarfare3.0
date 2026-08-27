@@ -205,6 +205,24 @@ namespace AncientWarfare3.core.lineage
             Record(pVassal, pSuzerain, null, "vassal_ended", "");
         }
 
+        public static void RecordTributePayment(Kingdom pTributary,
+            Kingdom pSuzerain, string pOutcome, float pPolitical,
+            int pGold, int pFactorPercent, string pOfferingOutcome)
+        {
+            if (pTributary?.data == null || pSuzerain?.data == null)
+                return;
+            string detail = string.Join("|", new[]
+            {
+                pPolitical.ToString("0.0"),
+                pGold.ToString(),
+                pFactorPercent.ToString(),
+                pOfferingOutcome ?? ""
+            });
+            Record(pTributary, pSuzerain, pTributary,
+                string.IsNullOrEmpty(pOutcome) ? "tributary_paid" : pOutcome,
+                detail);
+        }
+
         public static void RecordAllianceFormed(Kingdom pFounder,
             Kingdom pPartner, string pAllianceName)
         {
@@ -302,6 +320,12 @@ namespace AncientWarfare3.core.lineage
                 "tributary_set" => target +
                     AW_L10n.Text("aw_diplomacy_tributary_set_mid",
                         " became a tributary of ") + speaker,
+                "tributary_paid" => BuildTributePaymentText(speaker, target,
+                    detail, "aw_diplomacy_tributary_paid_event"),
+                "tributary_unpaid" => BuildTributePaymentText(speaker, target,
+                    detail, "aw_diplomacy_tributary_unpaid_event"),
+                "tribute_refused_power" => BuildTributePaymentText(speaker,
+                    target, detail, "aw_diplomacy_tributary_refused_event"),
                 "vassal_ended" => speaker + " / " + target +
                     AW_L10n.Text("aw_diplomacy_vassal_ended_suffix",
                         " ended their vassal relationship"),
@@ -325,6 +349,22 @@ namespace AncientWarfare3.core.lineage
                     discovered: true),
                 _ => speaker + " / " + target
             };
+        }
+
+        private static string BuildTributePaymentText(string pSpeaker,
+            string pTarget, string pDetail, string pTextKey)
+        {
+            string[] parts = (pDetail ?? "").Split('|');
+            string political = parts.Length > 0 ? parts[0] : "0";
+            string gold = parts.Length > 1 ? parts[1] : "0";
+            string factor = parts.Length > 2 ? parts[2] : "0";
+            string offering = parts.Length > 3 && !string.IsNullOrEmpty(parts[3])
+                ? parts[3]
+                : AW_L10n.Text("aw_diplomacy_tributary_offering_none",
+                    "No consort offering");
+            return string.Format(AW_L10n.Text(pTextKey,
+                    "{0} sent annual tribute to {1}: political {2}, gold {3}, factor {4}%. {5}"),
+                pSpeaker, pTarget, political, gold, factor, offering);
         }
 
         private static string BuildCovertResultText(string pDetail,

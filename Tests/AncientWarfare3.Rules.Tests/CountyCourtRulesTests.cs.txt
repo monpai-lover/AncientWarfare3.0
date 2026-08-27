@@ -1,0 +1,36 @@
+using AncientWarfare3.core.court;
+using AncientWarfare3.core.county;
+
+internal static class CountyCourtRulesTests
+{
+    public static void Run()
+    {
+        True(LocalLowOfficeVacancyRules.CanUseCountyFallback(true, 30, true),
+            "a county magistrate may use the low-office fallback");
+        Equal(false, LocalLowOfficeVacancyRules.CanUseCountyFallback(
+            true, 20, true), "a higher county office cannot use the fallback");
+        Equal(false, LocalLowOfficeVacancyRules.CanUseCountyFallback(
+            true, 30, false), "a non-vacancy appointment cannot use fallback");
+        Equal("county", CourtOfficeLayer.County,
+            "county has a dedicated court scope");
+        Equal("county_magistrate", CourtOfficeId.CountyMagistrate,
+            "county magistrate has a stable office id");
+        True(CountyCourtRules.IsCountyMagistrate(CourtOfficeLayer.County,
+            CourtOfficeId.CountyMagistrate), "county office identity");
+        Equal(105, CountyCourtRules.ResolveTermEndYear(100),
+            "county term default is five years");
+        Equal("长安县", CountyNameRules.Build("长安", 0, null),
+            "county names use the Chinese county suffix");
+        Equal("长安县2", CountyNameRules.Build("长安", 1, null),
+            "additional counties get stable ordinals");
+    }
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new System.InvalidOperationException(pMessage);
+    }
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual)) throw new System.InvalidOperationException(
+            $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

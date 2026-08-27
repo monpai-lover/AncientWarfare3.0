@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.performance;
@@ -23,17 +24,29 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ProcessAuthorityCycle()
         {
+            ProcessAuthorityCycle(int.MaxValue);
+        }
+
+        // Disposal can mutate the city container and trigger several native
+        // maintenance paths. Process only a small event slice per authority
+        // pass to keep large-step frame time bounded.
+        internal static void ProcessAuthorityCycle(int pMaximumCities)
+        {
             if (Pending.Count <= 0 ||
                 CityManagerMutationScope.IsCityUpdateActive ||
                 !PeasantRebelRouteRules.CanMutateAuthority(
                     AW3MultiplayerReplicaScope.IsReplicaSession) ||
                 AW3MultiplayerReplicaScope.IsApplying) return;
 
+            int limit = Math.Max(1, pMaximumCities);
             KeyValuePair<long, long>[] snapshot =
-                new KeyValuePair<long, long>[Pending.Count];
+                new KeyValuePair<long, long>[Math.Min(Pending.Count, limit)];
             int index = 0;
             foreach (KeyValuePair<long, long> item in Pending)
+            {
+                if (index >= snapshot.Length) break;
                 snapshot[index++] = item;
+            }
 
             for (int i = 0; i < snapshot.Length; i++)
             {

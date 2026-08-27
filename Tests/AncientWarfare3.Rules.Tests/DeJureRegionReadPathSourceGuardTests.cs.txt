@@ -1,0 +1,43 @@
+using System;
+using System.IO;
+
+internal static class DeJureRegionReadPathSourceGuardTests
+{
+    internal static void Run()
+    {
+        string source = Read("Code/core/court/DeJureRegionStore.cs");
+        int observe = source.IndexOf("internal static void ObserveLoadDirectory",
+            StringComparison.Ordinal);
+        int publish = source.IndexOf("internal static void PublishToSave", observe,
+            StringComparison.Ordinal);
+        string load = source.Substring(observe, publish - observe);
+        True(!load.Contains("RepairEmptyRegionsLocked", StringComparison.Ordinal),
+            "load-directory observation does not repair empty regions");
+        True(!load.Contains("EnsureAllKingdomCapitalSeatsLocked", StringComparison.Ordinal),
+            "load-directory observation does not scan kingdoms");
+        True(!load.Contains("SyncAllRegionNamesLocked", StringComparison.Ordinal),
+            "load-directory observation does not synchronize names");
+        True(!load.Contains("MigrateHistoricalMetadataLocked", StringComparison.Ordinal),
+            "load-directory observation does not migrate history");
+
+        int reads = source.IndexOf("internal static IReadOnlyList<DeJureRegion> ActiveRegions",
+            StringComparison.Ordinal);
+        int sync = source.IndexOf("internal static bool SyncSeatName", reads,
+            StringComparison.Ordinal);
+        string readBlock = source.Substring(reads, sync - reads);
+        True(!readBlock.Contains("SyncAllRegionNamesLocked", StringComparison.Ordinal),
+            "active-region reads do not synchronize names");
+        True(source.Contains("internal static void RepairAfterWorldLoaded", StringComparison.Ordinal),
+            "world-load repair remains an explicit entry point");
+        True(source.Contains("_worldLoadRepairCompleted", StringComparison.Ordinal),
+            "world-load repair is one-shot per load");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(), pPath));
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+}

@@ -311,7 +311,7 @@ namespace AncientWarfare3.content
             task.addBeh(new BehArmyRtsCaptainCombat());
             task.addBeh(new BehGoToActorTarget(
                 GoToActorTargetType.RaycastWithAttackRange,
-                false, true, true));
+                false, false, true));
             task.addBeh(new BehArmyRtsCaptainAttack());
             task.addBeh(new BehRestartTask());
         }
@@ -329,10 +329,10 @@ namespace AncientWarfare3.content
                 locale_key = "task_unit_aw_army_rts_member_combat"
             });
             task.setIcon("ui/Icons/iconWar");
-            task.addBeh(new BehFightCheckEnemyIsOk());
+            task.addBeh(new BehArmyRtsMemberCombat());
             task.addBeh(new BehGoToActorTarget(
                 GoToActorTargetType.SameTile,
-                true, true, true));
+                true, false, true));
             task.addBeh(new BehRestartTask());
         }
 
@@ -352,7 +352,7 @@ namespace AncientWarfare3.content
             task.addBeh(new BehArmyRtsSiegeCombat());
             task.addBeh(new BehGoToActorTarget(
                 GoToActorTargetType.RaycastWithAttackRange,
-                false, true, true));
+                false, false, true));
             task.addBeh(new BehArmyRtsCaptainAttack());
             task.addBeh(new BehRestartTask());
         }

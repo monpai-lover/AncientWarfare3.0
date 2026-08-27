@@ -5,6 +5,7 @@ using System.Linq;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.ui;
@@ -113,6 +114,19 @@ namespace AncientWarfare3.ui.windows
         protected override void Init()
         {
             ConfigureWindow();
+            CountyRenameService.Changed += OnCountyRenamed;
+        }
+
+        private void OnDestroy()
+        {
+            CountyRenameService.Changed -= OnCountyRenamed;
+        }
+
+        private void OnCountyRenamed(long pKingdomId, long pCityId)
+        {
+            if (!isActiveAndEnabled || pKingdomId != _displayedKingdomId)
+                return;
+            Refresh();
         }
 
         public override void OnNormalEnable()

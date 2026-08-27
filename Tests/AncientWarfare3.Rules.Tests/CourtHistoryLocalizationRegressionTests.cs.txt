@@ -23,6 +23,7 @@ internal static class CourtHistoryLocalizationRegressionTests
             "OfficialCareerHistoryQuery.cs"));
         string readModel = Read(Path.Combine("Code", "core", "court",
             "CourtReadModelService.cs"));
+        string localization = Read(Path.Combine("Locales", "aw3_court.csv"));
         if (!modClass.Contains("CourtLocalizationRepair.Ensure()"))
             throw new InvalidOperationException(
                 "court localization repair must run during mod load");
@@ -56,6 +57,25 @@ internal static class CourtHistoryLocalizationRegressionTests
                 "_root.sizeDelta = new Vector2(contentWidth, viewportHeight)"))
             throw new InvalidOperationException(
                 "history viewport must stay at window height while content grows");
+        foreach (string reason in new[]
+                 {
+                     "city_leader_mismatch", "term_expired",
+                     "local_office_reformed", "invalid",
+                     "promoted_city_leader"
+                 })
+        {
+            RequireLocalization(localization,
+                "aw_court_history_end_" + reason);
+            RequireLocalization(localization,
+                "aw_career_end_reason_" + reason);
+        }
         Console.WriteLine("Court history/localization regression tests passed.");
+    }
+
+    private static void RequireLocalization(string pCsv, string pKey)
+    {
+        if (!pCsv.Contains(pKey + ","))
+            throw new InvalidOperationException(
+                "missing court history localization: " + pKey);
     }
 }

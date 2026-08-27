@@ -44,9 +44,30 @@ internal static class HistoricalSchoolDeathRuntimeRulesTests
                 actorAlive: false, actorWrecked: false, deathPending: true),
             "a dead member is quarantined before persistence completes");
         False(HistoricalSchoolDeathRuntimeRules.ShouldExposeMembership(
-                activeMembership: true, actorExists: false,
-                actorAlive: false, actorWrecked: true, deathPending: false),
+            activeMembership: true, actorExists: false,
+            actorAlive: false, actorWrecked: true, deathPending: false),
             "a missing actor is never exposed as a school candidate");
+
+        True(HistoricalSchoolDeathRuntimeRules.ShouldQueueInitialPersistence(
+                activeMembership: true, actorExists: true,
+                actorAlive: false, actorWrecked: false,
+                deathPending: false),
+            "an actor death callback queues database persistence instead of blocking");
+        True(HistoricalSchoolDeathRuntimeRules.ShouldQueueInitialPersistence(
+                activeMembership: true, actorExists: true,
+                actorAlive: true, actorWrecked: true,
+                deathPending: false),
+            "a wrecked actor death callback also queues database persistence");
+        False(HistoricalSchoolDeathRuntimeRules.ShouldQueueInitialPersistence(
+                activeMembership: true, actorExists: true,
+                actorAlive: false, actorWrecked: false,
+                deathPending: true),
+            "a death already in the retry queue is not duplicated");
+        False(HistoricalSchoolDeathRuntimeRules.ShouldQueueInitialPersistence(
+                activeMembership: false, actorExists: true,
+                actorAlive: false, actorWrecked: false,
+                deathPending: false),
+            "an inactive membership does not create a death transaction");
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pMessage)

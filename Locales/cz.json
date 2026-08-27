@@ -38,6 +38,8 @@
   "AWPerformanceSettings": "AW3 性能设置",
   "aw_settings_btn": "AW3 设置",
   "aw_settings_btn Description": "打开 AW3 模组设置",
+  "AW3_ENABLE_EXPERIMENTAL_LARGE_SIMULATION_STEP": "启用实验性大步长模拟",
+  "AW3_ENABLE_EXPERIMENTAL_LARGE_SIMULATION_STEP Description": "在帧优先调度基础上运行原版大步长模拟；需要先启用帧优先调度；重启游戏后生效",
   "AW3_ENABLE_FRAME_PRIORITY_SCHEDULER": "启用帧优先调度",
   "AW3_ENABLE_FRAME_PRIORITY_SCHEDULER Description": "将一次原版大步长逻辑 tick 分摊到多个渲染帧；人物移动与寻路保持原版倍速语义",
   "aw_frame_scheduler_confirm_title": "启用帧优先调度",

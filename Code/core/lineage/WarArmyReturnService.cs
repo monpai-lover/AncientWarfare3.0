@@ -118,6 +118,8 @@ namespace AncientWarfare3.core.lineage
             return active;
         }
 
+        internal static bool HasActiveWork => Queue.OrderCount > 0;
+
         public static void OnArmyRosterChanged(Army pArmy)
         {
             if (pArmy?.data == null) return;

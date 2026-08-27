@@ -58,6 +58,34 @@ namespace AncientWarfare3.core.schools
             ApplyCommittedState(oldState, next);
         }
 
+        internal static bool SynchronizeHomeForSuccession(Actor pActor,
+            Kingdom pInheritanceKingdom, City pHomeCity)
+        {
+            if (pActor?.data == null || pInheritanceKingdom?.data == null ||
+                pInheritanceKingdom.isRekt()) return false;
+            HistoricalSchoolAffiliationSnapshot current = Get(pActor.data.id);
+            if (current == null) return true;
+            City home = pHomeCity?.data != null && !pHomeCity.isRekt() &&
+                        pHomeCity.kingdom == pInheritanceKingdom
+                ? pHomeCity
+                : pInheritanceKingdom.capital;
+            if (home?.data == null || home.isRekt() ||
+                home.kingdom != pInheritanceKingdom) return false;
+            if (current.HomeKingdomId == pInheritanceKingdom.id &&
+                current.HometownCityId == home.data.id &&
+                current.ResidenceCityId == home.data.id &&
+                current.ServiceKingdomId < 0 &&
+                current.LifecycleState ==
+                    HistoricalSchoolLifecycleState.AtHome)
+                return true;
+            HistoricalSchoolAffiliationSnapshot synchronized =
+                HistoricalSchoolAffiliationSnapshot.CreateHome(
+                    pActor.data.id, pInheritanceKingdom.id,
+                    pInheritanceKingdom.name, home.data.id,
+                    Date.getCurrentYear());
+            return Save(synchronized);
+        }
+
         internal static bool EnsureMemberAffiliation(Actor pActor, long pCityId)
         {
             if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return false;

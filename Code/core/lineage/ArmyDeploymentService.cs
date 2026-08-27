@@ -1211,8 +1211,15 @@ namespace AncientWarfare3.core.lineage
                 target = FindTile(targetTileId);
             WorldTile anchor = ResolveDeploymentAnchor(pArmy, target,
                 out bool deploymentEligible);
-            ArmyFormationService.SetAnchor(pArmy, anchor,
-                pDeploymentEligible: deploymentEligible);
+            bool useFormationMovement = ArmyDeploymentRules.
+                ShouldUseFormationQuorum(ArmyRtsRuntimeMode.Current);
+            if (ArmyDeploymentRules.ShouldObserveFormation(
+                    useFormationMovement, anchor?.data != null))
+                ArmyFormationService.ObserveArmy(pArmy, anchor,
+                    pDeploymentEligible: deploymentEligible);
+            else
+                ArmyFormationService.SetAnchor(pArmy, anchor,
+                    pDeploymentEligible: deploymentEligible);
         }
 
         private static WorldTile ResolveDeploymentAnchor(Army pArmy,

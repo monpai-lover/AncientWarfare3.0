@@ -1,0 +1,47 @@
+using AncientWarfare3.core.lineage;
+
+internal static class MandateMilitaryStrengthRulesTests
+{
+    internal static void Run()
+    {
+        Equal(900, MandateMilitaryStrengthRules.ResolveTarget(1200),
+            "the Mandate army target is capped at 900");
+        Equal(0, MandateMilitaryStrengthRules.ResolveTarget(-1),
+            "negative army targets are rejected");
+        True(MandateMilitaryStrengthRules.ShouldRecruit(true, true, 40, 900),
+            "a wartime Mandate below target requests native enlistment");
+        False(MandateMilitaryStrengthRules.ShouldRecruit(true, false, 40, 900),
+            "peace does not trigger the wartime enlistment path");
+        False(MandateMilitaryStrengthRules.ShouldRecruit(true, true, 900, 900),
+            "the target suppresses recruitment once reached");
+        True(MandateMilitaryStrengthRules.CanUseNativeCandidate(
+                true, true, true, true, false, false, false, false, false,
+                false),
+            "a local adult civilian is eligible for native enlistment");
+        False(MandateMilitaryStrengthRules.CanUseNativeCandidate(
+                true, true, true, true, true, false, false, false, false,
+                false),
+            "the king is protected from emergency enlistment");
+        False(MandateMilitaryStrengthRules.CanUseNativeCandidate(
+                true, true, true, true, false, false, false, false, false,
+                true),
+            "an actor already assigned to an army is not duplicated");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new System.InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new System.InvalidOperationException(pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(
+                pExpected, pActual))
+            throw new System.InvalidOperationException(pMessage);
+    }
+}

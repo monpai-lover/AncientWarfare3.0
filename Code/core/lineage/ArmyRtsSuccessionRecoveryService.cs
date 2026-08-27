@@ -24,8 +24,11 @@ namespace AncientWarfare3.core.lineage
             new SortedSet<long>();
         private static readonly HashSet<long> MissingArmyRecoveryQueued =
             new HashSet<long>();
+        private static readonly Dictionary<long, long> CaptainRetryAfterCycle =
+            new Dictionary<long, long>();
         private static readonly List<long> ArmyIds = new List<long>(
             ArmyRtsSuccessionRecoveryRules.MaximumArmiesPerCycle);
+        private static long _authorityCycle;
 
         internal static void OnKingInstalled(Kingdom pKingdom, Actor pKing,
             bool pFromLoad = false)
@@ -45,6 +48,7 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ProcessAuthorityCycle()
         {
+            if (_authorityCycle < long.MaxValue) _authorityCycle++;
             ProcessPendingRecoveries(
                 ArmyRtsSuccessionRecoveryRules.MaximumArmiesPerCycle,
                 pRequireRuntimeCommit: true);
@@ -138,6 +142,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pArmy?.data == null || pCaptainId < 0L)
                 return;
+            CaptainRetryAfterCycle.Remove(pArmy.id);
             PendingCaptainArmies.Add(pArmy.id);
             LogCaptainRecovery("captain_vacancy_enqueued", pArmy,
                 "source=death previous=" + pCaptainId);
@@ -148,6 +153,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pArmy?.data == null || pPreviousCaptainId < 0L)
                 return;
+            CaptainRetryAfterCycle.Remove(pArmy.id);
             PendingCaptainArmies.Add(pArmy.id);
             LogCaptainRecovery("captain_vacancy_enqueued", pArmy,
                 "source=vacated previous=" + pPreviousCaptainId);
@@ -173,7 +179,14 @@ namespace AncientWarfare3.core.lineage
                 if (!ArmyRtsControllerService.HasActiveMission(army.id))
                     continue;
                 int living = SafeUnitCount(army);
-                if (!HasOperationalCaptain(army, kingdom) && living > 0)
+                bool captainRecoveryReady =
+                    !CaptainRetryAfterCycle.TryGetValue(army.id,
+                        out long retryAfter) ||
+                    ArmyRtsSuccessionRecoveryRules.
+                        ShouldAttemptCaptainRecovery(_authorityCycle,
+                            retryAfter);
+                if (!HasOperationalCaptain(army, kingdom) && living > 0 &&
+                    captainRecoveryReady)
                     PendingCaptainArmies.Add(army.id);
                 if (living < ArmyLogisticsRules.MinimumOperationalForce &&
                     mission.ProposalKind != ArmyRtsProposalKind.Retreat)
@@ -253,6 +266,8 @@ namespace AncientWarfare3.core.lineage
                 ArmyRtsAssignmentReconciliationService.Enqueue(army);
                 bool captainOperational = HasOperationalCaptain(army,
                     kingdom);
+                if (captainOperational)
+                    CaptainRetryAfterCycle.Remove(armyId);
                 if (ArmyRtsSuccessionRecoveryRules.ShouldRetryCaptainRecovery(
                         armyValid: army?.data != null,
                         captainOperational: captainOperational,
@@ -261,6 +276,9 @@ namespace AncientWarfare3.core.lineage
                         wartimeEmergency: wartimeEmergency))
                 {
                     PendingCaptainArmies.Add(armyId);
+                    CaptainRetryAfterCycle[armyId] = _authorityCycle +
+                        ArmyRtsSuccessionRecoveryRules.
+                            CaptainRecoveryRetryCooldownCycles;
                     LogCaptainRecovery("captain_recovery_retry", army,
                         "mission=" + missionActive + " emergency=" +
                         wartimeEmergency);
@@ -348,7 +366,7 @@ namespace AncientWarfare3.core.lineage
             string pDetails)
         {
             if (!AWPerformanceSettings.ArmyRtsDiagnosticsEnabled) return;
-            ModClass.LogWarning("[AW3 RTS succession] stage=" + pStage +
+            ModClass.LogError("[AW3 RTS succession] stage=" + pStage +
                 " army=" + (pArmy?.id ?? -1L) + " captain=" +
                 CurrentCaptainId(pArmy) + " units=" + SafeUnitCount(pArmy) +
                 " " + pDetails);
@@ -388,7 +406,9 @@ namespace AncientWarfare3.core.lineage
             PendingCaptainArmies.Clear();
             PendingLowForceArmies.Clear();
             MissingArmyRecoveryQueued.Clear();
+            CaptainRetryAfterCycle.Clear();
             ArmyIds.Clear();
+            _authorityCycle = 0L;
         }
 
         private static bool HasLiveCaptain(Army pArmy)

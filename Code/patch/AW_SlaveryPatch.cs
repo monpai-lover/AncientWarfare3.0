@@ -54,14 +54,45 @@ namespace AncientWarfare3.patch
             ActorKingdomArmyState __state)
         {
             if (__instance?.kingdom == __state.Kingdom) return;
+
+            // Vanilla calls setDefaultKingdom from ActorManager.finalizeActor
+            // while an actor is still being materialized.  The original
+            // kingdom assignment must remain side-effect free at that point;
+            // load/army repair has its own post-load queues.
+            if (!IsStableRuntime(__instance)) return;
+
             ArmyMembershipReconciliationService.Enqueue(__state.Army);
             ArmyMembershipReconciliationService.Enqueue(__instance?.army);
+            // Do not query profession state synchronously here.  The actor
+            // can still be in a vanilla lifecycle boundary; the membership
+            // service performs that check from its stable authority queue.
+            WarriorArmyMembershipService.Enqueue(__instance);
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             WarNoticeService.QueueArmyChanged(__state.Kingdom,
                 __instance.army);
             ArmyDeploymentService.ReleaseActor(__instance, restoreJob: true);
             TemporarySlaveVanguardService.OnActorKingdomChanged(__instance,
                 __state.Kingdom);
+        }
+
+        private static bool IsStableRuntime(Actor pActor)
+        {
+            try
+            {
+                // Actor.setDefaultKingdom is also invoked from
+                // ActorManager.finalizeActor.  At that point data/asset can
+                // exist while profession and tile state are still being
+                // materialized; querying warrior/army state is unsafe.
+                return pActor?.data != null && pActor.asset != null &&
+                       pActor.profession_asset != null &&
+                       pActor.current_tile?.data != null &&
+                       Config.game_loaded && !SmoothLoader.isLoading() &&
+                       World.world != null;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         [HarmonyPostfix]

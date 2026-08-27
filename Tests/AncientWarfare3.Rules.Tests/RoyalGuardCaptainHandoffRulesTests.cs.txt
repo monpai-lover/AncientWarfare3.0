@@ -211,11 +211,13 @@ internal static class RoyalGuardCaptainHandoffRulesTests
         string postRunner = File.ReadAllText(Path.Combine(root, "Code", "core",
             "performance", "AWCooperativeActorPostRunner.cs"));
         int militaryActorStart = postRunner.IndexOf(
-            "private void ProcessMilitaryP0Actor(",
+            "internal static void ProcessMilitaryP0Actor(",
             StringComparison.Ordinal);
-        int militaryActorEnd = postRunner.IndexOf(
-            "private static bool HasLiveMilitaryP0Objective",
-            militaryActorStart, StringComparison.Ordinal);
+        int militaryActorEnd = militaryActorStart >= 0
+            ? postRunner.IndexOf(
+                "private static bool HasLiveMilitaryP0Objective",
+                militaryActorStart, StringComparison.Ordinal)
+            : -1;
         string militaryActorBody = militaryActorStart >= 0 &&
             militaryActorEnd > militaryActorStart
             ? postRunner.Substring(militaryActorStart,

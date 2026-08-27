@@ -155,7 +155,19 @@ namespace AncientWarfare3.core.lineage
         public static void RebuildRuntime()
         {
             ClearRuntime();
-            EnsureLoaded();
+            if (!EnsureLoaded()) return;
+            MandateReport report = MandateService.ReadReportReadOnly();
+            bool activeClaimants = MandateRebelService.HasActiveRebelClaimants();
+            bool activeZhuluWars = ZhuluWarService.HasActivePrincipalWars();
+            if (MandatePhaseRules.ShouldReconcileRestoredState(
+                    report?.active == true, _phase, report?.origin_type,
+                    activeClaimants, activeZhuluWars))
+            {
+                SetPhase(MandatePhase.Renewal, SafeCurrentYear());
+                _chaosUnresolvedYears = 0;
+                _chaosRecoveryYears = 0;
+                Persist("restored_mandate_phase_reconciled");
+            }
         }
 
         public static void ClearRuntime()

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 
@@ -44,40 +45,11 @@ namespace AncientWarfare3.core.court
             Enqueue(pKingdom.id);
         }
 
-        internal static void RequestImmediateReconcile(Kingdom pKingdom,
-            long pCityId)
-        {
-            if (pKingdom?.data == null || pKingdom.isRekt() ||
-                pCityId < 0L || !CourtService.HasOfficialCourt(pKingdom))
-                return;
-            string key = "city-bureau-vacancy:" + pKingdom.id + ":" +
-                         pCityId;
-            DeferredRuntimeWorkService.EnqueueCoalesced(key,
-                DeferredWorkClass.Persistent,
-                () => ProcessImmediate(pKingdom.id, pCityId, 0));
-        }
-
-        private static void ProcessImmediate(long pKingdomId, long pCityId,
-            int pAttempt)
-        {
-            Kingdom kingdom = ResolveKingdom(pKingdomId);
-            City city = ResolveCity(pCityId);
-            if (kingdom?.data == null || city?.data == null ||
-                kingdom.isRekt() || city.isRekt() || city.kingdom != kingdom)
-                return;
-            if (ProcessCity(kingdom, city, 0f, Date.getCurrentYear())) return;
-            if (pAttempt + 1 >= MaximumWriteAttempts) return;
-            string key = "city-bureau-vacancy:" + pKingdomId + ":" +
-                         pCityId;
-            DeferredRuntimeWorkService.EnqueueCoalesced(key,
-                DeferredWorkClass.Persistent,
-                () => ProcessImmediate(pKingdomId, pCityId, pAttempt + 1));
-        }
-
         internal static void ClearRuntime()
         {
             foreach (PendingWork work in Pending.Values) Dispose(work);
             Pending.Clear();
+            LocalCourtAppointmentService.ClearRuntime();
         }
 
         private static void Enqueue(long pKingdomId)
@@ -103,13 +75,17 @@ namespace AncientWarfare3.core.court
             if (work.RetryCityId >= 0L)
             {
                 City retryCity = ResolveCity(work.RetryCityId);
-                if (retryCity?.data == null || retryCity.isRekt() ||
-                    retryCity.kingdom != kingdom ||
+                bool retryHasVacancy = false;
+                bool retryCompleted = retryCity?.data == null ||
+                    retryCity.isRekt() || retryCity.kingdom != kingdom ||
                     ProcessCity(kingdom, retryCity, work.CourtEfficiency,
-                        work.Year))
+                        work.Year, out retryHasVacancy);
+                if (retryCompleted)
                 {
                     if (retryCity?.data != null)
+                    {
                         work.CompletedCityIds.Add(retryCity.data.id);
+                    }
                     ClearRetry(work);
                 }
                 else if (++work.RetryAttempts < MaximumWriteAttempts)
@@ -154,8 +130,9 @@ namespace AncientWarfare3.core.court
                 if (city?.data == null || city.isRekt() ||
                     city.kingdom != kingdom ||
                     work.CompletedCityIds.Contains(city.data.id)) continue;
+                bool hasVacancy;
                 if (!ProcessCity(kingdom, city, work.CourtEfficiency,
-                        work.Year))
+                        work.Year, out hasVacancy))
                 {
                     work.RetryCityId = city.data.id;
                     work.RetryAttempts = 1;
@@ -168,8 +145,9 @@ namespace AncientWarfare3.core.court
         }
 
         private static bool ProcessCity(Kingdom pKingdom, City pCity,
-            float pCourtEfficiency, int pYear)
+            float pCourtEfficiency, int pYear, out bool pHasVacancy)
         {
+            pHasVacancy = false;
             CustomLocalCourtTemplate localTemplate = null;
             bool customTemplate = CustomCourtRuntime.
                 HasCustomLocalTemplates(pKingdom);
@@ -189,9 +167,19 @@ namespace AncientWarfare3.core.court
                                  CourtSchoolId.None;
             if (schoolSnapshot == null)
                 CitySchoolSnapshotService.MarkDirty(pCity);
-            if (!LocalCourtAppointmentService.ReconcileCity(pKingdom, pCity,
-                    slots, pYear, out IReadOnlyList<long> officerActorIds))
-                return false;
+            IReadOnlyList<CourtVacancyKey> discovered =
+                LocalCourtAppointmentService.DiscoverVacancies(
+                    pKingdom, pCity, slots, pYear);
+            foreach (IGrouping<CourtVacancyKey, CourtVacancyKey> group in
+                     discovered.GroupBy(key => key))
+                CourtVacancyRegistry.Register(group.Key, group.Count());
+            pHasVacancy = discovered.Count > 0;
+            IReadOnlyList<long> officerActorIds = CourtService.
+                GetActiveOfficers(pKingdom, int.MaxValue)
+                .Where(row => row != null &&
+                    row.layer == CourtOfficeLayer.City &&
+                    row.city_id == pCity.data.id)
+                .Select(row => row.actor_id).Distinct().ToArray();
             int filled = officerActorIds.Count;
             float efficiency = CourtBureauRules.BureauEfficiency(slots,
                 filled);

@@ -105,15 +105,20 @@ namespace AncientWarfare3.core.lineage
             _runtimeMarkerKingdomId = -1L;
             _runtimeMarkerKind = "";
             _coreCityIds = new HashSet<long>();
-            _autoCandidateYear = int.MinValue;
-            _autoCandidateKingdomCount = -1;
-            _autoCandidateKingdomId = -1L;
+            InvalidatePowerCandidateCache();
             _pendingFallenMandateKingdomId = -1L;
             _pendingMandateConquerorKingdomId = -1L;
             _lastProjectionResumeYear = int.MinValue;
             MandateRebelService.ClearRuntime();
             _cacheDirty = true;
             ReadReport();
+        }
+
+        internal static void InvalidatePowerCandidateCache()
+        {
+            _autoCandidateYear = int.MinValue;
+            _autoCandidateKingdomCount = -1;
+            _autoCandidateKingdomId = -1L;
         }
 
         public static int ResumePendingProjections(int pMax = 2)
@@ -368,6 +373,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.MANDATE_LAST_YEAR, out int lastYear, int.MinValue);
             if (lastYear == currentYear) return;
             pKingdom.data.set(LineageKeys.MANDATE_LAST_YEAR, currentYear);
+            MandateBorderDefenseService.OnKingdomYear(pKingdom);
 
             MandateReport before = ReadReport();
             int delta = CalculateYearlyDelta(pKingdom, before);
@@ -1431,6 +1437,14 @@ namespace AncientWarfare3.core.lineage
             Kingdom attacker = pWar.getMainAttacker();
             Kingdom defender = pWar.getMainDefender();
             if (attacker?.data == null || defender?.data == null) return;
+            try
+            {
+                long capitalId = defender.capital?.data?.id ?? -1L;
+                if (capitalId >= 0L)
+                    pWar.data.set(LineageKeys.MANDATE_WAR_START_CAPITAL_ID,
+                        capitalId);
+            }
+            catch { }
             RecordEvent("mandate_war_start", defender, defender.king, null, -5, ReadReport().mandate_value,
                 attacker.name + T("aw_hist_mandate_war_declared_mid") + defender.name +
                 T("aw_hist_mandate_war_declared_suffix"));
@@ -1452,8 +1466,17 @@ namespace AncientWarfare3.core.lineage
 
             bool mandateWar = type == WAR_TIANMING ||
                               type == WAR_TIANMING_REBEL;
+            bool capitalBreakthrough = defender == mandate &&
+                pWinner == WarWinner.Attackers &&
+                TransferCapitalRingAfterMandateWar(pWar, defender, attacker);
             if (!mandateWar)
             {
+                if (capitalBreakthrough)
+                {
+                    ClearMandate("capital_lost");
+                    TryDeclareMandateAfterVictory(attacker, defender);
+                    return;
+                }
                 Kingdom loser = pWinner == WarWinner.Attackers
                     ? defender
                     : pWinner == WarWinner.Defenders ? attacker : null;
@@ -1467,6 +1490,9 @@ namespace AncientWarfare3.core.lineage
 
             if (defender == mandate && pWinner == WarWinner.Attackers)
             {
+                if (!capitalBreakthrough)
+                    TransferCapitalRingAfterMandateWar(pWar, defender,
+                        attacker);
                 bool rebel = MandateRebelService.IsRebelKingdom(attacker) || type == WAR_TIANMING_REBEL;
                 bool pseudo = !LineageService.IsXiaKingdom(attacker) || IsPseudoForeignClaimant(attacker);
                 ClearMandate("war_lost");
@@ -1481,6 +1507,61 @@ namespace AncientWarfare3.core.lineage
 
             if (defender == mandate && pWinner == WarWinner.Defenders)
                 ChangeMandate(defender, 12, "mandate_war_won");
+        }
+
+        private static bool TransferCapitalRingAfterMandateWar(War pWar,
+            Kingdom pFormerMandate, Kingdom pVictor)
+        {
+            if (pWar?.data == null || pFormerMandate?.data == null ||
+                pVictor?.data == null || pFormerMandate == pVictor ||
+                !Ready) return false;
+            try
+            {
+                pWar.data.get(LineageKeys.MANDATE_CAPITAL_RING_TRANSFERRED,
+                    out bool alreadyTransferred, false);
+                pWar.data.get(LineageKeys.MANDATE_WAR_START_CAPITAL_ID,
+                    out long targetCityId, -1L);
+                City capital = targetCityId >= 0L
+                    ? FindCity(targetCityId)
+                    : pFormerMandate.capital;
+                Kingdom capitalOwner = capital?.kingdom;
+                bool capitalCaptured = capital?.data != null &&
+                    (capitalOwner == pVictor ||
+                     VassalService.GetRootSuzerain(capitalOwner) == pVictor);
+                bool capitalOwnedByFormer = capital?.data != null &&
+                    capital.kingdom == pFormerMandate;
+                if (!MandateCoreTransferRules.ShouldTransferCapitalRing(
+                        true, pWar.isAttacker(pVictor), capitalCaptured,
+                        capitalOwnedByFormer, alreadyTransferred))
+                    return alreadyTransferred && capitalCaptured;
+
+                var transferIds = new HashSet<long> { capital.id };
+                IEnumerable<City> neighbors = capital.neighbours_cities ??
+                    new HashSet<City>();
+                foreach (City neighbor in neighbors)
+                {
+                    if (neighbor?.data == null || neighbor.isRekt() ||
+                        !_coreCityIds.Contains(neighbor.id) ||
+                        neighbor.kingdom != pFormerMandate) continue;
+                    transferIds.Add(neighbor.id);
+                }
+                foreach (long cityId in transferIds)
+                {
+                    City city = FindCity(cityId);
+                    if (city?.data == null || city.isRekt() ||
+                        city.kingdom != pFormerMandate) continue;
+                    city.joinAnotherKingdom(pVictor);
+                }
+                pWar.data.set(LineageKeys.MANDATE_CAPITAL_RING_TRANSFERRED,
+                    true);
+                return true;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Mandate capital ring transfer failed: " +
+                                    error.Message);
+                return false;
+            }
         }
 
         private static int ReadOrdinaryWarDefeatDelta(War pWar,
@@ -1516,6 +1597,7 @@ namespace AncientWarfare3.core.lineage
             if (!MandateAuthorityMutationRules.CanMutate(
                     AW3MultiplayerReplicaScope.IsReplicaSession))
                 return;
+            InvalidatePowerCandidateCache();
             if (pKingdom?.data == null) return;
             if (MandateIslandExileService.IsActive(pKingdom)) return;
             MandateReport report = ReadReport();
@@ -2854,6 +2936,9 @@ namespace AncientWarfare3.core.lineage
                 case "kingdom_fell": return T("aw_hist_mandate_end_kingdom_fell");
                 case "replaced": return T("aw_hist_mandate_end_replaced");
                 case "player_grant_replaced": return T("aw_hist_mandate_end_player_grant");
+                case "chaos_timeout": return T("aw_hist_mandate_end_chaos_timeout");
+                case "zhulu_age_entered": return T("aw_hist_mandate_end_zhulu_age_entered");
+                case "island_exile_handoff": return T("aw_hist_mandate_end_island_exile_handoff");
                 default: return string.IsNullOrEmpty(pReason) ? T("aw_hist_mandate_end_generic") : pReason;
             }
         }

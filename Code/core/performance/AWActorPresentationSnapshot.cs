@@ -1726,8 +1726,7 @@ internal sealed class AWActorPresentationSnapshot
             return;
         }
 
-        List<TileZone> visibleZones =
-            world.zone_camera.getVisibleZones();
+        List<TileZone> visibleZones = AWPresentationVisibility.GetVisibleZones();
         for (int zoneIndex = 0;
              zoneIndex < visibleZones.Count;
              zoneIndex++)

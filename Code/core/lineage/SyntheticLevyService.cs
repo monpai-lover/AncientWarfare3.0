@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.performance;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -76,6 +77,8 @@ namespace AncientWarfare3.core.lineage
             Army army, Actor template, long emergencyId,
             WorldTile pSpawnTile = null)
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization)
+                return null;
             if (city?.data == null || kingdom?.data == null ||
                 army?.data == null || template?.asset == null ||
                 World.world?.units == null || city.kingdom != kingdom ||
@@ -131,13 +134,14 @@ namespace AncientWarfare3.core.lineage
             int limit = Math.Min(Math.Max(0, requested),
                 TemporaryLevyRules.MaxRecruitsPerWorkItem);
             Actor template = ResolveTemplate(city, army);
-            if (pSpawnTile?.data == null || template?.asset == null)
+            WorldTile spawnTile = pSpawnTile ?? city?.getTile();
+            if (spawnTile?.data == null || template?.asset == null)
                 return 0;
             int created = 0;
             while (created < limit)
             {
                 Actor actor = TryCreate(city, kingdom, army, template,
-                    emergencyId, pSpawnTile);
+                    emergencyId, spawnTile);
                 if (actor == null) break;
                 createdActors?.Add(actor);
                 created++;

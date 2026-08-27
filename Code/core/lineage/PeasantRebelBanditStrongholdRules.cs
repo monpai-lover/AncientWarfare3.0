@@ -174,6 +174,14 @@ namespace AncientWarfare3.core.lineage
                 : BanditStrongholdFallAction.QueueFall;
         }
 
+        public static bool ShouldCompleteLeaderlessSuppression(
+            bool isSuppressionWar, bool isBanditKingdom,
+            bool hasLivingKing, bool hasLivingRegisteredHeir)
+        {
+            return isSuppressionWar && isBanditKingdom &&
+                   !hasLivingKing && !hasLivingRegisteredHeir;
+        }
+
         public static bool CanRelocateOrdinaryResident(bool adult,
             bool civilianProfession, bool king, bool cityLeader,
             bool heir)
@@ -188,12 +196,48 @@ namespace AncientWarfare3.core.lineage
             return ordinaryResidentAvailable;
         }
 
+        public static int RulerPriority(bool hasRestorationClaim,
+            bool ordinaryResident, bool cityLeader)
+        {
+            if (hasRestorationClaim) return 0;
+            if (ordinaryResident) return 1;
+            if (cityLeader) return 2;
+            return 3;
+        }
+
         public static bool CanUseCityLeaderAsRuler(
             bool cityLeaderAlive, bool cityLeaderAdult,
             bool cityLeaderBelongsToMotherCity)
         {
             return cityLeaderAlive && cityLeaderAdult &&
                    cityLeaderBelongsToMotherCity;
+        }
+
+        public static bool CanUseDirectRuler(bool candidateIsMale,
+            bool femaleSuccessionAllowed)
+        {
+            _ = candidateIsMale;
+            _ = femaleSuccessionAllowed;
+            // Direct bandit founding explicitly promotes the selected founder;
+            // the temporary setKing scope handles native gender-law gates.
+            return true;
+        }
+
+        public static bool IsValidBanditKing(bool banditKingdom,
+            bool kingAlive, bool kingBelongsToKingdom,
+            bool kingBelongsToKingdomCity)
+        {
+            return banditKingdom && kingAlive &&
+                   kingBelongsToKingdom && kingBelongsToKingdomCity;
+        }
+
+        public static bool CanPromoteBanditKingCandidate(bool actorAlive,
+            bool actorAdult, bool actorMale, bool actorBelongsToKingdom,
+            bool actorCityBelongsToKingdom, bool actorIsBoat)
+        {
+            return actorAlive && actorAdult && actorMale &&
+                   actorBelongsToKingdom && actorCityBelongsToKingdom &&
+                   !actorIsBoat;
         }
 
         public static bool ShouldTransferFallenSurvivor(

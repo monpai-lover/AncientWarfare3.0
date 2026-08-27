@@ -25,12 +25,6 @@ namespace AncientWarfare3.core.policy
                      ActorRacePerformanceRules.MetricCount];
         private static readonly int[] ActorRaceCounts =
             new int[ActorRaceTicks.Length];
-        private static readonly long[] ActorBatchTicks =
-            new long[ActorBatchPerformanceRules.StageCount];
-        private static readonly int[] ActorBatchCounts =
-            new int[ActorBatchTicks.Length];
-        private static readonly long[] ActorBatchMaxTicks =
-            new long[ActorBatchTicks.Length];
         private static readonly long[] ArmyRtsControllerTicks =
             new long[ArmyRtsControllerPerformanceRules.StageCount];
         private static readonly int[] ArmyRtsControllerCounts =
@@ -67,7 +61,6 @@ namespace AncientWarfare3.core.policy
             ActorDiagnosticSamplingRules.MaximumDetailSamplesPerFrame;
         private static long _sampleFrameStarted;
         private static long _actorWallTicks;
-        private static long _actorParallelWallTicks;
         private static long _actorAiTicks;
         private static int _actorAiCalls;
         private static readonly Dictionary<string, ActorTaskSample>
@@ -95,6 +88,8 @@ namespace AncientWarfare3.core.policy
         private static long _slowestDeferredTicks;
         private static string _slowestAnnualStageId = "none";
         private static long _slowestAnnualStageTicks;
+        private static string _slowestAuthorityStageId = "none";
+        private static long _slowestAuthorityStageTicks;
         private static int _sampleGc0Start;
         private static int _sampleGc1Start;
         private static int _sampleGc2Start;
@@ -166,6 +161,8 @@ namespace AncientWarfare3.core.policy
             _frameContinuousStageTicks = 0L;
             _frameAnnualStageId = "none";
             _frameAnnualStageTicks = 0L;
+            _slowestAuthorityStageId = "none";
+            _slowestAuthorityStageTicks = 0L;
             _sampling = RuntimePerformanceDiagnosticRules.ShouldSample(
                 currentMode != 0, _frame);
             AWSchedulerStageDiagnostics.BeginFrame(_sampling);
@@ -190,6 +187,31 @@ namespace AncientWarfare3.core.policy
             return _frameStarted != 0L ? Stopwatch.GetTimestamp() : 0L;
         }
 
+        public static long BeginAuthorityStage()
+        {
+            // Authority stages are synchronous main-thread work. Keep timing
+            // active between text-log sampling windows so deferred spikes
+            // retain their actual stage owner.
+            return _frameStarted != 0L ? Stopwatch.GetTimestamp() : 0L;
+        }
+
+        public static long BeginDeferredItemScope()
+        {
+            return _frameStarted != 0L ? Stopwatch.GetTimestamp() : 0L;
+        }
+
+        public static void EndAuthorityStage(string pId, long pStarted)
+        {
+            long elapsed = Elapsed(pStarted);
+            if (elapsed < 0L || !RuntimePerformanceDiagnosticRules.
+                    ShouldReplaceSlowest(_slowestAuthorityStageTicks,
+                        elapsed)) return;
+            _slowestAuthorityStageTicks = elapsed;
+            _slowestAuthorityStageId = string.IsNullOrEmpty(pId)
+                ? "authority_unknown"
+                : pId;
+        }
+
         public static bool ShouldCollectActorDetail()
         {
             return _sampling || Bench.bench_enabled;
@@ -201,11 +223,6 @@ namespace AncientWarfare3.core.policy
             int used = Interlocked.Increment(ref _actorDetailSamples) - 1;
             return ActorDiagnosticSamplingRules.ShouldCollect(_sampling,
                 Bench.bench_enabled, used, ActorDetailBudgetPerFrame);
-        }
-
-        public static bool ShouldCollectActorBatch()
-        {
-            return _sampling;
         }
 
         public static long BeginDeathEvent()
@@ -238,35 +255,6 @@ namespace AncientWarfare3.core.policy
             int index = ActorRacePerformanceRules.Index(pToken.Bucket, pMetric);
             ActorRaceTicks[index] += elapsed;
             ActorRaceCounts[index]++;
-        }
-
-        public static long BeginActorBatch(ActorBatchPerformanceStage pStage)
-        {
-            return _sampling && ActorBatchPerformanceRules.IsValid(pStage)
-                ? Stopwatch.GetTimestamp()
-                : 0L;
-        }
-
-        public static void EndActorBatch(ActorBatchPerformanceStage pStage,
-            long pStarted)
-        {
-            long elapsed = Elapsed(pStarted);
-            if (elapsed < 0L || !ActorBatchPerformanceRules.IsValid(pStage))
-                return;
-            int index = (int)pStage;
-            Interlocked.Add(ref ActorBatchTicks[index], elapsed);
-            Interlocked.Increment(ref ActorBatchCounts[index]);
-            UpdateMaximum(ref ActorBatchMaxTicks[index], elapsed);
-        }
-
-        public static long BeginActorParallelWall()
-        {
-            return BeginScope();
-        }
-
-        public static void EndActorParallelWall(long pStarted)
-        {
-            AddElapsed(ref _actorParallelWallTicks, pStarted);
         }
 
         public static long BeginArmyRtsControllerStage(
@@ -551,6 +539,8 @@ namespace AncientWarfare3.core.policy
             int strategicPathActive = ArmyRouteProviderService.ActiveCount;
             ArmyRtsBenchmarkSnapshot armyRts =
                 ArmyRtsBenchmark.Snapshot();
+            AWIdleBehaviourThrottleDiagnosticSnapshot idleThrottle =
+                AWIdleBehaviourThrottleDiagnostics.Snapshot();
             HistoricalSchoolDiagnosticSnapshot schoolDiagnostics =
                 HistoricalSchoolDiagnostics.Snapshot();
             long frameTicks = Elapsed(_sampleFrameStarted);
@@ -629,6 +619,10 @@ namespace AncientWarfare3.core.policy
                 " school_pending_deaths=" + schoolPendingDeaths +
                 " school_pending_descents=" + schoolPendingDescents +
                 " deferred_runtime_work=" + deferredRuntimeWork +
+                " deferred_runtime_detail=" +
+                DeferredRuntimeWorkService.GetDiagnostics() +
+                " native_authority=" +
+                AWAuthorityCycleService.GetDiagnostics() +
                 " kingdom_repair_queue=" + kingdomRepairQueue +
                 " army_count=" + armyCount +
                 " frame_ms=" + Milliseconds(frameTicks) +
@@ -640,8 +634,14 @@ namespace AncientWarfare3.core.policy
                 Milliseconds(schedulerStages.UnaccountedTicks) +
                 " scheduler_host_unaccounted_ms=" +
                 Milliseconds(schedulerStages.HostUnaccountedTicks) +
-                " simulation_coordinator=" +
-                AWSimulationCoordinatorThread.Instance.GetDiagnostics() +
+                 " simulation_coordinator=master_batch_runner" +
+                " simulation_workers=" +
+                AWSimulationWorkerPool.Instance.GetDiagnostics() +
+                 " status_scheduler=vanilla_master_lifecycle" +
+                " stack_effects=" +
+                AWActiveStackEffectsUpdater.GetDiagnostics() +
+                " inside_boat=" +
+                AWInsideBoatActorIndex.GetDiagnostics() +
                 " worst_frame=" + _worstFrameNumber +
                 " worst_frame_ms=" + Milliseconds(_worstFrameTicks) +
                 " worst_frame_stage=" + _worstFrameStageId +
@@ -652,7 +652,6 @@ namespace AncientWarfare3.core.policy
                 " worst_frame_annual_stage_ms=" +
                 Milliseconds(_worstFrameAnnualStageTicks) +
                 " actor_ms=" + Milliseconds(_actorWallTicks) +
-                ActorParallelFields() +
                 " actor_post_worker_ms=" +
                 Milliseconds(actorPostDiagnostics.WorkerTicks) +
                 " actor_post_commit_ms=" +
@@ -661,13 +660,19 @@ namespace AncientWarfare3.core.policy
                 " enemy_search_candidates=" +
                 actorPostDiagnostics.Candidates +
                 " enemy_search_empty=" + actorPostDiagnostics.Empty +
-                " enemy_presence_cache=" +
-                AWEnemyPresenceCache.GetDiagnostics() +
+                 " enemy_presence_cache=disabled" +
                 " actor_ai_ms=" + Milliseconds(_actorAiTicks) +
                 " actor_ai_calls=" + _actorAiCalls +
                 " actor_task=" + actorTaskId +
                 " actor_task_ms=" + Milliseconds(actorTaskTicks) +
                 " actor_task_calls=" + actorTaskCalls +
+                " idle_social_allowed=" + idleThrottle.SocializeAllowed +
+                " idle_social_deferred=" + idleThrottle.SocializeDeferred +
+                " idle_emote_allowed=" + idleThrottle.EmoteAllowed +
+                " idle_emote_deferred=" + idleThrottle.EmoteDeferred +
+                " idle_sleep_allowed=" + idleThrottle.SleepAllowed +
+                " idle_sleep_deferred=" + idleThrottle.SleepDeferred +
+                " idle_budget_rejected=" + idleThrottle.BudgetRejected +
                 " path_smooth_ms=" + Milliseconds(_pathSmoothTicks) +
                 " path_smooth_calls=" + _pathSmoothCalls +
                 " path_smooth_slowest_actor=" + _slowestPathSmoothActorId +
@@ -677,7 +682,6 @@ namespace AncientWarfare3.core.policy
                 " path_step_exclusive_ms=" + Milliseconds(exclusivePathStep) +
                 " path_step_calls=" + _pathStepCalls +
                 " actor_other_ms=" + Milliseconds(otherActor) +
-                ActorBatchFields() +
                 ArmyRtsControllerFields() +
                 " buildings_ms=" + Milliseconds(_buildingWallTicks) +
                 " update_age_ms=" + Milliseconds(_updateAgeWallTicks) +
@@ -752,9 +756,12 @@ namespace AncientWarfare3.core.policy
                 " path_reused=" + pathDiagnostics.Reused +
                 " path_reused_running=" +
                 pathDiagnostics.ReusedRunning +
+                " path_straight_segments=" +
+                pathDiagnostics.StraightSegments +
                 " path_cancelled=" + pathDiagnostics.Cancelled +
                 " path_completed=" + pathDiagnostics.Completed +
                 " path_failed=" + pathDiagnostics.Failed +
+                " path_failed_by_reason=" + pathDiagnostics.FailedByReason() +
                 " path_operational_requests=" +
                 pathDiagnostics.OperationalRequests +
                 " path_essential_requests=" +
@@ -774,6 +781,8 @@ namespace AncientWarfare3.core.policy
                 pathDiagnostics.AmbientQueueHighWater +
                 " path_expanded_nodes=" + pathDiagnostics.ExpandedNodes +
                 " path_owner_state=" + PathfindingOwnershipService.State +
+                " presentation_visibility=" +
+                AWPresentationVisibility.GetDiagnostics() +
                 " actor_path_workers=" + actorPathWorkers +
                 " actor_path_active=" + actorPathActive +
                 " actor_path_queue=" + actorPathQueue +
@@ -815,6 +824,8 @@ namespace AncientWarfare3.core.policy
                 " army_rts_replans=" + armyRts.Replans +
                 " army_rts_no_progress_ms=" +
                 armyRts.NoProgressMilliseconds +
+                " transport_diag=" +
+                ArmyRtsTransportDiagnostics.Snapshot() +
                 " detail=" + _slowestDetailId +
                 " detail_ms=" + Milliseconds(_slowestDetailTicks) +
                 " deferred_key=" + _slowestDeferredKey +
@@ -823,6 +834,9 @@ namespace AncientWarfare3.core.policy
                 " annual_stage=" + _slowestAnnualStageId +
                 " annual_stage_ms=" +
                 Milliseconds(_slowestAnnualStageTicks) +
+                " authority_stage=" + _slowestAuthorityStageId +
+                " authority_stage_ms=" +
+                Milliseconds(_slowestAuthorityStageTicks) +
                 " gc0_collections=" + gc0Collections +
                 " gc1_collections=" + gc1Collections +
                 " gc2_collections=" + gc2Collections +
@@ -884,58 +898,6 @@ namespace AncientWarfare3.core.policy
                    " death_slowest_ms=" + Milliseconds(slowestTicks) +
                    " death_stages=" +
                    (details.Length == 0 ? "none" : details.ToString());
-        }
-
-        private static string ActorBatchFields()
-        {
-            int slowestIndex = -1;
-            long slowestTicks = 0L;
-            var details = new StringBuilder();
-            for (int i = 0; i < ActorBatchTicks.Length; i++)
-            {
-                long ticks = Interlocked.Read(ref ActorBatchTicks[i]);
-                int count = Volatile.Read(ref ActorBatchCounts[i]);
-                if (ticks > slowestTicks)
-                {
-                    slowestTicks = ticks;
-                    slowestIndex = i;
-                }
-                if (count <= 0) continue;
-                if (details.Length > 0) details.Append(',');
-                ActorBatchPerformanceStage stage =
-                    (ActorBatchPerformanceStage)i;
-                details.Append(ActorBatchPerformanceRules.Id(stage));
-                details.Append(':');
-                details.Append(Milliseconds(ticks));
-                details.Append('/');
-                details.Append(count);
-            }
-            string slowest = slowestIndex < 0
-                ? "none"
-                : ActorBatchPerformanceRules.Id(
-                    (ActorBatchPerformanceStage)slowestIndex);
-            return " actor_batch_slowest=" + slowest +
-                   " actor_batch_slowest_ms=" + Milliseconds(slowestTicks) +
-                   " actor_batch_slowest_calls=" +
-                   (slowestIndex < 0
-                       ? 0
-                       : Volatile.Read(ref ActorBatchCounts[slowestIndex])) +
-                   " actor_batch_stages=" +
-                   (details.Length == 0 ? "none" : details.ToString());
-        }
-
-        private static string ActorParallelFields()
-        {
-            int index = (int)ActorBatchPerformanceStage.ParallelChecks;
-            return " actor_parallel_stage_wall_ms=" +
-                   Milliseconds(_actorParallelWallTicks) +
-                   " actor_parallel_checks_worker_sum_ms=" +
-                   Milliseconds(Interlocked.Read(ref ActorBatchTicks[index])) +
-                   " actor_parallel_checks_worker_max_ms=" +
-                   Milliseconds(Interlocked.Read(
-                       ref ActorBatchMaxTicks[index])) +
-                   " actor_parallel_checks_worker_calls=" +
-                   Volatile.Read(ref ActorBatchCounts[index]);
         }
 
         private static string ArmyRtsControllerFields()
@@ -1232,7 +1194,6 @@ namespace AncientWarfare3.core.policy
         private static void ResetSample()
         {
             _actorWallTicks = 0L;
-            _actorParallelWallTicks = 0L;
             _actorAiTicks = 0L;
             _actorAiCalls = 0;
             ActorTaskSamples.Clear();
@@ -1256,13 +1217,12 @@ namespace AncientWarfare3.core.policy
             _slowestDeferredTicks = 0L;
             _slowestAnnualStageId = "none";
             _slowestAnnualStageTicks = 0L;
+            _slowestAuthorityStageId = "none";
+            _slowestAuthorityStageTicks = 0L;
             Array.Clear(RecentTicks, 0, RecentTicks.Length);
             Array.Clear(RecentCounts, 0, RecentCounts.Length);
             Array.Clear(ActorRaceTicks, 0, ActorRaceTicks.Length);
             Array.Clear(ActorRaceCounts, 0, ActorRaceCounts.Length);
-            Array.Clear(ActorBatchTicks, 0, ActorBatchTicks.Length);
-            Array.Clear(ActorBatchCounts, 0, ActorBatchCounts.Length);
-            Array.Clear(ActorBatchMaxTicks, 0, ActorBatchMaxTicks.Length);
             Array.Clear(ArmyRtsControllerTicks, 0,
                 ArmyRtsControllerTicks.Length);
             Array.Clear(ArmyRtsControllerCounts, 0,

@@ -64,6 +64,33 @@ namespace AncientWarfare3.core.pathfinding
             return TryResolveShoreFallback(pStart, pTarget, out pCandidate);
         }
 
+        // Compatibility entry point for temporary-boat provisioning. It uses
+        // the registered shoreline fallback and never performs a new map scan.
+        internal static bool TryResolveEmergencyShoreRoute(WorldTile pStart,
+            WorldTile pTarget, out AWDockRouteCandidate pCandidate,
+            out AWDockRouteFailureReason pReason)
+        {
+            pCandidate = default;
+            pReason = AWDockRouteFailureReason.None;
+            if (pStart?.data == null || pTarget?.data == null)
+            {
+                pReason = AWDockRouteFailureReason.InvalidEndpoints;
+                return false;
+            }
+            if (pStart.isSameIsland(pTarget))
+            {
+                pReason = AWDockRouteFailureReason.SameIsland;
+                return false;
+            }
+            EnsureTopology();
+            if (TryResolveShoreFallback(pStart, pTarget, out pCandidate))
+                return true;
+            pReason = ShoreEndpoints.Count == 0
+                ? AWDockRouteFailureReason.NoStableShore
+                : AWDockRouteFailureReason.NoDockOrShorePair;
+            return false;
+        }
+
         internal static bool TryResolveRouteTiles(
             AWDockRouteCandidate pRoute, out WorldTile pEntryLand,
             out WorldTile pPickupSea, out WorldTile pDestinationSea,

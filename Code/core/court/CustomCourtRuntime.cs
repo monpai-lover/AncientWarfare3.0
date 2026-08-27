@@ -18,6 +18,11 @@ namespace AncientWarfare3.core.court
         public static readonly CourtDefinitionResolver Resolver =
             new CourtDefinitionResolver(Instances);
 
+        internal static void ClearRuntime()
+        {
+            Instances.Clear();
+        }
+
         public static string KingdomKey(Kingdom kingdom)
         {
             return kingdom == null
@@ -91,7 +96,11 @@ namespace AncientWarfare3.core.court
                     isCapital);
             bool military = automaticKind ==
                 CustomLocalGovernmentDefaultKind.Military;
-            bool effectiveManual = manual && !isCapital;
+            // A capital still uses the civil default when no explicit binding
+            // exists, but an explicit player choice must be respected there as
+            // well.  The previous capital exclusion made Minzhou/Junfu
+            // impossible to switch in the most visible local court.
+            bool effectiveManual = manual;
             string resolvedId = CustomLocalCourtTemplateRules.ResolveTemplateId(
                 templates, persistedId, effectiveManual, military);
             pTemplate = templates.FirstOrDefault(template =>
@@ -134,8 +143,8 @@ namespace AncientWarfare3.core.court
                 pTemplateId);
             pCity.data.set(LineageKeys.CITY_LOCAL_COURT_TEMPLATE_MANUAL,
                 pManual);
-            CityBureauAnnualWorkService.RequestImmediateReconcile(pKingdom,
-                pCity.data.id);
+            CourtVacancyReconciliationService.RegisterCityVacancies(
+                pKingdom, pCity);
             return true;
         }
 
@@ -298,9 +307,9 @@ namespace AncientWarfare3.core.court
                             city);
                     CourtTemplateOfficerMigrationService.TryMigrateLocal(
                         kingdom, city, source, target);
-                    CityBureauAnnualWorkService.RequestImmediateReconcile(
-                        kingdom, city.data.id);
                 }
+                CourtVacancyReconciliationService.RefreshKingdomDefinitions(
+                    kingdom);
                 RegionalGovernmentAggregationService.Invalidate(kingdom);
                 PersistTemplateMetadata(kingdom, next);
                 return true;

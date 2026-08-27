@@ -83,26 +83,45 @@ namespace AncientWarfare3.core.lineage
             internal double CachedAt { get; }
         }
 
+        private readonly struct CaptureStateEntry
+        {
+            internal CaptureStateEntry(long pControllerId, bool pActive)
+            {
+                ControllerId = pControllerId;
+                Active = pActive;
+            }
+
+            internal long ControllerId { get; }
+            internal bool Active { get; }
+        }
+
         private static readonly Dictionary<CityMilitaryThreatKey, FactEntry>
             Facts = new Dictionary<CityMilitaryThreatKey, FactEntry>();
         private static readonly Dictionary<PresenceKey, PresenceEntry>
             PresenceFacts = new Dictionary<PresenceKey, PresenceEntry>();
+        private static readonly Dictionary<long, CaptureStateEntry>
+            CaptureState = new Dictionary<long, CaptureStateEntry>();
         private static long _requests;
         private static long _physicalScans;
         private static long _hits;
         private static long _invalidations;
         private static long _revision;
         private static long _cacheEpoch = 1L;
+        private static bool _authorityCycleActive;
 
         internal static long Revision => _revision;
 
         internal static void BeginAuthorityCycle()
         {
-            // Cache lifetime is revision- and time-based across authority cycles.
+            // Rotate the epoch once per pass. Facts are reusable for the whole
+            // pass, even when a long pass exceeds the short async cache window.
+            AdvanceCacheEpoch();
+            _authorityCycleActive = true;
         }
 
         internal static void EndAuthorityCycle()
         {
+            _authorityCycleActive = false;
         }
 
         internal static bool TryGet(War pWar, City pCity,
@@ -113,9 +132,7 @@ namespace AncientWarfare3.core.lineage
             if (!TryCreateKey(pWar, pCity, pKingdom, out var key))
                 return false;
             if (!Facts.TryGetValue(key, out FactEntry entry) ||
-                !CityMilitaryThreatFactsRules.ShouldReuse(
-                    entry.CacheEpoch, _cacheEpoch, RealtimeSeconds(),
-                    entry.CachedAt))
+                !CanReuse(entry.CacheEpoch, entry.CachedAt))
                 return false;
             pHostile = entry.Hostile;
             _hits++;
@@ -136,9 +153,7 @@ namespace AncientWarfare3.core.lineage
             pKingdoms = null;
             if (!TryCreatePresenceKey(pWar, pCity, out PresenceKey key) ||
                 !PresenceFacts.TryGetValue(key, out PresenceEntry entry) ||
-                !CityMilitaryThreatFactsRules.ShouldReusePresence(
-                    entry.CacheEpoch, _cacheEpoch, RealtimeSeconds(),
-                    entry.CachedAt)) return false;
+                !CanReuse(entry.CacheEpoch, entry.CachedAt)) return false;
             pKingdoms = entry.Kingdoms;
             return true;
         }
@@ -150,6 +165,47 @@ namespace AncientWarfare3.core.lineage
                 return;
             PresenceFacts[key] = new PresenceEntry(pKingdoms, _cacheEpoch,
                 RealtimeSeconds());
+        }
+
+        // The vanilla City object owns capture transitions. Keep the latest
+        // transition as a fact so RTS queries do not rediscover it through a
+        // short-lived per-query cache.
+        internal static bool ObserveCaptureState(City pCity,
+            Kingdom pController, bool pActive)
+        {
+            long cityId = pCity?.data == null ? -1L : pCity.id;
+            if (cityId < 0L) return false;
+            long controllerId = pActive && pController?.data != null
+                ? pController.id
+                : -1L;
+            var next = new CaptureStateEntry(controllerId,
+                pActive && controllerId >= 0L);
+            if (CaptureState.TryGetValue(cityId,
+                    out CaptureStateEntry previous) &&
+                previous.ControllerId == next.ControllerId &&
+                previous.Active == next.Active) return false;
+            CaptureState[cityId] = next;
+            return true;
+        }
+
+        internal static bool TryGetCaptureState(City pCity,
+            out long pControllerId, out bool pActive)
+        {
+            pControllerId = -1L;
+            pActive = false;
+            long cityId = pCity?.data == null ? -1L : pCity.id;
+            if (cityId < 0L || !CaptureState.TryGetValue(cityId,
+                    out CaptureStateEntry state)) return false;
+            pControllerId = state.ControllerId;
+            pActive = state.Active;
+            return true;
+        }
+
+        internal static void ClearCaptureState(City pCity)
+        {
+            long cityId = pCity?.data == null ? -1L : pCity.id;
+            if (cityId < 0L) return;
+            CaptureState[cityId] = new CaptureStateEntry(-1L, false);
         }
 
         internal static void RecordPhysicalScan()
@@ -203,12 +259,24 @@ namespace AncientWarfare3.core.lineage
         {
             Facts.Clear();
             PresenceFacts.Clear();
+            CaptureState.Clear();
             _requests = 0L;
             _physicalScans = 0L;
             _hits = 0L;
             _invalidations = 0L;
+            _authorityCycleActive = false;
             AdvanceRevision();
             AdvanceCacheEpoch();
+        }
+
+        private static bool CanReuse(long pEntryEpoch, double pCachedAt)
+        {
+            if (_authorityCycleActive)
+                return CityMilitaryThreatFactsRules.
+                    ShouldReuseAuthorityCycle(true, pEntryEpoch,
+                        _cacheEpoch);
+            return CityMilitaryThreatFactsRules.ShouldReuse(pEntryEpoch,
+                _cacheEpoch, RealtimeSeconds(), pCachedAt);
         }
 
         private static bool TryCreateKey(War pWar, City pCity,

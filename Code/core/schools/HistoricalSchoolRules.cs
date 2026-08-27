@@ -402,6 +402,17 @@ namespace AncientWarfare3.core.schools
                 .FirstOrDefault();
         }
 
+        public static long StableTravelCandidateOrder(long pActorId,
+            long pCityId)
+        {
+            unchecked
+            {
+                long value = pActorId * 6364136223846793005L +
+                             pCityId * 1442695040888963407L;
+                return value ^ value >> 33;
+            }
+        }
+
         public static TResult[] BuildStableTravelCandidateWindow<TSource, TResult>(
             long pActorId, IEnumerable<TSource> pCandidates,
             Func<TSource, long> pCityId, Func<TSource, TResult> pProfileFactory, int pLimit)
@@ -431,12 +442,7 @@ namespace AncientWarfare3.core.schools
 
         private static long StableCandidateOrder(long pActorId, long pCityId)
         {
-            unchecked
-            {
-                long value = pActorId * 6364136223846793005L +
-                             pCityId * 1442695040888963407L;
-                return value ^ value >> 33;
-            }
+            return StableTravelCandidateOrder(pActorId, pCityId);
         }
 
         public static int AnnualDirectDiscipleLimit(long pTeacherActorId, int pYear)

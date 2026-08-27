@@ -1,0 +1,116 @@
+using System;
+using System.IO;
+
+internal static class RtsAuthorityLogRegressionTests
+{
+    internal static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string controller = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsControllerService.cs"));
+        string rules = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyRtsRules.cs"));
+        string ledger = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "SyntheticMobilizationLedgerService.cs"));
+        string watchdog = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "ArmyStallWatchdogService.cs"));
+        string schoolState = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "schools", "HistoricalSchoolState.cs"));
+        string schoolMembership = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "schools", "SchoolMembershipService.cs"));
+        string rulerFacts = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "RulerTitleFactService.cs"));
+        string provider = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "pathfinding", "ArmyRouteProvider.cs"));
+
+        Require(rules.Contains("ShouldRetryStrategicRouteAfterPoll(",
+                StringComparison.Ordinal),
+            "RTS poll failures must use a bounded retry rule");
+        Require(!controller.Contains(
+                "ArmyStallWatchdogService.OnRouteFailed(pArmy.id);\n                LogStrategicRouteFailure(pArmy, pMission, pRuntime,\n                    captain, target, poll.Kind, poll.FailureReason);\n                ResetRouteRetry(pRuntime);",
+                StringComparison.Ordinal),
+            "a failed strategic route must not clear its retry backoff");
+        Require(controller.Contains("RegisterRouteFailure(pRuntime, fingerprint",
+                StringComparison.Ordinal),
+            "route failures must retain a stable fingerprint");
+        Require(controller.Contains(
+                "if (IsRouteRetryCoolingDown(pArmyId))",
+                StringComparison.Ordinal),
+            "same-mission replans must observe route retry cooldown");
+        Require(watchdog.Contains(
+                "ArmyRtsControllerService.IsRouteRetryCoolingDown(pArmyId)",
+                StringComparison.Ordinal) &&
+            watchdog.Contains("pState.Flow.SuspendForExternalOwnership();",
+                StringComparison.Ordinal),
+            "watchdog cooldown suppression must not escalate as another failure");
+
+        Require(ledger.Contains("_loadRecordKeys", StringComparison.Ordinal),
+            "load reconciliation must use a stable record-key snapshot");
+        Require(!ledger.Contains("Records.GetEnumerator()",
+                StringComparison.Ordinal),
+            "load reconciliation must not retain a live dictionary enumerator");
+        Require(ledger.Contains("LoadRecordReconciliationBatchLimit",
+                StringComparison.Ordinal),
+            "load reconciliation must remain batch bounded");
+
+        Require(schoolState.Contains(
+                "if (!_activeByActor.TryGetValue(pActorId,",
+                StringComparison.Ordinal) &&
+            schoolMembership.Contains("pending.Quarantined",
+                StringComparison.Ordinal),
+            "replayed school death closure must be explicitly idempotent");
+        Require(schoolMembership.Contains(
+                "closed != null", StringComparison.Ordinal) &&
+            schoolMembership.Contains("!pending.Quarantined",
+                StringComparison.Ordinal),
+            "school death replay must not publish a duplicate revision");
+        Require(schoolMembership.Contains(
+                "Committed school death membership conflict:",
+                StringComparison.Ordinal),
+            "replacement membership conflicts must remain visible");
+        Require(rulerFacts.Contains(
+                "!AWAsyncRuntime.DatabaseEnabled", StringComparison.Ordinal) &&
+            rulerFacts.Contains(
+                "ModClass.LogError(\"Queue ruler fact snapshot failed:",
+                StringComparison.Ordinal),
+            "disabled history writes must be quiet while live failures remain errors");
+
+        Require(!provider.Contains(
+                "bool consumed = _finder.Consume(finderRequestId);\n                    AWPathPollResult observed = _finder.Poll(",
+                StringComparison.Ordinal),
+            "a ready RTS path step must not be consumed and then polled again");
+        Require(controller.Contains(
+                "bool preserveFailedFallback =",
+                StringComparison.Ordinal) &&
+            controller.Contains(
+                "IsRouteRetryCoolingDown(pArmy.id) &&",
+                StringComparison.Ordinal) &&
+            controller.Contains(
+                "!ArmyRtsRules.ShouldPreserveStrategicRoute(",
+                StringComparison.Ordinal),
+            "vanilla job maintenance must preserve the strategic fallback during route cooldown");
+        Require(provider.Contains(
+                "_consumedStepPending", StringComparison.Ordinal) &&
+            provider.Contains(
+                "ArmyRoutePollKind.Completed", StringComparison.Ordinal) &&
+            provider.Contains(
+                "if (_consumedStepPending.Remove(armyId))",
+                StringComparison.Ordinal),
+            "a consumed final RTS step must resolve a cleaned finder session as completed");
+        Require(provider.Contains(
+                "estimate: poll.Step.Estimate", StringComparison.Ordinal),
+            "RTS provider must preserve traversal estimates for route cost decisions");
+        string diagnostics = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "pathfinding", "AWPathDiagnostics.cs"));
+        string threatFacts = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "CityAttackZoneService.cs"));
+        Require(diagnostics.Contains("FailedByReason", StringComparison.Ordinal) &&
+            diagnostics.Contains("OnFailed(AWPathFailureReason", StringComparison.Ordinal),
+            "path diagnostics must retain failure reason breakdown");
+    }
+
+    private static void Require(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

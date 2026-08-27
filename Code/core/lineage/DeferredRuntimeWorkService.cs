@@ -36,14 +36,32 @@ namespace AncientWarfare3.core.lineage
         private static int _consecutiveCriticalRuntimeWork;
         private static int _consecutiveRuntimeWork;
         private static int _lastDrainFrame = -1;
+        private static long _orderedEnqueued;
+        private static long _coalescedEnqueued;
+        private static long _drained;
+        private static int _lastDrainProcessed;
 
         public static int PendingCount => PersistentQueue.Count +
                                           RuntimeQueue.Count +
                                           CriticalRuntimeQueue.Count;
 
+        public static string GetDiagnostics()
+        {
+            return "persistent=" + PersistentQueue.Count +
+                   " runtime=" + RuntimeQueue.Count +
+                   " critical=" + CriticalRuntimeQueue.Count +
+                   " coalesced_index=" + Coalesced.Count +
+                   " ordered_enqueued=" + _orderedEnqueued +
+                   " coalesced_enqueued=" + _coalescedEnqueued +
+                   " drained=" + _drained +
+                   " last_drain=" + _lastDrainProcessed +
+                   " pending_prefixes=" + PendingPrefixDiagnostics();
+        }
+
         public static void EnqueueCoalesced(string pKey, DeferredWorkClass pClass, Action pAction)
         {
             if (string.IsNullOrEmpty(pKey) || pAction == null) return;
+            _coalescedEnqueued++;
             if (Coalesced.TryGetValue(pKey, out LinkedListNode<WorkItem> existing))
             {
                 if (existing.Value.workClass != pClass)
@@ -70,6 +88,7 @@ namespace AncientWarfare3.core.lineage
         public static void EnqueueOrdered(DeferredWorkClass pClass, Action pAction)
         {
             if (pAction == null) return;
+            _orderedEnqueued++;
             QueueFor(pClass).AddLast(new WorkItem
             {
                 workClass = pClass,
@@ -97,6 +116,8 @@ namespace AncientWarfare3.core.lineage
                 Execute(node.Value);
                 processed++;
             }
+            _lastDrainProcessed = processed;
+            _drained += processed;
         }
 
         public static void FlushPersistent()
@@ -118,11 +139,17 @@ namespace AncientWarfare3.core.lineage
             _consecutiveCriticalRuntimeWork = 0;
             _consecutiveRuntimeWork = 0;
             _lastDrainFrame = -1;
+            _orderedEnqueued = 0L;
+            _coalescedEnqueued = 0L;
+            _drained = 0L;
+            _lastDrainProcessed = 0;
         }
 
         private static void Execute(WorkItem pItem)
         {
-            long diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            // A deferred item may execute outside a diagnostic sampling frame;
+            // measure it directly at the active frame boundary.
+            long diagnostic = RuntimePerformanceDiagnostic.BeginDeferredItemScope();
             try
             {
                 pItem.action();
@@ -214,6 +241,41 @@ namespace AncientWarfare3.core.lineage
         private static long MillisecondsToTicks(double pMilliseconds)
         {
             return Math.Max(1L, (long)(Stopwatch.Frequency * Math.Max(0.01, pMilliseconds) / 1000.0));
+        }
+
+        private static string PendingPrefixDiagnostics()
+        {
+            var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            CountPrefixes(PersistentQueue, counts);
+            CountPrefixes(RuntimeQueue, counts);
+            CountPrefixes(CriticalRuntimeQueue, counts);
+            if (counts.Count == 0) return "none";
+
+            var ranked = new List<KeyValuePair<string, int>>(counts);
+            ranked.Sort((left, right) =>
+            {
+                int byCount = right.Value.CompareTo(left.Value);
+                return byCount != 0 ? byCount :
+                    string.CompareOrdinal(left.Key, right.Key);
+            });
+            int limit = Math.Min(12, ranked.Count);
+            var parts = new string[limit];
+            for (int i = 0; i < limit; i++)
+                parts[i] = ranked[i].Key + "=" + ranked[i].Value;
+            return string.Join(",", parts);
+        }
+
+        private static void CountPrefixes(LinkedList<WorkItem> pQueue,
+            Dictionary<string, int> pCounts)
+        {
+            for (LinkedListNode<WorkItem> node = pQueue.First;
+                 node != null; node = node.Next)
+            {
+                string prefix = DeferredRuntimeWorkRules.DiagnosticPrefix(
+                    node.Value.key);
+                pCounts.TryGetValue(prefix, out int count);
+                pCounts[prefix] = count + 1;
+            }
         }
     }
 }

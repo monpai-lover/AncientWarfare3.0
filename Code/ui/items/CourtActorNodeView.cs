@@ -35,6 +35,9 @@ namespace AncientWarfare3.ui.items
         private GameObject _dispositionObject;
         private Button _dispositionButton;
         private TipButton _dispositionTip;
+        private GameObject _renameCountyObject;
+        private Button _renameCountyButton;
+        private TipButton _renameCountyTip;
         private long _boundActorId = -1L;
 
         public bool HasPortrait => _avatar != null;
@@ -86,9 +89,38 @@ namespace AncientWarfare3.ui.items
             }
 
             _name.text = pNode.IsVacancy
-                ? OfficeName(pKingdom, pNode.OfficeId) + " - " +
+                ? VacancyOfficeName(pNode, pKingdom) + " - " +
                   AW_L10n.Text("aw_court_no_officer", "Vacant")
                 : pNode.ActorName;
+            bool countyOffice = pNode.OfficeLayer == CourtOfficeLayer.County &&
+                                pNode.CountyId >= 0L;
+            _renameCountyObject.SetActive(countyOffice);
+            _name.rectTransform.sizeDelta = new Vector2(
+                countyOffice ? Width - 34f : Width - 12f, 16f);
+            _renameCountyButton.onClick.RemoveAllListeners();
+            if (countyOffice)
+            {
+                long countyId = pNode.CountyId;
+                _renameCountyButton.onClick.AddListener(() =>
+                    CountyRenameWindow.Open(countyId));
+                _renameCountyTip.enabled = true;
+                _renameCountyTip.type = AW_RawTooltip.TYPE;
+                _renameCountyTip.hoverAction = () => Tooltip.show(
+                    _renameCountyObject, AW_RawTooltip.TYPE,
+                    new TooltipData
+                    {
+                        tip_name = AW_L10n.Text("aw_county_rename_title",
+                            "Rename County"),
+                        tip_description = AW_L10n.Text(
+                            "aw_county_rename_card_tip",
+                            "Rename this county")
+                    });
+            }
+            else
+            {
+                _renameCountyTip.enabled = false;
+                _renameCountyTip.hoverAction = null;
+            }
             string roleLine = RoleLine(pNode, pKingdom);
             string jointTitle = live && CanShowOfficialJointTitle(pKingdom, pNode)
                 ? OfficialJointTitle(pKingdom, pNode, actor, compact: true)
@@ -100,7 +132,8 @@ namespace AncientWarfare3.ui.items
 
             _button.onClick.RemoveAllListeners();
             bool officeAvailable = CourtService.IsManualOfficeAvailable(
-                pKingdom, pNode.OfficeId, pNode.OfficeLayer, pNode.CityId) &&
+                pKingdom, pNode.OfficeId, pNode.OfficeLayer, pNode.CityId,
+                pNode.CountyId) &&
                 !IsMilitaryGovernorateCommandNode(pNode);
             bool appointmentAllowed = CourtService.CanUseManualAppointment(
                 pKingdom);
@@ -114,7 +147,8 @@ namespace AncientWarfare3.ui.items
             else if (canAppoint)
                 _button.onClick.AddListener(() =>
                     CourtAppointmentWindow.Open(pKingdom.id, pNode.OfficeId,
-                        -1L, pNode.OfficeLayer, pNode.CityId));
+                        -1L, pNode.OfficeLayer, pNode.CityId,
+                        pNode.CountyId));
 
             long incumbentActorId = live && !pNode.IsVacancy
                 ? actor.data.id
@@ -189,7 +223,8 @@ namespace AncientWarfare3.ui.items
                     : AW_L10n.Text("aw_court_select_officer", "Select");
                 _manageOfficeButton.onClick.AddListener(() =>
                     CourtAppointmentWindow.Open(pKingdom.id, pNode.OfficeId,
-                        incumbentActorId, pNode.OfficeLayer, pNode.CityId));
+                        incumbentActorId, pNode.OfficeLayer, pNode.CityId,
+                        pNode.CountyId));
                 string tipDescription = replacing
                     ? AW_L10n.Text("aw_court_replace_officer_desc",
                         "Choose a new actor to replace the current officer.")
@@ -241,30 +276,15 @@ namespace AncientWarfare3.ui.items
             Kingdom pKingdom, out string pLayer, out string pOfficeId,
             out long pCityId)
         {
-            pLayer = pNode?.OfficeLayer ?? "";
-            pOfficeId = pNode?.OfficeId ?? "";
-            pCityId = pNode?.CityId ?? -1L;
+            pLayer = pNode?.HistoryOfficeLayer ?? "";
+            pOfficeId = pNode?.HistoryOfficeId ?? "";
+            pCityId = pNode?.HistoryCityId ?? -1L;
             if (pNode == null || pKingdom?.data == null) return false;
-
-            CourtOfficerView officer = CourtService.GetActiveOfficers(
-                    pKingdom, 512)
-                .Where(row => row != null && row.actor_id == pNode.ActorId &&
-                    !string.IsNullOrEmpty(row.office_id) &&
-                    row.office_id != CourtPyramidRoleId.Heir &&
-                    !string.IsNullOrEmpty(row.layer))
-                .OrderBy(row => row.layer == CourtOfficeLayer.Central ? 0 :
-                    row.layer == CourtOfficeLayer.City ? 1 : 2)
-                .ThenBy(row => row.office_id, System.StringComparer.Ordinal)
-                .FirstOrDefault();
-            if (officer != null)
-            {
-                // History is always keyed by the actual appointment. Identity
-                // roles such as heir are display roles and never a history scope.
-                pLayer = officer.layer;
-                pOfficeId = officer.office_id;
-                pCityId = officer.city_id;
-            }
-            return true;
+            if (string.IsNullOrEmpty(pLayer)) pLayer = pNode.OfficeLayer ?? "";
+            if (string.IsNullOrEmpty(pOfficeId)) pOfficeId = pNode.OfficeId ?? "";
+            if (pCityId < 0L) pCityId = pNode.CityId;
+            return !string.IsNullOrEmpty(pLayer) &&
+                   !string.IsNullOrEmpty(pOfficeId);
         }
 
         public bool TryEnsurePortrait()
@@ -345,6 +365,39 @@ namespace AncientWarfare3.ui.items
             _name.resizeTextForBestFit = true;
             _name.resizeTextMinSize = 7;
             _name.resizeTextMaxSize = 10;
+            _renameCountyObject = new GameObject("RenameCounty",
+                typeof(RectTransform), typeof(Image), typeof(Button),
+                typeof(TipButton));
+            _renameCountyObject.transform.SetParent(transform, false);
+            RectTransform renameRect =
+                _renameCountyObject.GetComponent<RectTransform>();
+            renameRect.anchorMin = new Vector2(1f, 1f);
+            renameRect.anchorMax = new Vector2(1f, 1f);
+            renameRect.pivot = new Vector2(1f, 1f);
+            renameRect.anchoredPosition = new Vector2(-5f, -61f);
+            renameRect.sizeDelta = new Vector2(18f, 18f);
+            AW_UIStyle.ApplyButton(
+                _renameCountyObject.GetComponent<Image>(), 0.96f);
+            _renameCountyButton =
+                _renameCountyObject.GetComponent<Button>();
+            _renameCountyTip =
+                _renameCountyObject.GetComponent<TipButton>();
+            _renameCountyTip.showOnClick = false;
+            Image renameIcon = new GameObject("Icon", typeof(RectTransform),
+                typeof(Image)).GetComponent<Image>();
+            renameIcon.transform.SetParent(_renameCountyObject.transform,
+                false);
+            renameIcon.rectTransform.anchorMin = Vector2.zero;
+            renameIcon.rectTransform.anchorMax = Vector2.one;
+            renameIcon.rectTransform.offsetMin = new Vector2(2f, 2f);
+            renameIcon.rectTransform.offsetMax = new Vector2(-2f, -2f);
+            renameIcon.sprite = SpriteTextureLoader.getSprite(
+                                    "ui/icons/iconEdit") ??
+                                SpriteTextureLoader.getSprite(
+                                    "ui/icons/iconDocument");
+            renameIcon.preserveAspect = true;
+            renameIcon.raycastTarget = false;
+            _renameCountyObject.SetActive(false);
             _roles = CreateText("Roles", new Vector2(4f, -79f), new Vector2(Width - 8f, 22f),
                 8, TextAnchor.UpperCenter);
             _roles.color = new Color(0.95f, 0.86f, 0.58f, 1f);
@@ -486,7 +539,7 @@ namespace AncientWarfare3.ui.items
             _tip.enabled = true;
             _tip.type = AW_RawTooltip.TYPE;
             string title = pNode.IsVacancy
-                ? OfficeName(pKingdom, pNode.OfficeId)
+                ? VacancyOfficeName(pNode, pKingdom)
                 : pNode.ActorName;
             string desc = BuildTooltip(pNode, pActor, pKingdom);
             _tip.hoverAction = () => Tooltip.show(gameObject, AW_RawTooltip.TYPE,
@@ -582,9 +635,11 @@ namespace AncientWarfare3.ui.items
             string namedRank = OfficialNamedRankName(pNode.OfficialTrack,
                 pNode.OfficialRank);
             string grade = OfficialRankName(pNode.OfficialRank);
-            string office = string.IsNullOrEmpty(pNode.OfficeId)
+            string resolvedOffice = string.IsNullOrEmpty(pNode.OfficeId)
                 ? ""
                 : OfficeName(pKingdom, pNode.OfficeId);
+            string office = OfficialCareerRankRules.ResolveVisibleOfficeTitle(
+                pNode.OfficeId, pNode.DisplayTitle, resolvedOffice);
             if (pNode.OfficeId == CourtOfficeId.Governor &&
                 !string.IsNullOrEmpty(pNode.CityName))
                 office = pNode.CityName + " " + office;
@@ -664,6 +719,15 @@ namespace AncientWarfare3.ui.items
                 string localLabel = string.IsNullOrWhiteSpace(place)
                     ? office : place + " " + office;
                 if (!string.IsNullOrEmpty(localLabel)) labels.Add(localLabel);
+            }
+            else if (pNode.OfficeLayer == CourtOfficeLayer.County &&
+                     !string.IsNullOrEmpty(pNode.OfficeId))
+            {
+                string county = string.IsNullOrWhiteSpace(pNode.CityName)
+                    ? AW_L10n.Text("aw_county_label", "County")
+                    : pNode.CityName;
+                string office = OfficeName(pKingdom, pNode.OfficeId);
+                labels.Add(county + " " + office);
             }
             foreach (string role in pNode.Roles ?? new List<string>())
             {
@@ -746,11 +810,22 @@ namespace AncientWarfare3.ui.items
 
         private static string OfficeName(Kingdom pKingdom, string pOfficeId)
         {
+            if (pOfficeId == CourtOfficeId.CountyMagistrate)
+                return AW_L10n.Text("aw_court_office_county_magistrate", "County Magistrate");
             if (!string.IsNullOrEmpty(pOfficeId) && pOfficeId.StartsWith(
                     "regional_superior:", StringComparison.Ordinal))
                 return AW_L10n.Text("aw_court_office_regional_superior",
                     "Regional Governor");
             return CourtInstitutionService.OfficeName(pKingdom, pOfficeId);
+        }
+
+        private static string VacancyOfficeName(CourtPyramidNodeModel pNode,
+            Kingdom pKingdom)
+        {
+            if (pNode?.RoleId == CourtPyramidRoleId.RegionalGovernor &&
+                !string.IsNullOrWhiteSpace(pNode.DisplayTitle))
+                return pNode.DisplayTitle;
+            return OfficeName(pKingdom, pNode?.OfficeId);
         }
 
         private static string SchoolName(string pSchoolId)

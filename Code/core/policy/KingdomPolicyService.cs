@@ -1250,6 +1250,81 @@ namespace AncientWarfare3.core.policy
             return Split(raw).Contains(pId);
         }
 
+        internal static bool TryExecuteDeJureMergeDecision(Kingdom pKingdom,
+            long pPrimaryRegionId, long pSecondaryRegionId,
+            out string pError)
+        {
+            pError = string.Empty;
+            const string decisionId = "aw_decision_merge_single_city_de_jure";
+            if (pKingdom?.data == null || pKingdom.isRekt())
+            {
+                pError = "invalid_kingdom";
+                return false;
+            }
+
+            KingdomPolicyDef definition = GetDefinition(pKingdom, decisionId);
+            if (definition == null || !CanAccessPolicyNode(pKingdom, definition) ||
+                IsNodeLocked(pKingdom, decisionId))
+            {
+                pError = "decision_unavailable";
+                return false;
+            }
+
+            if (!string.IsNullOrEmpty(GetCurrent(pKingdom,
+                    PolicyNodeKind.Decision)))
+            {
+                pError = "decision_busy";
+                return false;
+            }
+
+            float points = GetPoliticalPoints(pKingdom);
+            if (points + 0.001f < definition.Cost)
+            {
+                pError = "insufficient_points";
+                return false;
+            }
+
+            if (!IsSpecialRequirementMet(pKingdom, definition))
+            {
+                pError = "decision_requirements_missing";
+                return false;
+            }
+
+            if (!DeJureRegionMergeService.TryMerge(pKingdom,
+                    pPrimaryRegionId, pSecondaryRegionId, out pError))
+                return false;
+
+            pKingdom.data.set(LineageKeys.POLICY_POINTS,
+                Mathf.Clamp(points - definition.Cost, 0f, MAX_POINTS));
+            AddCompleted(pKingdom, definition.Kind, definition.Id);
+            if (ShouldRecordGenericCompletion(definition))
+                RecordCompletion(pKingdom, definition);
+            int year = Date.getCurrentYear();
+            pKingdom.data.set(LineageKeys.POLICY_AI_LAST_DEJURE_MERGE_YEAR,
+                year);
+            pKingdom.data.set(LineageKeys.POLICY_AI_LAST_DEJURE_MERGE_MONTH,
+                year * 12 + Date.getCurrentMonth());
+            UpsertSnapshot(pKingdom);
+            return true;
+        }
+
+        internal static bool TryExecuteBestDeJureMergeDecision(
+            Kingdom pKingdom, out string pError)
+        {
+            pError = string.Empty;
+            DeJureRegionMergeCandidate candidate =
+                DeJureRegionMergeService.GetMergeCandidates(pKingdom)
+                    .FirstOrDefault();
+            if (candidate == null)
+            {
+                pError = "invalid_target";
+                return false;
+            }
+            return TryExecuteDeJureMergeDecision(pKingdom,
+                candidate.PrimaryRegionId, candidate.SecondaryRegionId,
+                out pError);
+        }
+
         public static IEnumerable<string> MissingRequirements(Kingdom pKingdom, KingdomPolicyDef pDef)
         {
             if (pDef == null) yield break;
@@ -1743,6 +1818,13 @@ namespace AncientWarfare3.core.policy
                            IsCompleted(pKingdom, PolicyNodeKind.Social, "aw_policy_start_slavery");
                 case "aw_decision_clean_corruption":
                     return CorruptionService.CanStartCleanup(pKingdom);
+                case "aw_decision_merge_single_city_de_jure":
+                    return GetPoliticalPoints(pKingdom) >= 60f &&
+                           DeJureRegionMergeRules.CooldownAllows(
+                               ReadDeJureMergeYear(pKingdom),
+                               Date.getCurrentYear()) &&
+                           DeJureRegionMergeService.GetMergeCandidates(pKingdom)
+                               .Count > 0;
                 case "aw_west_decision_consolidate_royal_authority":
                     return KingdomPolicyEffectService.
                         CanConsolidateRoyalAuthority(pKingdom);
@@ -2439,6 +2521,14 @@ namespace AncientWarfare3.core.policy
         {
             pKingdom.data.get(pKey, out int lastYear, pFallback);
             return Date.getCurrentYear() - lastYear;
+        }
+
+        private static int ReadDeJureMergeYear(Kingdom pKingdom)
+        {
+            pKingdom.data.get(
+                LineageKeys.POLICY_AI_LAST_DEJURE_MERGE_YEAR,
+                out int lastYear, -1);
+            return lastYear;
         }
 
         private static bool IsVassalKingdom(Kingdom pKingdom)

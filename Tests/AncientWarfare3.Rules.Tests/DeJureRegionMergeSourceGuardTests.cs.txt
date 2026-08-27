@@ -1,0 +1,80 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+
+internal static class DeJureRegionMergeSourceGuardTests
+{
+    internal static void Run()
+    {
+        string store = Read("Code/core/court/DeJureRegionStore.cs");
+        string service = Read("Code/core/court/DeJureRegionMergeService.cs");
+        string policy = Read("Code/core/policy/KingdomPolicyService.cs");
+        string ai = Read("Code/core/policy/KingdomPolicyAI.cs");
+        string command = Read("Code/core/multiplayer/commands/AW3PolicyCommandHandler.cs");
+        string router = Read("Code/core/multiplayer/commands/AW3AuthoritativeCommandRouter.cs");
+        string catalog = Read("Code/api/multiplayer/AW3MultiplayerCatalogModels.cs");
+        string ui = Read("Code/ui/windows/KingdomPolicyWindow.cs");
+        string mergeWindow = Read("Code/ui/windows/DeJureRegionMergeWindow.cs");
+        string locale = Read("Locales/aw3_policy_decisions.csv");
+        Contains(store, "TryMergeSingleCityRegions");
+        Contains(store, "DeJureRegionMerged");
+        Contains(store, "DeJureRegionRetired");
+        Contains(store, "CloneStore(_store)");
+        Contains(store, "_store = snapshot");
+        Contains(store, "WarGoalPersistence.InvalidateOpenDeJureRegionGoals");
+        Contains(store, "HierarchicalVassalMapModeService.MarkHierarchyDirty");
+        Contains(store, "RefreshAfterDeJureMutation");
+        Contains(store, "De jure single-city region merge committed");
+        Contains(service, "GetMergeCandidates");
+        Contains(service, "TryMerge(Kingdom");
+        Contains(service, "neighbours_cities");
+        DoesNotContain(service, "MemberCityIds.Add");
+        DoesNotContain(service, "city.kingdom =");
+        Contains(policy, "TryExecuteDeJureMergeDecision");
+        Contains(policy, "TryExecuteBestDeJureMergeDecision");
+        Contains(policy, "definition.Cost");
+        Contains(ai, "TryExecuteBestDeJureMergeDecision");
+        Contains(command, "MergeDeJureRegions");
+        Contains(router, "MergeDeJureRegions");
+        Contains(catalog, "MergeDeJureRegions");
+        Contains(ui, "DeJureRegionMergeWindow.Open");
+        Contains(mergeWindow, "AW3CommandRequest.MergeDeJureRegions");
+        Contains(locale, "aw_decision_merge_single_city_de_jure");
+        Contains(locale, "aw_de_jure_merge_confirm");
+        AssertUniqueLocalizationKeys(locale);
+    }
+
+    private static string Read(string relative) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            relative.Replace('/', Path.DirectorySeparatorChar)))
+        .Replace("\r\n", "\n");
+
+    private static void Contains(string text, string needle)
+    {
+        if (!text.Contains(needle, StringComparison.Ordinal))
+            throw new InvalidOperationException("source guard failed: " + needle);
+    }
+
+    private static void DoesNotContain(string text, string needle)
+    {
+        if (text.Contains(needle, StringComparison.Ordinal))
+            throw new InvalidOperationException("source guard found: " + needle);
+    }
+
+    private static void AssertUniqueLocalizationKeys(string csv)
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string line in csv.Split('\n'))
+        {
+            string trimmed = line.Trim();
+            if (trimmed.Length == 0 || trimmed.StartsWith("key,", StringComparison.Ordinal))
+                continue;
+            int comma = trimmed.IndexOf(',');
+            if (comma <= 0) continue;
+            string key = trimmed.Substring(0, comma);
+            if (!key.StartsWith("aw_", StringComparison.Ordinal)) continue;
+            if (!keys.Add(key))
+                throw new InvalidOperationException("duplicate localization key: " + key);
+        }
+    }
+}

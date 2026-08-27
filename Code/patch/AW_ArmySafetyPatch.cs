@@ -78,6 +78,7 @@ namespace AncientWarfare3.patch
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             AWArmyService.EnsureOrdinaryNativeName(__result,
                 pActor?.kingdom ?? pCity?.kingdom, pCity);
+            WarriorArmyMembershipService.NotifyArmyAvailable(__result);
         }
 
         [HarmonyPrefix]
@@ -430,10 +431,23 @@ namespace AncientWarfare3.patch
             if (__state == __instance?.army) return;
             ArmyFormationService.OnActorArmyChanged(__instance, __state,
                 __instance?.army);
+            if (!AW3MultiplayerReplicaScope.IsApplying)
+            {
+                bool alive = false;
+                bool warrior = false;
+                try
+                {
+                    alive = __instance.isAlive() && !__instance.isRekt();
+                    warrior = __instance.isWarrior();
+                }
+                catch { }
+                if (WarriorArmyMembershipRules.ShouldQueueAfterArmyChange(
+                        __instance?.data != null, alive, warrior,
+                        hasArmy: false))
+                    WarriorArmyMembershipService.Enqueue(__instance);
+            }
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__state == null || __state == __instance?.army) return;
-            ArmyInvalidCleanupQueue.ScheduleIfEmpty(__state,
-                SafeCity(__state), SafeKingdom(__state, null, null));
         }
 
         [HarmonyPrefix]
@@ -490,8 +504,6 @@ namespace AncientWarfare3.patch
                 catch { }
                 if (count > 0) return;
             }
-            ArmyInvalidCleanupQueue.ScheduleIfEmpty(__state, pCity,
-                pCity?.kingdom);
         }
 
         [HarmonyPrefix]

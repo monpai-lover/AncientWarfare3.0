@@ -96,6 +96,15 @@ internal static class SuccessionDisputeRulesTests
                 pOriginalCityCount: 6, pRivalCityCount: 0,
                 pTemporaryWarActive: true),
             "a live unbound war keeps compensation open");
+        Equal(true, SuccessionDisputeRules.ShouldRetryAdvance(
+                pAttempt: 0),
+            "a transient succession stage failure is retried");
+        Equal(true, SuccessionDisputeRules.ShouldRetryAdvance(
+                pAttempt: SuccessionDisputeRules.MaximumAdvanceAttempts - 1),
+            "the final permitted succession stage attempt is retried");
+        Equal(false, SuccessionDisputeRules.ShouldRetryAdvance(
+                pAttempt: SuccessionDisputeRules.MaximumAdvanceAttempts),
+            "an exhausted succession stage is finally eligible for compensation");
         Equal(20L, SuccessionDisputeRules.SelectExplicitBranchSupportTarget(
                 supporterShiId: 30, claimantShiId: 30,
                 claimantActorId: 20, successorShiId: 40,

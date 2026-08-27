@@ -8,6 +8,8 @@ namespace AncientWarfare3.core.lineage
 
         private static readonly HashSet<long> ActiveMaleTitleHolders =
             new HashSet<long>();
+        private static readonly HashSet<long> HoldersNeedingSuccessor =
+            new HashSet<long>();
         private static readonly HashSet<long> ExpectedMaleTitleSuccessors =
             new HashSet<long>();
         private static readonly Dictionary<long, long> SuccessorByHolder =
@@ -43,18 +45,41 @@ namespace AncientWarfare3.core.lineage
             bool breedingAge = adult && SafeIsBreedingAge(pActor);
             bool canProduceBabies = breedingAge &&
                                     SafeCanProduceBabies(pActor);
+            bool needsSuccessor = HoldersNeedingSuccessor.Contains(
+                pActor.data.id);
             return DynasticMaleLineContinuityRules
                 .ShouldBypassPersonalOffspringLimit(
-                    HasEligibleRole(pActor), alive, adult, breedingAge,
-                    canProduceBabies,
-                    DynasticLivingSonIndexService.HasLivingSon(pActor));
+                    needsSuccessor, alive, adult, breedingAge,
+                    canProduceBabies, hasLivingSon: false);
+        }
+
+        public static void RequestContinuation(Actor pHolder)
+        {
+            if (pHolder?.data == null || !pHolder.isSexMale() ||
+                !SafeIsAlive(pHolder)) return;
+            EnqueueHolder(pHolder.data.id);
+        }
+
+        public static void OnKingdomYear(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return;
+            RequestContinuation(pKingdom.king);
+            RequestContinuation(HeirService.GetHeir(pKingdom));
+            try
+            {
+                foreach (FeudatorySnapshot snapshot in
+                         FeudatoryService.GetByKingdom(pKingdom.id))
+                    RequestContinuation(ResolveActor(
+                        snapshot?.PrinceActorId ?? -1L));
+            }
+            catch { }
         }
 
         public static void OnTitleProjectionChanged(Actor pHolder)
         {
             if (pHolder?.data == null) return;
             long holderId = pHolder.data.id;
-            if (HasActiveMaleTitle(pHolder) && SafeIsAlive(pHolder))
+            if (IsHereditaryHolder(pHolder) && SafeIsAlive(pHolder))
                 ActiveMaleTitleHolders.Add(holderId);
             else
                 ActiveMaleTitleHolders.Remove(holderId);
@@ -75,6 +100,7 @@ namespace AncientWarfare3.core.lineage
             ActiveMaleTitleHolders.Remove(actorId);
             ExpectedMaleTitleSuccessors.Remove(actorId);
             RemoveHolderSuccessor(actorId);
+            HoldersNeedingSuccessor.Remove(actorId);
             QueueParentHolder(pActor.data.parent_id_1);
             if (pActor.data.parent_id_2 != pActor.data.parent_id_1)
                 QueueParentHolder(pActor.data.parent_id_2);
@@ -83,9 +109,15 @@ namespace AncientWarfare3.core.lineage
         public static void OnActorLoaded(Actor pActor)
         {
             if (pActor?.data == null) return;
-            if (!HasActiveMaleTitle(pActor) || !SafeIsAlive(pActor)) return;
-            ActiveMaleTitleHolders.Add(pActor.data.id);
-            EnqueueHolder(pActor.data.id);
+            if (IsHereditaryHolder(pActor) && SafeIsAlive(pActor))
+            {
+                ActiveMaleTitleHolders.Add(pActor.data.id);
+                EnqueueHolder(pActor.data.id);
+            }
+            if (!pActor.isSexMale()) return;
+            QueueParentHolder(pActor.data.parent_id_1);
+            if (pActor.data.parent_id_2 != pActor.data.parent_id_1)
+                QueueParentHolder(pActor.data.parent_id_2);
         }
 
         public static void ProcessAuthorityCycle()
@@ -103,6 +135,7 @@ namespace AncientWarfare3.core.lineage
         public static void Reset()
         {
             ActiveMaleTitleHolders.Clear();
+            HoldersNeedingSuccessor.Clear();
             ExpectedMaleTitleSuccessors.Clear();
             SuccessorByHolder.Clear();
             DirtyHolders.Clear();
@@ -113,16 +146,30 @@ namespace AncientWarfare3.core.lineage
         {
             Actor holder = ResolveActor(pHolderId);
             if (holder?.data == null || !SafeIsAlive(holder) ||
-                !HasActiveMaleTitle(holder))
+                !IsHereditaryHolder(holder))
             {
                 ActiveMaleTitleHolders.Remove(pHolderId);
                 RemoveHolderSuccessor(pHolderId);
+                HoldersNeedingSuccessor.Remove(pHolderId);
                 return;
             }
 
             ActiveMaleTitleHolders.Add(pHolderId);
             long successorId = SelectExpectedSuccessorId(holder);
             RemoveHolderSuccessor(pHolderId);
+            if (DynasticMaleLineContinuityRules.ShouldRequestHeir(
+                    eligibleHereditaryRole: true,
+                    hasLegalSuccessor: successorId >= 0L))
+            {
+                HoldersNeedingSuccessor.Add(pHolderId);
+                NobleRemarriageService.MarkDirty(holder.kingdom);
+                NobleHeirPregnancyService.RequestForHolder(holder);
+            }
+            else
+            {
+                HoldersNeedingSuccessor.Remove(pHolderId);
+                NobleHeirPregnancyService.CancelPendingForHolder(holder);
+            }
             if (successorId < 0L) return;
             SuccessorByHolder[pHolderId] = successorId;
             ExpectedMaleTitleSuccessors.Add(successorId);
@@ -130,27 +177,14 @@ namespace AncientWarfare3.core.lineage
 
         private static long SelectExpectedSuccessorId(Actor pHolder)
         {
-            var candidates = new List<NobleRankCandidate>();
-            try
-            {
-                foreach (Actor child in pHolder.getChildren(false))
-                {
-                    if (child?.data == null || child == pHolder) continue;
-                    bool eligible = child.isSexMale() &&
-                                    SafeIsAlive(child) &&
-                                    !child.hasTrait("madness") &&
-                                    !SlaveService.IsSlave(child);
-                    candidates.Add(new NobleRankCandidate(child.data.id,
-                        eligible, child.data.created_time));
-                }
-            }
-            catch { }
-            return NobleRankRules.SelectEldestEligibleId(candidates);
+            Actor successor = HereditaryTitleSuccessionService.FindSuccessor(
+                pHolder, pHolder?.kingdom);
+            return successor?.data?.id ?? -1L;
         }
 
         private static void QueueIfMaleTitleHolder(Actor pActor)
         {
-            if (pActor?.data == null || !HasActiveMaleTitle(pActor)) return;
+            if (pActor?.data == null || !IsHereditaryHolder(pActor)) return;
             ActiveMaleTitleHolders.Add(pActor.data.id);
             EnqueueHolder(pActor.data.id);
         }
@@ -185,6 +219,14 @@ namespace AncientWarfare3.core.lineage
                        title.Style == NobleTitleStyle.Male;
             }
             catch { return false; }
+        }
+
+        private static bool IsHereditaryHolder(Actor pActor)
+        {
+            if (pActor?.data == null || !pActor.isSexMale()) return false;
+            return SafeIsKing(pActor) || SafeIsRegisteredHeir(pActor) ||
+                   SafeIsFeudatoryPrince(pActor) ||
+                   HasActiveMaleTitle(pActor);
         }
 
         private static bool SafeIsKing(Actor pActor)

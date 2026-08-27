@@ -264,6 +264,7 @@ namespace AncientWarfare3.core.lineage
             SlaveService.ReleaseForFeudatoryAppointment(pPrince);
             AssignPrinceIdentity(pPrince, pCities[0]);
             MarkPrinceChildren(pPrince, snapshot.FeudatoryId);
+            DynasticMaleLineContinuityService.RequestContinuation(pPrince);
             RefreshSuccessor(snapshot.FeudatoryId);
             FeudatoryMapModeService.DirtyMapIfActive();
             for (int i = 0; i < pCities.Count; i++)
@@ -610,6 +611,7 @@ namespace AncientWarfare3.core.lineage
                 City seat = FindCity(snapshot.SeatCityId);
                 if (seat?.data != null) AssignPrinceIdentity(prince, seat);
                 MarkPrinceChildren(prince, snapshot.FeudatoryId);
+                DynasticMaleLineContinuityService.RequestContinuation(prince);
             }
             FeudatoryMapModeService.DirtyMapIfActive();
         }
@@ -1925,6 +1927,7 @@ namespace AncientWarfare3.core.lineage
             PublishReplaced(snapshot.WithPrince(snapshot.PrinceActorId,
                 snapshot.PrinceName, snapshot.ShiBranchId,
                 snapshot.PrinceShiLabel, successorId, successorName));
+            DynasticMaleLineContinuityService.RequestContinuation(prince);
             return true;
         }
 
@@ -1984,28 +1987,24 @@ namespace AncientWarfare3.core.lineage
                 otherSuccession.FeudatoryId != pFeudatoryId;
             bool imperialHeir = HeirService.IsCurrentHeir(pEmpire,
                 pCandidate);
-            bool eligible = pCandidate.kingdom == pEmpire &&
-                pCandidate.data.id != pExcludedActorId &&
-                !alreadyOtherPrince && !alreadyOtherSuccessor &&
-                !imperialHeir &&
-                HeirCandidateRules.IsBasicMaleSuccessionEligible(
-                    !pCandidate.isRekt() && pCandidate.isAlive(),
-                    pCandidate == pPrince,
-                    XiaAuthorityGenderRules.IsSuccessionCandidateSexEligible(
-                        pCandidate.isSexMale(),
-                        CourtAuxiliaryLawService.AllowsFemaleSuccession(
-                            pEmpire)),
-                    pCandidate.isKing(), pCandidate.isAdult(),
-                    pCandidate.hasTrait("madness"),
-                    SlaveService.IsSlave(pCandidate));
-            bool sameShi = LineageQuery.GetActorShiId(pCandidate.data.id) ==
-                           pShiBranchId;
             bool biologicalDirectSon = directSon &&
                 FeudatorySuccessionRules.IsDirectBiologicalSon(
                     pCandidate.data.parent_id_1,
                     pCandidate.data.parent_id_2,
                     pPrince?.data?.id ?? -1L,
                     pCandidate.isSexMale());
+            bool adult = pCandidate.isAdult();
+            bool ageEligible = adult || biologicalDirectSon;
+            bool eligible = pCandidate.kingdom == pEmpire &&
+                pCandidate.data.id != pExcludedActorId &&
+                !alreadyOtherPrince && !alreadyOtherSuccessor &&
+                !imperialHeir && !pCandidate.isRekt() &&
+                pCandidate.isAlive() && pCandidate != pPrince &&
+                !pCandidate.isKing() && pCandidate.isSexMale() &&
+                ageEligible && !pCandidate.hasTrait("madness") &&
+                !SlaveService.IsSlave(pCandidate);
+            bool sameShi = LineageQuery.GetActorShiId(pCandidate.data.id) ==
+                           pShiBranchId;
             bool directTreeDescendant = pFounderActorId >= 0 &&
                 LineageQuery.IsAgnaticDescendantOf(pCandidate.data.id,
                     pFounderActorId);
@@ -2013,10 +2012,12 @@ namespace AncientWarfare3.core.lineage
                 ? LineageQuery.GetAgnaticDepth(pCandidate.data.id,
                     pFounderActorId)
                 : MaximumSuccessionKinDistance + 1;
+            pCandidate.data.get(LineageKeys.BIRTH_LEGITIMACY,
+                out bool legitimateBirth, true);
             pCandidates.Add(new FeudatorySuccessionCandidate(
                 pCandidate.data.id, eligible, biologicalDirectSon, sameShi,
                 kinDistance, pCandidate.data.created_time,
-                directTreeDescendant));
+                directTreeDescendant, legitimateBirth, adult));
         }
 
         private static int GetArmySize(long pArmyId)

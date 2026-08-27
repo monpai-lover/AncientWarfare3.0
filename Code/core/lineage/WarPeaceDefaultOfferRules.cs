@@ -49,6 +49,15 @@ namespace AncientWarfare3.core.lineage
                 }
             ordered.Sort(Compare);
 
+            int targetGross = Math.Min(WarPeaceOfferLedger.MaximumGross,
+                Math.Abs(WarPeaceTermsRules.ClampSignedWarScore(
+                    signedWarScore)));
+            IReadOnlyList<WarPeaceSettlementTermDraft> cessions =
+                SelectAffordableCessionTerms(targetGross, ordered,
+                    sourceCityCount);
+            if (cessions.Count > 0)
+                return cessions;
+
             if (mode ==
                 WarPeaceDefaultOfferMode.ExhaustionMaximumBenefit)
                 return SelectMaximumBenefitTerms(signedWarScore, ordered,
@@ -56,9 +65,6 @@ namespace AncientWarfare3.core.lineage
 
             var result = new List<WarPeaceSettlementTermDraft>();
             var ledger = new WarPeaceOfferLedger();
-            int targetGross = Math.Min(WarPeaceOfferLedger.MaximumGross,
-                Math.Abs(WarPeaceTermsRules.ClampSignedWarScore(
-                    signedWarScore)));
             int selectedGross = 0;
             var cities = new HashSet<long>();
             var captives = new HashSet<long>();
@@ -120,6 +126,52 @@ namespace AncientWarfare3.core.lineage
                 {
                     Kind = WarPeaceTermKind.WhitePeace
                 });
+            return result;
+        }
+
+        private static IReadOnlyList<WarPeaceSettlementTermDraft>
+            SelectAffordableCessionTerms(int pTargetGross,
+                IReadOnlyList<IndexedCandidate> pOrdered,
+                int pSourceCityCount)
+        {
+            var result = new List<WarPeaceSettlementTermDraft>();
+            if (pTargetGross < 0 || pOrdered == null)
+                return result;
+
+            var ledger = new WarPeaceOfferLedger();
+            var cities = new HashSet<long>();
+            int selectedGross = 0;
+            for (int i = 0; i < pOrdered.Count &&
+                            result.Count <
+                            WarPeaceSettlementValidationRules.MaximumTerms;
+                 i++)
+            {
+                WarPeaceSettlementTermDraft term =
+                    pOrdered[i].Candidate.Term;
+                if (term.Kind != WarPeaceTermKind.CedeCity ||
+                    term.CityId < 0 || !cities.Add(term.CityId))
+                    continue;
+
+                int nextCededCities = cities.Count;
+                if (!WarPeaceTreatySurvivalRules.LeavesRequiredSourceAlive(
+                        pSourceCityCount, nextCededCities, false))
+                {
+                    cities.Remove(term.CityId);
+                    continue;
+                }
+
+                int cost = WarPeaceTermsRules.NormalizeTermCost(
+                    term.Kind, term.RequestedCost);
+                if (cost > pTargetGross - selectedGross ||
+                    !ledger.TryAddDemand(cost, out _))
+                {
+                    cities.Remove(term.CityId);
+                    continue;
+                }
+
+                result.Add(term.Clone());
+                selectedGross += cost;
+            }
             return result;
         }
 

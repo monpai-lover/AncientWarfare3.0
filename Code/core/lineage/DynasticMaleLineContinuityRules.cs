@@ -25,5 +25,11 @@ namespace AncientWarfare3.core.lineage
         {
             return vanillaRoom || continuationBypass;
         }
+
+        public static bool ShouldRequestHeir(bool eligibleHereditaryRole,
+            bool hasLegalSuccessor)
+        {
+            return eligibleHereditaryRole && !hasLegalSuccessor;
+        }
     }
 }

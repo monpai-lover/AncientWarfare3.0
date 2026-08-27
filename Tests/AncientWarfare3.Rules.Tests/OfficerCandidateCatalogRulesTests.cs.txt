@@ -1,0 +1,24 @@
+using AncientWarfare3.core.court;
+
+internal static class OfficerCandidateCatalogRulesTests
+{
+    public static void Run()
+    {
+        True(OfficerCandidateCatalogRules.ShouldInvalidate(
+                targetKingdomChanged: true),
+            "moving an actor into a different kingdom invalidates candidates");
+        False(OfficerCandidateCatalogRules.ShouldInvalidate(
+                targetKingdomChanged: false),
+            "repeating setKingdom for the same kingdom keeps the catalog");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+}

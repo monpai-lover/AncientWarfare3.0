@@ -71,6 +71,8 @@ namespace AncientWarfare3.core.lineage
             new Dictionary<long, long>();
         private static readonly Dictionary<long, int> CompensationAttempts =
             new Dictionary<long, int>();
+        private static readonly Dictionary<long, int> AdvanceAttempts =
+            new Dictionary<long, int>();
         private const int MaximumCompensationAttempts = 8;
         private const int RuntimeRebuildPageSize = 64;
         private static int _runtimeRebuildGeneration;
@@ -106,7 +108,7 @@ namespace AncientWarfare3.core.lineage
                     new SuccessionClaimantFacts(claimant.data.id,
                         factionSupport.LeaderKind,
                         factionSupport.LeaderSupport,
-                        factionSupport.RunnerUpSupport,
+                        factionSupport.DesignatedHeirSupport,
                         hasSupportCity: true, hasActiveDispute: false,
                         hasLivingDirectPaternalAncestor: false)))
                 return null;
@@ -740,6 +742,7 @@ namespace AncientWarfare3.core.lineage
             ById.Clear();
             ByKingdom.Clear();
             CompensationAttempts.Clear();
+            AdvanceAttempts.Clear();
             _runtimeRebuildGeneration = unchecked(
                 _runtimeRebuildGeneration + 1);
         }
@@ -756,7 +759,10 @@ namespace AncientWarfare3.core.lineage
         {
             SuccessionDisputeSnapshot row = Read(pDisputeId);
             if (row == null || row.Status >= SuccessionDisputeStatus.Active)
+            {
+                AdvanceAttempts.Remove(pDisputeId);
                 return;
+            }
             bool advanced;
             try
             {
@@ -774,19 +780,45 @@ namespace AncientWarfare3.core.lineage
             {
                 ModClass.LogWarning("Succession dispute stage failed: " +
                                     exception.Message);
-                Compensate(row, "advance_exception");
+                ScheduleAdvanceRetry(row, "advance_exception");
                 return;
             }
             if (!advanced)
             {
-                Compensate(row, "advance_failed");
+                ScheduleAdvanceRetry(row, "advance_failed");
                 return;
             }
+            AdvanceAttempts.Remove(pDisputeId);
             SuccessionDisputeSnapshot next = Read(pDisputeId);
             if (next != null) Publish(next);
             if (next != null && next.Status <
                 SuccessionDisputeStatus.Active)
                 Enqueue(pDisputeId);
+        }
+
+        private static void ScheduleAdvanceRetry(
+            SuccessionDisputeSnapshot pRow, string pReason)
+        {
+            if (pRow == null) return;
+            AdvanceAttempts.TryGetValue(pRow.DisputeId,
+                out int attempt);
+            if (!SuccessionDisputeRules.ShouldRetryAdvance(attempt))
+            {
+                AdvanceAttempts.Remove(pRow.DisputeId);
+                Compensate(pRow, pReason + "_exhausted");
+                return;
+            }
+            int nextAttempt = attempt + 1;
+            AdvanceAttempts[pRow.DisputeId] = nextAttempt;
+            ModClass.LogWarning("Succession dispute stage deferred: dispute=" +
+                                pRow.DisputeId + " status=" + pRow.Status +
+                                " attempt=" + nextAttempt + "/" +
+                                SuccessionDisputeRules.MaximumAdvanceAttempts +
+                                " reason=" + pReason);
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                "succession_dispute_retry:" + pRow.DisputeId + ":" +
+                attempt, DeferredWorkClass.Persistent,
+                () => Advance(pRow.DisputeId));
         }
 
         private static bool CreateRival(SuccessionDisputeSnapshot pRow)

@@ -87,6 +87,13 @@ namespace AncientWarfare3.api.multiplayer
                         BanditAmnestySettlementWindow.Open(
                             request.CountryId, request.TargetCountryId);
                         break;
+                    case AW3WindowKind.CourtStatistics:
+                        CourtStatisticsWindow.OpenForCourt(
+                            request.CountryId, request.CityId);
+                        break;
+                    case AW3WindowKind.DeJureRegionMerge:
+                        DeJureRegionMergeWindow.Open(request.CountryId);
+                        break;
                     case AW3WindowKind.CourtAppointment:
                         if (request.ActorId > 0)
                             CourtAppointmentWindow.Open(request.CountryId,

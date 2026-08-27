@@ -195,6 +195,9 @@ namespace AncientWarfare3.core.multiplayer
                     OfficialCareerPersistence.
                         RepairDuplicateFormalAppointments(
                             LineageArchiveManager.Instance?.OperatingDB)),
+                new AW3RestoreStage("legacy_projected_office_repair", () =>
+                    LegacyProjectedOfficeRepairService.Repair(
+                        LineageArchiveManager.Instance?.OperatingDB)),
                 new AW3RestoreStage("official_career_projection",
                     CourtService.RebuildOfficialCareerRuntimeProjections),
                 new AW3RestoreStage("city_tech_zone_cache",
@@ -213,10 +216,16 @@ namespace AncientWarfare3.core.multiplayer
                     CivilServiceExamService.RebuildRuntime),
                 new AW3RestoreStage("civil_service_qualifications",
                     CivilServiceQualificationService.RebuildRuntimeProjections),
+                new AW3RestoreStage("court_vacancies", () =>
+                    CourtVacancyRestoreService.RebuildRuntime(
+                        CourtVacancyRestoreService.BeginGeneration())),
                 new AW3RestoreStage("zhulu_native_war_migration",
                     ZhuluWarMigrationService.RebuildRuntime),
                 new AW3RestoreStage("special_armies",
                     AWArmyService.RepairSpecialArmiesAfterLoad),
+                new AW3RestoreStage("warrior_army_index",
+                    () => WarriorArmyMembershipService.RebuildAfterLoad(
+                        World.world?.armies)),
                 new AW3RestoreStage("army_strategic_index",
                     ArmyStrategicIndexService.RebuildRuntime),
                 new AW3RestoreStage("coalition_war_tasks",
@@ -328,6 +337,9 @@ namespace AncientWarfare3.core.multiplayer
                     OfficialCareerPersistence.
                         RepairDuplicateFormalAppointments(
                             LineageArchiveManager.Instance?.OperatingDB)),
+                new AW3RestoreStage("legacy_projected_office_repair", () =>
+                    LegacyProjectedOfficeRepairService.Repair(
+                        LineageArchiveManager.Instance?.OperatingDB)),
                 new AW3RestoreStage("official_career_projection",
                     CourtService.RebuildOfficialCareerRuntimeProjections),
                 new AW3RestoreStage("city_tech_zone_cache",
@@ -344,8 +356,14 @@ namespace AncientWarfare3.core.multiplayer
                     CivilServiceExamService.RebuildRuntime),
                 new AW3RestoreStage("civil_service_qualifications",
                     CivilServiceQualificationService.RebuildRuntimeProjections),
+                new AW3RestoreStage("court_vacancies", () =>
+                    CourtVacancyRestoreService.RebuildRuntime(
+                        CourtVacancyRestoreService.BeginGeneration())),
                 new AW3RestoreStage("succession_disputes",
                     SuccessionDisputeService.RebuildRuntime),
+                new AW3RestoreStage("warrior_army_index",
+                    () => WarriorArmyMembershipService.RebuildAfterLoad(
+                        World.world?.armies)),
                 new AW3RestoreStage("army_strategic_index",
                     ArmyStrategicIndexService.RebuildRuntime),
                 new AW3RestoreStage("kingdom_war_director",
@@ -401,6 +419,8 @@ namespace AncientWarfare3.core.multiplayer
                 new AW3RestoreStage("virtual_titles", VirtualNobleTitleService.ClearRuntime),
                 new AW3RestoreStage("court_aristocratic_groups",
                     CourtAristocraticGroupService.ClearRuntime),
+                new AW3RestoreStage("custom_court_instances",
+                    CustomCourtRuntime.ClearRuntime),
                 new AW3RestoreStage("court_peace",
                     CourtPeaceService.ClearRuntime),
                 new AW3RestoreStage("conferred_posthumous_titles",

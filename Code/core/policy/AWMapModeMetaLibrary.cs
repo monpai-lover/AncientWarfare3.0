@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui;
@@ -720,7 +721,16 @@ namespace AncientWarfare3.core.policy
                 Kingdom displayedKingdom;
                 if (HierarchicalVassalMapModeService.IsCityLayer)
                 {
-                    ColorCityZonesWithClosure(pQAsset, city, color);
+                    if (HierarchicalVassalMapModeService.IsCityCountyLayer)
+                    {
+                        CountyRecord county = CountyAdministrationService.
+                            FindForZone(pTile.zone.id);
+                        ColorCountyZones(pQAsset, city, county, color);
+                    }
+                    else
+                    {
+                        ColorCityZonesWithClosure(pQAsset, city, color);
+                    }
                     displayedKingdom = city.kingdom;
                 }
                 else if (HierarchicalVassalMapModeService.
@@ -779,6 +789,23 @@ namespace AncientWarfare3.core.policy
             if (pQAsset == null || pZones == null || pZones.Count == 0)
                 return;
             QuantumSpriteLibrary.colorZones(pQAsset, pZones, pColor);
+        }
+
+        private static void ColorCountyZones(QuantumSpriteAsset pQAsset,
+            City pCity, CountyRecord pCounty, Color pColor)
+        {
+            if (pQAsset == null || pCity?.zones == null ||
+                pCounty?.ZoneIds == null || pCounty.ZoneIds.Count == 0)
+                return;
+            var zones = new List<TileZone>(pCounty.ZoneIds.Count);
+            for (int index = 0; index < pCity.zones.Count; index++)
+            {
+                TileZone zone = pCity.zones[index];
+                if (zone != null && pCounty.ZoneIds.Contains(zone.id))
+                    zones.Add(zone);
+            }
+            if (zones.Count > 0)
+                QuantumSpriteLibrary.colorZones(pQAsset, zones, pColor);
         }
 
         private static void ColorCityZonesWithClosure(QuantumSpriteAsset pQAsset,

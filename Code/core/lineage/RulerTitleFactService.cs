@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
 
@@ -186,7 +187,13 @@ namespace AncientWarfare3.core.lineage
                         new HistoricalSqlColumn("ACTOR_ID", facts.ActorId)
                     }, updates, inserts, pOnCommitted: null,
                     out _, out string error)) return;
-            ModClass.LogWarning("Queue ruler fact snapshot failed: " + error);
+            // Database-disabled mode is an intentional runtime configuration,
+            // not a per-actor write failure. Suppress the expected refusal;
+            // retain an error for a live database/worker fault.
+            if (!AWAsyncRuntime.DatabaseEnabled &&
+                string.Equals(error, "historical async writer is disabled",
+                    StringComparison.Ordinal)) return;
+            ModClass.LogError("Queue ruler fact snapshot failed: " + error);
         }
 
         public static bool TryReadPersonalSnapshot(long pActorId, out RulerPersonalFacts pFacts)

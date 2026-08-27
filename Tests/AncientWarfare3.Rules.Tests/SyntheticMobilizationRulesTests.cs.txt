@@ -6,6 +6,7 @@ internal static class SyntheticMobilizationRulesTests
 {
     internal static void Run()
     {
+        SyntheticToggleControlsGenerationAndVanillaRecruitment();
         Equal(50, SyntheticMobilizationRules.Quota(100, 0, 50),
             "a 50 percent law mobilizes half the city population");
         Equal(40, SyntheticMobilizationRules.Quota(100, 20, 50),
@@ -149,6 +150,22 @@ internal static class SyntheticMobilizationRulesTests
             "discarded actors become eligible when they later reach safety");
         Contains(source, "OnSyntheticMaterialized(Actor pActor)",
             "materialization registers actor identity atomically");
+    }
+
+    private static void SyntheticToggleControlsGenerationAndVanillaRecruitment()
+    {
+        Equal(false, SyntheticMobilizationRules.ShouldUseSyntheticMobilization(
+                enabled: false),
+            "disabled synthetic mobilization must not generate synthetic units");
+        Equal(true, SyntheticMobilizationRules.ShouldUseSyntheticMobilization(
+                enabled: true),
+            "enabled synthetic mobilization may generate synthetic units");
+        Equal(true, SyntheticMobilizationRules.
+            ShouldBypassAw3RecruitmentRestrictions(syntheticEnabled: false),
+            "vanilla recruitment must bypass AW3 restrictions when synthetic units are off");
+        Equal(false, SyntheticMobilizationRules.
+            ShouldBypassAw3RecruitmentRestrictions(syntheticEnabled: true),
+            "synthetic mode keeps the AW3 recruitment boundary");
     }
 
     private static void Equal<T>(T expected, T actual, string message)

@@ -1,0 +1,28 @@
+using System;
+using AncientWarfare3.core.performance;
+
+internal static class NameplateRefreshRulesTests
+{
+    internal static void Run()
+    {
+        Equal(false, NameplateRefreshRules.ShouldRefresh(
+            ready: true, now: 1d, nextAllowedAt: 2d,
+            previousSignature: 10UL, currentSignature: 11UL),
+            "a zoom-only signature change must not rebuild nameplate candidates before the throttle expires");
+        Equal(true, NameplateRefreshRules.ShouldRefresh(
+            ready: true, now: 2d, nextAllowedAt: 2d,
+            previousSignature: 10UL, currentSignature: 11UL),
+            "an expired nameplate throttle permits a changed visible range to refresh");
+        Equal(true, NameplateRefreshRules.ShouldRefresh(
+            ready: false, now: 0d, nextAllowedAt: 10d,
+            previousSignature: 0UL, currentSignature: 0UL),
+            "an uninitialized nameplate cache must refresh immediately");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                ": expected=" + pExpected + " actual=" + pActual);
+    }
+}

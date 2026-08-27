@@ -107,5 +107,19 @@ namespace AncientWarfare3.core.lineage
         {
             return hasPersistedOperation && !canUseReservePool;
         }
+
+        public static bool ShouldStartOperation(bool liveShortage,
+            bool reserveAvailable)
+        {
+            return liveShortage && reserveAvailable;
+        }
+
+        public static bool ShouldRestartAfterConfirmedExhaustion(
+            bool reserveAvailable, bool exhaustionConfirmed)
+        {
+            _ = exhaustionConfirmed;
+            return reserveAvailable;
+        }
+
     }
 }

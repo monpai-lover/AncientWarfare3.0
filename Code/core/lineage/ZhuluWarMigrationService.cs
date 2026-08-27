@@ -8,6 +8,7 @@ namespace AncientWarfare3.core.lineage
     {
         public static void RebuildRuntime()
         {
+            ZhuluWarService.RebuildActiveWarIndex();
             if (AW3MultiplayerReplicaScope.IsReplicaSession ||
                 World.world?.wars == null) return;
 
@@ -42,6 +43,7 @@ namespace AncientWarfare3.core.lineage
                         war.data.id + ": " + exception.Message);
                 }
             }
+            ZhuluWarService.RebuildActiveWarIndex();
         }
     }
 }

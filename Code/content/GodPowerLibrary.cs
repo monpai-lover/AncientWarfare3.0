@@ -711,7 +711,7 @@ namespace AncientWarfare3.content
                 FeudatoryNameplateSnapshots.Clear();
                 FeudatoryNameplateIds.Clear();
                 List<TileZone> visibleZones =
-                    World.world.zone_camera.getVisibleZones();
+                    AWPresentationVisibility.GetVisibleZones();
                 for (int i = 0; i < visibleZones.Count; i++)
                 {
                     TileZone zone = visibleZones[i];
@@ -806,7 +806,7 @@ namespace AncientWarfare3.content
             {
                 SchoolNameplateCandidates.Clear();
                 SchoolNameplateCandidateIds.Clear();
-                List<TileZone> visibleZones = World.world.zone_camera.getVisibleZones();
+                List<TileZone> visibleZones = AWPresentationVisibility.GetVisibleZones();
                 for (int i = 0; i < visibleZones.Count; i++)
                 {
                     City city = visibleZones[i]?.city;
@@ -851,7 +851,7 @@ namespace AncientWarfare3.content
             {
                 ShiNameplateCandidates.Clear();
                 ShiNameplateCandidateIds.Clear();
-                List<TileZone> visibleZones = World.world.zone_camera.getVisibleZones();
+                List<TileZone> visibleZones = AWPresentationVisibility.GetVisibleZones();
                 for (int i = 0; i < visibleZones.Count; i++)
                 {
                     City city = visibleZones[i]?.city;
@@ -884,11 +884,19 @@ namespace AncientWarfare3.content
             ref bool pReady, ref ulong pPreviousSignature,
             ref float pRefreshAt)
         {
+            float now = Time.unscaledTime;
+            // Do not even ask ZoneCamera for a signature while the candidate
+            // cache is inside its refresh window. Zooming changes the native
+            // visible range every frame; the nameplate list only needs a
+            // bounded refresh cadence.
+            if (pReady && now < pRefreshAt)
+                return false;
+
             ulong signature = AWPresentationVisibility.GetSignature(
                 renderGameplay: false);
-            float now = Time.unscaledTime;
-            if (pReady && pPreviousSignature == signature &&
-                now < pRefreshAt)
+            if (!NameplateRefreshRules.ShouldRefresh(
+                    pReady, now, pRefreshAt,
+                    pPreviousSignature, signature))
                 return false;
 
             pReady = true;
@@ -1116,7 +1124,9 @@ namespace AncientWarfare3.content
             if (!PeasantRebelBanditStrongholdService.TryCreateDirect(city,
                     out Kingdom bandit, out City stronghold,
                     out string failureKey,
-                    out bool restorationRedirected))
+                    out bool restorationRedirected,
+                    pAllowClaimRedirect: true,
+                    pIgnoreSuppressionCooldown: true))
             {
                 Tip(AW_L10n.Text(failureKey,
                     "Bandit stronghold creation failed"));

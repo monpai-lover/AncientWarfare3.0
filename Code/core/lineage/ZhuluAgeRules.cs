@@ -36,6 +36,10 @@ namespace AncientWarfare3.core.lineage
     public static class ZhuluAgeRules
     {
         public const string AgeId = "age_zhulu";
+        public const int MaximumWarCandidates = 24;
+        public const int MaximumActiveWars = 12;
+        public const int MaximumActiveWarsPerRealm = 2;
+        public const int MaximumAllianceTargetChecksPerRealm = 24;
         public const long CityWeight = 200L;
         public const long ZoneWeight = 2L;
         public const long PopulationWeight = 1L;
@@ -95,7 +99,15 @@ namespace AncientWarfare3.core.lineage
 
         public static int WarCandidateLimit(bool isZhuluAge)
         {
-            return isZhuluAge ? int.MaxValue : 24;
+            return isZhuluAge ? MaximumWarCandidates : 24;
+        }
+
+        public static bool CanOpenNewWar(int activeWars,
+            int activeWarsForRealm)
+        {
+            return Math.Max(0, activeWars) < MaximumActiveWars &&
+                   Math.Max(0, activeWarsForRealm) <
+                       MaximumActiveWarsPerRealm;
         }
 
         public static bool CanUseUnificationWarAi(bool isZhuluAge,

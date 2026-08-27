@@ -29,6 +29,8 @@ namespace AncientWarfare3.core.pathfinding
         private long _cancelled;
         private long _completed;
         private long _failed;
+        private readonly long[] _failedByReason =
+            new long[Enum.GetValues(typeof(AWPathFailureReason)).Length];
         private long _expandedNodes;
         private long _fallbackSearches;
         private long _staleSteps;
@@ -53,6 +55,7 @@ namespace AncientWarfare3.core.pathfinding
         private long _dockRequests;
         private long _boatRetries;
         private long _rtsSharedRouteReuses;
+        private long _straightSegments;
         private long _memberCorrections;
         private int _operationalQueueHighWater;
         private int _essentialQueueHighWater;
@@ -95,6 +98,7 @@ namespace AncientWarfare3.core.pathfinding
         public long DockRequests => Interlocked.Read(ref _dockRequests);
         public long BoatRetries => Interlocked.Read(ref _boatRetries);
         public long RtsSharedRouteReuses => Interlocked.Read(ref _rtsSharedRouteReuses);
+        public long StraightSegments => Interlocked.Read(ref _straightSegments);
         public long MemberCorrections => Interlocked.Read(ref _memberCorrections);
         public int OperationalQueueHighWater =>
             Volatile.Read(ref _operationalQueueHighWater);
@@ -155,7 +159,25 @@ namespace AncientWarfare3.core.pathfinding
         }
         public void OnCancelled() => Interlocked.Increment(ref _cancelled);
         public void OnCompleted() => Interlocked.Increment(ref _completed);
-        public void OnFailed() => Interlocked.Increment(ref _failed);
+        public void OnFailed() => OnFailed(AWPathFailureReason.None);
+        public void OnFailed(AWPathFailureReason pReason)
+        {
+            Interlocked.Increment(ref _failed);
+            int index = (int)pReason;
+            if (index >= 0 && index < _failedByReason.Length)
+                Interlocked.Increment(ref _failedByReason[index]);
+        }
+        public string FailedByReason()
+        {
+            var values = new System.Collections.Generic.List<string>();
+            for (int index = 0; index < _failedByReason.Length; index++)
+            {
+                long count = Interlocked.Read(ref _failedByReason[index]);
+                if (count == 0) continue;
+                values.Add(((AWPathFailureReason)index) + "=" + count);
+            }
+            return values.Count == 0 ? "none" : string.Join(",", values);
+        }
         public void AddExpandedNodes(int pCount) => Interlocked.Add(ref _expandedNodes, pCount);
         public void OnFallback() => Interlocked.Increment(ref _fallbackSearches);
         public void OnStaleStep() => Interlocked.Increment(ref _staleSteps);
@@ -164,6 +186,7 @@ namespace AncientWarfare3.core.pathfinding
         public void OnDockRequest() => Interlocked.Increment(ref _dockRequests);
         public void OnBoatRetry() => Interlocked.Increment(ref _boatRetries);
         public void OnRtsSharedRouteReuse() => Interlocked.Increment(ref _rtsSharedRouteReuses);
+        public void OnStraightSegment() => Interlocked.Increment(ref _straightSegments);
         public void OnMemberCorrection() => Interlocked.Increment(ref _memberCorrections);
         public void OnDequeued(AWPathWorkPriority pPriority, long pEnqueuedAt)
         {

@@ -197,7 +197,8 @@ namespace AncientWarfare3.core.policy
             catch { }
         }
 
-        internal static bool NeedsProcessFrame => false;
+        internal static bool NeedsProcessFrame =>
+            HierarchicalVassalMapLabelRuntime.NeedsProcessFrame;
 
         internal static int RuntimeNodeCountForDiagnostics =>
             RuntimeNodes.Count;
@@ -243,6 +244,7 @@ namespace AncientWarfare3.core.policy
                 {
                     SetRootActive(false);
                 }
+                HierarchicalVassalMapLabelRuntime.ProcessFrame();
             }
             catch (Exception error)
             {
@@ -252,7 +254,7 @@ namespace AncientWarfare3.core.policy
                         RecoverFromProcessFailure();
                 }
                 catch { }
-                SetRootActive(false);
+                if (!_active) SetRootActive(false);
                 _reportedFailure = !HierarchicalVassalMapLabelRuntime.
                     CanRetryProcessFailure;
                 if (_reportedFailure) return;
@@ -331,6 +333,23 @@ namespace AncientWarfare3.core.policy
             foreach (KeyValuePair<string, LabelNode> pair in RuntimeNodes)
                 if (pActiveKeys == null || !pActiveKeys.Contains(pair.Key))
                     pair.Value.SetActive(false);
+        }
+
+        internal static void HideNativeLabelsExcept(ISet<string> pActiveKeys)
+        {
+            foreach (KeyValuePair<string, LabelNode> pair in RuntimeNodes)
+                if (TryParseNativeLabelKey(pair.Key, out _, out _, out _) &&
+                    (pActiveKeys == null || !pActiveKeys.Contains(pair.Key)))
+                    pair.Value.SetActive(false);
+        }
+
+        internal static void KeepNativeLabelsVisible()
+        {
+            // Empty clicks are not navigation. Re-show already-built native
+            // entries after the engine's zone redraw without changing focus.
+            foreach (KeyValuePair<string, LabelNode> pair in RuntimeNodes)
+                if (TryParseNativeLabelKey(pair.Key, out _, out _, out _))
+                    pair.Value.SetActive(true);
         }
 
         internal static bool ShowRuntimeLabel(string pKey)

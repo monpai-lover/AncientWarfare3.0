@@ -60,6 +60,7 @@ namespace AncientWarfare3.core.court
                     .OrderBy(item => item.Id, StringComparer.Ordinal).ToList();
                 local.Edges = SortEdges(local.Edges);
                 NormalizeOffices(local.Offices);
+                CustomLocalCourtTemplateRules.EnsureChiefOfficeId(local);
             }
             normalized.ArchivedCrossLayerEdges = SortEdges(
                 normalized.ArchivedCrossLayerEdges);
@@ -96,6 +97,11 @@ namespace AncientWarfare3.core.court
             {
                 template = JsonConvert.DeserializeObject<CustomCourtTemplate>(
                     json, Settings);
+                if (template == null)
+                {
+                    error = CustomCourtTemplateValidationError.InvalidTemplateId;
+                    return false;
+                }
                 template = CustomLocalCourtTemplateRules.UpgradeLegacy(
                     template);
                 if (!Enum.IsDefined(typeof(CustomCourtTemplateScope),

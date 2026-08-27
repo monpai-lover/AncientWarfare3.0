@@ -1,0 +1,38 @@
+using System;
+using System.IO;
+
+internal static class DeJureSeatNameSyncSourceGuardTests
+{
+    internal static void Run()
+    {
+        string store = Read("Code/core/court/DeJureRegionStore.cs");
+        string readModel = Read("Code/core/court/DeJureRegionReadModelService.cs");
+        string mapMode = Read("Code/core/policy/HierarchicalVassalMapModeService.cs");
+
+        Contains(store, "private static void MigrateHistoricalMetadataLocked()");
+        Contains(store, "return pRegion?.RegionName ?? string.Empty;");
+        NotContains(store, "SyncRegionNameFromSeatLocked(current);");
+        NotContains(store, "SyncRegionNameFromSeatLocked(target);");
+        NotContains(store, "SyncAllRegionNamesLocked();");
+        Contains(readModel, "DeJureRegionStore.ResolveDisplayName(legal)");
+        Contains(mapMode, "DeJureRegionStore.ResolveDisplayName(legal)");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            pPath.Replace('/', Path.DirectorySeparatorChar)));
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "missing de-jure seat name sync source guard: " + pNeedle);
+    }
+
+    private static void NotContains(string pText, string pNeedle)
+    {
+        if (pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "unexpected de-jure seat name sync source: " + pNeedle);
+    }
+}

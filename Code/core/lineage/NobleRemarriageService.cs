@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.core.schools;
 
 namespace AncientWarfare3.core.lineage
@@ -11,6 +12,18 @@ namespace AncientWarfare3.core.lineage
         private const int MaximumTitledSubjects = 16;
         private const int MinimumCandidateAgeYears = 16;
         private const int WorldTimePerYear = 60;
+        private const int MaximumSubjectsPerSlice = 4;
+
+        private sealed class PendingSlice
+        {
+            internal int Year;
+            internal readonly List<long> SubjectIds = new List<long>();
+            internal int Cursor;
+            internal bool Unresolved;
+        }
+
+        private static readonly Dictionary<long, PendingSlice> PendingSlices =
+            new Dictionary<long, PendingSlice>();
 
         private static SQLiteConnection DB =>
             LineageArchiveManager.Instance?.OperatingDB;
@@ -32,24 +45,72 @@ namespace AncientWarfare3.core.lineage
             MarkDirty(partner.kingdom);
         }
 
+        internal static void ClearRuntimeState()
+        {
+            PendingSlices.Clear();
+        }
+
         public static void OnKingdomYear(Kingdom pKingdom)
         {
             if (!Ready || pKingdom?.data == null || pKingdom.isRekt())
                 return;
-
-            List<NobleRemarriageSubjectCandidate> candidates =
-                BuildSubjects(pKingdom);
-            IReadOnlyList<long> selected = NobleRemarriageRules
-                .SelectSubjects(candidates,
-                    NobleRemarriageRules.MaximumSubjectsPerKingdomYear);
-            bool unresolved = candidates.Count > selected.Count;
-            for (int i = 0; i < selected.Count; i++)
+            if (!PendingSlices.TryGetValue(pKingdom.id,
+                    out PendingSlice pending) ||
+                pending.Year != Date.getCurrentYear())
             {
-                Actor subject = FindActor(selected[i]);
-                if (!TryRemarry(pKingdom, subject)) unresolved = true;
+                List<NobleRemarriageSubjectCandidate> candidates =
+                    BuildSubjects(pKingdom);
+                IReadOnlyList<long> selected = NobleRemarriageRules
+                    .SelectSubjects(candidates,
+                        NobleRemarriageRules.MaximumSubjectsPerKingdomYear);
+                pending = new PendingSlice
+                {
+                    Year = Date.getCurrentYear()
+                };
+                for (int i = 0; i < selected.Count; i++)
+                    pending.SubjectIds.Add(selected[i]);
+                PendingSlices[pKingdom.id] = pending;
+                pending.Unresolved = candidates.Count > selected.Count;
             }
+            ProcessSlice(pKingdom, pending);
+        }
+
+        private static void EnqueueSlice(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                "noble-remarriage-slice:" + pKingdom.id,
+                DeferredWorkClass.Persistent,
+                () =>
+                {
+                    if (PendingSlices.TryGetValue(pKingdom.id,
+                            out PendingSlice pending))
+                        ProcessSlice(pKingdom, pending);
+                });
+        }
+
+        private static void ProcessSlice(Kingdom pKingdom,
+            PendingSlice pPending)
+        {
+            int end = Math.Min(pPending.SubjectIds.Count,
+                pPending.Cursor + MaximumSubjectsPerSlice);
+            for (; pPending.Cursor < end; pPending.Cursor++)
+            {
+                Actor subject = FindActor(pPending.SubjectIds[
+                    pPending.Cursor]);
+                if (!TryRemarry(pKingdom, subject))
+                    pPending.Unresolved = true;
+            }
+            if (pPending.Cursor < pPending.SubjectIds.Count)
+            {
+                pKingdom.data.set(LineageKeys.NOBLE_REMARRIAGE_DIRTY,
+                    true);
+                EnqueueSlice(pKingdom);
+                return;
+            }
+            PendingSlices.Remove(pKingdom.id);
             pKingdom.data.set(LineageKeys.NOBLE_REMARRIAGE_DIRTY,
-                unresolved);
+                pPending.Unresolved);
         }
 
         private static List<NobleRemarriageSubjectCandidate> BuildSubjects(
@@ -144,6 +205,8 @@ namespace AncientWarfare3.core.lineage
                     RestoreCity(spouse, previousCity, pKingdom);
                     return false;
                 }
+                DynasticMaleLineContinuityService.RequestContinuation(
+                    pSubject.isSexMale() ? pSubject : spouse);
                 LineageService.ArchiveActor(pSubject, pAlive: true);
                 LineageService.ArchiveActor(spouse, pAlive: true);
                 ChronicleEvents.OnNobleRemarried(pKingdom, pSubject,

@@ -124,6 +124,8 @@ namespace AncientWarfare3.core.lineage
             "aw_mandate_rebel_bandit_wall_cursor";
         public const string MANDATE_REBEL_BANDIT_SPAWN_LAST_YEAR =
             "aw_mandate_rebel_bandit_spawn_last_year";
+        public const string MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR =
+            "aw_bandit_suppression_until_year";
         public const string MANDATE_REBEL_BANDIT_ENTRY_CITY_IDS =
             "aw_mandate_rebel_bandit_entry_city_ids";
         public const string MANDATE_REBEL_BANDIT_STRONGHOLD_STATE =
@@ -391,6 +393,10 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_DECISION_LAST_SUCCESS_PREFIX =
             "aw_mandate_decision_last_success_";
         public const string MANDATE_SUCCESSION_CRISIS_YEAR = "aw_mandate_succession_crisis_year";
+        public const string MANDATE_CAPITAL_RING_TRANSFERRED =
+            "aw_mandate_capital_ring_transferred";
+        public const string MANDATE_WAR_START_CAPITAL_ID =
+            "aw_mandate_war_start_capital_id";
         public const string CITY_TECH_LAST_YEAR = "aw_city_tech_last_year";
         public const string CITY_ECONOMY_LAST_YEAR = "aw_city_economy_last_year";
         public const string CITY_ECONOMY_MAJOR_TAX_YEAR = "aw_city_economy_major_tax_year";
@@ -418,6 +424,8 @@ namespace AncientWarfare3.core.lineage
 
         public const string TRAIT_GUIZU = "guizu";
         public const string TRAIT_ZHUHOU = "zhuhou";
+        public const string TRAIT_SHIDAFU = "shidafu";
+        public const string SOCIAL_IDENTITY = "aw_social_identity";
         public const string TRAIT_SLAVE = "slave";
         public const string TRAIT_VETERAN = "veteran";
         public const string TRAIT_GUARD = "aw_royal_guard";
@@ -632,6 +640,10 @@ namespace AncientWarfare3.core.lineage
             "aw_policy_ai_last_foreign_appease_year";
         public const string POLICY_AI_LAST_XIA_APPEASE_YEAR =
             "aw_policy_ai_last_xia_appease_year";
+        public const string POLICY_AI_LAST_DEJURE_MERGE_YEAR =
+            "aw_policy_ai_last_dejure_merge_year";
+        public const string POLICY_AI_LAST_DEJURE_MERGE_MONTH =
+            "aw_policy_ai_last_dejure_merge_month";
         public const string COURT_PROFILE_ID = "aw_court_profile_id";
         public const string COURT_MODE = "aw_court_mode";
         public const string COURT_TIER = "aw_court_tier";
@@ -721,6 +733,7 @@ namespace AncientWarfare3.core.lineage
         public const string CITY_LOCAL_COURT_TEMPLATE_MANUAL =
             "aw_city_local_court_template_manual";
         public const string COURT_CITY_ID = "aw_court_city_id";
+        public const string COURT_COUNTY_ID = "aw_court_county_id";
         public const string OFFICER_RANK = "aw_officer_rank";
         public const string OFFICER_TRACK = "aw_officer_track";
         public const string OFFICER_MERIT = "aw_officer_merit";
@@ -944,6 +957,8 @@ namespace AncientWarfare3.core.lineage
             "aw_zhulu_declared_defender_color";
         public const string ZHULU_CAPITAL_BREAKTHROUGH_KEYS =
             "aw_zhulu_capital_breakthrough_keys";
+        public const string ZHULU_WAR_START_CAPITAL_ID =
+            "aw_zhulu_war_start_capital_id";
     }
 
     internal static class SuccessionMode

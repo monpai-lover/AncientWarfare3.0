@@ -110,6 +110,15 @@ namespace AncientWarfare3.patch
                 HeirService.RestoreAccessionModeSnapshotRetry(__instance);
                 return;
             }
+            if (!PeasantRebelBanditStrongholdService.
+                    IsInstallingDirectBanditKing &&
+                (PeasantRebelRouteService.IsBandit(__instance) ||
+                 PeasantRebelBanditStrongholdService.HasActiveStronghold(
+                     __instance)))
+            {
+                PeasantRebelBanditStrongholdService.EnsureBanditKingIdentity(
+                    __instance, "native_set_king");
+            }
             if (!UsesManagedSuccession(__instance)) return;
             if (!setKingSucceeded) return;
             if (AccessionIdentityService.IsConfirmedCityless(__instance))

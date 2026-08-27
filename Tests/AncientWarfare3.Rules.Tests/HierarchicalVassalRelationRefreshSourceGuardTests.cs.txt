@@ -38,6 +38,17 @@ internal static class HierarchicalVassalRelationRefreshSourceGuardTests
         Contains(mandate,
             "ReadYearlyDeltaBreakdown(pKingdom, pReport).Total",
             "annual settlement and the tooltip must share one total");
+        Contains(mandate,
+            "internal static void InvalidatePowerCandidateCache()",
+            "Mandate candidate power needs an explicit relation invalidation entry");
+        string destroyedMandate = Slice(mandate,
+            "public static void OnKingdomDestroyed(Kingdom pKingdom)", 700);
+        Contains(destroyedMandate,
+            "InvalidatePowerCandidateCache();",
+            "kingdom destruction remains a Mandate invalidation boundary");
+        Contains(dirtyVassalMap,
+            "MandateService.InvalidatePowerCandidateCache();",
+            "every successful vassal-tree mutation invalidates Mandate power");
         Contains(window, "BuildAnnualMandateTooltip",
             "the Mandate value row must expose the annual breakdown");
     }

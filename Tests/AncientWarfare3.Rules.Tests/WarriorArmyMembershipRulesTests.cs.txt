@@ -1,0 +1,50 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WarriorArmyMembershipRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, WarriorArmyMembershipRules.ShouldReconcileActor(
+            actorValid: true, alive: true, warrior: true, hasArmy: false,
+            hasKingdom: true), "an orphan warrior with a kingdom is repaired");
+        Equal(false, WarriorArmyMembershipRules.ShouldReconcileActor(
+            actorValid: true, alive: true, warrior: false, hasArmy: false,
+            hasKingdom: true), "non-warriors are not enrolled");
+        Equal(false, WarriorArmyMembershipRules.ShouldReconcileActor(
+            actorValid: true, alive: true, warrior: true, hasArmy: true,
+            hasKingdom: true), "existing army membership is left unchanged");
+        Equal(false, WarriorArmyMembershipRules.ShouldReconcileActor(
+            actorValid: true, alive: false, warrior: true, hasArmy: false,
+            hasKingdom: true), "dead actors are not enrolled");
+        Equal(true, WarriorArmyMembershipRules.IsEligibleTargetArmy(
+            armyValid: true, alive: true, ordinaryArmy: true,
+            actorKingdomId: 7L, armyKingdomId: 7L),
+            "same-kingdom ordinary army is an eligible target");
+        Equal(false, WarriorArmyMembershipRules.IsEligibleTargetArmy(
+            armyValid: true, alive: true, ordinaryArmy: false,
+            actorKingdomId: 7L, armyKingdomId: 7L),
+            "special armies are never used as fallback targets");
+        Equal(false, WarriorArmyMembershipRules.IsEligibleTargetArmy(
+            armyValid: true, alive: true, ordinaryArmy: true,
+            actorKingdomId: 7L, armyKingdomId: 9L),
+            "foreign armies are never used as fallback targets");
+        Equal(false, WarriorArmyMembershipRules.IsEligibleTargetArmy(
+            armyValid: false, alive: true, ordinaryArmy: true,
+            actorKingdomId: 7L, armyKingdomId: 7L),
+            "disposed armies are never used as fallback targets");
+        Equal(true, WarriorArmyMembershipRules.ShouldQueueAfterArmyChange(
+            actorValid: true, alive: true, warrior: true, hasArmy: false),
+            "a warrior detached from an army is queued for repair");
+        Equal(32, WarriorArmyMembershipRules.ResolveActorBudget(1000),
+            "repair work has a bounded actor budget");
+        Equal(0, WarriorArmyMembershipRules.ResolveActorBudget(0),
+            "an empty repair queue does no work");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(
+                expected, actual))
+            throw new System.InvalidOperationException(message);
+    }
+}

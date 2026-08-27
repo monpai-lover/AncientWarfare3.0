@@ -123,6 +123,31 @@ namespace AncientWarfare3.patch
             HistoricalSchoolRuntime.EnqueueWorldYear();
         }
 
+        // The cooperative simulation advances MapStats directly and does not
+        // invoke MapBox.updateObjectAge. Keep school annual work attached to
+        // the actual world-time source so both simulation paths enqueue years.
+        [HarmonyPostfix]
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyPatch(typeof(MapStats), "updateWorldTime")]
+        private static void WorldTimeUpdated_Postfix()
+        {
+            HistoricalSchoolRuntime.EnqueueWorldYear();
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MapBox), "Update")]
+        private static void NativeMapBoxUpdate_Postfix()
+        {
+            if (!Config.game_loaded || SmoothLoader.isLoading()) return;
+            if (AWCooperativeSimulationRunner.Instance.RequiresControl) return;
+            try { HistoricalSchoolRuntime.ProcessVanillaFrame(); }
+            catch (Exception error)
+            {
+                HistoricalSchoolRuntime.LogAnnualStageFailure(
+                    "native_frame", error);
+            }
+        }
+
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(Actor), "die",
             new[] { typeof(bool), typeof(AttackType), typeof(bool), typeof(bool) })]
@@ -324,11 +349,28 @@ namespace AncientWarfare3.patch
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(Actor), "setKingdom", new[] { typeof(Kingdom) })]
-        private static bool ActorSetKingdom_Prefix(Actor __instance, Kingdom pKingdomToSet)
+        private static bool ActorSetKingdom_Prefix(Actor __instance,
+            Kingdom pKingdomToSet, out Kingdom __state)
         {
+            __state = __instance?.kingdom;
             if (AW3MultiplayerReplicaScope.IsApplying ||
                 SmoothLoader.isLoading() || !Config.game_loaded) return true;
             return HistoricalAffiliationService.CanJoinKingdom(__instance, pKingdomToSet);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Actor), "setKingdom", new[] { typeof(Kingdom) })]
+        private static void ActorSetKingdom_Postfix(Actor __instance,
+            Kingdom pKingdomToSet, Kingdom __state)
+        {
+            if (SmoothLoader.isLoading() || !Config.game_loaded) return;
+            if (!OfficerCandidateCatalogRules.ShouldInvalidate(
+                    !ReferenceEquals(__state, pKingdomToSet))) return;
+            OfficerCandidateCatalog.Invalidate(__state);
+            OfficerCandidateCatalog.Invalidate(pKingdomToSet);
+            CourtVacancyReconciliationService.ActorLeftKingdom(__state);
+            CourtVacancyReconciliationService.CandidatePoolChanged(
+                pKingdomToSet);
         }
 
         [HarmonyPostfix]

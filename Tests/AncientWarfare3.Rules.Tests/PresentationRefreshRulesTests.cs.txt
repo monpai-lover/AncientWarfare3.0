@@ -1,0 +1,68 @@
+using AncientWarfare3.core.performance;
+
+internal static class PresentationRefreshRulesTests
+{
+    internal static void Run()
+    {
+        Equal(true, PresentationRefreshRules.ShouldRebuild(
+            hasPrepared: false,
+            snapshotChanged: false,
+            renderModeChanged: false,
+            visibilityChanged: false,
+            now: 0d,
+            nextCameraRefreshAt: 10d),
+            "the first presentation frame must build");
+
+        Equal(false, PresentationRefreshRules.ShouldRebuild(
+            hasPrepared: true,
+            snapshotChanged: false,
+            renderModeChanged: false,
+            visibilityChanged: true,
+            now: 1d,
+            nextCameraRefreshAt: 2d),
+            "zoom changes inside the debounce window must reuse the prepared frame");
+
+        Equal(true, PresentationRefreshRules.ShouldRebuild(
+            hasPrepared: true,
+            snapshotChanged: false,
+            renderModeChanged: false,
+            visibilityChanged: true,
+            now: 2d,
+            nextCameraRefreshAt: 2d),
+            "a settled camera change must rebuild");
+
+        Equal(true, PresentationRefreshRules.ShouldRebuild(
+            hasPrepared: true,
+            snapshotChanged: true,
+            renderModeChanged: false,
+            visibilityChanged: false,
+            now: 1d,
+            nextCameraRefreshAt: 2d),
+            "a new simulation snapshot must not be delayed by camera throttling");
+
+        Equal(true, PresentationRefreshRules.ShouldRebuild(
+            hasPrepared: true,
+            snapshotChanged: false,
+            renderModeChanged: true,
+            visibilityChanged: false,
+            now: 1d,
+            nextCameraRefreshAt: 2d),
+            "a render mode change must rebuild immediately");
+
+        Equal(true, PresentationRefreshRules.ShouldReadVisibleZones(
+            hasCachedZones: false, now: 0d, nextReadAt: 10d),
+            "visible zones must be read when there is no cache");
+        Equal(false, PresentationRefreshRules.ShouldReadVisibleZones(
+            hasCachedZones: true, now: 1d, nextReadAt: 2d),
+            "visible zones must not be read repeatedly during camera motion");
+        Equal(true, PresentationRefreshRules.ShouldReadVisibleZones(
+            hasCachedZones: true, now: 2d, nextReadAt: 2d),
+            "visible zones must be refreshed after the camera settles");
+    }
+
+    private static void Equal(bool expected, bool actual, string message)
+    {
+        if (expected != actual)
+            throw new System.InvalidOperationException(message);
+    }
+}

@@ -142,6 +142,16 @@ namespace AncientWarfare3.core.policy
         {
             if (pDef == null) return;
             if (!string.IsNullOrEmpty(KingdomPolicyService.GetCurrent(pKingdom, pKind))) return;
+            if (pKind == PolicyNodeKind.Decision &&
+                pDef.Id == "aw_decision_merge_single_city_de_jure")
+            {
+                if (KingdomPolicyService.TryExecuteBestDeJureMergeDecision(
+                        pKingdom, out _))
+                    pKingdom.data.set(
+                        LineageKeys.POLICY_AI_LAST_DECISION_YEAR,
+                        Date.getCurrentYear());
+                return;
+            }
             if (!KingdomPolicyService.StartResearch(pKingdom, pDef.Id)) return;
 
             if (pKind != PolicyNodeKind.Decision) return;
@@ -233,6 +243,14 @@ namespace AncientWarfare3.core.policy
                            XiaizationService.SpecialRequirementMet(pKingdom, pDef.Id);
                 case "aw_decision_clean_corruption":
                     return CorruptionService.CanStartCleanup(pKingdom);
+                case "aw_decision_merge_single_city_de_jure":
+                    return KingdomPolicyService.GetPoliticalPoints(pKingdom) >=
+                               pDef.Cost &&
+                           DeJureRegionMergeRules.CooldownAllows(
+                               ReadDeJureMergeYear(pKingdom),
+                               Date.getCurrentYear()) &&
+                           DeJureRegionMergeService.GetMergeCandidates(pKingdom)
+                               .Count > 0;
                 case "aw_decision_fabricate_core":
                     return WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom)?.data != null;
                 case "aw_decision_year_name":
@@ -451,6 +469,14 @@ namespace AncientWarfare3.core.policy
         {
             pKingdom.data.get(pKey, out int lastYear, pFallback);
             return Date.getCurrentYear() - lastYear;
+        }
+
+        private static int ReadDeJureMergeYear(Kingdom pKingdom)
+        {
+            pKingdom.data.get(
+                LineageKeys.POLICY_AI_LAST_DEJURE_MERGE_YEAR,
+                out int lastYear, -1);
+            return lastYear;
         }
 
         private static int YearsSinceForeignAppeasement(Kingdom pKingdom)

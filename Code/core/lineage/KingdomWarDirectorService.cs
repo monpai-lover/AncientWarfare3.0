@@ -698,10 +698,6 @@ namespace AncientWarfare3.core.lineage
             if (!IsActiveWar(war) || !IsLiveKingdom(kingdom) ||
                 !SafeHasKingdom(war, kingdom))
                 return WarFirstOrderResult.Discard;
-            if (ArmyRtsControllerService.
-                    HasActiveMissionForKingdom(kingdom))
-                return WarFirstOrderResult.Assigned;
-
             ArmyStrategicIdCursor cursor = ArmyStrategicIndexService.
                 CreateSnapshotCursor(kingdom);
             ArmyStrategicSnapshotBatch batch =
@@ -709,8 +705,17 @@ namespace AncientWarfare3.core.lineage
             ArmyStrategicFacts selected = null;
             for (int i = 0; i < batch.Armies.Count; i++)
             {
-                if (!IsEligibleFieldArmy(batch.Armies[i])) continue;
-                selected = batch.Armies[i];
+                ArmyStrategicFacts candidate = batch.Armies[i];
+                if (!IsEligibleFieldArmy(candidate)) continue;
+                Army candidateArmy = ArmyStrategicIndexService.
+                    ResolveIndexedArmy(candidate.ArmyId, kingdom.id);
+                bool hasMission = candidateArmy?.data != null &&
+                    ArmyRtsControllerService.TryGetMission(
+                        candidateArmy, out ArmyRtsMission existingMission) &&
+                    existingMission?.WarId >= 0L;
+                if (!KingdomWarDirectorRules.ShouldSelectFirstOrderArmy(
+                        eligible: true, hasMission: hasMission)) continue;
+                selected = candidate;
                 break;
             }
             if (selected == null) return WarFirstOrderResult.RetryLater;
@@ -1704,8 +1709,6 @@ namespace AncientWarfare3.core.lineage
         private static void EnqueueFirstOrderForKingdom(Kingdom pKingdom)
         {
             if (!IsLiveKingdom(pKingdom) ||
-                ArmyRtsControllerService.
-                    HasActiveMissionForKingdom(pKingdom) ||
                 !WarIdsByKingdom.TryGetValue(pKingdom.id,
                     out SortedSet<long> warIds)) return;
             var participant = new[] { pKingdom.id };

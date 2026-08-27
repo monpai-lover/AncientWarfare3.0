@@ -1,0 +1,38 @@
+using System;
+using System.IO;
+
+internal static class DeJureDirtyEventSourceGuardTests
+{
+    internal static void Run()
+    {
+        string source = Read("Code/core/court/DeJureRegionStore.cs");
+        True(source.Contains("DeJureRegionMaintenanceService.MarkRegionDirty",
+            StringComparison.Ordinal),
+            "region mutations mark affected regions dirty");
+        True(source.Contains("DeJureRegionMaintenanceService.MarkKingdomDirty",
+            StringComparison.Ordinal),
+            "city and capital mutations mark affected kingdoms dirty");
+        True(source.Contains("DeJureDirtyReason.Retirement",
+            StringComparison.Ordinal),
+            "retirement is represented as a dirty reason");
+        True(source.Contains("DeJureDirtyReason.Merge",
+            StringComparison.Ordinal),
+            "merge is represented as a dirty reason");
+        True(source.Contains("DeJureDirtyReason.Name",
+            StringComparison.Ordinal),
+            "seat-name changes are represented as a dirty reason");
+        string assignment = Read(
+            "Code/core/court/DeJureNewCityAssignmentService.cs");
+        True(assignment.Contains("OnCityFounded", StringComparison.Ordinal) &&
+             assignment.Contains("RepairUnassignedCities", StringComparison.Ordinal),
+            "new-city assignment retains event and explicit load-repair paths");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(), pPath));
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+}

@@ -100,6 +100,12 @@ namespace AncientWarfare3.core.lineage
             return pMode == ArmyRtsMode.On;
         }
 
+        public static bool ShouldObserveFormation(bool useFormationMovement,
+            bool anchorValid)
+        {
+            return useFormationMovement && anchorValid;
+        }
+
         public static bool ShouldUseFormationFollowerJob(
             ArmyRtsMode pMode, bool actorIsCaptain)
         {

@@ -18,7 +18,14 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (HistoricalSchoolActorSpawnCapture.IsTargetActor(__instance)) return;
-            HistoricalFigureService.TrySpawnOn(__instance, "newCreature");
+            try
+            {
+                HistoricalFigureService.TrySpawnOn(__instance, "newCreature");
+            }
+            catch (System.Exception e)
+            {
+                ModClass.LogError("Actor.newCreature historical figure stage failed: " + e);
+            }
         }
 
         [HarmonyPostfix]

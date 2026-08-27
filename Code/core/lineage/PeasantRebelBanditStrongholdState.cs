@@ -67,6 +67,7 @@ namespace AncientWarfare3.core.lineage
         public BanditIslandMigrationState Migration =
             new BanditIslandMigrationState();
         public long StrongholdCityId = -1L;
+        public long LeaderActorId = -1L;
         public long MotherCityId = -1L;
         public long OriginKingdomId = -1L;
         public List<string> FixedZoneKeys = new List<string>();

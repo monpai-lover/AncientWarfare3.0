@@ -18,7 +18,7 @@ internal static class RuntimePerformanceDiagnosticRulesTests
             "combined diagnostic and benchmark mode emits one text log");
         PerformanceIntervalMetricsUseRealElapsedTime();
         PerformanceIntervalLogUsesO1NativeCounts();
-        ActorParallelMetricsSeparateWallFromWorkerTime();
+        DuplicateActorBatchInstrumentationIsAbsent();
         PerformanceIntervalLifecycleIsWorldAndModeBound();
         BenchmarkFallbackCannotBeReintercepted();
         GeneratedFallbackInvalidatesPendingCompletion();
@@ -27,6 +27,26 @@ internal static class RuntimePerformanceDiagnosticRulesTests
         BenchmarkTimeoutCoversExceptionalMapUpdate();
         BenchmarkAutoLoadWaitsForTheRequestedWorldAndSelectsX20();
         ContinuousWorstFrameSamplingKeepsUnsampledSpikes();
+    }
+
+    private static void DuplicateActorBatchInstrumentationIsAbsent()
+    {
+        string root = Directory.GetCurrentDirectory();
+        Equal(false, File.Exists(Path.Combine(root, "Code", "patch",
+                "AW_ActorBatchBenchmarkPatch.cs")),
+            "AW3 does not wrap vanilla Actor batch jobs with duplicate timers");
+        Equal(false, File.Exists(Path.Combine(root, "Code", "core", "policy",
+                "ActorBatchPerformanceRules.cs")),
+            "deleted Actor batch diagnostics leave no private stage table");
+
+        string runtime = Read("Code", "core", "policy",
+            "RuntimePerformanceDiagnostic.cs");
+        Equal(false, runtime.Contains("ActorBatchPerformance",
+                StringComparison.Ordinal) ||
+            runtime.Contains("actor_batch_", StringComparison.Ordinal) ||
+            runtime.Contains("actor_parallel_stage_wall",
+                StringComparison.Ordinal),
+            "runtime diagnostics rely on vanilla Bench for Actor batch stages");
     }
 
     private static void ContinuousWorstFrameSamplingKeepsUnsampledSpikes()
@@ -364,49 +384,6 @@ internal static class RuntimePerformanceDiagnosticRulesTests
             index += value.Length;
         }
         return count;
-    }
-
-    private static void ActorParallelMetricsSeparateWallFromWorkerTime()
-    {
-        string runtime = Read("Code", "core", "policy",
-            "RuntimePerformanceDiagnostic.cs");
-        string patch = Read("Code", "patch",
-            "AW_ActorBatchBenchmarkPatch.cs");
-
-        Contains(patch, "typeof(JobManagerBase<BatchActors, Actor>)",
-            "actor diagnostics patch the native parallel-stage boundary");
-        Contains(patch, "if (!(__instance is JobManagerActors))",
-            "shared generic code cannot contaminate actor-stage timing");
-        Contains(patch,
-            "RuntimePerformanceDiagnostic.BeginActorParallelWall()",
-            "parallel-stage wall timing begins before the native stage");
-        Contains(patch,
-            "RuntimePerformanceDiagnostic.EndActorParallelWall(__state);",
-            "parallel-stage wall timing ends after the native stage");
-
-        Contains(runtime,
-            "Interlocked.Add(ref ActorBatchTicks[index], elapsed);",
-            "parallel worker elapsed sums are atomic");
-        Contains(runtime,
-            "Interlocked.Increment(ref ActorBatchCounts[index]);",
-            "parallel worker call counts are atomic");
-        Contains(runtime,
-            "UpdateMaximum(ref ActorBatchMaxTicks[index], elapsed);",
-            "parallel diagnostics retain the slowest individual batch");
-        Equal(false, runtime.Contains("ActorBatchTicks[index] += elapsed",
-                StringComparison.Ordinal) ||
-            runtime.Contains("ActorBatchCounts[index]++",
-                StringComparison.Ordinal),
-            "parallel worker metrics have no racy read-modify-write path");
-
-        Contains(runtime, " actor_parallel_stage_wall_ms=",
-            "PERF log exposes native parallel-stage wall time");
-        Contains(runtime, " actor_parallel_checks_worker_sum_ms=",
-            "PERF log identifies the parallel-check worker elapsed sum");
-        Contains(runtime, " actor_parallel_checks_worker_max_ms=",
-            "PERF log identifies the slowest parallel-check batch");
-        Contains(runtime, " actor_parallel_checks_worker_calls=",
-            "PERF log exposes the measured parallel-check batch count");
     }
 
     private static void BenchmarkFallbackCannotBeReintercepted()

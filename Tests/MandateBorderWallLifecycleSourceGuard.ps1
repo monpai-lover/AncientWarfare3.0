@@ -57,7 +57,7 @@ foreach ($token in @('MandateBorderWallStateStore.Read(',
         'MandateBorderWallRefreshRules.ShouldRestore(',
         'AssetManager.top_tiles.get(',
         'asset.type == "type_watch_tower"',
-        'building.tiles', 'pCarveRoadPassages: false',
+        'building.tiles', 'pCarveRoadPassages: true',
         'DeferredRuntimeWorkService.EnqueueCoalesced(',
         'DeferredWorkClass.CriticalRuntime',
         'mandate_border_wall_refresh:')) {

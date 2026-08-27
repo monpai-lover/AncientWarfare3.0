@@ -642,6 +642,8 @@ namespace AncientWarfare3.core.lineage
             var result = new List<WarPeaceDefaultTermCandidate>();
             if (war?.data == null || payer?.data == null ||
                 beneficiary?.data == null) return result;
+            bool imperialBorderWar = KingdomTitleService.IsEmperor(beneficiary) &&
+                AreNeighbors(beneficiary, payer);
             AddWarGoalCandidate(result, war, payer, beneficiary);
 
             var candidateCityIds = new HashSet<long>();
@@ -710,6 +712,12 @@ namespace AncientWarfare3.core.lineage
                     FromKingdomId = payer.id,
                     ToKingdomId = beneficiary.id
                 }, false, 80, CanForceTributary(payer, beneficiary)));
+            if (imperialBorderWar)
+                result[result.Count - 1] = new WarPeaceDefaultTermCandidate(
+                    result[result.Count - 1].Term,
+                    result[result.Count - 1].IsWarGoal,
+                    result[result.Count - 1].Priority,
+                    false);
             result.Add(new WarPeaceDefaultTermCandidate(
                 new WarPeaceSettlementTermDraft
                 {
@@ -731,6 +739,22 @@ namespace AncientWarfare3.core.lineage
                     result.Count -
                     WarPeaceDefaultOfferRules.MaximumCandidates);
             return result;
+        }
+
+        private static bool AreNeighbors(Kingdom pA, Kingdom pB)
+        {
+            if (pA?.data == null || pB?.data == null) return false;
+            try
+            {
+                foreach (City city in pA.getCities())
+                {
+                    if (city?.data == null || city.isRekt()) continue;
+                    foreach (Kingdom neighbor in city.neighbours_kingdoms)
+                        if (neighbor == pB) return true;
+                }
+            }
+            catch { }
+            return false;
         }
 
         private static void AddFrozenOccupationCandidates(

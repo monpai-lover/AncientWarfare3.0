@@ -38,6 +38,12 @@ internal static class CustomCourtTemplateRulesTests
         Equal(CustomCourtTemplateValidationError.InvalidEffect,
             malformedError,
             "null effect entries report the invalid-effect category");
+        False(CustomCourtTemplateJsonCodec.TryImport(
+            "null", out _, out CustomCourtTemplateValidationError nullError),
+            "null template JSON is rejected without throwing");
+        Equal(CustomCourtTemplateValidationError.InvalidTemplateId,
+            nullError,
+            "null template JSON reports invalid-template category");
 
         string modRoot = Path.Combine(Path.GetTempPath(), "aw3-courtjson-" +
             Guid.NewGuid().ToString("N"));

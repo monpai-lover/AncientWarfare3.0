@@ -5,13 +5,22 @@ using AncientWarfare3.core.performance;
 
 internal static class PathfindingPerformanceTests
 {
+    public static void RunContinuationTests()
+    {
+        LongRangeStreamingCachesSolvedRouteAcrossSegments();
+        LongRangeContinuationConsumesCachedWaypointRoute();
+        RtsBoundedWaterSkipsActorContinuation();
+        ContinuationStateCarriesEstimatedVitals();
+        RequestValidationMatchesCultiwayBoundary();
+        GenerationResultsCarryWorldAndSearchDiagnostics();
+    }
+
     public static void Run()
     {
         SchedulerStageDiagnosticsAccumulateStableSnapshots();
-        ActorTimerWorkPreservesBatchContainerOwnership();
-        ActorPostEnemyCacheKeepsPreparationAndCommitBoundaries();
-        SpatialMembershipKeepsRepairAndVanillaFallbacks();
-        PathRuntimeDiagnosticsAreReadOnly();
+        MasterSchedulerAndActorPostRemainConverged();
+        PathGeneratorReusesWorkerPathBuffers();
+        CultiwayRoutingStagesMatchReference();
         WorkClassesPreserveOperationalCapacityWithFairness();
         RuntimeSubmittersClassifyPathWorkExplicitly();
         RequestKeysMatchWithoutAllocating();
@@ -19,6 +28,8 @@ internal static class PathfindingPerformanceTests
         FinderUsesSessionTokenQueues();
         FinderUsesLosslessWorkerWakeups();
         LongRangeStreamingCachesSolvedRouteAcrossSegments();
+        LongRangeContinuationConsumesCachedWaypointRoute();
+        RtsBoundedWaterSkipsActorContinuation();
         FinderQueueFairnessBoundsOperationalStarvation();
         RtsRoutesUseTheSharedFinderOnly();
         PathDiagnosticsExposeSessionSchedulerState();
@@ -39,14 +50,29 @@ internal static class PathfindingPerformanceTests
         RecoveryUsesCultiwayReasonResetAndBackoff();
         FoodAccessSurvivesDecorativePathFailure();
         PathStreamUsesCultiwayLifecycle();
+        PathStreamTracksPendingStepsWithoutQueueCount();
         WarmedSearchWorkspaceAvoidsPerRequestAllocation();
         CancelledSearchDoesNotContaminateTheNextRequest();
         BranchingSearchCannotFillTheSparseLabelTable();
         BoundedMilitaryWaterCrossingIsEnforced();
         RegionLimitedPathReturnsABoundedSegment();
+        CultiwayRoutingStagesAreConnected();
+        CrossIslandTransportIsSelectedBeforeLandSearch();
+        StraightSegmentReturnsTheConfiguredStreamingSlice();
+        MediumRangeSearchTargetsDestinationBeforeRegionLookahead();
+        LongRangeRegionCorridorRoutesAroundBlockedDirectLine();
+        LongRangeSearchUsesGeometricLookaheadWithoutRegionTopology();
+        ChunkTopologyUpdatesInvalidateTraversalAndTransportCaches();
+        TileStateChangesInvalidateTraversalCache();
+        CrossIslandTransportSkipsDisconnectedLandSearch();
         InitialTraversalPublicationCannotStarveOnLiveDirtyChunks();
         SparseOverlayGenerationAvoidsFullChunkCopy();
         LargeSchedulerPathProgressRules();
+        CultiwayIdentityAndCleanupContracts();
+        RequestValidationMatchesCultiwayBoundary();
+        GenerationResultsCarryWorldAndSearchDiagnostics();
+        DirtyTraversalFlushRemainsBudgetedAtRenderBoundary();
+        SchedulerOwnershipHasOnePathPulsePerCycle();
     }
 
     private static void SchedulerStageDiagnosticsAccumulateStableSnapshots()
@@ -80,164 +106,165 @@ internal static class PathfindingPerformanceTests
             "taking a scheduler snapshot consumes the current frame buckets");
     }
 
-    private static void ActorTimerWorkPreservesBatchContainerOwnership()
+
+    private static void PathGeneratorReusesWorkerPathBuffers()
     {
-        string runner = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "core", "performance",
-            "AWCooperativeActorParallelJobRunner.cs"));
-        Assert(!runner.Contains("start += TimerRangeSize",
-                   StringComparison.Ordinal) &&
-               runner.Contains("new TimerRange(actors, 0, count)",
+        string generator = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWStreamingPathGenerator.cs"));
+        Assert(generator.Contains("[ThreadStatic]", StringComparison.Ordinal) &&
+               generator.Contains("ReusablePathSteps", StringComparison.Ordinal) &&
+               !generator.Contains("_threadStraightPath", StringComparison.Ordinal),
+            "path generation keeps reuse internal to the worker workspace");
+        Assert(generator.Contains(
+                "out IReadOnlyList<AWPathStep> pSteps",
+                StringComparison.Ordinal) &&
+               generator.Contains(
+                   "var buffer = new AWPathStep[pMaximumSteps];",
                    StringComparison.Ordinal),
-            "actor timer workers keep each batch on one worker so its mutable containers are not written concurrently");
+            "straight path generation publishes an owned snapshot instead of a reused buffer");
+        Assert(generator.Contains("workspace.BuildPath(result.NodeIndex)",
+                   StringComparison.Ordinal) &&
+               generator.Contains("CopyPrefix(fullRoute, outputCount)",
+                   StringComparison.Ordinal),
+             "A* path generation publishes immutable route snapshots");
     }
 
-    private static void ActorPostEnemyCacheKeepsPreparationAndCommitBoundaries()
+    private static void CultiwayRoutingStagesMatchReference()
     {
-        string actorPost = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "core", "performance",
-            "AWCooperativeActorPostRunner.cs"));
-        int beginPreparation = actorPost.IndexOf(
-            "BeginEnemySearchPreparation();",
-            StringComparison.Ordinal);
-        int workerAdmission = actorPost.IndexOf(
-            "searchTicket = AWSimulationWorkerPool.Instance.BeginIndexed(",
-            beginPreparation < 0 ? 0 : beginPreparation,
-            StringComparison.Ordinal);
-        Assert(beginPreparation >= 0 && workerAdmission > beginPreparation,
-            "enemy cache preparation precedes enemy-search worker admission");
-        Assert(actorPost.Contains(
-                "AWEnemyPresenceCache.BeginPreparation();",
-                StringComparison.Ordinal),
-            "enemy-search preparation activates the scoped enemy cache");
-        Assert(actorPost.Contains(
-                "public void Abort()", StringComparison.Ordinal) &&
-               actorPost.Contains(
-                   "AWEnemyPresenceCache.EndPreparation();",
+        string config = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathfindingConfig.cs"));
+        Assert(!config.Contains("FastPathHeuristicWeight", StringComparison.Ordinal) &&
+               config.Contains("LongRangeHeuristicWeight", StringComparison.Ordinal),
+            "ordinary actor routing keeps only Cultiway's accurate heuristic weights");
+
+        string generator = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWStreamingPathGenerator.cs"));
+        Assert(!generator.Contains("fastHeuristicWeight", StringComparison.Ordinal) &&
+               generator.Contains("float heuristicWeight = longRange", StringComparison.Ordinal),
+            "ordinary actor routing uses short-range 1f and long-range Cultiway weight");
+        Assert(generator.Contains("!pRequest.Options.BoundedMilitaryWater",
                    StringComparison.Ordinal),
-            "actor-post abort releases preparation cache state");
-        Assert(actorPost.Contains(
-                "stage = PostStage.CommitEnemySearch;",
-                StringComparison.Ordinal) &&
-               actorPost.Contains(
-                   "workItems[i].Commit();", StringComparison.Ordinal),
-            "enemy search mutates actors only through ordered commit work");
+            "ordinary actor routing excludes bounded military water paths");
 
-        string cachePatch = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "patch",
-            "AW_EnemyFinderCachePatch.cs"));
-        Assert(cachePatch.Contains(
-                "AWEnemyPresenceCache", StringComparison.Ordinal) &&
-               cachePatch.Contains(
-                   ".ClearNegativeKeys(", StringComparison.Ordinal),
-            "cleared enemy containers release kingdom negative cache keys");
-
-        string diagnostics = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "core", "policy",
-            "RuntimePerformanceDiagnostic.cs"));
-        Assert(diagnostics.Contains(
-                "enemy_presence_cache=", StringComparison.Ordinal) &&
-               diagnostics.Contains(
-                   "AWEnemyPresenceCache.GetDiagnostics()",
-                   StringComparison.Ordinal),
-            "runtime diagnostics expose enemy-presence cache effectiveness");
-    }
-
-    private static void SpatialMembershipKeepsRepairAndVanillaFallbacks()
-    {
-        string chunkMembership = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "core", "performance",
-            "AWIncrementalChunkActorMembership.cs"));
-        Assert(chunkMembership.Contains(
-                "totalUnits = container.units_all.Count;",
-                StringComparison.Ordinal),
-            "chunk unit totals follow the canonical units_all count");
-        Assert(chunkMembership.Contains(
-                "foreach (KeyValuePair<long, List<Actor>> pair in",
-                StringComparison.Ordinal) &&
-               chunkMembership.Contains(
-                   "RemoveActorReferences", StringComparison.Ordinal),
-            "chunk removal repairs stale references in every kingdom list");
-        Assert(chunkMembership.Contains(
-                "internal static void ChangeKingdom(",
-                StringComparison.Ordinal) &&
-               chunkMembership.Contains(
-                   "RepairUnexpectedKingdomProjection(",
-                   StringComparison.Ordinal),
-            "kingdom transfer detects and repairs stale projections");
-        Assert(chunkMembership.Contains(
-                "internal static void Validate(", StringComparison.Ordinal),
-            "incremental chunk membership retains an exact validator");
-
-        string incremental = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "core", "performance",
-            "AWIncrementalSimObjectZoneUnits.cs"));
-        Assert(incremental.Contains(
-                "internal static void Invalidate()",
-                StringComparison.Ordinal) &&
-               incremental.Contains(
-                   "AWIncrementalChunkActorMembership",
-                   StringComparison.Ordinal) &&
-               incremental.Contains(
-                   ".Validate(", StringComparison.Ordinal),
-            "incremental zone membership keeps invalidation and exact validation");
-
-        string patch = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "patch",
-            "AW_SimObjectsZonesPatch.cs"));
-        Assert(patch.Contains(
-                "FallBackToVanilla(", StringComparison.Ordinal) &&
-               patch.Contains(
-                   "AWIncrementalSimObjectZoneUnits.Invalidate();",
-                   StringComparison.Ordinal) &&
-               patch.Contains(
-                   "AWParallelSimObjectZoneUnits.Invalidate();",
-                   StringComparison.Ordinal),
-            "spatial optimization faults invalidate indexes before vanilla fallback");
-        Assert(patch.Contains(
-                "catch (System.Exception error)", StringComparison.Ordinal),
-            "spatial Harmony prefixes catch optimization-only invariant faults");
-    }
-
-    private static void PathRuntimeDiagnosticsAreReadOnly()
-    {
         string finder = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
             "AWPathFinder.cs"));
-        Assert(finder.Contains(
-                "internal AWPathSessionState ReadState(long pActorId)",
-                StringComparison.Ordinal),
-            "path finder exposes a non-consuming session snapshot");
-
-        string bridge = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
-            "AWPathMovementBridge.cs"));
-        int start = bridge.IndexOf(
-            "internal static string DescribeRuntimeState(Actor pActor)",
-            StringComparison.Ordinal);
-        int end = bridge.IndexOf(
-            "internal static bool ShouldPollNow(Actor pActor)", start,
-            StringComparison.Ordinal);
-        string body = start >= 0 && end > start
-            ? bridge.Substring(start, end - start)
-            : string.Empty;
-        Assert(body.Contains("finder.ReadState(actorId)",
-                StringComparison.Ordinal),
-            "runtime path diagnostics use the read-only session snapshot");
-        Assert(!body.Contains(".Poll(", StringComparison.Ordinal) &&
-               !body.Contains("OpenReadyCursor(", StringComparison.Ordinal),
-            "runtime path diagnostics never consume or open path results");
-
-        string deferred = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "core", "performance",
-            "AWDeferredPathRequestBatch.cs"));
-        Assert(deferred.Contains("PendingSlots.TryGetValue(actorId",
-                StringComparison.Ordinal) &&
-               deferred.Contains("Pending[slot] = item;",
-                   StringComparison.Ordinal) &&
-               deferred.Contains("internal static void Clear()",
+        Assert(finder.Contains("private const int SegmentStepBudget = 24;",
                    StringComparison.Ordinal),
-            "deferred path requests keep latest-per-actor order and teardown clearing");
+            "streamed path workers match Cultiway's 24-step segment budget");
+        Assert(finder.Contains("Priority = ThreadPriority.Normal",
+                   StringComparison.Ordinal),
+            "path workers use the master worker lifecycle priority");
+        int partialPath = generator.IndexOf(
+            "IReadOnlyList<AWPathStep> steps = outputCount == stepCount",
+            StringComparison.Ordinal);
+        int routeCopy = generator.IndexOf(
+            "AWPathStep[] fullRoute = workspace.BuildPath(result.NodeIndex);",
+            StringComparison.Ordinal);
+        Assert(routeCopy >= 0 && partialPath > routeCopy,
+             "full route is materialized before any bounded segment is published");
+    }
+
+    private static void MasterSchedulerAndActorPostRemainConverged()
+    {
+        string maintenance = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWCooperativeWorldMaintenanceRunner.cs"));
+        Assert(maintenance.Contains("ProcessActorMetaBatch()",
+                   StringComparison.Ordinal) &&
+               !maintenance.Contains("RebuildActorMetaPartitions()",
+                   StringComparison.Ordinal) &&
+               !maintenance.Contains("PrepareActorsIncremental",
+                   StringComparison.Ordinal),
+            "world maintenance follows the master full ordered lifecycle");
+
+        string actorPost = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWCooperativeActorPostRunner.cs"));
+        Assert(!actorPost.Contains("AWEnemyPresenceCache",
+                   StringComparison.Ordinal) &&
+               !actorPost.Contains("AWDeferredPathRequestBatch",
+                   StringComparison.Ordinal) &&
+               !actorPost.Contains("pathMovementTicket",
+                   StringComparison.Ordinal) &&
+               actorPost.Contains("case PostStage.MilitaryP0:",
+                   StringComparison.Ordinal) &&
+               actorPost.Contains("ArmyRtsTransportService.ProcessMilitaryP0",
+                   StringComparison.Ordinal),
+            "actor post removes experimental workers while retaining RTS P0");
+
+        string pathPatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_GlobalPathfindingPatch.cs"));
+        Assert(pathPatch.Contains("ArmyRtsTransportService.OwnsTransportBoat",
+                   StringComparison.Ordinal) &&
+               pathPatch.Contains("ShouldUseNativeMilitaryPath",
+                   StringComparison.Ordinal) &&
+               pathPatch.Contains("AWPathMovementBridge.Submit",
+                   StringComparison.Ordinal),
+            "RTS transport/native military bypasses remain outside ordinary paths");
+    }
+
+    private static void ContinuationStateCarriesEstimatedVitals()
+    {
+        var profile = new AWActorTraversalProfile(false, false, false,
+            false, false, true, true, false, false, false,
+            10f, 10f, 10f, 10f, 5f, 2f, 1f);
+        var first = AWTraversalRules.AdvanceState(profile,
+            new AWTraversalEstimate(2f, 4f, 0.5f, 0f,
+                AWHazardFlags.None));
+        Assert(Near(first.Stamina, 8f),
+            "continuation stamina must include regeneration");
+        Assert(Near(first.Health, 9.5f),
+            "continuation health must carry environmental damage");
+    }
+
+    private static void CultiwayIdentityAndCleanupContracts()
+    {
+        string pathRoot = Path.Combine(Directory.GetCurrentDirectory(),
+            "Code", "core", "pathfinding");
+        string finder = File.ReadAllText(Path.Combine(pathRoot,
+            "AWPathFinder.cs"));
+        string request = File.ReadAllText(Path.Combine(pathRoot,
+            "AWPathRequest.cs"));
+        string buildModels = File.ReadAllText(Path.Combine(pathRoot,
+            "AWTraversalBuildModels.cs"));
+        string bridge = File.ReadAllText(Path.Combine(pathRoot,
+            "AWPathMovementBridge.cs"));
+
+        Assert(File.Exists(Path.Combine(pathRoot, "AWPathIdentity.cs")),
+            "path identity contract exists");
+        Assert(finder.Contains("ConcurrentDictionary<AWPathAgentKey",
+                StringComparison.Ordinal),
+            "finder sessions are keyed by world-scoped agent identity");
+        Assert(finder.Contains("Drain(_starvedQueue)",
+                StringComparison.Ordinal) &&
+               finder.Contains("Drain(_initialQueue)",
+                   StringComparison.Ordinal) &&
+               finder.Contains("Drain(_continuationQueue)",
+                   StringComparison.Ordinal),
+            "finder clear drains all queued work");
+        Assert(finder.Contains("while (_queueSignal.Wait(0))",
+                StringComparison.Ordinal),
+            "finder clear drains semaphore permits");
+        Assert(request.Contains("AWPathAgentKey AgentKey",
+                StringComparison.Ordinal),
+            "path request carries world-scoped agent identity");
+        Assert(request.Contains("WithStart(", StringComparison.Ordinal) &&
+               request.Contains("ActorCurrentStamina",
+                   StringComparison.Ordinal) &&
+               request.Contains("ActorCurrentHealth",
+                   StringComparison.Ordinal),
+            "path continuations carry current actor state");
+        Assert(buildModels.Contains("GridIdentity",
+                StringComparison.Ordinal),
+            "traversal build results carry grid identity");
+        Assert(!bridge.Contains("finder.Cancel(pActor.data.id, pReason)",
+                StringComparison.Ordinal),
+            "stale owned cancellation never falls back to actor cancellation");
     }
 
     private static void RuntimeSubmittersClassifyPathWorkExplicitly()
@@ -497,6 +524,15 @@ internal static class PathfindingPerformanceTests
         Assert(finder.Contains("SemaphoreSlim") &&
                finder.Contains("_queueSignal.Release()"),
             "each scheduled path segment preserves a worker wakeup under burst load");
+
+        int workerLoop = finder.IndexOf("private void RunWorkerLoop()",
+            StringComparison.Ordinal);
+        int take = finder.IndexOf("if (!TryTakeWork(out AWScheduledPathWork work))",
+            workerLoop < 0 ? 0 : workerLoop, StringComparison.Ordinal);
+        int wait = finder.IndexOf("_queueSignal.Wait();",
+            workerLoop < 0 ? 0 : workerLoop, StringComparison.Ordinal);
+        Assert(workerLoop >= 0 && take >= 0 && wait >= 0 && wait < take,
+            "path workers consume one semaphore wake before dequeuing work");
     }
 
     private static void LongRangeStreamingCachesSolvedRouteAcrossSegments()
@@ -508,8 +544,77 @@ internal static class PathfindingPerformanceTests
             Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
             "AWStreamingPathGenerator.cs"));
         Assert(request.Contains("TryTakeCachedSegment") &&
-               generator.Contains("TryTakeCachedSegment"),
-            "continuation segments consume the prior solved route instead of re-running A*");
+               generator.Contains("TryTakeCachedSegment") &&
+               request.Contains("pCompletesRequest") &&
+               generator.Contains("CacheRoute(fullRoute, outputCount,") &&
+               generator.Contains("searchTargetId == target.Id"),
+            "continuation segments reuse intermediate routes without treating a waypoint as the final target");
+    }
+
+    private static void LongRangeContinuationConsumesCachedWaypointRoute()
+    {
+        const int width = 140;
+        const int height = 3;
+        var tiles = new AWTileTraversalSnapshot[width * height];
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+        {
+            int id = y * width + x;
+            var neighbors = new List<int>(4);
+            if (x > 0) neighbors.Add(id - 1);
+            if (x + 1 < width) neighbors.Add(id + 1);
+            if (y > 0) neighbors.Add(id - width);
+            if (y + 1 < height) neighbors.Add(id + width);
+            bool blocked = y == 1 && x == 10;
+            tiles[id] = new AWTileTraversalSnapshot(id, x, y,
+                ground: !blocked, block: blocked, regionId: x / 20,
+                islandId: 0, pNeighbors: neighbors.ToArray());
+        }
+
+        using var generation = AWTraversalGeneration.FromTiles(
+            907, width, height, tiles);
+        using var request = new AWPathRequest(907, width, width * 2 - 1,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        var config = new AWPathfindingConfig
+        {
+            ShortRangeTiles = 24,
+            LongRangeTiles = 96,
+            RegionCorridorLookaheadTiles = 64,
+            SegmentTargetSteps = 10,
+            MaxNodesLong = 12000,
+            MaxNodesLongFallback = 60000
+        };
+        var generator = new AWStreamingPathGenerator(config);
+        AWPathGenerationResult first = generator.GenerateSegment(request,
+            CancellationToken.None, 10);
+        Assert(first.Succeeded && !first.ReachedTarget && first.Steps.Count == 10,
+            "long-range generation returns a bounded intermediate segment");
+        int firstEnd = first.EndTileId;
+        request.AdvanceStartTile(firstEnd);
+        AWPathGenerationResult second = generator.GenerateSegment(request,
+            CancellationToken.None, 10);
+        Assert(second.Succeeded && second.Steps.Count > 0 &&
+               second.EndTileId != firstEnd,
+            "the next segment consumes the cached route instead of rerunning A*");
+        request.AdvanceStartTile(second.EndTileId);
+        AWPathGenerationResult third = generator.GenerateSegment(request,
+            CancellationToken.None, 10);
+        Assert(third.Succeeded && third.Steps.Count > 0 &&
+               third.EndTileId != second.EndTileId,
+            "a third segment continues the same cached route cursor");
+    }
+
+    private static void RtsBoundedWaterSkipsActorContinuation()
+    {
+        string generator = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWStreamingPathGenerator.cs"));
+        Assert(generator.Contains("!pRequest.Options.BoundedMilitaryWater") &&
+               generator.Contains("BoundedMilitaryWater") &&
+               generator.Contains("CanUseVanillaTransport"),
+            "RTS bounded-water routes remain outside ordinary actor continuation");
     }
 
     private static void RtsRoutesUseTheSharedFinderOnly()
@@ -912,6 +1017,10 @@ internal static class PathfindingPerformanceTests
         for (int i = 0; i < tiles.Length; i++)
             tiles[i] = new AWTileTraversalSnapshot(i, i, 0, ground: true,
                 pNeighbors: Array.Empty<int>());
+        // Force this case through A* instead of the valid straight-line
+        // shortcut; the assertion exercises sparse-label budget handling.
+        tiles[65] = new AWTileTraversalSnapshot(65, 65, 0, ground: true,
+            damageUnits: true, pNeighbors: Array.Empty<int>());
         tiles[69] = new AWTileTraversalSnapshot(69, 69, 0, ground: true,
             pNeighbors: Enumerable.Range(61, 8).ToArray());
         tiles[68] = new AWTileTraversalSnapshot(68, 68, 0, ground: true,
@@ -1043,6 +1152,359 @@ internal static class PathfindingPerformanceTests
                request.Stream.TryTake(out AWPathStep step) &&
                step.TileId == 1,
             "a one-region request returns the first bounded march segment");
+    }
+
+    private static void CultiwayRoutingStagesAreConnected()
+    {
+        string generator = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWStreamingPathGenerator.cs"));
+        Assert(generator.Contains("TryBuildStraightSegment",
+                StringComparison.Ordinal),
+            "ordinary path generation has a safe straight-line fast stage");
+        int straightStage = generator.IndexOf(
+            "TryBuildStraightSegment(pRequest, start, target",
+            StringComparison.Ordinal);
+        int regionStage = generator.IndexOf(
+            "ResolveLongRangeSearch(pRequest, start, target",
+            StringComparison.Ordinal);
+        Assert(straightStage >= 0 && regionStage > straightStage,
+            "straight-line routing runs before region-route construction");
+        Assert(generator.Contains("AWRegionRouteCache",
+                StringComparison.Ordinal) &&
+               generator.Contains("ResolveRegionLookahead",
+                StringComparison.Ordinal) &&
+               generator.Contains("!pRequest.Options.BoundedMilitaryWater",
+                   StringComparison.Ordinal),
+            "ordinary long paths use the region route cache and lookahead");
+    }
+
+    private static void PathStreamTracksPendingStepsWithoutQueueCount()
+    {
+        var stream = new AWPathStream();
+        Assert(stream.Count == 0, "new path streams have no pending steps");
+        Assert(stream.AddStep(new AWPathStep(1, AWMovementMethod.Walk)) &&
+               stream.AddStep(new AWPathStep(2, AWMovementMethod.Walk)) &&
+               stream.Count == 2,
+            "path stream pending count follows published steps");
+        Assert(stream.TryTake(out _) && stream.Count == 1,
+            "path stream pending count follows consumed steps");
+
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathStream.cs"));
+        Assert(source.Contains("_pendingCount", StringComparison.Ordinal) &&
+               source.Contains("Volatile.Read(ref _pendingCount)",
+                   StringComparison.Ordinal) &&
+               !source.Contains("public int Count => _steps.Count",
+                   StringComparison.Ordinal),
+            "path stream count is an atomic hot lookup instead of a queue traversal");
+    }
+
+    private static void CrossIslandTransportIsSelectedBeforeLandSearch()
+    {
+        string generator = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWStreamingPathGenerator.cs"));
+        int transport = generator.IndexOf(
+            "PhysicalTransportAvailable", StringComparison.Ordinal);
+        int search = generator.IndexOf("Search(pRequest", StringComparison.Ordinal);
+        Assert(transport >= 0 && search >= 0 && transport < search,
+            "physical cross-island transport is considered before land A*");
+    }
+
+    private static void StraightSegmentReturnsTheConfiguredStreamingSlice()
+    {
+        using AWTraversalGeneration generation = LinearLandGeneration(40);
+        using var request = new AWPathRequest(901, 0, 39,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        AWPathGenerationResult result = new AWStreamingPathGenerator()
+            .GenerateSegment(request, CancellationToken.None, 24);
+        Assert(result.Succeeded && !result.ReachedTarget &&
+               result.Steps.Count == 24 && result.EndTileId == 24,
+            "safe straight paths return one bounded streaming segment");
+    }
+
+    private static void RequestValidationMatchesCultiwayBoundary()
+    {
+        var tiles = new[]
+        {
+            new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+                pNeighbors: new[] { 1 }),
+            new AWTileTraversalSnapshot(1, 1, 0, ground: true,
+                pNeighbors: new[] { 0 })
+        };
+        using AWTraversalGeneration generation =
+            AWTraversalGeneration.FromTiles(9901, 2, 1, tiles,
+                pWorldGeneration: 41L);
+        using var valid = new AWPathRequest(9901, 0, 1,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(10f, 10f, 5f),
+            generation, 0d, pWorldGeneration: 41L);
+        Assert(AWPathRequestValidationRules.Validate(valid, 41L) ==
+               AWPathFailureReason.None && valid.WorldGeneration == 41L,
+            "path requests bind validation to the traversal world generation");
+
+        using var invalid = new AWPathRequest(9902, -1, 1,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(10f, 10f, 5f),
+            generation, 0d, pWorldGeneration: 41L);
+        Assert(AWPathRequestValidationRules.Validate(invalid, 41L) ==
+               AWPathFailureReason.InvalidStart,
+            "path requests reject out-of-range starts before worker submission");
+    }
+
+    private static void GenerationResultsCarryWorldAndSearchDiagnostics()
+    {
+        const int length = 12;
+        var tiles = new AWTileTraversalSnapshot[length];
+        for (int i = 0; i < length; i++)
+        {
+            var neighbors = new List<int>(2);
+            if (i > 0) neighbors.Add(i - 1);
+            if (i + 1 < length) neighbors.Add(i + 1);
+            tiles[i] = new AWTileTraversalSnapshot(i, i, 0,
+                ground: true, pNeighbors: neighbors.ToArray());
+        }
+        using AWTraversalGeneration generation =
+            AWTraversalGeneration.FromTiles(9902, length, 1, tiles,
+                pWorldGeneration: 42L);
+        using var request = new AWPathRequest(9903, 0, length - 1,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(10f, 10f, 5f),
+            generation, 0d, pWorldGeneration: 42L);
+        AWPathGenerationResult result = new AWStreamingPathGenerator()
+            .GenerateSegment(request, CancellationToken.None, 24);
+        Assert(result.Succeeded && result.Kind == AWPathGenerationKind.StraightLine &&
+               result.ExpandedNodes == 0 && !float.IsNaN(result.EndStamina) &&
+               !float.IsNaN(result.EndHealth),
+            "path segments expose generation kind, expansion count and continuation vitals");
+    }
+
+    private static void DirtyTraversalFlushRemainsBudgetedAtRenderBoundary()
+    {
+        string bootstrap = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathfindingBootstrap.cs"));
+        int processFrame = bootstrap.IndexOf("public static void ProcessFrame()",
+            StringComparison.Ordinal);
+        int tick = bootstrap.IndexOf("internal static void Tick()",
+            StringComparison.Ordinal);
+        Assert(processFrame >= 0 && tick > processFrame &&
+               bootstrap.Contains("ShouldProcessDirty(", StringComparison.Ordinal) &&
+               bootstrap.Contains("ProcessDirty(", StringComparison.Ordinal),
+            "dirty traversal refresh stays on the budgeted render boundary");
+        string tickBody = bootstrap.Substring(tick);
+        Assert(!tickBody.Contains("ProcessDirty(", StringComparison.Ordinal),
+            "path completion/retry tick never flushes the whole dirty queue");
+    }
+
+    private static void SchedulerOwnershipHasOnePathPulsePerCycle()
+    {
+        string authority = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWAuthorityCycleService.cs"));
+        string runner = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWCooperativeSimulationRunner.cs"));
+        Assert(authority.Contains("case CooperativeAuthorityStage.Pathfinding:",
+                   StringComparison.Ordinal) &&
+               authority.Contains("AWPathfindingBootstrap.ProcessFrame",
+                   StringComparison.Ordinal) &&
+               runner.Contains("AWPathfindingBootstrap.Tick();",
+                   StringComparison.Ordinal),
+            "path maintenance and retry activation have distinct scheduler owners");
+        Assert(!runner.Contains("AWAuthorityCycleService.ProcessCooperativeCycle(",
+                   StringComparison.Ordinal),
+            "cooperative mode cannot invoke the obsolete whole-cycle authority path");
+    }
+
+    private static void LongRangeRegionCorridorRoutesAroundBlockedDirectLine()
+    {
+        const int width = 140;
+        const int height = 3;
+        var tiles = new AWTileTraversalSnapshot[width * height];
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+        {
+            int id = y * width + x;
+            var neighbors = new List<int>(4);
+            if (x > 0) neighbors.Add(id - 1);
+            if (x + 1 < width) neighbors.Add(id + 1);
+            if (y > 0) neighbors.Add(id - width);
+            if (y + 1 < height) neighbors.Add(id + width);
+            bool blocked = y == 1 && x == 10;
+            tiles[id] = new AWTileTraversalSnapshot(id, x, y,
+                ground: !blocked, block: blocked, regionId: x / 20,
+                islandId: 0, pNeighbors: neighbors.ToArray());
+        }
+
+        using AWTraversalGeneration generation =
+            AWTraversalGeneration.FromTiles(902, width, height, tiles);
+        using var request = new AWPathRequest(902, width, width * 2 - 1,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        AWPathGenerationResult result = new AWStreamingPathGenerator()
+            .GenerateSegment(request, CancellationToken.None, 10);
+        Assert(result.Succeeded && result.Steps.Count > 0 &&
+               !result.ReachedTarget,
+            "region corridor search routes a long request around a blocked direct line");
+    }
+
+    private static void MediumRangeSearchTargetsDestinationBeforeRegionLookahead()
+    {
+        const int width = 80;
+        const int height = 3;
+        var tiles = new AWTileTraversalSnapshot[width * height];
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+        {
+            int id = y * width + x;
+            var neighbors = new List<int>(4);
+            if (x > 0) neighbors.Add(id - 1);
+            if (x + 1 < width) neighbors.Add(id + 1);
+            if (y > 0) neighbors.Add(id - width);
+            if (y + 1 < height) neighbors.Add(id + width);
+            bool blocked = y == 1 && x == 10;
+            tiles[id] = new AWTileTraversalSnapshot(id, x, y,
+                ground: !blocked, block: blocked, regionId: x / 20,
+                islandId: 0, pNeighbors: neighbors.ToArray());
+        }
+
+        using AWTraversalGeneration generation =
+            AWTraversalGeneration.FromTiles(905, width, height, tiles);
+        using var request = new AWPathRequest(905, width, width * 2 - 1,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        var config = new AWPathfindingConfig
+        {
+            ShortRangeTiles = 24,
+            LongRangeTiles = 96,
+            RegionCorridorLookaheadTiles = 32,
+            SegmentTargetSteps = 128,
+            MaxNodesLong = 12000,
+            MaxNodesLongFallback = 60000
+        };
+        AWPathGenerationResult result = new AWStreamingPathGenerator(config)
+            .GenerateSegment(request, CancellationToken.None, 128);
+        Assert(result.Succeeded && result.ReachedTarget &&
+               result.EndTileId == request.TargetTileId,
+            "medium-range searches target the destination before region lookahead");
+    }
+
+    private static void LongRangeSearchUsesGeometricLookaheadWithoutRegionTopology()
+    {
+        const int width = 140;
+        const int height = 3;
+        var tiles = new AWTileTraversalSnapshot[width * height];
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+        {
+            int id = y * width + x;
+            var neighbors = new List<int>(4);
+            if (x > 0) neighbors.Add(id - 1);
+            if (x + 1 < width) neighbors.Add(id + 1);
+            if (y > 0) neighbors.Add(id - width);
+            if (y + 1 < height) neighbors.Add(id + width);
+            bool blocked = y == 1 && x == 10;
+            tiles[id] = new AWTileTraversalSnapshot(id, x, y,
+                ground: !blocked, block: blocked, regionId: -1,
+                islandId: 0, pNeighbors: neighbors.ToArray());
+        }
+
+        using AWTraversalGeneration generation =
+            AWTraversalGeneration.FromTiles(904, width, height, tiles);
+        using var request = new AWPathRequest(904, width, width * 2 - 1,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        var config = new AWPathfindingConfig
+        {
+            ShortRangeTiles = 24,
+            RegionCorridorLookaheadTiles = 64,
+            SegmentTargetSteps = 128,
+            MaxNodesLong = 12000,
+            MaxNodesLongFallback = 60000
+        };
+        AWPathGenerationResult result = new AWStreamingPathGenerator(config)
+            .GenerateSegment(request, CancellationToken.None, 128);
+        Assert(result.Succeeded && !result.ReachedTarget &&
+               result.EndTileId != request.TargetTileId &&
+               generation.TryGet(result.EndTileId,
+                   out AWTileTraversalSnapshot end) &&
+               end.X >= 60 && end.X <= 68,
+            "missing region topology still bounds long A* at a geometric lookahead");
+    }
+
+    private static void ChunkTopologyUpdatesInvalidateTraversalAndTransportCaches()
+    {
+        string cache = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWTraversalCache.cs"));
+        Assert(cache.Contains(
+                "MarkTopologyDirty(IEnumerable<MapChunk>",
+                StringComparison.Ordinal) &&
+               cache.Contains("IncrementTopologySourceRevision();",
+                   StringComparison.Ordinal),
+            "chunk topology changes enter one explicit traversal invalidation path");
+
+        string patch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_GlobalPathfindingPatch.cs"));
+        Assert(patch.Contains(
+                "HarmonyPatch(typeof(MapChunkManager), nameof(MapChunkManager.updateDirty))",
+                StringComparison.Ordinal) &&
+               patch.Contains("_dirty_chunks_links",
+                   StringComparison.Ordinal) &&
+               patch.Contains("_dirty_chunks_regions",
+                   StringComparison.Ordinal) &&
+               patch.Contains("Cache.MarkTopologyDirty(",
+                   StringComparison.Ordinal) &&
+               patch.Contains("AWDockTransportService.MarkTopologyDirty();",
+                   StringComparison.Ordinal),
+            "original chunk relinking invalidates traversal and transport topology caches");
+    }
+
+    private static void TileStateChangesInvalidateTraversalCache()
+    {
+        string patch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_GlobalPathfindingPatch.cs"));
+        Assert(patch.Contains(
+                "nameof(WorldTile.setFireData)", StringComparison.Ordinal) &&
+               patch.Contains("nameof(WorldTile.freeze)",
+                   StringComparison.Ordinal) &&
+               patch.Contains("nameof(WorldTile.unfreeze)",
+                   StringComparison.Ordinal),
+            "direct fire and freeze state changes invalidate traversal tiles");
+    }
+
+    private static void CrossIslandTransportSkipsDisconnectedLandSearch()
+    {
+        var tiles = new[]
+        {
+            new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+                regionId: 0, islandId: 0, pNeighbors: Array.Empty<int>()),
+            new AWTileTraversalSnapshot(1, 1, 0, ground: true,
+                regionId: 1, islandId: 1, pNeighbors: Array.Empty<int>())
+        };
+        using AWTraversalGeneration generation =
+            AWTraversalGeneration.FromTiles(903, 2, 1, tiles);
+        using var request = new AWPathRequest(903, 0, 1,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d, pHighPriority: false,
+            pPhysicalTransportAvailable: true);
+        AWPathGenerationResult result = new AWStreamingPathGenerator()
+            .GenerateSegment(request, CancellationToken.None, 24);
+        Assert(result.Succeeded && result.ReachedTarget &&
+               result.Steps.Count == 1 &&
+               result.Steps[0].Method == AWMovementMethod.Transport,
+            "cross-island land requests select physical transport before A*");
     }
 
     private static AWTraversalGeneration LinearWaterGeneration(int waterTiles)

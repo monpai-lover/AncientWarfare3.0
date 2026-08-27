@@ -491,7 +491,26 @@ namespace AncientWarfare3.core.lineage
                 return false;
             return nextState == ArmyRtsState.March ||
                    nextState == ArmyRtsState.Pursue ||
-                   nextState == ArmyRtsState.Retreat;
+                   nextState == ArmyRtsState.Retreat ||
+                   nextState == ArmyRtsState.Assault;
+        }
+
+        public static bool ShouldPreserveStrategicRoute(
+            bool routeSubmitted, bool routeArrived, bool transportActive)
+        {
+            return routeSubmitted || routeArrived || transportActive;
+        }
+
+        public static bool ShouldRetryStrategicRouteAfterPoll(
+            bool terminalResult, bool missionValid, bool retryCoolingDown)
+        {
+            return terminalResult && missionValid && !retryCoolingDown;
+        }
+
+        public static bool ShouldLatchRetreatArrival(
+            bool exactCityZone, bool borderCityZone)
+        {
+            return exactCityZone || borderCityZone;
         }
 
         public static int ResolveStableStrategicEndpoint(int lockedTileId,

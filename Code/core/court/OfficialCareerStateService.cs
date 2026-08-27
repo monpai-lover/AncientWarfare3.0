@@ -552,6 +552,7 @@ namespace AncientWarfare3.core.court
                 actor.data.get(LineageKeys.COURT_LAYER,
                     out string runtimeLayer, "");
                 bool localOffice = runtimeLayer == CourtOfficeLayer.City ||
+                    runtimeLayer == CourtOfficeLayer.County ||
                     LocalCourtOfficeRules.IsLocalOffice(state.OfficeId);
                 bool cityLeaderOffice = localOffice && actor.isCityLeader() ||
                     CourtCityOfficeRules.IsCityLeaderOffice(state.OfficeId);
@@ -661,7 +662,15 @@ namespace AncientWarfare3.core.court
                                        state.OfficeId == CourtOfficeId.WestMayor;
                 if (termDue && localOffice)
                 {
-                    // Leader rotation or city-slice subordinate refill owns it.
+                    // The city bureau still owns rotation/refill, but the
+                    // outgoing official must receive the same performance
+                    // review as central officials before that handoff.
+                    if (nineRankSystem &&
+                        mutation.Rank > OfficialCareerRankRules.Unranked)
+                        EvaluateDueOfficial(mutation, economy, year, pKingdom,
+                            pPreserveTerm: true);
+                    else
+                        RenewDueOfficial(mutation, year, pKingdom);
                 }
                 else if (westernMayorDue && realmCityCount <= 1)
                     mutation.TermEndYear =
@@ -698,6 +707,7 @@ namespace AncientWarfare3.core.court
 
             if (!CommitAnnualMutations(mutations)) return;
             bool influenceChanged = false;
+            bool eligibilityChanged = false;
             foreach (AnnualMutation mutation in mutations)
             {
                 ProjectHotState(mutation.Actor, mutation.Rank, mutation.State.Track,
@@ -709,6 +719,8 @@ namespace AncientWarfare3.core.court
                     mutation.LocalGradeReviewYear);
                 influenceChanged |= mutation.Rank != mutation.PreviousRank ||
                                     Math.Abs(mutation.Merit - mutation.State.Merit) > 0.0001f;
+                eligibilityChanged |= mutation.Rank != mutation.PreviousRank ||
+                                     mutation.LocalGrade != mutation.State.LocalGrade;
                 if (mutation.Evaluated)
                     RecordEvaluation(pKingdom, mutation);
                 else if (OfficialCareerBiographyRules.ShouldRecordRankAdvance(
@@ -721,11 +733,15 @@ namespace AncientWarfare3.core.court
             if (rotationPlan?.Count > 0)
                 ProcessDueGovernorRotations(pKingdom, rotationPlan, year);
             if (influenceChanged) CourtDirectionService.MarkDirty(pKingdom);
+            if (eligibilityChanged)
+                CourtVacancyReconciliationService.CandidatePoolChanged(
+                    pKingdom);
             pKingdom.data.set(LineageKeys.OFFICIAL_CAREER_LAST_YEAR, year);
         }
 
         private static void EvaluateDueOfficial(AnnualMutation pMutation,
-            EconomyView pEconomy, int pYear, Kingdom pKingdom)
+            EconomyView pEconomy, int pYear, Kingdom pKingdom,
+            bool pPreserveTerm = false)
         {
             Actor actor = pMutation.Actor;
             OfficialCareerStateView state = pMutation.State;
@@ -748,9 +764,10 @@ namespace AncientWarfare3.core.court
             pMutation.LastEvaluation = grade;
             pMutation.EvaluationModifierUntil = pYear + 4;
             pMutation.Seniority = state.Seniority + Math.Max(0, 5 - grade);
-            pMutation.TermEndYear =
-                CourtAuxiliaryLawService.ResolveTermEndYear(pKingdom,
-                    SafeAge(actor), grade, state.ActorId, pYear);
+            if (!pPreserveTerm)
+                pMutation.TermEndYear =
+                    CourtAuxiliaryLawService.ResolveTermEndYear(pKingdom,
+                        SafeAge(actor), grade, state.ActorId, pYear);
             pMutation.Evaluated = true;
         }
 
@@ -1569,19 +1586,24 @@ namespace AncientWarfare3.core.court
             {
                 int appointmentOfficeGrade = OfficeGradeForOffice(pKingdom,
                     pLayer, pOfficeId, pCity);
-                return pLayer == CourtOfficeLayer.City
+                bool regionalGovernorSeat = IsRegionalGovernorSeat(pKingdom,
+                    pLayer, pOfficeId, pCity);
+                return pLayer == CourtOfficeLayer.City ||
+                    pLayer == CourtOfficeLayer.County
                     ? pVacancyPromotion
                         ? OfficialCareerRankRules.
                             ResolveLocalVacancyPromotionRank(existingRank,
                                 appointmentOfficeGrade,
                                 hasNineRankSystem: true,
                                 hasFormalQualification: true,
-                                vacancyPromotion: true)
+                                vacancyPromotion: true,
+                                regionalGovernor: regionalGovernorSeat)
                         : OfficialCareerRankRules.
                             ResolveInitialLocalAppointmentRank(existingRank,
                                 appointmentOfficeGrade,
                                 hasNineRankSystem: true,
-                                hasFormalQualification: true, entryBonus: 0)
+                                hasFormalQualification: true, entryBonus: 0,
+                                regionalGovernor: regionalGovernorSeat)
                     : pVacancyPromotion
                         ? OfficialCareerRankRules.ResolveVacancyPromotionRank(
                             existingRank, appointmentOfficeGrade,
@@ -1606,7 +1628,8 @@ namespace AncientWarfare3.core.court
             bool hasFormalQualification = CivilServiceExamRules.
                 IsFormalAppointmentQualification(
                     qualification?.Qualification);
-            bool localOffice = pLayer == CourtOfficeLayer.City;
+            bool localOffice = pLayer == CourtOfficeLayer.City ||
+                pLayer == CourtOfficeLayer.County;
             bool hasLocalQualification = pAllowLocalLowerQualification &&
                 localOffice && (pActor.isCityLeader() ||
                     LocalOfficialCandidateRules.AcceptsAppointmentQualification(
@@ -1616,10 +1639,21 @@ namespace AncientWarfare3.core.court
                         allowLocalLowerQualification: true));
             bool hasLegacyCredential = CivilServiceLegacyTransitionService.
                 HasUsableCredential(pActor, pKingdom, pLayer, pOfficeId);
-            bool hasAppointmentQualification = hasFormalQualification ||
-                hasLocalQualification || hasLegacyCredential;
             int officeGrade = OfficeGradeForOffice(pKingdom, pLayer,
                 pOfficeId, pCity);
+            bool regionalGovernor = IsRegionalGovernorSeat(pKingdom, pLayer,
+                pOfficeId, pCity);
+            bool allowUnqualifiedLocalFallback =
+                (pLayer == CourtOfficeLayer.County
+                    ? LocalLowOfficeVacancyRules.CanUseCountyFallback(
+                        true, officeGrade,
+                        pVacancyPromotion && pAllowLocalLowerQualification)
+                    : LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
+                        localOffice, officeGrade,
+                        pVacancyPromotion && pAllowLocalLowerQualification));
+            bool hasAppointmentQualification = hasFormalQualification ||
+                hasLocalQualification || hasLegacyCredential ||
+                allowUnqualifiedLocalFallback;
             if (pVacancyPromotion)
             {
                 if (localOffice)
@@ -1628,7 +1662,8 @@ namespace AncientWarfare3.core.court
                             officeGrade, hasNineRankSystem: true,
                             hasAppointmentQualification,
                             vacancyPromotion: true,
-                            qualification?.EntryBonus ?? 0);
+                            qualification?.EntryBonus ?? 0,
+                            regionalGovernor);
                 return OfficialCareerRankRules.ResolveVacancyPromotionRank(
                     existingRank, officeGrade, hasNineRankSystem: true,
                     hasAppointmentQualification, vacancyPromotion: true,
@@ -1638,7 +1673,7 @@ namespace AncientWarfare3.core.court
                 ? OfficialCareerRankRules.ResolveInitialLocalAppointmentRank(
                     existingRank, officeGrade, hasNineRankSystem: true,
                     hasAppointmentQualification,
-                    qualification?.EntryBonus ?? 0)
+                    qualification?.EntryBonus ?? 0, regionalGovernor)
                 : OfficialCareerRankRules.ResolveInitialAppointmentRank(
                     existingRank, officeGrade, hasNineRankSystem: true,
                     hasAppointmentQualification,
@@ -1885,6 +1920,20 @@ namespace AncientWarfare3.core.court
                 pKingdom, pOfficeId) ??
                 CourtProfileRegistry.FindOfficeAcrossProfiles(pOfficeId);
             return definition?.Grade ?? 30;
+        }
+
+        internal static bool IsRegionalGovernorSeat(Kingdom pKingdom,
+            string pLayer, string pOfficeId, City pCity)
+        {
+            if (pLayer != CourtOfficeLayer.City || pKingdom?.data == null ||
+                pCity?.data == null || pCity.kingdom != pKingdom ||
+                string.IsNullOrEmpty(pOfficeId)) return false;
+            if (!string.Equals(CourtService.ResolveCityOffice(pKingdom, pCity),
+                    pOfficeId, StringComparison.Ordinal)) return false;
+            if (!RegionalGovernmentAggregationService.TryFindRegion(pKingdom,
+                    pCity.data.id, out RegionalGovernmentReadModel region))
+                return false;
+            return region.EffectiveSeatCityId == pCity.data.id;
         }
 
         private static bool IsMilitaryOffice(string pLayer, string pOfficeId)

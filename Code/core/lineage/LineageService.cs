@@ -787,6 +787,11 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void OnCityLeaderAppointed(Actor pActor, string pOfficeId = CourtOfficeId.Governor)
         {
+            if (!SocialIdentityService.IsFormalNoble(pActor))
+            {
+                SocialIdentityService.ApplyOfficial(pActor);
+                return;
+            }
             NamingProfileId namingProfile = AWCultureNamingTraditionService
                 .ResolveForActorReadOnly(pActor).Profile;
             if (namingProfile == NamingProfileId.Western ||
@@ -827,6 +832,16 @@ namespace AncientWarfare3.core.lineage
             if (SlaveService.IsSlave(pActor))
                 SlaveService.FreeSlave(pActor, "promoted");
 
+            // Ordinary officials receive scholar-official status without
+            // entering the noble lineage admission path.
+            if (pTrigger == NobleTrigger.Official &&
+                !SocialIdentityService.IsFormalNoble(pActor))
+            {
+                SocialIdentityService.ApplyOfficial(pActor);
+                ApplyDisplayName(pActor);
+                return;
+            }
+
             if (westernAdmission)
             {
                 if (!WesternLineageAdmissionService.TryEnsure(pActor,
@@ -843,10 +858,20 @@ namespace AncientWarfare3.core.lineage
                 EnsureForeignPseudoOfficialLineage(pActor, pTrigger,
                     pOfficeId: pOfficeId, pArchiveActor: false);
 
+            if (pTrigger == NobleTrigger.Official &&
+                !SocialIdentityService.IsFormalNoble(pActor))
+            {
+                SocialIdentityService.ApplyOfficial(pActor);
+                ApplyDisplayName(pActor);
+                return;
+            }
+
             // 本人即贵族:距离归零、加 guizu、状态 noble。
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
-            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pActor.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             ApplyDisplayName(pActor);
             if (IsKingdomIntegrated(pActor.kingdom))
@@ -962,7 +987,8 @@ namespace AncientWarfare3.core.lineage
             pHeir.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pHeir.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             if (!pHeir.hasTrait(LineageKeys.TRAIT_GUIZU))
-                pHeir.addTrait(LineageKeys.TRAIT_GUIZU);
+                pHeir.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
             ApplyDisplayName(pHeir);
             FamilyTreeProjectionPendingStore.IncludePrerequisite(
                 pHeir.data.id,
@@ -1056,7 +1082,8 @@ namespace AncientWarfare3.core.lineage
                 namingProfile == NamingProfileId.OrcNomadic)
             {
                 WesternLineageAdmissionService.TryEnsure(pActor,
-                    pRuler: false, pHeir: false, pNoble: true,
+                    pRuler: false, pHeir: false,
+                    pNoble: SocialIdentityService.IsFormalNoble(pActor),
                     pOfficial: true, pSourceType: "official");
                 return;
             }
@@ -1251,7 +1278,9 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
-            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pActor.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             ApplyDisplayName(pActor);
             RenameClanByLeader(pActor.clan, pActor);
@@ -1347,7 +1376,9 @@ namespace AncientWarfare3.core.lineage
             // 无论是否分封,城主本人都是当代贵族:距离归零、加 guizu。
             pChild.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pChild.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
-            if (!pChild.hasTrait(LineageKeys.TRAIT_GUIZU)) pChild.addTrait(LineageKeys.TRAIT_GUIZU);
+            if (!pChild.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pChild.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             ApplyDisplayName(pChild);
             if (branchCreated)
@@ -1386,6 +1417,9 @@ namespace AncientWarfare3.core.lineage
             {
                 ApplyFeudatoryFoundedBranchIdentity(pPrince, currentShiId,
                     current.founder_actor_id);
+                RepairFeudatoryBranchDescendants(pPrince, lineageId,
+                    current.parent_shi_id, currentShiId,
+                    current.clan_name ?? clanName);
                 return currentShiId;
             }
 
@@ -1403,6 +1437,9 @@ namespace AncientWarfare3.core.lineage
                         recorded.clan_name);
                 ApplyFeudatoryFoundedBranchIdentity(pPrince, recordedShiId,
                     recorded.founder_actor_id);
+                RepairFeudatoryBranchDescendants(pPrince, lineageId,
+                    recorded.parent_shi_id, recordedShiId,
+                    recorded.clan_name ?? clanName);
                 return recordedShiId;
             }
 
@@ -1424,17 +1461,33 @@ namespace AncientWarfare3.core.lineage
             pPrince.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pPrince.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             if (!pPrince.hasTrait(LineageKeys.TRAIT_GUIZU))
-                pPrince.addTrait(LineageKeys.TRAIT_GUIZU);
-            MoveExistingDescendantsToBranch(pPrince, lineageId, currentShiId,
-                newShiId, clanName, pDeferProjection: true,
-                pAllWritesAccepted: out bool moveWritesAccepted);
-            ApplyDisplayName(pPrince);
-            bool syncWritesAccepted =
-                SyncExistingChildrenAfterLineageChange(pPrince,
-                pDeferProjection: true);
-            FinalizeFounderArchive(pPrince,
-                moveWritesAccepted && syncWritesAccepted);
+                pPrince.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
+            RepairFeudatoryBranchDescendants(pPrince, lineageId, currentShiId,
+                newShiId, clanName);
             return newShiId;
+        }
+
+        private static bool RepairFeudatoryBranchDescendants(
+            Actor pPrince, long pLineageId, long pSourceShiId,
+            long pBranchShiId, string pBranchClanName)
+        {
+            if (pPrince?.data == null || pLineageId < 0L ||
+                pBranchShiId < 0L ||
+                string.IsNullOrWhiteSpace(pBranchClanName))
+                return false;
+
+            bool moved = true;
+            if (pSourceShiId >= 0L && pSourceShiId != pBranchShiId)
+                MoveExistingDescendantsToBranch(pPrince, pLineageId,
+                    pSourceShiId, pBranchShiId, pBranchClanName,
+                    pDeferProjection: true,
+                    pAllWritesAccepted: out moved);
+            bool synced = SyncExistingChildrenAfterLineageChange(
+                pPrince, pDeferProjection: true);
+            ApplyDisplayName(pPrince);
+            FinalizeFounderArchive(pPrince, moved && synced);
+            return moved && synced;
         }
 
         private static void ApplyFeudatoryFoundedBranchIdentity(Actor pPrince,
@@ -1559,7 +1612,9 @@ namespace AncientWarfare3.core.lineage
             pKing.data.set(LineageKeys.CLAN_NAME, seed.ClanName);
             pKing.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pKing.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
-            if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU)) pKing.addTrait(LineageKeys.TRAIT_GUIZU);
+            if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pKing.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             pKing.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, newShiId);
 
@@ -1635,7 +1690,8 @@ namespace AncientWarfare3.core.lineage
             pKing.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             pKing.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, newShiId);
             if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU))
-                pKing.addTrait(LineageKeys.TRAIT_GUIZU);
+                pKing.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             try { World.world.clans.newClan(pKing, pAddDefaultTraits: true); }
             catch { }
@@ -1688,7 +1744,9 @@ namespace AncientWarfare3.core.lineage
             pKing.data.set(LineageKeys.RESTORED_SHI_ID, legitimateShi);
             pKing.data.set(LineageKeys.COLLATERAL_NONAGNATIC, false);
             pKingdom.data.set(LineageKeys.KINGDOM_RESTORED_SHI_ID, legitimateShi);
-            if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU)) pKing.addTrait(LineageKeys.TRAIT_GUIZU);
+            if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pKing.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             ApplyDisplayName(pKing);
             ArchiveActor(pKing, pAlive: true);
@@ -2312,6 +2370,15 @@ namespace AncientWarfare3.core.lineage
         {
             if (!CanUseXiaizedLineageGovernment(pActor) && !UsesAwLineageSystem(pActor)) return;
 
+            pActor.data.get(LineageKeys.SOCIAL_IDENTITY,
+                out string socialIdentity, "");
+            if (socialIdentity == SocialIdentityService.ScholarOfficialValue)
+            {
+                SocialIdentityService.ApplyTraits(pActor,
+                    SocialIdentityClass.ScholarOfficial);
+                return;
+            }
+
             pActor.data.get(LineageKeys.NOBLE_DISTANCE, out int dist, 99);
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineage, -1);
             if (lineage < 0) return; // 无谱系无所谓贵族衰落
@@ -2323,7 +2390,9 @@ namespace AncientWarfare3.core.lineage
             }
             else
             {
-                if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+                if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
+                    pActor.addTrait(LineageKeys.TRAIT_GUIZU,
+                        pRemoveOpposites: true);
                 pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             }
 

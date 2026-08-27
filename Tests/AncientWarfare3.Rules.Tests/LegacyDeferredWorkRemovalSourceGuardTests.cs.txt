@@ -1,0 +1,66 @@
+using System;
+using System.IO;
+
+internal static class LegacyDeferredWorkRemovalSourceGuardTests
+{
+    internal static void Run()
+    {
+        string root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "Code", "content", "XiaContent.cs")) &&
+               Directory.GetParent(root) != null)
+            root = Directory.GetParent(root).FullName;
+
+        string xiaContent = File.ReadAllText(Path.Combine(root,
+            "Code/content/XiaContent.cs"));
+        string armySafety = File.ReadAllText(Path.Combine(root,
+            "Code/patch/AW_ArmySafetyPatch.cs"));
+        string cleanupQueue = File.ReadAllText(Path.Combine(root,
+            "Code/core/lineage/ArmyInvalidCleanupQueue.cs"));
+        string readiness = File.ReadAllText(Path.Combine(root,
+            "Code/core/lineage/KingdomMilitaryReadinessService.cs"));
+        string cityLeader = File.ReadAllText(Path.Combine(root,
+            "Code/patch/AW_CityLeaderPatch.cs"));
+        string wartimeGarrison = File.ReadAllText(Path.Combine(root,
+            "Code/core/lineage/WartimeGarrisonService.cs"));
+        string garrisonSortie = File.ReadAllText(Path.Combine(root,
+            "Code/core/lineage/GarrisonSortieService.cs"));
+        int getJobStart = wartimeGarrison.IndexOf(
+            "public static string GetJob");
+        int getJobEnd = wartimeGarrison.IndexOf(
+            "public static void OnWarStarted", getJobStart);
+        string getJob = getJobStart >= 0 && getJobEnd > getJobStart
+            ? wartimeGarrison.Substring(getJobStart, getJobEnd - getJobStart)
+            : string.Empty;
+
+        True(!xiaContent.Contains("WartimeGarrisonContent.Init()"),
+            "wartime garrison content must not be initialized");
+        True(!armySafety.Contains("ArmyInvalidCleanupQueue.ScheduleIfEmpty"),
+            "empty armies must use vanilla lifecycle instead of deferred queue");
+        True(!cleanupQueue.Contains("\"empty_army:"),
+            "empty-army deferred key must be removed");
+        True(!cleanupQueue.Contains("empty_army_post_load_sweep"),
+            "empty-army post-load sweep must be removed");
+        True(!File.Exists(Path.Combine(root,
+            "Code/content/WartimeGarrisonContent.cs")),
+            "retired wartime garrison content must not remain registered");
+        True(!readiness.Contains("standing_readiness_city"),
+            "standing readiness city refresh must not enqueue deferred work");
+        True(!cityLeader.Contains("RegisterCityVacancies"),
+            "vanilla city leader checks must not register court vacancies");
+        True(!wartimeGarrison.Contains("EnqueueCoalesced"),
+            "retired wartime garrison must not enqueue custom runtime work");
+        True(!wartimeGarrison.Contains("FindNearbyThreat"),
+            "retired wartime garrison must not retain threat scans");
+        True(!garrisonSortie.Contains("EnqueueCoalesced"),
+            "retired garrison sortie must not enqueue custom runtime work");
+        True(getJob.Contains("WARTIME_GARRISON") &&
+                    getJob.Contains(
+                        "pActor.data.set(LineageKeys.WARTIME_GARRISON, false)"),
+            "legacy garrison flags must be cleared when an actor returns to vanilla job selection");
+    }
+
+    private static void True(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

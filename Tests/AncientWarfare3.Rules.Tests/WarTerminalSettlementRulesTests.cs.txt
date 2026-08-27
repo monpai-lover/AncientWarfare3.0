@@ -27,11 +27,11 @@ internal static class WarTerminalSettlementRulesTests
         WarTerminalSettlementDecision staleScore =
             WarTerminalSettlementRules.Resolve(
                 new WarTerminalSettlementFacts(false, 100, 0, 3, true));
-        Equal(WarTerminalSettlementReason.ForceElimination,
+        Equal(WarTerminalSettlementReason.DecisiveScore,
             staleScore.Reason,
-            "confirmed military collapse outranks a stale decisive score");
-        Equal(WarScoreSide.Defenders, staleScore.Beneficiary,
-            "surviving defenders receive the surrender settlement");
+            "a latched decisive score outranks transient military counters");
+        Equal(WarScoreSide.Attackers, staleScore.Beneficiary,
+            "the decisive score winner receives the surrender settlement");
     }
 
     private static void DecisiveScoreIsRecognizedWithoutPotentialFacts()

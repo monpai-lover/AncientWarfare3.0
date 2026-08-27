@@ -11,6 +11,7 @@ internal static class OfficialCareerClosePersistenceSqlTests
         Execute(db, "CREATE TABLE CourtOfficer (" +
                     "OFFICER_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
                     "ACTOR_ID INTEGER,ACTOR_NAME TEXT,CITY_ID INTEGER," +
+                    "COUNTY_ID INTEGER," +
                     "LAYER TEXT,OFFICE_ID TEXT,SCHOOL_ID TEXT,INFLUENCE REAL," +
                     "APPOINTED_YEAR INTEGER,APPOINTED_TIME REAL," +
                     "ENDED_YEAR INTEGER,ENDED_TIME REAL,ACTIVE INTEGER," +
@@ -19,7 +20,7 @@ internal static class OfficialCareerClosePersistenceSqlTests
                     "LOCAL_GRADE_AT_APPOINTMENT INTEGER," +
                     "INSTITUTION_AT_APPOINTMENT TEXT,IS_ACTING INTEGER)");
         Execute(db, "INSERT INTO CourtOfficer VALUES " +
-                    "(11,7,101,'Old Name',3,'central','chancellor','ru'," +
+                    "(11,7,101,'Old Name',3,-1,'central','chancellor','ru'," +
                     "12.5,100,6000,-1,-1,1,'',6000,4,2,'zhou',0)");
 
         using (SQLiteTransaction transaction = db.BeginTransaction())

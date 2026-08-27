@@ -1,0 +1,33 @@
+using AncientWarfare3.core.pathfinding;
+
+internal static class AWPathOptimizationRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, AWPathOptimizationRules.ShouldUseStraightSegment(
+            AWPathWorkClass.Ambient, false, false, false, false, false,
+            false), "ordinary ambient walkers may use a safe straight segment");
+        Equal(false, AWPathOptimizationRules.ShouldUseStraightSegment(
+            AWPathWorkClass.Operational, false, false, true, false, false,
+            false), "operational military paths never use the ambient shortcut");
+        Equal(false, AWPathOptimizationRules.ShouldUseStraightSegment(
+            AWPathWorkClass.EssentialTravel, false, false, false, false, false,
+            false), "essential travel keeps the full path contract");
+        Equal(false, AWPathOptimizationRules.ShouldUseStraightSegment(
+            AWPathWorkClass.Ambient, true, false, true, false, false,
+            false), "bounded military water paths never use the ambient shortcut");
+        Equal(false, AWPathOptimizationRules.ShouldUseStraightSegment(
+            AWPathWorkClass.Ambient, false, true, false, false, false,
+            false), "physical transport paths never use the ambient shortcut");
+        Equal(false, AWPathOptimizationRules.ShouldUseStraightSegment(
+            AWPathWorkClass.Ambient, false, false, false, true, false,
+            false), "boat paths never use the ambient shortcut");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage +
+                ": expected=" + pExpected + ", actual=" + pActual);
+    }
+}

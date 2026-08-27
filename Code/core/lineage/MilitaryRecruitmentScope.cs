@@ -11,7 +11,8 @@ namespace AncientWarfare3.core.lineage
         RestorationUprising,
         SlaveVanguard,
         FeudatoryGarrison,
-        ExistingSpecialArmy
+        ExistingSpecialArmy,
+        MandateEmergency
     }
 
     internal static class MilitaryRecruitmentScope
@@ -21,6 +22,8 @@ namespace AncientWarfare3.core.lineage
 
         public static MilitaryRecruitmentKind Current => _current;
         public static bool BypassesWarriorCapacity => _current != MilitaryRecruitmentKind.None;
+        public static bool IsMandateEmergency =>
+            _current == MilitaryRecruitmentKind.MandateEmergency;
         public static bool SuppressesPermanentEnlistmentHistory =>
             _current == MilitaryRecruitmentKind.TemporaryLevy ||
             _current == MilitaryRecruitmentKind.WartimeGarrison ||

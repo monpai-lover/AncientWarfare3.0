@@ -108,6 +108,8 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return true;
             if (pActor == null) return true;
+            if (PeasantRebelBanditStrongholdService.IsInstallingDirectBanditKing)
+                return true;
             if (RoyalAsylumService.IsActive(pActor) &&
                 !RoyalAsylumService.RecallForSuccession(pActor, __instance))
             {
@@ -172,7 +174,8 @@ namespace AncientWarfare3.patch
             CourtDirectionService.MarkDirty(__state?.kingdom);
             if (__instance?.data != null && __instance.kingdom?.data != null &&
                 !__instance.isRekt() && !__instance.isGettingCaptured())
-                CityLeaderVacancyRepairService.Request(__instance);
+                CourtVacancyReconciliationService.RegisterCityVacancies(
+                    __instance.kingdom, __instance);
         }
 
         private static void InvalidateRegionalGovernmentCache(City pCity,

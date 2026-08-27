@@ -4,7 +4,7 @@ internal static class CityMilitaryThreatFactsRulesTests
 {
     public static void Run()
     {
-        CacheEntryPointIsInstalledWithoutTileClosures();
+        EventEntryPointIsInstalledWithoutTileClosures();
         PresenceSnapshotIsSharedAcrossObservingKingdoms();
         LiveInvalidationUsesTheRevisionRule();
         CacheRotationDoesNotInvalidateAsyncFacts();
@@ -40,28 +40,34 @@ internal static class CityMilitaryThreatFactsRulesTests
         Assert(CityMilitaryThreatFactsRules.ShouldReuse(4L, 4L,
                 10.20d, 10.00d),
             "facts remain reusable when the query comes from the actor RTS path");
+        Assert(CityMilitaryThreatFactsRules.ShouldReuseAuthorityCycle(
+                true, 12L, 12L),
+            "an unchanged fact is reusable for the remainder of its authority cycle");
+        Assert(!CityMilitaryThreatFactsRules.ShouldReuseAuthorityCycle(
+                true, 12L, 13L),
+            "a fact from an earlier authority cycle is never reused");
+        Assert(!CityMilitaryThreatFactsRules.ShouldReuseAuthorityCycle(
+                false, 12L, 12L),
+            "authority-cycle reuse is disabled outside the active cycle");
     }
 
-    private static void CacheEntryPointIsInstalledWithoutTileClosures()
+    private static void EventEntryPointIsInstalledWithoutTileClosures()
     {
         string source = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
             "CityAttackZoneService.cs"));
-        Assert(source.Contains("CityMilitaryThreatFacts.TryGet("),
-            "city hostile-military queries enter the authority-cycle cache");
+        Assert(!source.Contains("CityMilitaryThreatFacts.TryGet("),
+            "city hostile-military queries do not use the expiring query cache");
+        Assert(source.Contains("TryGetCaptureState("),
+            "city hostile-military queries use event-driven capture state");
         Assert(!source.Contains("tile.doUnits(actor =>"),
             "a physical city scan does not allocate one captured callback per tile");
-        Assert(source.Contains("pZone?.chunk"),
-            "city threat scans resolve the vanilla TileZone chunk index");
-        Assert(source.Contains("pChunk.objects.kingdoms"),
-            "city threat scans use the vanilla chunk kingdom index");
-        Assert(source.Contains("pChunk.objects.getUnits(kingdomId)"),
-            "city threat scans use the vanilla per-kingdom unit index");
-        Assert(source.Contains(
-                "AllowedZones.Contains(pActor.current_tile?.zone)"),
-            "chunk candidates are filtered back to the target city zones");
-        Assert(source.Contains("HostilityByKingdom"),
-            "a physical city scan caches war relation checks per kingdom");
+        Assert(source.Contains("pCity.isGettingCaptured()"),
+            "save-load compatibility reads the vanilla active-occupation signal");
+        Assert(source.Contains("pCity.being_captured_by"),
+            "save-load compatibility uses the vanilla occupation controller");
+        Assert(!source.Contains("getUnits(kingdomId)"),
+            "city threat queries do not enumerate chunk units");
     }
 
     private static void PresenceSnapshotIsSharedAcrossObservingKingdoms()
@@ -79,13 +85,15 @@ internal static class CityMilitaryThreatFactsRulesTests
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
             "CityMilitaryThreatFacts.cs"));
         Assert(source.Contains("TryGetPresence("),
-            "threat facts expose a shared war/city presence snapshot");
+            "threat facts retain the shared war/city presence API");
         Assert(source.Contains("StorePresence("),
-            "threat facts persist the shared physical presence snapshot");
+            "threat facts retain the shared presence API for compatibility");
         Assert(source.Contains("_cacheEpoch"),
             "cache freshness is independent from async planner revision");
-        Assert(source.Contains("entry.CacheEpoch, _cacheEpoch"),
+        Assert(source.Contains("CanReuse(entry.CacheEpoch, entry.CachedAt)"),
             "city and war invalidation do not expire unrelated city facts");
+        Assert(source.Contains("ShouldReuseAuthorityCycle"),
+            "city threat facts use the authority-cycle cache when active");
     }
 
     private static void LiveInvalidationUsesTheRevisionRule()

@@ -63,6 +63,17 @@ namespace AncientWarfare3.core.lineage
         {
             if (pFacts.SpecialWarGuarded) return None();
 
+            // A decisive score is latched by WarScoreService. Once the cap is
+            // reached it is the authoritative terminal outcome; transient
+            // warrior-counter reads must not downgrade it to elimination or
+            // white peace while the settlement task is waiting to run.
+            if (pFacts.AttackerSignedScore == 100)
+                return Decision(WarTerminalSettlementReason.DecisiveScore,
+                    WarScoreSide.Attackers, 100);
+            if (pFacts.AttackerSignedScore == -100)
+                return Decision(WarTerminalSettlementReason.DecisiveScore,
+                    WarScoreSide.Defenders, 100);
+
             bool attackersEliminated = pFacts.AttackerPotential == 0;
             bool defendersEliminated = pFacts.DefenderPotential == 0;
             if (attackersEliminated != defendersEliminated)
@@ -72,13 +83,6 @@ namespace AncientWarfare3.core.lineage
                         ? WarScoreSide.Defenders
                         : WarScoreSide.Attackers,
                     100);
-
-            if (pFacts.AttackerSignedScore == 100)
-                return Decision(WarTerminalSettlementReason.DecisiveScore,
-                    WarScoreSide.Attackers, 100);
-            if (pFacts.AttackerSignedScore == -100)
-                return Decision(WarTerminalSettlementReason.DecisiveScore,
-                    WarScoreSide.Defenders, 100);
 
             if (pFacts.HasAffordableGoal)
                 return Decision(WarTerminalSettlementReason.AffordableGoal,

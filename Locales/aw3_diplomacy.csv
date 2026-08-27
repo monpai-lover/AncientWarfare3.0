@@ -1,4 +1,10 @@
 key,cz,en,ch
+aw_hist_tributary_settlement_to,→,→,→
+aw_hist_tributary_settlement_political,，政治点,political points,，政治點
+aw_hist_tributary_settlement_gold,，黄金,gold,，黃金
+aw_hist_tributary_settlement_factor,，缴纳比例,payment factor,，繳納比例
+aw_hist_tributary_settlement_outcome,，结果,outcome,，結果
+aw_hist_tributary_settlement_offering,，进贡,offering,，進貢
 aw_diplomacy_failure_war_target_option_changed,战争依据已变化，请重新选择,The basis for this war goal changed; select it again,戰爭依據已變化，請重新選擇
 aw_diplomacy_failure_invalid_participants,当前国家或目标国家已经无效,One of the realms is no longer valid,當前國家或目標國家已經無效
 aw_diplomacy_failure_invalid,当前双方不能互相宣战,These realms cannot declare war on each other,當前雙方不能互相宣戰
@@ -330,3 +336,15 @@ aw_diplomacy_spy_selected_cost,当前花费：{0},Selected cost: {0},當前花�
 aw_diplomacy_failure_insufficient_spy_points,间谍点数不足,The spy network has insufficient points,間諜點數不足
 aw_diplomacy_failure_claim_already_purchased,该城市的对应宣称已经购买,This claim has already been purchased for the city,該城市的對應宣稱已經購買
 aw_diplomacy_failure_claim_creation_failed,宣称写入失败，未扣除间谍点数,The claim could not be recorded; no points were spent,宣稱寫入失敗，未扣除間諜點數
+aw_diplomacy_tributary_summary,朝贡 {0}% | 下次结算 {1} | 预计政治点 {2}、黄金 {3},Tribute {0}% | due {1} | forecast political {2} / gold {3},朝貢 {0}% | 下次結算 {1} | 預計政治點 {2}、黃金 {3}
+aw_diplomacy_tributary_history,状态 {0} | 上次缴纳 {1} | 实际比例 {2} | {3},Status {0} | last paid {1} | actual factor {2} | {3},狀態 {0} | 上次繳納 {1} | 實際比例 {2} | {3}
+aw_diplomacy_tributary_due,待缴纳,Due,待繳納
+aw_diplomacy_tributary_paid,已按期缴纳,Paid on schedule,已按期繳納
+aw_diplomacy_tributary_no_record,暂无结算记录,No settlement record,暫無結算記錄
+aw_diplomacy_tributary_unknown,未知,Unknown,未知
+aw_diplomacy_tributary_offering_paid,女眷进贡已记录,Consort offering recorded,女眷進貢已記錄
+aw_diplomacy_tributary_offering_none,本年暂无女眷进贡,No consort offering this year,本年暫無女眷進貢
+aw_diplomacy_tributary_bubble_label,当前朝贡,Current tribute,當前朝貢
+aw_diplomacy_tributary_paid_event,朝贡国向宗主缴纳年度贡赋：政治点 {2}、黄金 {3}、实际比例 {4}%。{5},{0} sent annual tribute to {1}: political {2}; gold {3}; factor {4}%. {5},朝貢國向宗主繳納年度貢賦：政治點 {2}、黃金 {3}、實際比例 {4}%。{5}
+aw_diplomacy_tributary_unpaid_event,朝贡国未能缴清年度贡赋：政治点 {2}、黄金 {3}、实际比例 {4}%。{5},{0} could not pay annual tribute to {1}: political {2}; gold {3}; factor {4}%. {5},朝貢國未能繳清年度貢賦：政治點 {2}、黃金 {3}、實際比例 {4}%。{5}
+aw_diplomacy_tributary_refused_event,朝贡国因实力差距拒绝纳贡：实际比例 {4}%。,{0} refused annual tribute to {1} because of the power gap: factor {4}%. ,朝貢國因實力差距拒絕納貢：實際比例 {4}%。

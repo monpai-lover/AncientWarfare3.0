@@ -8,6 +8,17 @@ namespace AncientWarfare3.core.lineage
         public const int ReplacementBatchLimit = 8;
         public const int DemobilizationBatchLimit = 16;
 
+        public static bool ShouldUseSyntheticMobilization(bool enabled)
+        {
+            return enabled;
+        }
+
+        public static bool ShouldBypassAw3RecruitmentRestrictions(
+            bool syntheticEnabled)
+        {
+            return !syntheticEnabled;
+        }
+
         public static int Quota(int cityPopulation, int knownSynthetic,
             int lawPercent)
         {

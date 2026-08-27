@@ -51,6 +51,11 @@ namespace AncientWarfare3.ai.behaviours.actor
                 pActor.makeWait(0.2f);
                 return BehResult.RepeatStep;
             }
+            if (AWArmyMarchService.ShouldWaitForProviderRoute(pActor))
+            {
+                pActor.makeWait(0.1f);
+                return BehResult.RepeatStep;
+            }
             if (AWArmyMarchService.TryStartCompleteSharedRoute(pActor))
                 return BehResult.RepeatStep;
             pActor.beh_tile_target = target;
@@ -74,6 +79,13 @@ namespace AncientWarfare3.ai.behaviours.actor
                 pActor.makeWait(1f);
                 return BehResult.RepeatStep;
             }
+            if (AWArmyMarchService.ShouldWaitForProviderRoute(pActor))
+            {
+                pActor.makeWait(0.1f);
+                return BehResult.RepeatStep;
+            }
+            if (AWArmyMarchService.TryStartCompleteSharedRoute(pActor))
+                return BehResult.RepeatStep;
             pActor.beh_tile_target = target;
             return BehResult.Continue;
         }
@@ -127,6 +139,26 @@ namespace AncientWarfare3.ai.behaviours.actor
                 targetResult == ArmyFollowerTargetResult.Hold)
             {
                 pActor?.makeWait(0.15f);
+                return BehResult.RepeatStep;
+            }
+            ArmyFollowerStepResult stepResult =
+                AWArmyMarchService.TryStepFollowerDirect(pActor, target);
+            if (ArmySharedPathRules.ShouldPreserveInFlightMovement(
+                    stepResult, pActor?.is_moving == true))
+            {
+                pActor.timer_action = 0.1f;
+                return BehResult.RepeatStep;
+            }
+            if (ArmySharedPathRules.ShouldUseLocalReconnect(stepResult))
+            {
+                pActor.beh_tile_target = target;
+                return BehResult.Continue;
+            }
+            if (stepResult == ArmyFollowerStepResult.Stepped)
+                return BehResult.RepeatStep;
+            if (stepResult == ArmyFollowerStepResult.Hold)
+            {
+                pActor.makeWait(0.15f);
                 return BehResult.RepeatStep;
             }
             pActor.beh_tile_target = target;

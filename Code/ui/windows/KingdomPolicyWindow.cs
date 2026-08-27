@@ -1439,6 +1439,11 @@ namespace AncientWarfare3.ui.windows
             var box = CreateButtonBox("Node_" + pDef.Id, name, pPos, new Vector2(NODE_W, NODE_H),
                 NodeTextColor(status), () =>
                 {
+                    if (pDef.Id == "aw_decision_merge_single_city_de_jure")
+                    {
+                        DeJureRegionMergeWindow.Open(pKingdom.id);
+                        return;
+                    }
                     if (pDef.Id == "aw_decision_year_name")
                     {
                         NameDecisionWindow.Open(pKingdom.id);

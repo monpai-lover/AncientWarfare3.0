@@ -1,0 +1,85 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class ManualLocalChiefAppointmentRulesTests
+{
+    internal static void Run()
+    {
+        True(CourtManualAppointmentRules.IsAuthoritativeLocalChiefScope(
+            CourtOfficeLayer.City, true, true, "governor", "governor"),
+            "resolved city root office uses authoritative appointment");
+        False(CourtManualAppointmentRules.IsAuthoritativeLocalChiefScope(
+            CourtOfficeLayer.Central, true, true, "governor", "governor"),
+            "central office must not replace a city leader");
+        False(CourtManualAppointmentRules.IsAuthoritativeLocalChiefScope(
+            CourtOfficeLayer.City, false, true, "governor", "governor"),
+            "disposed city must not use authoritative appointment");
+        False(CourtManualAppointmentRules.IsAuthoritativeLocalChiefScope(
+            CourtOfficeLayer.City, true, false, "governor", "governor"),
+            "foreign city must not use authoritative appointment");
+        False(CourtManualAppointmentRules.IsAuthoritativeLocalChiefScope(
+            CourtOfficeLayer.City, true, true, "clerk", "governor"),
+            "subordinate local office must not replace a city leader");
+
+        var template = new CustomLocalCourtTemplate
+        {
+            Id = "custom_local",
+            ChiefOfficeId = "custom_local_dudu"
+        };
+        template.Offices.Add(new CustomCourtOffice
+        {
+            Id = "custom_local_dudu",
+            Layer = CourtOfficeLayer.City,
+            Grade = 20
+        });
+        template.Offices.Add(new CustomCourtOffice
+        {
+            Id = "custom_local_clerk",
+            Layer = CourtOfficeLayer.City,
+            Grade = 10
+        });
+        Equal("custom_local_dudu",
+            CustomLocalCourtTemplateRules.ResolveChiefOfficeId(template),
+            "a persisted local chief office must remain authoritative even when a subordinate has a lower grade");
+
+        var legacy = new CustomLocalCourtTemplate { Id = "legacy_local" };
+        legacy.Offices.Add(new CustomCourtOffice
+        {
+            Id = "legacy_local_root",
+            Layer = CourtOfficeLayer.City,
+            Grade = 20
+        });
+        legacy.Offices.Add(new CustomCourtOffice
+        {
+            Id = "legacy_local_child",
+            Layer = CourtOfficeLayer.City,
+            Grade = 10
+        });
+        legacy.Edges.Add(new CustomCourtEdge
+        {
+            FromOfficeId = "legacy_local_root",
+            ToOfficeId = "legacy_local_child",
+            Kind = CustomCourtEdgeKind.Management
+        });
+        Equal("legacy_local_root",
+            CustomLocalCourtTemplateRules.ResolveChiefOfficeId(legacy),
+            "legacy templates must infer the management root rather than the lowest grade seat");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                expected + ", got " + actual);
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+}

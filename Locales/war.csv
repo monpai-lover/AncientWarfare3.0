@@ -55,6 +55,10 @@ aw_war_goal_force_tributary,叩关纳贡,Compel Tribute,叩關納貢
 aw_war_force_tributary,叩关纳贡,Compel Tribute,叩關納貢
 aw_war_force_tributary_desc,迫使接壤弱国岁时纳贡但不纳入附庸体系,Compel a weaker neighboring realm to pay annual tribute without entering the vassal hierarchy,迫使接壤弱國歲時納貢但不納入附庸體系
 aw_hist_label_tributary_war,叩关战争,Tributary War,叩關戰爭
+aw_hist_label_de_jure_war,法理战争,De Jure War,法理戰爭
+aw_hist_goal_defender_win,守方胜利,Defender Victory,守方勝利
+aw_hist_goal_peace_unresolved,议和未决,Peace Unresolved,議和未決
+aw_hist_goal_negotiated_goal_not_enforced,谈判目标未执行,Negotiated War Goal Not Enforced,談判目標未執行
 aw_hist_goal_force_tributary,叩关纳贡,Compel Tribute,叩關納貢
 aw_hist_event_tributary_set,称臣纳贡,Tributary Submission,稱臣納貢
 aw_hist_event_tributary_get,受贡册封,Tributary Received,受貢冊封
@@ -102,6 +106,10 @@ task_unit_aw_army_rts_captain_combat,将领交战,Commander combat,將領交戰
 task_unit_aw_army_rts_member_combat,士兵交战,Soldier combat,士兵交戰
 task_unit_aw_army_rts_captain_siege_advance,攻城推进,Siege advance,攻城推進
 task_unit_aw_army_rts_siege_combat,攻城战斗,Siege combat,攻城戰鬥
+task_unit_aw_army_rts_transport_awaiting_pickup,等待运输船,Awaiting transport pickup,等待運輸船
+task_unit_aw_army_rts_transport_embarking,登船中,Embarking,登船中
+task_unit_aw_army_rts_transport_sailing,海上航行,Sailing,海上航行
+task_unit_aw_army_rts_transport_landing,登陆作战中,Landing operation,登陸作戰中
 war_type_zhulu_war,逐鹿战争,Zhulu War,逐鹿戰爭
 war_name_zhulu_war,逐鹿战争,Zhulu War,逐鹿戰爭
 war_type_bandit_suppression_war,剿匪战争,Bandit Suppression War,剿匪戰爭

@@ -1,4 +1,14 @@
 key,cz,en,ch
+aw_shi_lineage_mapmode,世家地图,Shi Lineage Map,世家地圖
+aw_shi_lineage_mapmode_description,按城市显示世家影响力,Show Shi influence by city,按城市顯示世家影響力
+aw_shi_mapmode_tooltip,世家影响力地图,Shi influence map,世家影響力地圖
+aw_shi_map_no_influence,此地无世家影响,No Shi influence,此地無世家影響
+aw_shi_map_dominant,主要世家,Dominant,主要世家
+aw_shi_map_none,无世家,No Shi,無世家
+aw_shi_map_unknown,未知世家,Unknown Shi,未知世家
+aw_shi_map_composition,世家构成,Shi Composition,世家構成
+aw_shi_map_focus,聚焦,Focus,聚焦
+aw_shi_map_focused,聚焦中,Focused,聚焦中
 aw_royal_enfeoffment,分封建藩,Royal Enfeoffment,分封建藩
 aw_royal_enfeoffment Description,点击本国城市建立一城附庸并派宗族成员为王,Click a home city to create a one-city vassal ruled by a royal clansman,點擊本國城市建立一城附庸並派宗族成員為王
 aw_royal_enfeoffment_description,点击本国城市建立一城附庸并派宗族成员为王,Click a home city to create a one-city vassal ruled by a royal clansman,點擊本國城市建立一城附庸並派宗族成員為王

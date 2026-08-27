@@ -26,6 +26,7 @@ internal static class CustomCourtTemplateCodecTests
         ContextDocumentsRemainIndependent();
         LocalDocumentsReplaceOrAppendOneTemplate();
         LocalOfficeNamesComeFromTemplateData();
+        LocalDocumentPreservesRevision();
     }
 
     private static void ContextDocumentsRemainIndependent()
@@ -111,6 +112,15 @@ internal static class CustomCourtTemplateCodecTests
             "office lookup searches local government templates");
         Equal("地方州牧", office.Name.Chinese,
             "local office lookup returns template-owned display text");
+    }
+
+    private static void LocalDocumentPreservesRevision()
+    {
+        CustomCourtTemplate document =
+            CustomCourtTemplateDocumentRules.CreateLocalDocument(
+                Local("revision_local", "Revision local"), 7);
+        Equal(7, document.Revision,
+            "local export envelope preserves the active template revision");
     }
 
     private static CustomCourtTemplate BuildTemplate(bool reverse)

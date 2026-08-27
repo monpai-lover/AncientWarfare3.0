@@ -16,6 +16,7 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         ResolvesSuppressionVictorByConfirmedPrecedence();
         AttributesOnlyLiveCombatAttackers();
         DefersStrongholdFallUntilTheCorrectBoundary();
+        ResolvesLeaderlessSuppressionSettlement();
         AllowsStrongholdCreationWhenGateTowersCannotBePlaced();
         DisposesLogicallyEmptyStrongholdsAfterOwnershipChanges();
         CountsOnlyLivingStrongholdResidents();
@@ -23,6 +24,10 @@ internal static class PeasantRebelBanditStrongholdRulesTests
         RelocatesOnlyOrdinaryResidents();
         PrefersOrdinaryResidentsForRuler();
         AllowsEligibleCityLeaderFallbackRuler();
+        RestorationClaimantWinsRulerPriority();
+        RejectsRulerCandidatesThatCannotPassKingGate();
+        RejectsForeignBanditKings();
+        AcceptsOnlyResidentsOfTheBanditKingdom();
         TransfersFallenSurvivorsToTheMotherRealm();
         ComposesStrongholdNamesAndTitles();
     }
@@ -164,6 +169,27 @@ internal static class PeasantRebelBanditStrongholdRulesTests
             "a populated uncaptured stronghold remains active");
     }
 
+    private static void ResolvesLeaderlessSuppressionSettlement()
+    {
+        True(PeasantRebelBanditStrongholdRules.
+                ShouldCompleteLeaderlessSuppression(
+                    isSuppressionWar: true, isBanditKingdom: true,
+                    hasLivingKing: false, hasLivingRegisteredHeir: false),
+            "a suppression war ends when the bandit has neither king nor heir");
+        False(PeasantRebelBanditStrongholdRules.
+                ShouldCompleteLeaderlessSuppression(true, true, true, false),
+            "a living bandit king keeps the suppression war active");
+        False(PeasantRebelBanditStrongholdRules.
+                ShouldCompleteLeaderlessSuppression(true, true, false, true),
+            "a living registered heir keeps the suppression war active");
+        False(PeasantRebelBanditStrongholdRules.
+                ShouldCompleteLeaderlessSuppression(false, true, false, false),
+            "ordinary wars do not use bandit decapitation settlement");
+        False(PeasantRebelBanditStrongholdRules.
+                ShouldCompleteLeaderlessSuppression(true, false, false, false),
+            "a non-bandit participant cannot trigger bandit collapse");
+    }
+
     private static void RelocatesOnlyOrdinaryResidents()
     {
         True(PeasantRebelBanditStrongholdRules.
@@ -220,6 +246,75 @@ internal static class PeasantRebelBanditStrongholdRulesTests
                 cityLeaderAlive: true, cityLeaderAdult: true,
                 cityLeaderBelongsToMotherCity: false),
             "an unrelated city leader cannot be used as the fallback ruler");
+    }
+
+    private static void RestorationClaimantWinsRulerPriority()
+    {
+        Equal(0, PeasantRebelBanditStrongholdRules.RulerPriority(
+                hasRestorationClaim: true, ordinaryResident: true,
+                cityLeader: true),
+            "a restoration claimant is the first bandit ruler choice");
+        Equal(1, PeasantRebelBanditStrongholdRules.RulerPriority(
+                hasRestorationClaim: false, ordinaryResident: true,
+                cityLeader: true),
+            "an ordinary resident is the second bandit ruler choice");
+        Equal(2, PeasantRebelBanditStrongholdRules.RulerPriority(
+                hasRestorationClaim: false, ordinaryResident: false,
+                cityLeader: true),
+            "the city leader is only a fallback ruler choice");
+    }
+
+    private static void RejectsRulerCandidatesThatCannotPassKingGate()
+    {
+        True(PeasantRebelBanditStrongholdRules.CanUseDirectRuler(
+                candidateIsMale: true, femaleSuccessionAllowed: false),
+            "a male direct ruler passes the native kingship gate");
+        True(PeasantRebelBanditStrongholdRules.CanUseDirectRuler(
+                candidateIsMale: false, femaleSuccessionAllowed: true),
+            "a female direct ruler is allowed when the court law permits it");
+        True(PeasantRebelBanditStrongholdRules.CanUseDirectRuler(
+                candidateIsMale: false, femaleSuccessionAllowed: false),
+            "a city-leader fallback is promoted directly even when the native court law is male-only");
+    }
+
+    private static void RejectsForeignBanditKings()
+    {
+        False(PeasantRebelBanditStrongholdRules.IsValidBanditKing(
+            banditKingdom: true, kingAlive: true,
+            kingBelongsToKingdom: false, kingBelongsToKingdomCity: false),
+            "a foreign actor can never remain king of a bandit kingdom");
+        False(PeasantRebelBanditStrongholdRules.IsValidBanditKing(
+            banditKingdom: true, kingAlive: true,
+            kingBelongsToKingdom: true, kingBelongsToKingdomCity: false),
+            "a bandit king must live in a city owned by the bandit kingdom");
+        False(PeasantRebelBanditStrongholdRules.IsValidBanditKing(
+            banditKingdom: false, kingAlive: true,
+            kingBelongsToKingdom: true, kingBelongsToKingdomCity: true),
+            "the bandit identity gate does not apply to an ordinary kingdom");
+    }
+
+    private static void AcceptsOnlyResidentsOfTheBanditKingdom()
+    {
+        True(PeasantRebelBanditStrongholdRules.CanPromoteBanditKingCandidate(
+            actorAlive: true, actorAdult: true, actorMale: true,
+            actorBelongsToKingdom: true, actorCityBelongsToKingdom: true,
+            actorIsBoat: false),
+            "a living adult resident may become the bandit king");
+        False(PeasantRebelBanditStrongholdRules.CanPromoteBanditKingCandidate(
+            actorAlive: true, actorAdult: true, actorMale: true,
+            actorBelongsToKingdom: false, actorCityBelongsToKingdom: true,
+            actorIsBoat: false),
+            "a foreign actor cannot be promoted into the bandit kingship");
+        False(PeasantRebelBanditStrongholdRules.CanPromoteBanditKingCandidate(
+            actorAlive: true, actorAdult: true, actorMale: true,
+            actorBelongsToKingdom: true, actorCityBelongsToKingdom: false,
+            actorIsBoat: false),
+            "an actor outside a bandit city cannot be promoted");
+        False(PeasantRebelBanditStrongholdRules.CanPromoteBanditKingCandidate(
+            actorAlive: true, actorAdult: true, actorMale: true,
+            actorBelongsToKingdom: true, actorCityBelongsToKingdom: true,
+            actorIsBoat: true),
+            "a transport boat cannot become a bandit king");
     }
 
     private static void AllowsStrongholdCreationWhenGateTowersCannotBePlaced()

@@ -8,9 +8,9 @@ internal static class MandateBorderWallRulesTests
         IndependentLivingKingdomIsFortified();
         FriendlyAndInvalidKingdomsAreIgnored();
         OnlyValidForeignLandCreatesAFrontierTile();
-        PoorRelationThresholdMatchesWarPlanning();
-        FirstWallDecisionRestrictsToPoorRelations();
-        SecondWallDecisionAllowsAllRelations();
+        PoorRelationThresholdMatchesRequestedRelationScale();
+        EveryWallDecisionRestrictsToPoorRelations();
+        RebelAndBanditKingdomsAreIgnored();
     }
 
     private static void IndependentLivingKingdomIsFortified()
@@ -45,40 +45,42 @@ internal static class MandateBorderWallRulesTests
             "blocked terrain does not create a frontier tile");
     }
 
-    private static void PoorRelationThresholdMatchesWarPlanning()
+    private static void PoorRelationThresholdMatchesRequestedRelationScale()
     {
-        True(MandateBorderWallRules.IsPoorRelation(-55),
-            "the existing negative-opinion boundary is poor relation");
-        True(MandateBorderWallRules.IsPoorRelation(-100),
-            "strongly negative opinion is poor relation");
-        False(MandateBorderWallRules.IsPoorRelation(-54),
-            "opinion above the war-planning boundary is not poor relation");
+        True(MandateBorderWallRules.IsPoorRelation(29),
+            "relation below thirty is a wall target");
+        False(MandateBorderWallRules.IsPoorRelation(30),
+            "relation thirty is not a wall target");
     }
 
-    private static void FirstWallDecisionRestrictsToPoorRelations()
+    private static void EveryWallDecisionRestrictsToPoorRelations()
     {
         True(MandateBorderWallRules.ShouldUsePoorRelationTargetsForDecision(0),
             "the first wall decision only fortifies poor relations");
-        False(MandateBorderWallRules.ShouldUsePoorRelationTargetsForDecision(1),
-            "after the first decision the second stage can fill all borders");
-    }
-
-    private static void SecondWallDecisionAllowsAllRelations()
-    {
+        True(MandateBorderWallRules.ShouldUsePoorRelationTargetsForDecision(1),
+            "later wall decisions still fortify only poor relations");
         True(MandateBorderWallRules.ShouldUsePoorRelationTargets(1),
             "an activated wall after one decision remains poor-relation only");
-        False(MandateBorderWallRules.ShouldUsePoorRelationTargets(2),
-            "completed wall decisions keep the all-target stage enabled");
+        True(MandateBorderWallRules.ShouldUsePoorRelationTargets(2),
+            "completed wall decisions never enable all-target stage");
+    }
+
+    private static void RebelAndBanditKingdomsAreIgnored()
+    {
+        False(Target(isRebel: true), "rebel kingdoms are ignored");
+        False(Target(isBandit: true), "bandit kingdoms are ignored");
+        False(Target(isGuiyi: true), "guiyi kingdoms are ignored");
     }
 
     private static bool Target(bool hasKingdom = true,
         bool alive = true, bool neutral = false,
         bool sameSystem = false, bool sameAlliance = false,
-        bool tributary = false)
+        bool tributary = false, bool isRebel = false,
+        bool isBandit = false, bool isGuiyi = false)
     {
         return MandateBorderWallRules.ShouldFortifyKingdom(
             hasKingdom, alive, neutral, sameSystem, sameAlliance,
-            tributary);
+            tributary, isRebel, isBandit, isGuiyi);
     }
 
     private static bool Land(bool target = true, bool hasCity = true,

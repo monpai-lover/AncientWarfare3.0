@@ -456,8 +456,8 @@ namespace AncientWarfare3.ui.windows
                     ToolbarScrollbarWidth, 0f);
                 _toolScrollbar.transform.SetAsLastSibling();
             }
-            Layout(_status.rectTransform, 8f, 536f, 148f,
-                Mathf.Max(1f, ToolbarContentHeight - 544f));
+            Layout(_status.rectTransform, 8f, 550f, 148f,
+                Mathf.Max(1f, ToolbarContentHeight - 558f));
             _canvasRect.GetComponent<TreeDragPanHandler>().Setup(_workspaceRect,
                 _canvasRect);
             _chrome?.RepositionResizeHandle();
@@ -1356,6 +1356,17 @@ namespace AncientWarfare3.ui.windows
             }
             string officeId = card?.Office?.Id;
             if (string.IsNullOrEmpty(officeId)) return;
+            if (_editingLocal && ActiveLocalTemplate != null)
+                CustomLocalCourtTemplateRules.EnsureChiefOfficeId(
+                    ActiveLocalTemplate);
+            if (_editingLocal && ActiveLocalTemplate != null &&
+                string.Equals(ActiveLocalTemplate.ChiefOfficeId, officeId,
+                    StringComparison.Ordinal))
+            {
+                SetStatus(AW_L10n.Text("aw_custom_court_chief_protected",
+                    "The city chief seat is fixed and cannot be deleted."));
+                return;
+            }
             ActiveOffices?.RemoveAll(office => office != null &&
                 string.Equals(office.Id, officeId, StringComparison.Ordinal));
             ActiveEdges?.RemoveAll(edge => edge == null ||
@@ -1423,7 +1434,7 @@ namespace AncientWarfare3.ui.windows
                 CustomLocalCourtTemplate local = ActiveLocalTemplate;
                 if (local == null) return false;
                 pDocument = CustomCourtTemplateDocumentRules
-                    .CreateLocalDocument(local);
+                    .CreateLocalDocument(local, _template?.Revision ?? 1);
                 return true;
             }
             pDocument = CustomCourtTemplateDocumentRules

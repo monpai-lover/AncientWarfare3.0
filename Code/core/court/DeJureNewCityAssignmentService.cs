@@ -3,17 +3,26 @@ using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.naming;
+using AncientWarfare3.core.performance;
 
 namespace AncientWarfare3.core.court
 {
     internal static class DeJureNewCityAssignmentService
     {
         private const string RetryPrefix = "de_jure_new_city:";
+        private const string WorldRepairRetryKey = "de_jure_world_repair";
+        private const int MaxWorldRepairDeferrals = 600;
         private static readonly HashSet<long> RetryIds = new HashSet<long>();
         private static bool _worldRepairCompleted;
+        private static int _worldRepairDeferrals;
+        private static bool _worldRepairDeferralWarningLogged;
 
         internal static void OnCityFounded(City pCity)
         {
+            if (pCity?.kingdom?.data != null)
+                DeJureRegionMaintenanceService.MarkKingdomDirty(
+                    pCity.kingdom.data.id, DeJureDirtyReason.CityRoster);
             if (TryAssign(pCity, allowRetry: true)) return;
         }
 
@@ -21,6 +30,8 @@ namespace AncientWarfare3.core.court
         {
             RetryIds.Clear();
             _worldRepairCompleted = false;
+            _worldRepairDeferrals = 0;
+            _worldRepairDeferralWarningLogged = false;
         }
 
         // Existing saves may contain cities created before the automatic
@@ -31,6 +42,14 @@ namespace AncientWarfare3.core.court
             if (_worldRepairCompleted || World.world?.cities == null ||
                 World.world.cities.Count == 0 || !Config.game_loaded ||
                 SmoothLoader.isLoading()) return;
+            // Save loading can expose the city list before native kingdom
+            // ownership has been restored. Do not consume the one-shot repair
+            // in that intermediate state; retry from the deferred runtime lane.
+            if (!IsWorldOwnershipReady())
+            {
+                QueueWorldRepairRetry();
+                return;
+            }
             _worldRepairCompleted = true;
             try
             {
@@ -76,6 +95,7 @@ namespace AncientWarfare3.core.court
             if (kingdom.capital == pCity)
             {
                 DeJureRegionStore.EnsureKingdomCapitalSeat(kingdom);
+                ApplyHistoricalCityName(pCity);
                 return true;
             }
             if (DeJureRegionStore.TryGetForCity(pCity.data.id, out _)) return true;
@@ -106,9 +126,73 @@ namespace AncientWarfare3.core.court
             }
 
             RetryIds.Remove(pCity.data.id);
+            ApplyHistoricalCityName(pCity);
             HierarchicalVassalMapModeService.MarkHierarchyDirty(kingdom);
             HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
             return true;
+        }
+
+        private static void ApplyHistoricalCityName(City pCity)
+        {
+            if (pCity?.data == null || pCity.data.custom_name ||
+                !LineageService.IsXiaKingdom(pCity.kingdom) ||
+                !XiaHistoricalDeJureRules.ShouldNameCity(
+                    AWPerformanceSettings.EnableHistoricalDeJureCityNames,
+                    !pCity.data.custom_name)) return;
+            try
+            {
+                string currentName = ResolveChineseCityName(pCity);
+                if (XiaHistoricalDeJureRules.IsHistoricalCityName(
+                        XiaHistoricalDeJureCatalogService.Current,
+                        currentName)) return;
+                if (!DeJureRegionStore.TryGetForCity(pCity.data.id,
+                        out DeJureRegion region)) return;
+                var memberNames = (region.MemberCityIds ??
+                    new List<long>()).Select(ResolveChineseCityName);
+                XiaHistoricalDeJureProfile profile =
+                    XiaHistoricalDeJureRules.SelectProfile(
+                        XiaHistoricalDeJureCatalogService.Current, memberNames,
+                        StableSelector(pCity.data.id));
+                string[] usedNames = memberNames.ToArray();
+                int selector = StableSelector(pCity.data.id);
+                string stateId = string.IsNullOrWhiteSpace(
+                        region.HistoricalStateId)
+                    ? profile.StateId
+                    : region.HistoricalStateId;
+                string candidate = XiaHistoricalDeJureRules.
+                    SelectHistoricalCityName(
+                        XiaHistoricalDeJureCatalogService.Current, stateId,
+                        usedNames, selector);
+                if (string.IsNullOrWhiteSpace(candidate) ||
+                    string.Equals(candidate, ResolveChineseCityName(pCity),
+                        StringComparison.Ordinal)) return;
+                // Preserve the native/generated city identity before replacing
+                // only the Chinese presentation slot with the historical
+                // county label.
+                AWLocalizedNameService.CaptureNative(pCity.data);
+                pCity.data.set(AWNameDataKeys.ChineseName, candidate);
+                AWLocalizedNameService.ProjectStored(pCity.data);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogError("Historical city name assignment failed: " +
+                    error.Message);
+            }
+        }
+
+        private static string ResolveChineseCityName(long pCityId)
+        {
+            return ResolveChineseCityName(World.world?.cities?.get(pCityId));
+        }
+
+        private static string ResolveChineseCityName(City pCity)
+        {
+            if (pCity?.data == null) return string.Empty;
+            pCity.data.get(AWNameDataKeys.ChineseName,
+                out string chineseName, string.Empty);
+            return string.IsNullOrWhiteSpace(chineseName)
+                ? pCity.data.name ?? string.Empty
+                : chineseName.Trim();
         }
 
         private static bool PrepareNeighbours(City pCity)
@@ -134,9 +218,13 @@ namespace AncientWarfare3.core.court
             var facts = new List<DeJureNewCityRegionCandidate>();
             foreach (DeJureRegion region in DeJureRegionStore.ActiveRegions())
             {
-                var members = (region.MemberCityIds ?? new List<long>())
+                var allMembers = (region.MemberCityIds ?? new List<long>())
                     .Select(id => World.world?.cities?.get(id))
                     .Where(city => city?.data != null && !city.isRekt() &&
+                        DeJureRegionStore.IsEligibleCityId(city.data.id))
+                    .ToList();
+                var members = allMembers
+                    .Where(city =>
                         city.kingdom == pKingdom &&
                         DeJureRegionStore.IsEligibleCityId(city.data.id))
                     .ToList();
@@ -150,7 +238,9 @@ namespace AncientWarfare3.core.court
                 long seatDistance = Distance(cityTile, seat?.getTile());
                 facts.Add(new DeJureNewCityRegionCandidate(region.RegionId,
                     adjacentSeat, adjacentSeat ? 1 : 0, nearest,
-                    seatDistance, true));
+                    seatDistance,
+                    allMembers.Count < RegionalGovernmentRules.
+                        MaximumRegionCityCount));
             }
             return DeJureNewCityAssignmentRules.Select(facts,
                 StableSelector(pCity.data.id));
@@ -198,6 +288,38 @@ namespace AncientWarfare3.core.court
                     // the native city graph is ready.
                     TryAssign(World.world?.cities?.get(cityId), true);
                 });
+        }
+
+        private static bool IsWorldOwnershipReady()
+        {
+            try
+            {
+                foreach (City city in World.world.cities)
+                {
+                    if (city?.data == null || city.isRekt()) continue;
+                    if (city.kingdom?.data == null) return false;
+                }
+                return true;
+            }
+            catch { return false; }
+        }
+
+        private static void QueueWorldRepairRetry()
+        {
+            if (_worldRepairDeferrals++ >= MaxWorldRepairDeferrals)
+            {
+                if (!_worldRepairDeferralWarningLogged)
+                {
+                    _worldRepairDeferralWarningLogged = true;
+                    ModClass.LogWarning(
+                        "De jure world repair deferred too long; ownership " +
+                        "never became ready.");
+                }
+                return;
+            }
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                WorldRepairRetryKey, DeferredWorkClass.Runtime,
+                RepairUnassignedCities);
         }
     }
 }

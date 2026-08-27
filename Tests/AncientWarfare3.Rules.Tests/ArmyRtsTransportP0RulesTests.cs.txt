@@ -52,6 +52,18 @@ internal static class ArmyRtsTransportP0RulesTests
         Assert(!ArmyRtsTransportRules.ShouldAdmitMemberP0(
                 pValidMember: false, pInsideBoat: false),
             "an invalid member is never admitted to P0");
+        Assert(ArmyRtsTransportRules.ShouldKeepExistingP0Path(
+                exactTarget: true, customPathOwned: true,
+                nativeTransportBoat: false),
+            "a captain keeps its pending AW path when P0 revisits the same shore target");
+        Assert(ArmyRtsTransportRules.ShouldKeepExistingP0Path(
+                exactTarget: true, customPathOwned: false,
+                nativeTransportBoat: true),
+            "a temporary boat keeps its native path when P0 revisits the same sea target");
+        Assert(!ArmyRtsTransportRules.ShouldKeepExistingP0Path(
+                exactTarget: false, customPathOwned: true,
+                nativeTransportBoat: false),
+            "a changed transport waypoint replaces the previous path");
         Assert(ArmyRtsTransportRules.SelectEmergencyLanding(
                    entryValid: true, entryDistanceSquared: 25f,
                    exitValid: true, exitDistanceSquared: 9f) ==
@@ -78,6 +90,47 @@ internal static class ArmyRtsTransportP0RulesTests
             "performance", "AWCooperativeActorPostRunner.cs"));
         string boatLifecycle = File.ReadAllText(Path.Combine(root, "Code",
             "patch", "AW_ActorBoatLifecyclePatch.cs"));
+
+        int captainPriorityStart = controller.IndexOf(
+            "internal static bool HasActiveCaptainObjective(",
+            StringComparison.Ordinal);
+        int captainPriorityEnd = controller.IndexOf(
+            "// Runs at the actor-post boundary",
+            captainPriorityStart, StringComparison.Ordinal);
+        string captainPriorityBody = captainPriorityStart >= 0 &&
+            captainPriorityEnd > captainPriorityStart
+            ? controller.Substring(captainPriorityStart,
+                captainPriorityEnd - captainPriorityStart)
+            : string.Empty;
+        Assert(!captainPriorityBody.Contains(
+                   "record.State == ArmyRtsState.Rally",
+                   StringComparison.Ordinal),
+            "an active RTS captain remains eligible for P0 while rallying");
+
+        int memberPriorityStart = controller.IndexOf(
+            "internal static bool HasActiveMemberObjective(",
+            StringComparison.Ordinal);
+        int memberPriorityEnd = controller.IndexOf(
+            "public static bool HasFrontHoldMission(",
+            memberPriorityStart, StringComparison.Ordinal);
+        string memberPriorityBody = memberPriorityStart >= 0 &&
+            memberPriorityEnd > memberPriorityStart
+            ? controller.Substring(memberPriorityStart,
+                memberPriorityEnd - memberPriorityStart)
+            : string.Empty;
+        Assert(!memberPriorityBody.Contains(
+                   "record.State == ArmyRtsState.Rally",
+                   StringComparison.Ordinal),
+            "active RTS members remain eligible for P0 while rallying");
+
+        Assert(!controller.Contains(
+                   "if (pState != ArmyRtsState.Rally)\n                ArmyMilitaryMovementPriorityIndex.Register",
+                   StringComparison.Ordinal),
+            "state/job reconciliation cannot drop RTS actors from P0 during rally");
+        Assert(!controller.Contains(
+                   "record.State != ArmyRtsState.Rally &&\n                    ShouldOwnMilitaryActor",
+                   StringComparison.Ordinal),
+            "captain command reassertion cannot drop a rallying captain from P0");
 
         int boatOwnershipStart = transport.IndexOf(
             "public static bool OwnsTransportBoat(",
@@ -167,11 +220,15 @@ internal static class ArmyRtsTransportP0RulesTests
             ? transport.Substring(p0DriveStart,
                 p0DriveEnd - p0DriveStart)
             : string.Empty;
+        p0DriveBody = p0DriveBody.Replace("\r\n", "\n");
         Assert(p0DriveBody.Contains("AWPathMovementBridge.Update(pActor)",
                    StringComparison.Ordinal) &&
-               !p0DriveBody.Contains("pActor.b5_checkPathMovement(",
+               p0DriveBody.Contains(
+                   "pActor.asset?.is_boat == true &&",
+                   StringComparison.Ordinal) &&
+               p0DriveBody.Contains("pActor.b5_checkPathMovement(",
                    StringComparison.Ordinal),
-            "transport P0 advances its owned path without native batch gating");
+            "transport P0 advances captain AW paths while preserving the native boat path lifecycle");
         Assert(p0DriveBody.Contains(
                    "AWPathMovementBridge.HasOwnership(pActor) &&\n                    !pActor.is_moving",
                    StringComparison.Ordinal),

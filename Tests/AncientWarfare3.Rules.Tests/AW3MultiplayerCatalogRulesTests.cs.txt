@@ -53,8 +53,8 @@ internal static class AW3MultiplayerCatalogRulesTests
         IReadOnlyList<AW3CommandDescriptor> commands =
             AW3MultiplayerCatalog.Commands;
 
-        Equal(34, windows.Count, "current AW3 window count");
-        Equal(34, windows.Select(value => value.WindowId).Distinct(
+        Equal(36, windows.Count, "current AW3 window count");
+        Equal(36, windows.Select(value => value.WindowId).Distinct(
                 StringComparer.Ordinal).Count(),
             "window IDs are unique");
         Equal(Enum.GetValues<AW3WindowKind>().Length, windows.Count,
@@ -168,7 +168,9 @@ internal static class AW3MultiplayerCatalogRulesTests
                 1),
             AW3CommandRequest.GrantBanditAmnesty(7, 8, "None", "", "", true),
             AW3CommandRequest.CommitDomesticHousehold(7, 31, 32,
-                "consort")
+                "consort"),
+            AW3CommandRequest.FillCentralCourtVacancies(7),
+            AW3CommandRequest.MergeDeJureRegions(7, 101, 102)
         };
 
         Equal(Enum.GetValues<AW3CommandKind>().Length, requests.Length,
@@ -758,6 +760,7 @@ internal static class AW3MultiplayerCatalogRulesTests
             "AWHistoricalReadService.TrySchedule",
             "DiplomacyProposalService.TryGetActiveNonAggression",
             "DiplomacyProposalService.TryGetActiveTruce",
+            "VassalService.TryReadTributaryDiplomacyDetails",
             "SuccessionDisputeService.TryGetMaterializedByKingdom",
             "WarNoticeService.TryGetPreparationSummary",
             "WarScoreService.TryGetSnapshot",

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ai;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
@@ -10,6 +11,35 @@ namespace AncientWarfare3.core.lineage
     internal static class PeasantRebelBanditStrongholdService
     {
         private const int GateTowerInwardSearchSteps = 6;
+
+        [ThreadStatic]
+        private static int _directBanditKingInstallationDepth;
+
+        internal static bool IsInstallingDirectBanditKing =>
+            _directBanditKingInstallationDepth > 0;
+
+        private sealed class DirectBanditKingInstallationScope : IDisposable
+        {
+            private bool _disposed;
+
+            internal DirectBanditKingInstallationScope()
+            {
+                _directBanditKingInstallationDepth++;
+            }
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                if (_directBanditKingInstallationDepth > 0)
+                    _directBanditKingInstallationDepth--;
+                _disposed = true;
+            }
+        }
+
+        private static IDisposable EnterDirectBanditKingInstallationScope()
+        {
+            return new DirectBanditKingInstallationScope();
+        }
 
         private static readonly CultiwayWallPoint[]
             GateTowerInwardDirections =
@@ -51,7 +81,8 @@ namespace AncientWarfare3.core.lineage
         internal static bool TryPlan(City pMother, Kingdom pBandit,
             Kingdom pOrigin, Actor pRuler,
             out PeasantRebelBanditStrongholdPlan pPlan,
-            out string pFailureKey)
+            out string pFailureKey,
+            bool pIgnoreSuppressionCooldown = false)
         {
             pPlan = null;
             pFailureKey = "aw_bandit_stronghold_invalid_city";
@@ -59,8 +90,20 @@ namespace AncientWarfare3.core.lineage
                 pBandit?.data == null || pBandit.isRekt() ||
                 pOrigin?.data == null || pOrigin.isRekt() ||
                 pRuler?.data == null || pRuler.isRekt() ||
+                pRuler.city != pMother || pRuler.kingdom != pMother.kingdom ||
                 World.world?.cities == null ||
                 TopTileLibrary.wall_wild == null) return false;
+            pMother.data.get(
+                LineageKeys.MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
+                out int suppressionUntilYear, int.MinValue);
+            if (!PeasantRebelBanditSpawnRules.CanCreateInCity(
+                    Date.getCurrentYear(), suppressionUntilYear,
+                    pIgnoreSuppressionCooldown))
+            {
+                pFailureKey =
+                    "aw_bandit_stronghold_suppression_cooldown";
+                return false;
+            }
             if (pMother.kingdom != pBandit && pMother.kingdom != pOrigin)
                 return false;
             if (HasStronghold(pBandit) || IsStronghold(pMother) ||
@@ -329,16 +372,19 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool TryCreateDirect(City pMother,
             out Kingdom pBandit, out City pStronghold,
-            out string pFailureKey)
+            out string pFailureKey,
+            bool pIgnoreSuppressionCooldown = false)
         {
             return TryCreateDirect(pMother, out pBandit, out pStronghold,
-                out pFailureKey, out _, pAllowClaimRedirect: true);
+                out pFailureKey, out _, pAllowClaimRedirect: true,
+                pIgnoreSuppressionCooldown: pIgnoreSuppressionCooldown);
         }
 
         internal static bool TryCreateDirect(City pMother,
             out Kingdom pBandit, out City pStronghold,
             out string pFailureKey, out bool restorationRedirected,
-            bool pAllowClaimRedirect = true)
+            bool pAllowClaimRedirect = true,
+            bool pIgnoreSuppressionCooldown = false)
         {
             pBandit = null;
             pStronghold = null;
@@ -382,7 +428,7 @@ namespace AncientWarfare3.core.lineage
             }
             if (!TryPlan(pMother, origin, origin, ruler,
                     out PeasantRebelBanditStrongholdPlan plan,
-                    out pFailureKey))
+                    out pFailureKey, pIgnoreSuppressionCooldown))
                 return false;
 
             bool rulerWasMotherCityLeader = pMother.leader == ruler;
@@ -394,6 +440,12 @@ namespace AncientWarfare3.core.lineage
                 Kingdom bandit = World.world.kingdoms.makeNewCivKingdom(
                     ruler);
                 pBandit = bandit;
+                if (!EnsureDirectBanditKing(bandit, ruler,
+                        "after_make_new_kingdom"))
+                    throw new InvalidOperationException(
+                        "native kingdom creation did not install bandit king");
+                try { ReignRecordWriter.OpenReign(bandit, ruler); }
+                catch { }
                 bandit.copyMetasFromOtherKingdom(origin);
                 MandateRebelService.MarkRebelKingdom(bandit, ruler,
                     origin);
@@ -439,11 +491,19 @@ namespace AncientWarfare3.core.lineage
                             pMother.setLeader(ruler, pNew: true);
                         PrepareBanditKingdomRemoval(
                             bandit, origin, pMother, null, ruler);
-                        World.world.kingdoms.removeObject(bandit);
+                        RemoveBanditKingdomAndDrain(bandit);
                     }
                     pBandit = null;
                     return false;
                 }
+                if (!EnsureDirectBanditKing(bandit, ruler,
+                        "after_stronghold_creation"))
+                    throw new InvalidOperationException(
+                        "bandit king was lost during stronghold creation");
+                if (!EnsureBanditKingIdentity(bandit,
+                        "after_stronghold_creation_identity"))
+                    throw new InvalidOperationException(
+                        "bandit king is not a local stronghold resident");
                 return true;
             }
             catch (Exception e)
@@ -458,7 +518,7 @@ namespace AncientWarfare3.core.lineage
                         pMother.setLeader(ruler, pNew: true);
                     PrepareBanditKingdomRemoval(
                         pBandit, origin, pMother, null, ruler);
-                    World.world.kingdoms.removeObject(pBandit);
+                    RemoveBanditKingdomAndDrain(pBandit);
                 }
                 pBandit = null;
                 pFailureKey = "aw_bandit_stronghold_transaction_failed";
@@ -485,6 +545,23 @@ namespace AncientWarfare3.core.lineage
         internal static bool IsStrongholdKingdom(Kingdom pKingdom)
         {
             return HasActiveStronghold(pKingdom);
+        }
+
+        internal static Actor ResolveRecordedRuler(Kingdom pBandit)
+        {
+            if (pBandit?.data == null ||
+                !PeasantRebelBanditStateStore.TryRead(pBandit,
+                    out PeasantRebelBanditStrongholdState state)) return null;
+            long rulerId = state.LeaderActorId;
+            if (rulerId < 0L) rulerId = state.Migration?.LeaderActorId ?? -1L;
+            if (rulerId < 0L) return null;
+            try { return World.world?.units?.get(rulerId); }
+            catch { return null; }
+        }
+
+        internal static bool IsRecordedRuler(Kingdom pBandit, Actor pActor)
+        {
+            return pActor?.data != null && ResolveRecordedRuler(pBandit) == pActor;
         }
 
         internal static bool IsStrongholdCity(City pCity)
@@ -529,27 +606,244 @@ namespace AncientWarfare3.core.lineage
         private static Actor SelectDirectRuler(City pMother)
         {
             Kingdom origin = pMother?.kingdom;
-            Actor ordinary = pMother?.units?.Where(actor =>
-                    IsOrdinaryResident(actor, origin))
-                .OrderBy(actor => actor.getID()).FirstOrDefault();
-            if (PeasantRebelBanditStrongholdRules.ShouldPreferOrdinaryRuler(
-                    ordinary != null))
-                return ordinary;
-
-            Actor cityLeader = pMother?.leader;
-            bool alive = false;
-            bool adult = false;
+            Actor selected = null;
+            int selectedPriority = int.MaxValue;
+            int selectedAbility = int.MinValue;
+            long selectedId = long.MaxValue;
             try
             {
-                alive = cityLeader != null && cityLeader.isAlive() &&
-                    !cityLeader.isRekt();
-                adult = alive && cityLeader.isAdult();
+                foreach (Actor actor in pMother?.units ?? new List<Actor>())
+                {
+                    if (!CanUseDirectRulerCandidate(actor, pMother))
+                        continue;
+                    bool hasClaim = HasDormantRestorationClaim(actor);
+                    bool ordinary = IsOrdinaryResident(actor, origin);
+                    bool cityLeader = actor == pMother.leader;
+                    int priority = PeasantRebelBanditStrongholdRules.
+                        RulerPriority(hasClaim, ordinary, cityLeader);
+                    if (priority > 2) continue;
+                    int ability = RulerAbility(actor);
+                    long actorId = actor.getID();
+                    if (selected != null &&
+                        (priority > selectedPriority ||
+                         priority == selectedPriority &&
+                         (ability < selectedAbility ||
+                          ability == selectedAbility && actorId >= selectedId)))
+                        continue;
+                    selected = actor;
+                    selectedPriority = priority;
+                    selectedAbility = ability;
+                    selectedId = actorId;
+                }
             }
             catch { }
-            return PeasantRebelBanditStrongholdRules.CanUseCityLeaderAsRuler(
-                    alive, adult, cityLeader?.city == pMother)
-                ? cityLeader
-                : null;
+            return selected;
+        }
+
+        private static bool CanUseDirectRulerCandidate(Actor pActor,
+            City pMother)
+        {
+            if (pActor?.data == null || pMother?.data == null ||
+                pActor.city != pMother || pActor.isRekt() ||
+                pActor.kingdom != pMother.kingdom ||
+                !pActor.isAlive() || !pActor.isAdult() ||
+                !pActor.isSexMale() || pActor.hasTrait("madness"))
+                return false;
+            return pActor == pMother.leader ||
+                   IsOrdinaryResident(pActor, pMother.kingdom) ||
+                   (RoyalClaimService.IsAvailableRestorationLeader(pActor) &&
+                    HasDormantRestorationClaim(pActor));
+        }
+
+        private static bool HasDormantRestorationClaim(Actor pActor)
+        {
+            if (pActor?.data == null ||
+                !RoyalClaimService.IsAvailableRestorationLeader(pActor))
+                return false;
+            return RoyalClaimService.FindBestDormantClaimIdForActor(
+                pActor.data.id) >= 0L;
+        }
+
+        private static int RulerAbility(Actor pActor)
+        {
+            try
+            {
+                return (int)Math.Max(0f,
+                    (pActor.stats?["diplomacy"] ?? 0f) +
+                    (pActor.stats?["warfare"] ?? 0f) +
+                    (pActor.stats?["stewardship"] ?? 0f) +
+                    (pActor.stats?["intelligence"] ?? 0f));
+            }
+            catch { return 0; }
+        }
+
+        private static bool EnsureDirectBanditKing(Kingdom pBandit,
+            Actor pRuler, string pPhase)
+        {
+            if (pBandit?.data == null || pRuler?.data == null ||
+                pBandit.isRekt() || pRuler.isRekt()) return false;
+            if (pBandit.king == pRuler && pRuler.kingdom == pBandit)
+                return true;
+            try
+            {
+                if (pRuler.kingdom != pBandit)
+                    pRuler.joinKingdom(pBandit);
+                using (EnterDirectBanditKingInstallationScope())
+                    pBandit.setKing(pRuler);
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Bandit king installation failed at " +
+                                    pPhase + ": " + e.Message);
+                return false;
+            }
+            bool installed = pBandit.king == pRuler &&
+                pRuler.kingdom == pBandit;
+            if (!installed)
+                ModClass.LogWarning("Bandit king installation was rejected at " +
+                                    pPhase + "; kingdom=" +
+                                    pBandit.getID() + "; ruler=" +
+                                    pRuler.getID());
+            return installed;
+        }
+
+        internal static bool EnsureBanditKingIdentity(Kingdom pBandit,
+            string pPhase)
+        {
+            if (pBandit?.data == null || pBandit.isRekt() ||
+                pBandit.isNeutral()) return false;
+
+            Actor current = null;
+            try { current = pBandit.king; }
+            catch { }
+            if (IsValidBanditKingResident(pBandit, current)) return true;
+
+            Actor candidate = ResolveRecordedRuler(pBandit);
+            if (!CanPromoteBanditKingCandidate(pBandit, candidate))
+                candidate = SelectBanditKingCandidate(pBandit);
+            if (!CanPromoteBanditKingCandidate(pBandit, candidate))
+            {
+                ModClass.LogWarning("Bandit king identity repair found no " +
+                    "local adult ruler: kingdom=" + pBandit.getID() +
+                    ", phase=" + (pPhase ?? "unknown"));
+                return false;
+            }
+
+            try
+            {
+                using (EnterDirectBanditKingInstallationScope())
+                    pBandit.setKing(candidate);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Bandit king identity repair failed at " +
+                    (pPhase ?? "unknown") + ": " + error.Message);
+                return false;
+            }
+
+            bool installed = pBandit.king == candidate &&
+                IsValidBanditKingResident(pBandit, candidate);
+            if (!installed)
+            {
+                ModClass.LogWarning("Bandit king identity repair was rejected " +
+                    "at " + (pPhase ?? "unknown") + "; kingdom=" +
+                    pBandit.getID() + "; candidate=" + candidate.getID());
+                return false;
+            }
+
+            candidate.data.set(LineageKeys.MANDATE_REBEL_LEADER, true);
+            if (!candidate.hasTrait("rebel")) candidate.addTrait("rebel");
+            if (PeasantRebelBanditStateStore.TryRead(pBandit,
+                    out PeasantRebelBanditStrongholdState state) &&
+                state.LeaderActorId != candidate.data.id)
+            {
+                state.LeaderActorId = candidate.data.id;
+                PeasantRebelBanditStateStore.Write(pBandit, state);
+            }
+            return true;
+        }
+
+        private static Actor SelectBanditKingCandidate(Kingdom pBandit)
+        {
+            Actor selected = null;
+            int selectedPriority = int.MinValue;
+            int selectedAbility = int.MinValue;
+            long selectedId = long.MaxValue;
+            try
+            {
+                foreach (City city in pBandit.getCities())
+                {
+                    if (city?.data == null || city.isRekt() ||
+                        city.kingdom != pBandit) continue;
+                    foreach (Actor actor in city.units ?? new List<Actor>())
+                    {
+                        if (!CanPromoteBanditKingCandidate(pBandit, actor))
+                            continue;
+                        int priority = actor == city.leader ? 2 :
+                            (actor.isWarrior() ? 1 : 0);
+                        int ability = RulerAbility(actor);
+                        long actorId = actor.getID();
+                        if (selected != null &&
+                            (priority < selectedPriority ||
+                             priority == selectedPriority &&
+                             (ability < selectedAbility ||
+                              ability == selectedAbility && actorId >=
+                                  selectedId))) continue;
+                        selected = actor;
+                        selectedPriority = priority;
+                        selectedAbility = ability;
+                        selectedId = actorId;
+                    }
+                }
+            }
+            catch { }
+            return selected;
+        }
+
+        private static bool IsValidBanditKingResident(Kingdom pBandit,
+            Actor pActor)
+        {
+            if (pBandit?.data == null || pActor?.data == null ||
+                pActor.isRekt() || !pActor.isAlive()) return false;
+            City city = null;
+            try { city = pActor.city; }
+            catch { }
+            return PeasantRebelBanditStrongholdRules.IsValidBanditKing(
+                banditKingdom: true,
+                kingAlive: true,
+                kingBelongsToKingdom: pActor.kingdom == pBandit,
+                kingBelongsToKingdomCity: city?.data != null &&
+                    !city.isRekt() && city.kingdom == pBandit);
+        }
+
+        private static bool CanPromoteBanditKingCandidate(Kingdom pBandit,
+            Actor pActor)
+        {
+            if (pBandit?.data == null || pActor?.data == null ||
+                pActor.isRekt()) return false;
+            City city = null;
+            bool adult = false;
+            bool male = false;
+            bool alive = false;
+            bool boat = false;
+            try
+            {
+                city = pActor.city;
+                adult = pActor.isAdult();
+                male = pActor.isSexMale();
+                alive = pActor.isAlive();
+                boat = pActor.asset?.is_boat == true;
+            }
+            catch { return false; }
+            return PeasantRebelBanditStrongholdRules.
+                CanPromoteBanditKingCandidate(
+                    actorAlive: alive,
+                    actorAdult: adult,
+                    actorMale: male,
+                    actorBelongsToKingdom: pActor.kingdom == pBandit,
+                    actorCityBelongsToKingdom: city?.data != null &&
+                        !city.isRekt() && city.kingdom == pBandit,
+                    actorIsBoat: boat);
         }
 
         internal static City ResolveStronghold(Kingdom pKingdom)
@@ -623,6 +917,24 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        internal static bool TryCompleteLeadershipCollapse(Kingdom pBandit,
+            Kingdom pSuppressor)
+        {
+            if (!CanMutate() || pBandit?.data == null || pBandit.isRekt() ||
+                !PeasantRebelBanditStateStore.TryRead(pBandit,
+                    out PeasantRebelBanditStrongholdState state)) return false;
+            City stronghold = ResolveCity(state.StrongholdCityId);
+            if (stronghold?.data == null || stronghold.kingdom != pBandit)
+                return false;
+            if (state.Phase == BanditStrongholdPhase.Completed)
+                return true;
+            if (state.Phase != BanditStrongholdPhase.Active &&
+                state.Phase != BanditStrongholdPhase.Falling)
+                return false;
+            return CompleteFall(pBandit, stronghold, state, pSuppressor,
+                pRecordSuppressionChronicle: true);
+        }
+
         internal static void QueueGuiyiRestorationFall(Kingdom pBandit,
             Action<City> pOnCompleted)
         {
@@ -668,7 +980,7 @@ namespace AncientWarfare3.core.lineage
                                  .ToList())
                     {
                         if (building?.data == null) continue;
-                        World.world.buildings.removeObject(building);
+                        building.removeBuildingFinal();
                     }
                 foreach (TileZone zone in zones)
                     if (zone?.tiles != null)
@@ -1009,6 +1321,13 @@ namespace AncientWarfare3.core.lineage
                 pState.Raid.CarriedFoodByActorId.Clear();
                 if (!PeasantRebelBanditStateStore.Write(pBandit, pState))
                     return false;
+                int suppressionUntilYear = PeasantRebelBanditSpawnRules.
+                    ResolveSuppressionExpiryYear(Date.getCurrentYear(),
+                        pRecordSuppressionChronicle);
+                if (suppressionUntilYear != int.MinValue)
+                    mother.data.set(LineageKeys.
+                        MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
+                        suppressionUntilYear);
                 if (!pStronghold.isRekt())
                     BanditStrongholdCityDisposalService.Schedule(
                         pStronghold.getID(),
@@ -1523,6 +1842,7 @@ namespace AncientWarfare3.core.lineage
             {
                 Phase = pPhase,
                 StrongholdCityId = pStrongholdCityId,
+                LeaderActorId = plan.Context.Ruler?.data?.id ?? -1L,
                 MotherCityId = plan.Context.Mother.getID(),
                 OriginKingdomId = plan.Context.Origin.getID(),
                 PressureTargetCityId = plan.Context.Mother.getID(),
@@ -1621,12 +1941,11 @@ namespace AncientWarfare3.core.lineage
             {
                 foreach (Building tower in pTransaction.Towers)
                     if (tower?.data != null)
-                        World.world.buildings.removeObject(tower);
+                        tower.removeBuildingFinal();
                 foreach (TileSnapshot snapshot in pTransaction.WallTiles)
                     snapshot.Tile?.setTopTileType(snapshot.TopType);
                 if (pTransaction.BuiltMotherCore?.data != null)
-                    World.world.buildings.removeObject(
-                        pTransaction.BuiltMotherCore);
+                    pTransaction.BuiltMotherCore.removeBuildingFinal();
                 foreach (TileZone zone in plan.InteriorZones)
                     if (zone != null) plan.Context.Mother.addZone(zone);
                 if (pTransaction.Stronghold?.data != null &&
@@ -1666,7 +1985,7 @@ namespace AncientWarfare3.core.lineage
                     PrepareBanditKingdomRemoval(plan.Context.Bandit,
                         plan.Context.Origin, plan.Context.Mother,
                         pTransaction.Actors, plan.Context.Ruler);
-                    World.world.kingdoms.removeObject(plan.Context.Bandit);
+                    RemoveBanditKingdomAndDrain(plan.Context.Bandit);
                 }
             }
             catch (Exception e)
@@ -1715,9 +2034,19 @@ namespace AncientWarfare3.core.lineage
                         pOrigin);
                 }
                 if (actor.kingdom != pBandit) continue;
-                actor.kingdom = null;
-                ActorKingdomSafetyService.QueueRepair(actor);
+                ActorKingdomSafetyService.DetachForTransfer(actor);
             }
+        }
+
+        private static void RemoveBanditKingdomAndDrain(Kingdom pBandit)
+        {
+            if (pBandit?.data == null) return;
+            World.world.kingdoms.removeObject(pBandit);
+
+            // The native manager only disposes removed kingdoms at the next
+            // maintenance boundary. Drain actor repairs now, while the
+            // actor still has a valid asset/tile and before map layers draw.
+            ActorKingdomSafetyService.DrainPendingRepairs(4096);
         }
 
         private static bool IsValidRemovalCity(City pCity,

@@ -30,6 +30,18 @@ internal static class DeferredRuntimeWorkRulesTests
         Contains("key=<ordered>", ordered,
             "ordered work without a coalescing key remains identifiable");
 
+        AssertEqual("wartime_garrison_city",
+            DeferredRuntimeWorkRules.DiagnosticPrefix(
+                "wartime_garrison_city:42"),
+            "deferred diagnostics group object-specific keys by producer");
+        AssertEqual("deployment_assign",
+            DeferredRuntimeWorkRules.DiagnosticPrefix(
+                "deployment_assign:war-signature:17"),
+            "deferred diagnostics stop at the first key separator");
+        AssertEqual("<ordered>",
+            DeferredRuntimeWorkRules.DiagnosticPrefix(null),
+            "ordered work remains visible in prefix diagnostics");
+
         MethodInfo runtimePriority = typeof(DeferredRuntimeWorkRules)
             .GetMethod("ShouldPrioritizeRuntimeWork",
                 BindingFlags.Public | BindingFlags.Static);
@@ -66,10 +78,34 @@ internal static class DeferredRuntimeWorkRulesTests
         Assert((bool)criticalRuntimePriority.Invoke(null,
                 new object[] { true, false, false, 3 }),
             "critical work remains selectable when it is the only queued work");
+
+        AssertEqual(0, DeferredRuntimeWorkRules.ResolveItemsPerAuthorityFrame(0),
+            "empty deferred queue does not spend a drain budget");
+        AssertEqual(1, DeferredRuntimeWorkRules.ResolveItemsPerAuthorityFrame(32),
+            "normal deferred queue remains one item per authority frame");
+        AssertEqual(2, DeferredRuntimeWorkRules.ResolveCatchUpItemsPerAuthorityFrame(33),
+            "a growing deferred backlog receives bounded catch-up");
+        AssertEqual(4, DeferredRuntimeWorkRules.ResolveCatchUpItemsPerAuthorityFrame(128),
+            "a severe deferred backlog is capped at the catch-up limit");
     }
 
     private static void Assert(bool condition, string name)
     {
         if (!condition) throw new InvalidOperationException(name);
+    }
+
+    private static void AssertEqual(int expected, int actual, string name)
+    {
+        if (expected != actual)
+            throw new InvalidOperationException(name +
+                $": expected {expected}, got {actual}");
+    }
+
+    private static void AssertEqual(string expected, string actual,
+        string name)
+    {
+        if (!string.Equals(expected, actual, StringComparison.Ordinal))
+            throw new InvalidOperationException(name +
+                $": expected {expected}, got {actual}");
     }
 }

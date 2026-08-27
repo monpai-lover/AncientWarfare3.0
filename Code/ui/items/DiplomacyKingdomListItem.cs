@@ -31,7 +31,8 @@ namespace AncientWarfare3.ui.items
         }
 
         public void Bind(Kingdom pKingdom, string pName, string pDetail,
-            int pOpinion, Color pColor, bool pSelected, Action<long> pSelect)
+            int pOpinion, Color pColor, bool pSelected,
+            bool pHasTributaryDetails, Action<long> pSelect)
         {
             _kingdomId = pKingdom?.id ?? -1L;
             _select = pSelect;
@@ -43,6 +44,7 @@ namespace AncientWarfare3.ui.items
             _background.color = pSelected
                 ? new Color(.24f, .22f, .18f, .98f)
                 : new Color(.11f, .105f, .09f, .94f);
+            SetRowHeight(pHasTributaryDetails ? 62f : Height);
             if (pKingdom?.data != null)
             {
                 string bannerId = "";
@@ -75,6 +77,21 @@ namespace AncientWarfare3.ui.items
             _kingdomId = -1L;
             _select = null;
             gameObject.SetActive(false);
+        }
+
+        private void SetRowHeight(float pHeight)
+        {
+            RectTransform rect = GetComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(190f, pHeight);
+            LayoutElement layout = GetComponent<LayoutElement>();
+            layout.minHeight = pHeight;
+            layout.preferredHeight = pHeight;
+            Layout(_stripe.rectTransform, 0f, 0f, 4f, pHeight);
+            Layout(_flagBackground.rectTransform, 8f,
+                (pHeight - 26f) * .5f, 26f, 26f);
+            Stretch(_name.rectTransform, 40f, 5f, 6f, 18f);
+            Stretch(_detail.rectTransform, 40f, 26f, 6f,
+                Mathf.Max(17f, pHeight - 31f));
         }
 
         private void Build()

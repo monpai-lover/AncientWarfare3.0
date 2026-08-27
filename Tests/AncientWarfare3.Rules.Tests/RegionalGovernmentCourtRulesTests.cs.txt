@@ -32,6 +32,11 @@ internal static class RegionalGovernmentCourtRulesTests
             "local court must use the city leader as the chief fallback");
         True(readModel.Contains("RegionSeatCityId"),
             "regional superior must resolve the region seat city");
+        string aggregation = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "RegionalGovernmentAggregationService.cs"));
+        True(aggregation.Contains("RefreshCachedGovernorActors", StringComparison.Ordinal) &&
+             aggregation.Contains("RefreshCachedGovernorActors(pKingdom, cached)", StringComparison.Ordinal),
+            "regional cache hits must refresh the seat city leader binding");
     }
 
     private static void True(bool pActual, string pMessage)

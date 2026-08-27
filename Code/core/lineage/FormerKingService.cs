@@ -11,7 +11,9 @@ namespace AncientWarfare3.core.lineage
             bool alive = IsAlive(pLastKing);
             if (!FormerKingTraitRules.ShouldMarkFormerKing(
                     pKingdomDestroyed: true,
-                    pWasLastKing: pKingdom.king == pLastKing,
+                    pWasLastKing: pKingdom.king == pLastKing ||
+                        PeasantRebelBanditStrongholdService.IsRecordedRuler(
+                            pKingdom, pLastKing),
                     pFormerKingAlive: alive))
                 return;
 

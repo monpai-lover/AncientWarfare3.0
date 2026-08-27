@@ -2,6 +2,7 @@ using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.county;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -105,6 +106,8 @@ namespace AncientWarfare3.patch
             ArmyRetreatService.OnKingdomDestroying(pKingdom);
             CivilServiceExamService.OnKingdomDestroying(pKingdom);
             CourtService.OnKingdomDestroying(pKingdom);
+            CourtVacancyReconciliationService.KingdomDestroyed(
+                pKingdom?.id ?? -1L);
             FormerHeirService.ArchiveAndClear(pKingdom);
             ChronicleEvents.OnKingdomDestroyed(pKingdom);
             return true;
@@ -169,7 +172,11 @@ namespace AncientWarfare3.patch
             KingdomStrategyRevisionService.MarkChanged(
                 __state?.id ?? -1L,
                 (__instance?.kingdom ?? pKingdom)?.id ?? -1L);
+            WarRefugeeService.OnCityOwnerChanged(
+                __instance, __state, __instance?.kingdom ?? pKingdom);
             CitySchoolSnapshotService.MarkDirty(__instance);
+            CourtVacancyReconciliationService.CityChangedKingdom(
+                __instance, __state, __instance?.kingdom ?? pKingdom);
             HierarchicalVassalMapModeService.MarkCityOwnershipChanged(
                 __instance, __state, __instance?.kingdom ?? pKingdom);
         }
@@ -214,6 +221,9 @@ namespace AncientWarfare3.patch
         public static void DestroyCity_Postfix(City __instance,
             Kingdom __state)
         {
+            if (__instance?.data != null && __state?.data != null)
+                CourtVacancyRegistry.RemoveCity(__state.id,
+                    __instance.data.id);
             HierarchicalVassalMapModeService.RemoveCity(__instance, __state);
         }
 
@@ -225,6 +235,7 @@ namespace AncientWarfare3.patch
                 BeginContinuousScope();
             try
             {
+                CountyAdministrationStore.MarkCityDirty(__instance?.data?.id ?? -1L);
                 HierarchicalVassalMapModeService.MarkCityZoneGeometryDirty(__instance, pZone);
             }
             finally
@@ -253,6 +264,7 @@ namespace AncientWarfare3.patch
         public static void NewCityEvent_Postfix(City __instance)
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
+            CountyAdministrationStore.MarkCityDirty(__instance?.data?.id ?? -1L);
             KingdomMilitaryReadinessService.OnCityKingdomChanged(
                 __instance, null, __instance?.kingdom);
             ArmyRetreatService.OnCityControlChanged(__instance, null);

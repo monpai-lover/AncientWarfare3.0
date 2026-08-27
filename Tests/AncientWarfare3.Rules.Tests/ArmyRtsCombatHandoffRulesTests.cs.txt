@@ -523,13 +523,13 @@ internal static class ArmyRtsCombatHandoffRulesTests
             ? memberTaskContent.Substring(memberCombatStart,
                 memberCombatEnd - memberCombatStart)
             : string.Empty;
-        Assert(memberCombatBody.Contains("new BehFightCheckEnemyIsOk()",
+        Assert(memberCombatBody.Contains("new BehArmyRtsMemberCombat()",
                    StringComparison.Ordinal) &&
                memberCombatBody.Contains("GoToActorTargetType.SameTile",
                    StringComparison.Ordinal) &&
-               !controller.Contains("FindMemberCombatTarget(",
+               controller.Contains("FindCaptainCombatTarget(",
                    StringComparison.Ordinal),
-            "member combat uses native fighting after native target acquisition");
+            "member combat uses the bounded RTS target chain for ordinary residents");
 
         int setMemberCombatStart = controller.IndexOf(
             "internal static bool TrySetMemberCombatTask(",
@@ -552,8 +552,14 @@ internal static class ArmyRtsCombatHandoffRulesTests
         Assert(fixedAdmissionGate >= 0 && siegeAdmission >
                    fixedAdmissionGate && nativeFightPreservation >
                    siegeAdmission && setMemberCombatBody.Contains(
-                       "return HasValidMemberCombatTarget(pActor);",
-                       StringComparison.Ordinal),
+                       "if (HasValidMemberCombatTarget(pActor))",
+                       StringComparison.Ordinal) &&
+               setMemberCombatBody.Contains(
+                   "if (fieldCombatReleased)",
+                   StringComparison.Ordinal) &&
+               setMemberCombatBody.Contains(
+                   "ArmyRtsContent.MemberCombatTaskId",
+                   StringComparison.Ordinal),
             "member task admission preserves native fighting after mission and siege gates");
 
         int prepareP0Start = controller.IndexOf(
@@ -599,14 +605,48 @@ internal static class ArmyRtsCombatHandoffRulesTests
             ? controller.Substring(siegeTargetStart,
                 siegeTargetEnd - siegeTargetStart)
             : string.Empty;
-        Assert(siegeTargetBody.Contains(
+        Assert(!siegeTargetBody.Contains(
                    "pTarget.is_profession_warrior",
                    StringComparison.Ordinal),
-            "city combat retains hostile military targets only and exits after the garrison is gone");
+            "city combat can select ordinary residents while the population guard remains authoritative");
         Assert(missionRouteClearBody.Contains(
                    "ClearArmyAttackTargets(pArmy)",
                    StringComparison.Ordinal),
             "an accepted emergency mission clears every stale attack target with the old route");
+        int targetCompletedStart = controller.IndexOf(
+            "public static void OnTargetCompleted(City pTargetCity)",
+            StringComparison.Ordinal);
+        int targetCompletedEnd = controller.IndexOf(
+            "public static bool TryGetWatchdogSample(",
+            targetCompletedStart, StringComparison.Ordinal);
+        string targetCompletedBody = targetCompletedStart >= 0 &&
+            targetCompletedEnd > targetCompletedStart
+            ? controller.Substring(targetCompletedStart,
+                targetCompletedEnd - targetCompletedStart)
+            : string.Empty;
+        int nativeTargetClear = targetCompletedBody.IndexOf(
+            "ClearVanillaCityAttackTarget(army, pTargetCity)",
+            StringComparison.Ordinal);
+        int targetInvalidate = targetCompletedBody.IndexOf(
+            "Invalidate(armyId)", nativeTargetClear,
+            StringComparison.Ordinal);
+        Assert(nativeTargetClear >= 0 && targetInvalidate > nativeTargetClear,
+            "capture completion clears the anchor city's native attack target before mission invalidation");
+        int releaseActorStart = controller.IndexOf(
+            "public static void ReleaseActor(Actor pActor)",
+            StringComparison.Ordinal);
+        int releaseActorEnd = controller.IndexOf(
+            "public static void ReassertCaptainCommand(",
+            releaseActorStart, StringComparison.Ordinal);
+        string releaseActorBody = releaseActorStart >= 0 &&
+            releaseActorEnd > releaseActorStart
+            ? controller.Substring(releaseActorStart,
+                releaseActorEnd - releaseActorStart)
+            : string.Empty;
+        Assert(releaseActorBody.Contains(
+                   "ArmyMarchRules.VanillaAttackMarchTaskId",
+                   StringComparison.Ordinal),
+            "releasing an invalidated army also clears the vanilla attack-march task");
         int combatOwnershipStart = controller.IndexOf(
             "private static bool TryHandleWarCombatOwnership(",
             StringComparison.Ordinal);
@@ -953,9 +993,11 @@ internal static class ArmyRtsCombatHandoffRulesTests
                 "pMission.ProposalKind == ArmyRtsProposalKind.Attack",
                 StringComparison.Ordinal),
             "only attacks may publish a vanilla city attack order");
-        Assert(!advanceBody.Contains("SubmitStrategicRoute(",
+        Assert(advanceBody.Contains("ShouldPreserveStrategicRoute(",
+                StringComparison.Ordinal) &&
+            advanceBody.Contains("SubmitStrategicRoute(",
                 StringComparison.Ordinal),
-            "normal marching must not use the AW3 route provider");
+            "normal marching submits one shared strategic route and preserves it until consumed");
         Assert(!advanceBody.Contains("TryHandleActor(",
                 StringComparison.Ordinal),
             "normal marching must not use the AW3 transport controller");
@@ -992,7 +1034,14 @@ internal static class ArmyRtsCombatHandoffRulesTests
                 "!runtime.FieldCombatReleased &&\n                TryHandleWarCombatOwnership",
                 StringComparison.Ordinal),
             "the lifecycle gate must evaluate released combat armies instead of bypassing their lock");
-        Assert(controller.Contains("currentCity == target", StringComparison.Ordinal),
+        int insideTargetCheck = controller.IndexOf(
+            "bool insideTarget = IsInsideTargetTerritory(captain, target);",
+            StringComparison.Ordinal);
+        int targetDefenderScan = controller.IndexOf(
+            "CityAttackZoneService.HasHostileMilitaryInside(war,",
+            Math.Max(0, insideTargetCheck), StringComparison.Ordinal);
+        Assert(insideTargetCheck >= 0 && targetDefenderScan >
+                   insideTargetCheck,
             "entering the target city must hand off before a defender scan");
         int releaseCaseStart = controller.IndexOf(
             "case ArmyRtsCombatControlDecision.ReleaseToVanilla:",
@@ -1077,11 +1126,13 @@ internal static class ArmyRtsCombatHandoffRulesTests
                    StringComparison.Ordinal),
             "self-landing yields only when that actor belongs to transport, not merely when its army has another active voyage");
         int p0Start = postRunner.IndexOf(
-            "private void ProcessMilitaryP0Actor(",
+            "internal static void ProcessMilitaryP0Actor(",
             StringComparison.Ordinal);
-        int p0End = postRunner.IndexOf(
-            "private static bool HasLiveMilitaryP0Objective", p0Start,
-            StringComparison.Ordinal);
+        int p0End = p0Start >= 0
+            ? postRunner.IndexOf(
+                "private static bool HasLiveMilitaryP0Objective", p0Start,
+                StringComparison.Ordinal)
+            : -1;
         string p0Body = p0Start >= 0 && p0End > p0Start
             ? postRunner.Substring(p0Start, p0End - p0Start)
             : string.Empty;

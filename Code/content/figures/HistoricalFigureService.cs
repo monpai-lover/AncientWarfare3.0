@@ -311,6 +311,7 @@ namespace AncientWarfare3.content.figures
             }
 
             // 4) 世界日志公告:特殊人物$ren$降临这个世界($ren$=带国色的人名)。
+            ApplyCombatPackage(pActor, pDef);
             AnnounceFigure(pActor, pDef);
 
             // 编年史:历史人物降临 = 一次"出生"事件(预设姓名已就绪)。
@@ -328,6 +329,41 @@ namespace AncientWarfare3.content.figures
             }
 
             ModClass.LogInfo($"历史人物降临:{pDef.Key}(序号 {pIndex},国名预留 {pDef.KingdomName})");
+        }
+
+        private static void ApplyCombatPackage(Actor pActor,
+            HistoricalFigureDef pDef)
+        {
+            if (pActor == null || pDef == null) return;
+
+            try
+            {
+                if (pDef.CombatHealth > FIGURE_HEALTH)
+                    pActor.setHealth(pDef.CombatHealth);
+
+                if (pDef.CombatTraits != null)
+                {
+                    for (int i = 0; i < pDef.CombatTraits.Length; i++)
+                    {
+                        string traitId = pDef.CombatTraits[i];
+                        if (string.IsNullOrEmpty(traitId) ||
+                            AssetManager.traits.get(traitId) == null ||
+                            pActor.hasTrait(traitId))
+                            continue;
+                        pActor.addTrait(traitId);
+                    }
+                }
+
+                pActor.setStatsDirty();
+            }
+            catch (Exception error)
+            {
+                // Vanilla trait catalogs can vary between game versions.  A
+                // missing or incompatible trait must not invalidate the
+                // already committed historical figure.
+                ModClass.LogWarning("Historical figure combat package skipped: " +
+                    error.Message);
+            }
         }
 
         private static void QueueFigurePromotionRepair(long pActorId)

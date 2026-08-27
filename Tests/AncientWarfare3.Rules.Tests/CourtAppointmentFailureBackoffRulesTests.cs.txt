@@ -1,0 +1,28 @@
+using AncientWarfare3.core.court;
+
+internal static class CourtAppointmentFailureBackoffRulesTests
+{
+    internal static void Run()
+    {
+        Assert(CourtAppointmentFailureBackoffRules.ShouldAttempt(-1, 100),
+            "an office without a failure record must be attempted");
+        Assert(!CourtAppointmentFailureBackoffRules.ShouldAttempt(100, 102),
+            "a failed office must not retry during the cooldown");
+        Assert(CourtAppointmentFailureBackoffRules.ShouldAttempt(100, 103),
+            "a failed office must retry after the cooldown");
+        Assert(CourtAppointmentFailureBackoffRules.ShouldStopCurrentReconcile(
+                pAttempted: true, pCommitted: false),
+            "a failed appointment must stop the current candidate batch");
+        Assert(!CourtAppointmentFailureBackoffRules.ShouldStopCurrentReconcile(
+                pAttempted: true, pCommitted: true),
+            "a committed appointment must allow the next vacancy");
+        Assert(!CourtAppointmentFailureBackoffRules.ShouldStopCurrentReconcile(
+                pAttempted: false, pCommitted: false),
+            "no appointment attempt must not stop reconciliation");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

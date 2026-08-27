@@ -298,50 +298,14 @@ internal static class Regression20260721Tests
         string garrisonService = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
             "WartimeGarrisonService.cs"));
-        string garrisonBehaviour = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "ai", "behaviours",
-            "actor", "BehWartimeGarrisonPatrol.cs"));
-        string garrisonContent = File.ReadAllText(Path.Combine(
+        Equal(true, garrisonService.Contains("Disabled") &&
+                    !garrisonService.Contains("EnqueueCoalesced") &&
+                    !garrisonService.Contains("FindNearbyThreat"),
+            "retired garrison has no custom task, threat scan, or deferred work");
+        Equal(false, File.Exists(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "content",
-            "WartimeGarrisonContent.cs"));
-        Equal(true, garrisonService.Contains("PatrolCursorByActor"),
-            "each indexed garrison rotates through city patrol zones");
-        Equal(true, garrisonService.Contains("FindSafeCityRingTile") &&
-                    garrisonService.Contains(
-                        "if (!ShouldPatrol(pActor)) return null;") &&
-                    !garrisonService.Contains("return city?.getTile();"),
-            "a missing border zone falls back to a safe city ring rather than the city centre");
-        Equal(true, garrisonContent.Contains("EngageTaskId") &&
-                    garrisonContent.Contains("ReinforceTaskId") &&
-                    !garrisonContent.Contains(
-                        "BehCityActorGetRandomDangerZone"),
-            "garrison defence uses threat engagement and distributed reinforcement instead of the generic danger-zone centre task");
-        Equal(false, garrisonBehaviour.Contains("12f, 24f") ||
-                     garrisonContent.Contains("12f, 24f"),
-            "garrison patrol never stands still for twelve to twenty-four seconds");
-        Equal(true, garrisonService.Contains(
-                    "WarScoreService.IsCityFrozenControlledByEnemySide") &&
-                    garrisonService.Contains("FindNearbyThreat") &&
-                    garrisonService.Contains(
-                        "WartimeGarrisonRules.CanInspectThreatCandidate") &&
-                    garrisonService.Contains(
-                        "WartimeGarrisonRules.ShouldRunThreatProbe") &&
-                    garrisonService.Contains(
-                        "BoundaryRefreshNextAllowedByCity") &&
-                    garrisonService.Contains(
-                        "OriginChunkId") &&
-                    garrisonService.Contains("ResetThreatProbeCursor") &&
-                    garrisonService.Contains(
-                        "MapChunk originChunk") &&
-                    garrisonService.Contains("originChunk.neighbours_all") &&
-                    garrisonService.Contains("chunk.objects.units_all") &&
-                    garrisonService.Contains(
-                        "WartimeGarrisonRules.ShouldAdvanceThreatProbeChunk") &&
-                    !garrisonService.Contains("Finder.getUnitsFromChunk") &&
-                    !garrisonService.Contains("sequenceIndex"),
-            "garrison patrol integrates frozen-control defence and bounded nearby-threat probes");
-        Equal(false, garrisonService.Contains("hasNearbyThreat: false);"),
-            "garrison patrol never hard-codes nearby threats as absent");
+            "WartimeGarrisonContent.cs")),
+            "retired garrison content is not registered");
 
         string armyMapInformationService = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "presentation",

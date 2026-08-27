@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using AncientWarfare3.core.lineage;
 
 internal static class FeudatoryIdentityRulesTests
@@ -13,6 +15,36 @@ internal static class FeudatoryIdentityRulesTests
         False(FeudatoryIdentityRules.CanEnslave(
                 ordinaryEligible: false, activePrince: false),
             "feudatory rules do not bypass ordinary exclusions");
+        Equal(10L, FeudatorySuccessionRules.SelectSuccessor(new[]
+        {
+            new FeudatorySuccessionCandidate(10, eligible: true,
+                directSon: true, sameShiBranch: true, kinDistance: 0,
+                birthTime: 10, directTreeDescendant: true,
+                legitimateBirth: true, adult: false),
+            new FeudatorySuccessionCandidate(11, eligible: true,
+                directSon: true, sameShiBranch: true, kinDistance: 0,
+                birthTime: 20, directTreeDescendant: true,
+                legitimateBirth: true, adult: true)
+        }), "the legitimate eldest son remains the feudatory successor");
+
+        string lineage = Read("Code/core/lineage/LineageService.cs");
+        True(lineage.Contains(
+                "private static bool RepairFeudatoryBranchDescendants(",
+                StringComparison.Ordinal),
+            "feudatory branches expose one idempotent descendant repair");
+        True(Count(lineage, "RepairFeudatoryBranchDescendants(") >= 4,
+            "current, recorded, and new branches use shared repair");
+        True(lineage.Contains("current.parent_shi_id", StringComparison.Ordinal) ||
+             lineage.Contains("recorded.parent_shi_id", StringComparison.Ordinal),
+            "reused branches repair from their persisted parent branch");
+
+        string title = Read("Code/core/lineage/DynasticTitleService.cs");
+        True(title.Contains("successorSnapshot.SuccessorActorId",
+                StringComparison.Ordinal),
+            "the displayed successor uses the stored feudatory projection");
+        False(title.Contains("FindFeudatorySuccessor(",
+                StringComparison.Ordinal),
+            "the title read model does not rescan feudatory successors");
     }
 
     private static void True(bool value, string name)
@@ -23,5 +55,30 @@ internal static class FeudatoryIdentityRulesTests
     private static void False(bool value, string name)
     {
         if (value) throw new InvalidOperationException(name);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(name);
+    }
+
+    private static string Read(string relative) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            relative.Replace('/', Path.DirectorySeparatorChar)));
+
+    private static int Count(string text, string needle)
+    {
+        int count = 0;
+        int offset = 0;
+        while (offset >= 0 && offset < text.Length)
+        {
+            int found = text.IndexOf(needle, offset,
+                StringComparison.Ordinal);
+            if (found < 0) break;
+            count++;
+            offset = found + needle.Length;
+        }
+        return count;
     }
 }

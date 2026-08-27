@@ -11,7 +11,8 @@ namespace AncientWarfare3.core.court
         {
             SQLiteConnection db =
                 LineageArchiveManager.Instance?.OperatingDB;
-            return OfficialCareerHistoryQuery.Read(db, pScope, limit);
+            return OfficialCareerHistoryRules.CollapseTechnicalTransitions(
+                OfficialCareerHistoryQuery.Read(db, pScope, limit));
         }
     }
 }

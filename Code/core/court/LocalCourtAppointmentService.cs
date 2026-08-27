@@ -3,14 +3,13 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.lineage;
-using AncientWarfare3.core.schools;
 
 namespace AncientWarfare3.core.court
 {
     internal static class LocalCourtAppointmentService
     {
-        private const int CandidateScanLimit = 96;
         private static SQLiteConnection DB =>
             LineageArchiveManager.Instance?.OperatingDB;
 
@@ -20,139 +19,163 @@ namespace AncientWarfare3.core.court
             public string OfficeId = "";
         }
 
-        internal static bool ReconcileCity(Kingdom pKingdom, City pCity,
-            int pCapacity, int pYear, out IReadOnlyList<long> pOfficerActorIds)
+        internal static CourtVacancyOutcome TryFillRegisteredLocalVacancy(
+            Kingdom pKingdom, City pCity, CourtVacancyKey pVacancy,
+            CourtCandidateSession pSession)
         {
-            pOfficerActorIds = Array.Empty<long>();
-            if (DB == null || pKingdom?.data == null || pCity?.data == null ||
-                pCity.kingdom != pKingdom) return false;
-            List<string> desiredSeats = DesiredSeats(pKingdom, pCity,
-                Math.Max(0, pCapacity));
-            if (!TryLoadActive(pKingdom.id, pCity.data.id,
-                    out List<ActiveLocalOfficer> active)) return false;
+            if (pKingdom?.data == null || pCity?.data == null ||
+                pCity.isRekt() || pCity.kingdom != pKingdom ||
+                pSession == null || pVacancy.KingdomId != pKingdom.id ||
+                pVacancy.CityId != pCity.data.id)
+                return CourtVacancyOutcome.Invalid;
 
-            string rootOffice = desiredSeats.Count == 0
-                ? string.Empty
-                : desiredSeats[0];
-            Actor cityLeader = pCity.leader;
-            if (!string.IsNullOrEmpty(rootOffice) && cityLeader?.data != null)
+            int year = Date.getCurrentYear();
+            if (pVacancy.Layer == CourtOfficeLayer.County)
             {
-                ActiveLocalOfficer rootRow = active.FirstOrDefault(row =>
-                    row.OfficeId == rootOffice);
-                if (rootRow != null && rootRow.ActorId != cityLeader.data.id)
-                {
-                    EndAppointment(FindActor(rootRow.ActorId), rootRow,
-                        pKingdom, "city_leader_mismatch");
-                    if (!TryLoadActive(pKingdom.id, pCity.data.id,
-                            out active)) return false;
-                }
+                if (pVacancy.OfficeId != CourtOfficeId.CountyMagistrate ||
+                    pVacancy.CountyId < 0L ||
+                    LoadCountyOfficerIds(pKingdom.id, pCity.data.id)
+                        .Contains(pVacancy.CountyId))
+                    return CourtVacancyOutcome.Invalid;
+                Actor countyCandidate = pSession.Actors
+                    .Where(actor => pSession.IsAvailable(actor, pVacancy))
+                    .Where(actor => actor?.data != null &&
+                        CanUseCandidateFacts(actor, pKingdom))
+                    .Where(actor => CivilServiceQualificationService.
+                        CanReceiveFormalCivilAppointment(actor, pKingdom,
+                            CourtOfficeLayer.County,
+                            CourtOfficeId.CountyMagistrate, true,
+                            pAllowLocalLowerQualification: true,
+                            pCity: pCity))
+                    .OrderByDescending(MainAbility)
+                    .ThenBy(actor => actor.data.id)
+                    .FirstOrDefault();
+                if (countyCandidate == null)
+                    return CourtVacancyOutcome.NoCandidate;
+                return CourtService.TryAssignCountyMagistrate(countyCandidate,
+                        pKingdom, pCity, pVacancy.CountyId, true)
+                    ? CourtVacancyOutcome.Filled
+                    : CourtVacancyOutcome.TechnicalFailure;
             }
-            var desiredCounts = desiredSeats.GroupBy(id => id,
-                    StringComparer.Ordinal).ToDictionary(group => group.Key,
-                    group => group.Count(), StringComparer.Ordinal);
-            var retainedCounts = new Dictionary<string, int>(
-                StringComparer.Ordinal);
-            foreach (ActiveLocalOfficer row in active)
+
+            if (pVacancy.Layer != CourtOfficeLayer.City ||
+                string.IsNullOrEmpty(pVacancy.OfficeId))
+                return CourtVacancyOutcome.Invalid;
+            if (!TryLoadActive(pKingdom.id, pCity.data.id,
+                    out List<ActiveLocalOfficer> active))
+                return CourtVacancyOutcome.TechnicalFailure;
+            int desiredSeats = DesiredSeats(pKingdom, pCity,
+                    ResolveCurrentCapacity(pKingdom, pCity))
+                .Count(officeId => officeId == pVacancy.OfficeId);
+            int occupiedSeats = active.Count(row =>
+                row.OfficeId == pVacancy.OfficeId);
+            if (desiredSeats <= occupiedSeats)
+                return CourtVacancyOutcome.Invalid;
+
+            long leaderNativeCityId = NativeCityId(pCity.leader);
+            Actor candidate = SelectCandidate(pSession.Actors, pKingdom,
+                pCity, leaderNativeCityId, pVacancy.OfficeId,
+                pAllowVacancyPromotion: true);
+            if (candidate == null)
+                return CourtVacancyOutcome.NoCandidate;
+            if (pVacancy.IsLocalChief)
             {
-                Actor actor = FindActor(row.ActorId);
-                bool live = actor?.data != null && actor.isAlive() &&
-                            !actor.isRekt() &&
-                            CourtAffiliationResolver.CanServe(actor, pKingdom,
-                                CourtOfficeLayer.City);
-                desiredCounts.TryGetValue(row.OfficeId, out int allowed);
-                retainedCounts.TryGetValue(row.OfficeId, out int retained);
-                bool surplus = retained >= allowed;
-                bool subordinateTermDue = row.OfficeId != rootOffice && live &&
-                    IsTermDue(actor, pYear);
-                if (!live || allowed == 0 || surplus || subordinateTermDue)
+                bool committed = ManualLocalChiefAppointmentService.TryAppoint(
+                    pKingdom, pCity, candidate, () =>
+                        CourtService.TryAssignLocalOfficerRecord(candidate,
+                            pKingdom, pCity, pVacancy.OfficeId, true));
+                return committed ? CourtVacancyOutcome.Filled :
+                    CourtVacancyOutcome.TechnicalFailure;
+            }
+            return CourtService.TryAssignLocalOfficer(candidate, pKingdom,
+                    pCity, pVacancy.OfficeId, true)
+                ? CourtVacancyOutcome.Filled
+                : CourtVacancyOutcome.TechnicalFailure;
+        }
+
+        internal static IReadOnlyList<CourtVacancyKey> DiscoverVacancies(
+            Kingdom pKingdom, City pCity, int pCapacity, int pYear)
+        {
+            var result = new List<CourtVacancyKey>();
+            if (pKingdom?.data == null || pCity?.data == null ||
+                pCity.isRekt() || pCity.kingdom != pKingdom) return result;
+            if (!TryLoadActive(pKingdom.id, pCity.data.id,
+                    out List<ActiveLocalOfficer> active)) return result;
+            IReadOnlyList<string> seats = DesiredSeats(pKingdom, pCity,
+                Math.Max(0, pCapacity));
+            var occupied = active.GroupBy(row => row.OfficeId,
+                    StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Count(),
+                    StringComparer.Ordinal);
+            foreach (string officeId in seats)
+            {
+                occupied.TryGetValue(officeId, out int count);
+                if (count > 0)
                 {
-                    EndAppointment(actor, row, pKingdom,
-                        !live ? "invalid" : subordinateTermDue
-                            ? "term_expired"
-                            : "local_office_reformed");
+                    occupied[officeId] = count - 1;
                     continue;
                 }
-                retainedCounts[row.OfficeId] = retained + 1;
+                result.Add(new CourtVacancyKey(pKingdom.id, pCity.data.id,
+                    -1L, CourtOfficeLayer.City, officeId,
+                    pIsLocalChief: officeId == CourtService.ResolveCityOffice(
+                        pKingdom, pCity)));
             }
-
-            if (!string.IsNullOrEmpty(rootOffice) && pCity.leader?.data != null)
+            HashSet<long> occupiedCounties = LoadCountyOfficerIds(
+                pKingdom.id, pCity.data.id);
+            foreach (CountyRecord county in CountyAdministrationService.
+                         CountiesForCity(pCity.data.id))
             {
-                retainedCounts.TryGetValue(rootOffice, out int rootCount);
-                if (rootCount == 0 && CourtService.TryAssignLocalOfficer(
-                        pCity.leader, pKingdom, pCity, rootOffice))
-                    retainedCounts[rootOffice] = 1;
+                if (county == null || !county.Active || county.CountyId < 0L)
+                    continue;
+                if (occupiedCounties.Contains(county.CountyId)) continue;
+                result.Add(new CourtVacancyKey(pKingdom.id, pCity.data.id,
+                    county.CountyId, CourtOfficeLayer.County,
+                    CourtOfficeId.CountyMagistrate));
             }
+            return result;
+        }
 
-            List<Actor> candidates = LoadAllCandidates(pKingdom,
-                LoadCandidates(pKingdom, pCity));
-            long leaderNativeCityId = NativeCityId(pCity.leader);
-            for (int seatIndex = 1; seatIndex < desiredSeats.Count; seatIndex++)
+        private static HashSet<long> LoadCountyOfficerIds(long pKingdomId,
+            long pCityId)
+        {
+            var result = new HashSet<long>();
+            try
             {
-                string officeId = desiredSeats[seatIndex];
-                int requiredBefore = desiredSeats.Take(seatIndex + 1)
-                    .Count(id => id == officeId);
-                retainedCounts.TryGetValue(officeId, out int current);
-                if (current >= requiredBefore) continue;
-                Actor candidate = SelectCandidate(candidates, pKingdom,
-                    leaderNativeCityId, officeId,
-                    pAllowVacancyPromotion: false);
-                bool vacancyFallback = candidate == null;
-                if (vacancyFallback)
-                    candidate = SelectCandidate(candidates, pKingdom,
-                        leaderNativeCityId, officeId,
-                        pAllowVacancyPromotion: true);
-                if (candidate == null) continue;
-                if (CourtService.TryAssignLocalOfficer(candidate, pKingdom,
-                        pCity, officeId, vacancyFallback))
-                    retainedCounts[officeId] = current + 1;
-                candidates.Remove(candidate);
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT COUNTY_ID FROM " +
+                    CourtOfficerTableItem.GetTableName() +
+                    " WHERE KINGDOM_ID=@kingdom AND CITY_ID=@city " +
+                    "AND LAYER=@layer AND OFFICE_ID=@office AND ACTIVE=1";
+                command.Parameters.AddWithValue("@kingdom", pKingdomId);
+                command.Parameters.AddWithValue("@city", pCityId);
+                command.Parameters.AddWithValue("@layer", CourtOfficeLayer.County);
+                command.Parameters.AddWithValue("@office",
+                    CourtOfficeId.CountyMagistrate);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read() && !reader.IsDBNull(0))
+                    result.Add(Convert.ToInt64(reader.GetValue(0)));
             }
-
-            if (!TryLoadActive(pKingdom.id, pCity.data.id, out active))
-                return false;
-            pOfficerActorIds = active.Select(row => row.ActorId).Distinct()
-                .OrderBy(id => id).ToArray();
-            return true;
+            catch { }
+            return result;
         }
 
         private static List<string> DesiredSeats(Kingdom pKingdom, City pCity,
             int pCapacity)
         {
-            var result = new List<string>(pCapacity);
-            if (pCapacity <= 0) return result;
-            if (CustomCourtRuntime.TryGetLocalTemplate(pKingdom, pCity,
-                    out CustomLocalCourtTemplate local))
-            {
-                List<CustomCourtOffice> offices = (local.Offices ??
-                    new List<CustomCourtOffice>()).Where(office =>
-                    office != null && office.Layer == CourtOfficeLayer.City)
-                    .ToList();
-                IReadOnlyDictionary<string, int> ranks =
-                    CustomCourtHierarchyLayoutRules.BuildRanks(offices,
-                        local.Edges);
-                foreach (CustomCourtOffice office in offices.OrderBy(office =>
-                             ranks.TryGetValue(office.Id, out int rank)
-                                 ? rank
-                                 : int.MaxValue)
-                             .ThenBy(office => office.Grade)
-                             .ThenBy(office => office.Id,
-                                 StringComparer.Ordinal))
-                    for (int slot = 0;
-                         slot < Math.Max(1, office.Slots);
-                         slot++)
-                        result.Add(office.Id);
-                return result;
-            }
+            return LocalChiefOfficeResolver.ResolveOrderedSeats(pKingdom,
+                pCity, pCapacity).ToList();
+        }
 
-            string leaderOffice = CourtService.ResolveCityOffice(pKingdom,
-                pCity);
-            for (int slot = 0; slot < pCapacity; slot++)
+        private static int ResolveCurrentCapacity(Kingdom pKingdom,
+            City pCity)
+        {
+            try
             {
-                string office = LocalCourtOfficeRules.OfficeForSlot(slot,
-                    leaderOffice);
-                if (!string.IsNullOrEmpty(office)) result.Add(office);
+                return CourtRules.CityOfficeSlots(
+                    pCity.getPopulationPeople(), pCity.countZones(),
+                    pKingdom.capital == pCity);
             }
-            return result;
+            catch { return 0; }
         }
 
         private static bool TryLoadActive(long pKingdomId, long pCityId,
@@ -189,79 +212,12 @@ namespace AncientWarfare3.core.court
             }
         }
 
-        private static List<Actor> LoadCandidates(Kingdom pKingdom,
-            City pCity)
-        {
-            var result = new List<Actor>();
-            if (CivilServiceQualificationService.HasExaminationSystem(
-                    pKingdom))
-            {
-                var cityIds = new List<long>();
-                try
-                {
-                    foreach (City city in pKingdom.getCities())
-                        if (city?.data != null && !city.isRekt() &&
-                            city.kingdom == pKingdom)
-                            cityIds.Add(city.data.id);
-                }
-                catch { return result; }
-                if (!CivilServiceWaitingPoolQuery.TryLoadLocalActorIds(DB,
-                        CivilServiceExamCandidateTableItem.GetTableName(),
-                        CivilServiceExamSessionTableItem.GetTableName(),
-                        ActorArchiveTableItem.GetTableName(),
-                        CourtOfficerTableItem.GetTableName(),
-                        SchoolAffiliationTableItem.GetTableName(), pKingdom.id,
-                        cityIds, CandidateScanLimit,
-                        out IReadOnlyList<long> actorIds)) return result;
-                foreach (long actorId in actorIds)
-                {
-                    Actor actor = FindActor(actorId);
-                    if (CanUseCandidate(actor, pKingdom,
-                            pFromLocalWaitingPool: true)) result.Add(actor);
-                }
-                return result;
-            }
-
-            int inspected = 0;
-            try
-            {
-                foreach (Actor actor in pKingdom.getUnits())
-                {
-                    if (++inspected > CandidateScanLimit) break;
-                    if (CanUseCandidate(actor, pKingdom,
-                            pFromLocalWaitingPool: false)) result.Add(actor);
-                }
-            }
-            catch { result.Clear(); }
-            return result;
-        }
-
-        private static bool CanUseCandidate(Actor pActor, Kingdom pKingdom,
-            bool pFromLocalWaitingPool)
-        {
-            if (!CanUseCandidateFacts(pActor, pKingdom)) return false;
-            pActor.data.get(LineageKeys.COURT_OFFICE_ID,
-                out string officeId, "");
-            pActor.data.get(LineageKeys.CIVIL_SERVICE_QUALIFICATION,
-                out string qualification, "none");
-            return LocalOfficialCandidateRules.CanEnter(
-                    pActor.isAlive() && !pActor.isRekt(), pActor.isAdult(),
-                    SlaveService.IsSlave(pActor),
-                    !string.IsNullOrEmpty(officeId), pActor.isKing(),
-                    HeirService.PeekRegisteredHeir(pKingdom) == pActor,
-                    CivilServiceQualificationService.HasExaminationSystem(
-                        pKingdom), qualification,
-                    participatedAndFailedHigherStage:
-                    pFromLocalWaitingPool &&
-                    string.Equals(qualification, "none",
-                        StringComparison.OrdinalIgnoreCase));
-        }
-
         private static bool CanUseCandidateFacts(Actor pActor,
             Kingdom pKingdom)
         {
             if (pActor?.data == null || pKingdom?.data == null ||
                 !pActor.isSexMale() || pActor.hasTrait("madness") ||
+                pActor.isCityLeader() ||
                 !CourtAffiliationResolver.CanServe(pActor, pKingdom,
                     CourtOfficeLayer.City) ||
                 !RoyalGuardOfficeRules.CanAppearInOfficeCandidateList(
@@ -279,40 +235,25 @@ namespace AncientWarfare3.core.court
                 participatedAndFailedHigherStage: false);
         }
 
-        private static List<Actor> LoadAllCandidates(Kingdom pKingdom,
-            IReadOnlyList<Actor> pWaitingCandidates)
+        internal static void ClearRuntime()
         {
-            var result = new List<Actor>();
-            var actorIds = new HashSet<long>();
-            foreach (Actor actor in pWaitingCandidates ?? Array.Empty<Actor>())
-            {
-                if (actor?.data == null || !actorIds.Add(actor.data.id))
-                    continue;
-                result.Add(actor);
-            }
-
-            int inspected = 0;
-            try
-            {
-                foreach (Actor actor in pKingdom.getUnits())
-                {
-                    if (++inspected > CandidateScanLimit) break;
-                    if (actor?.data == null || actorIds.Contains(actor.data.id) ||
-                        !CanUseCandidateFacts(actor, pKingdom)) continue;
-                    actorIds.Add(actor.data.id);
-                    result.Add(actor);
-                }
-            }
-            catch { }
-            return result;
+            OfficerCandidateCatalog.ClearRuntime();
         }
 
         private static Actor SelectCandidate(IReadOnlyList<Actor> pCandidates,
-            Kingdom pKingdom, long pLeaderNativeCityId, string pOfficeId,
-            bool pAllowVacancyPromotion)
+            Kingdom pKingdom, City pCity, long pLeaderNativeCityId,
+            string pOfficeId, bool pAllowVacancyPromotion)
         {
             Actor best = null;
             int bestScore = int.MinValue;
+            int bestTier = int.MaxValue;
+            int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
+                pKingdom, CourtOfficeLayer.City, pOfficeId, pCity);
+            bool regionalGovernor = OfficialCareerStateService.
+                IsRegionalGovernorSeat(pKingdom, CourtOfficeLayer.City,
+                    pOfficeId, pCity);
+            bool lowOffice = LocalLowOfficeVacancyRules.IsLowestLocalGrade(
+                officeGrade);
             foreach (Actor actor in pCandidates)
             {
                 if (!CanUseCandidateFacts(actor, pKingdom) ||
@@ -320,38 +261,70 @@ namespace AncientWarfare3.core.court
                         CanReceiveFormalCivilAppointment(actor, pKingdom,
                             CourtOfficeLayer.City, pOfficeId,
                             pAllowVacancyPromotion,
-                            pAllowLocalLowerQualification: true)) continue;
+                            pAllowLocalLowerQualification: true,
+                            pCity: pCity)) continue;
                 actor.data.get(LineageKeys.OFFICER_MERIT,
                     out float merit, 0f);
+                bool formalLocalQualification =
+                    HasFormalLocalQualification(actor, pKingdom);
                 int score = LocalOfficialCandidateRules.Score(
                     MainAbility(actor), (int)Math.Max(0f, merit),
                     pLeaderNativeCityId >= 0L &&
                     NativeCityId(actor) == pLeaderNativeCityId);
-                if (best == null || score > bestScore ||
-                    score == bestScore && actor.data.id < best.data.id)
+                int tier = lowOffice
+                    ? (int)LocalLowOfficeVacancyRules.CandidateTier(
+                        formalLocalQualification,
+                        HasClanOrShi(actor))
+                    : 0;
+                if (lowOffice && pAllowVacancyPromotion)
+                {
+                    int resolvedRank =
+                        OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
+                            OfficialCareerStateService.ReadRankFast(actor),
+                            officeGrade, CourtService.HasNineRankSystem(
+                                pKingdom),
+                            formalLocalQualification ||
+                            LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
+                                isCityLayer: true, officeGrade: officeGrade,
+                                vacancyPromotion: true),
+                            vacancyPromotion: true,
+                            regionalGovernor: regionalGovernor);
+                    score += Math.Max(0, resolvedRank);
+                }
+                if (best == null || tier < bestTier ||
+                    tier == bestTier && (score > bestScore ||
+                    score == bestScore && actor.data.id < best.data.id))
                 {
                     best = actor;
+                    bestTier = tier;
                     bestScore = score;
                 }
             }
             return best;
         }
 
-        private static bool IsTermDue(Actor pActor, int pYear)
+        private static bool HasFormalLocalQualification(Actor pActor,
+            Kingdom pKingdom)
         {
-            pActor.data.get(LineageKeys.OFFICER_TERM_END_YEAR,
-                out int termEndYear, int.MaxValue);
-            return termEndYear >= 0 && termEndYear <= pYear;
+            CivilServiceQualificationRecord qualification =
+                CivilServiceQualificationService.LoadOrRepair(pActor,
+                    pKingdom);
+            return qualification != null &&
+                   LocalOfficialCandidateRules.IsLocalQualification(
+                       qualification.Qualification);
         }
 
-        private static void EndAppointment(Actor pActor,
-            ActiveLocalOfficer pRow, Kingdom pKingdom, string pReason)
+        private static bool HasClanOrShi(Actor pActor)
         {
-            if (pActor?.data != null && pActor.isAlive() && !pActor.isRekt() &&
-                CourtService.TryDismissOfficer(pActor, pKingdom, pReason))
-                return;
-            OfficialCareerService.EndForOffice(pRow.ActorId, pKingdom.id,
-                CourtOfficeLayer.City, pRow.OfficeId, pReason);
+            if (pActor?.data == null) return false;
+            try
+            {
+                if (pActor.hasClan() && pActor.clan?.data != null)
+                    return true;
+            }
+            catch { }
+            pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            return shiId >= 0L;
         }
 
         private static Actor FindActor(long pActorId)

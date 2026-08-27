@@ -1,9 +1,15 @@
 {
   "AWPerformanceSettings": [
     {
-      "Id": "AW3_ENABLE_FRAME_PRIORITY_SCHEDULER",
+      "Id": "AW3_ENABLE_EXPERIMENTAL_LARGE_SIMULATION_STEP",
       "Type": "SWITCH",
       "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchLargeSimulationStep"
+    },
+    {
+      "Id": "AW3_ENABLE_FRAME_PRIORITY_SCHEDULER",
+      "Type": "SWITCH",
+      "BoolVal": true,
       "Callback": "AWPerformanceSettings:SwitchFramePriorityScheduler"
     },
     {
@@ -11,6 +17,12 @@
       "Type": "SWITCH",
       "BoolVal": true,
       "Callback": "AWPerformanceSettings:SwitchArmyRts"
+    },
+    {
+      "Id": "AW3_ENABLE_SYNTHETIC_MOBILIZATION",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchSyntheticMobilization"
     },
     {
       "Id": "AW3_ARMY_RTS_WAR_RESOLUTION_MODE",
@@ -31,6 +43,12 @@
       "Type": "SWITCH",
       "BoolVal": true,
       "Callback": "AWPerformanceSettings:SwitchAiVassalActions"
+    },
+    {
+      "Id": "AW3_USE_HISTORICAL_DEJURE_CITY_NAMES",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchHistoricalDeJureCityNames"
     },
     {
       "Id": "AW3_SHOW_ARMY_RTS_VISUALS",

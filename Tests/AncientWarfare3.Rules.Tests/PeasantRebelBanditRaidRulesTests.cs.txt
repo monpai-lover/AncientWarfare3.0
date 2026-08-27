@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using AncientWarfare3.core.lineage;
 
@@ -11,6 +12,7 @@ internal static class PeasantRebelBanditRaidRulesTests
         PartySizeUsesAvailableWarriors();
         LootIsBoundedByNeedShareAndReserve();
         TargetsPreferDistanceThenFood();
+        CapitalAdjacentCitiesAvoidWorldScans();
         SuppressionRightLastsThreeYears();
         ExcludesWarriorsAlreadyCarryingResources();
         DistributesCargoByStableActorId();
@@ -73,6 +75,26 @@ internal static class PeasantRebelBanditRaidRulesTests
 
         SequenceEqual(new long[] { 3, 2, 1 }, ranked,
             "unreachable allied and stronghold targets are excluded");
+    }
+
+    private static void CapitalAdjacentCitiesAvoidWorldScans()
+    {
+        string source = File.ReadAllText(Path.Combine(
+                Directory.GetCurrentDirectory(),
+                "Code/core/lineage/PeasantRebelBanditRaidService.cs"))
+            .Replace("\r\n", "\n");
+        True(source.Contains("capital.neighbours_cities",
+                StringComparison.Ordinal),
+            "raid targets must come from the capital adjacency index");
+        False(source.Contains("World.world.cities.ToList()",
+                StringComparison.Ordinal),
+            "raid target selection must not copy the world city list");
+        False(source.Contains("reachableFrom(",
+                StringComparison.Ordinal),
+            "capital adjacency must replace per-city reachability scans");
+        False(source.Contains("IsCoastalCity(city)",
+                StringComparison.Ordinal),
+            "capital adjacency must replace zone coastline scans");
     }
 
     private static void SuppressionRightLastsThreeYears()

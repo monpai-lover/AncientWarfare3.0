@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using AncientWarfare3.core.performance;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -93,6 +94,8 @@ namespace AncientWarfare3.core.lineage
             Kingdom pKingdom, City pSourceCity, int pRequestedShortage,
             double pStartTime)
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization)
+                return null;
             if (TryRead(pArmy, out ArmyReplenishmentOperationState existing))
                 return existing;
             if (!IsLiveOrdinaryArmy(pArmy) ||
@@ -100,6 +103,11 @@ namespace AncientWarfare3.core.lineage
                 !IsControlledCity(pSourceCity, pKingdom) ||
                 !TryGetActiveMissionWar(pArmy, pKingdom, out _) ||
                 pRequestedShortage <= 0 ||
+                !TryGetSourceReserveAvailability(pArmy,
+                    out bool reserveAvailable) ||
+                !ArmyReplenishmentOperationRules.ShouldStartOperation(
+                    liveShortage: pRequestedShortage > 0,
+                    reserveAvailable: reserveAvailable) ||
                 !ArmyMobilizationRules.CanConsume(
                     CityReservePoolService.ResolveMobilizationPhase(
                         pKingdom)) ||
@@ -145,6 +153,14 @@ namespace AncientWarfare3.core.lineage
         {
             pAvailable = false;
             if (pArmy?.data == null) return false;
+            if (!AWPerformanceSettings.EnableSyntheticMobilization)
+            {
+                // With synthetic mobilization disabled, vanilla owns both
+                // enlistment and reserve availability. Never report a false
+                // AW3 exhaustion result to the RTS controller.
+                pAvailable = true;
+                return true;
+            }
             Kingdom kingdom = SafeKingdom(pArmy);
             if (!IsLiveKingdom(kingdom)) return false;
             if (ArmyConquestReserveService.Get(pArmy) > 0)
@@ -179,13 +195,21 @@ namespace AncientWarfare3.core.lineage
                 pAvailable = true;
                 return true;
             }
-            if (!TemporaryLevyService.HasConfirmedReserveExhaustion(
-                    kingdom, pArmy)) return false;
+            bool exhaustionConfirmed = TemporaryLevyService.
+                HasConfirmedReserveExhaustion(kingdom, pArmy);
+            pAvailable = ArmyReplenishmentOperationRules.
+                ShouldRestartAfterConfirmedExhaustion(
+                    reserveAvailable: false, exhaustionConfirmed);
             return true;
         }
 
         internal static void ProcessAuthorityCycle()
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization)
+            {
+                DisableSyntheticReplenishment();
+                return;
+            }
             if (ActiveArmyIds.Count == 0) return;
             IReadOnlyList<long> batch = TakeActiveBatch(
                 ArmyReplenishmentOperationRules.MaximumOperationsPerCycle);
@@ -265,6 +289,8 @@ namespace AncientWarfare3.core.lineage
         {
             try
             {
+                if (!AWPerformanceSettings.EnableSyntheticMobilization)
+                    return false;
                 if (pArmy?.data == null) return false;
                 bool ordinary =
                     ArmyNativeNameService.IsOrdinaryArmy(pArmy);
@@ -274,6 +300,15 @@ namespace AncientWarfare3.core.lineage
                     ordinary, royalGuard);
             }
             catch { return false; }
+        }
+
+        internal static void DisableSyntheticReplenishment()
+        {
+            if (ActiveArmyIds.Count == 0) return;
+            var snapshot = new List<long>(ActiveArmyIds);
+            for (int i = 0; i < snapshot.Count; i++)
+                Clear(FindArmy(snapshot[i]));
+            ActiveArmyIds.Clear();
         }
 
         private static void ProcessOne(long pArmyId, double pNow)

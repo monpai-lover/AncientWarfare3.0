@@ -33,6 +33,35 @@ internal static class OfficialCareerHistorySqlTests
         Equal(2, rows.Count, "office history scope");
         Equal("张三", rows[0].ActorName, "stored actor name");
         True(rows[0].IsCurrent, "active history row");
+
+        var polluted = new[]
+        {
+            Row(30, 8, 3, "city", "governor", 130, -1, true, ""),
+            Row(29, 8, 3, "city", "governor", 129, 130, false,
+                "promoted_city_leader"),
+            Row(28, 8, 3, "city", "governor", 128, 129, false,
+                "city_leader_mismatch"),
+            Row(27, 9, 3, "city", "governor", 120, 128, false,
+                "term_expired")
+        };
+        IReadOnlyList<OfficialCareerHistoryRow> collapsed =
+            OfficialCareerHistoryRules.CollapseTechnicalTransitions(polluted);
+        Equal(2, collapsed.Count, "technical leader churn is one visible term");
+        Equal(8L, collapsed[0].ActorId, "current incumbent is preserved");
+        Equal(128, collapsed[0].StartYear,
+            "collapsed term starts at the first technical appointment");
+        Equal(9L, collapsed[1].ActorId,
+            "a real incumbent change remains visible");
+
+        IReadOnlyList<OfficialCareerHistoryRow> separate =
+            OfficialCareerHistoryRules.CollapseTechnicalTransitions(new[]
+            {
+                Row(4, 8, 3, "city", "governor", 130, -1, true, ""),
+                Row(3, 8, 4, "city", "governor", 129, 130, false,
+                    "city_leader_mismatch")
+            });
+        Equal(2, separate.Count,
+            "different city scopes never merge technical transitions");
     }
 
     private static void Insert(SQLiteConnection pDb, long pId,
@@ -56,6 +85,15 @@ internal static class OfficialCareerHistorySqlTests
     private static void True(bool pValue, string pMessage)
     {
         if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static OfficialCareerHistoryRow Row(long pOfficerId,
+        long pActorId, long pCityId, string pLayer, string pOfficeId,
+        int pStart, int pEnd, bool pCurrent, string pReason)
+    {
+        return new OfficialCareerHistoryRow(7, pOfficerId, pActorId,
+            pCityId, pLayer, pOfficeId, "actor", pStart, pEnd,
+            pCurrent, pReason, pStart * 60d);
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pMessage)

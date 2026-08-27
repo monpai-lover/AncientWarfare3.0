@@ -1,0 +1,66 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsCombatTargetRulesTests
+{
+    public static void Run()
+    {
+        True(ArmyRtsCombatTargetRules.ShouldAllowTarget(
+            targetAlive: true, targetHostile: true,
+            targetCanBeAttacked: true,
+            targetIsKing: false, targetIsCityLeader: false,
+            targetIsHeir: false),
+            "an enemy ordinary civilian remains an eligible RTS target");
+
+        False(ArmyRtsCombatTargetRules.ShouldAllowTarget(
+            targetAlive: true, targetHostile: true,
+            targetCanBeAttacked: true,
+            targetIsKing: true, targetIsCityLeader: false,
+            targetIsHeir: false),
+            "enemy kings are never selected by RTS soldiers");
+
+        False(ArmyRtsCombatTargetRules.ShouldAllowTarget(
+            targetAlive: true, targetHostile: true,
+            targetCanBeAttacked: true,
+            targetIsKing: false, targetIsCityLeader: true,
+            targetIsHeir: false),
+            "enemy city leaders are never selected by RTS soldiers");
+
+        False(ArmyRtsCombatTargetRules.ShouldAllowTarget(
+            targetAlive: true, targetHostile: true,
+            targetCanBeAttacked: true,
+            targetIsKing: false, targetIsCityLeader: false,
+            targetIsHeir: true),
+            "enemy heirs are never selected by RTS soldiers");
+
+        False(ArmyRtsCombatTargetRules.ShouldAllowTarget(
+            targetAlive: true, targetHostile: false,
+            targetCanBeAttacked: true,
+            targetIsKing: false, targetIsCityLeader: false,
+            targetIsHeir: false),
+            "friendly civilians remain invalid targets");
+
+        False(ArmyRtsCombatTargetRules.ShouldAllowTarget(
+            targetAlive: false, targetHostile: true,
+            targetCanBeAttacked: true,
+            targetIsKing: false, targetIsCityLeader: false,
+            targetIsHeir: false),
+            "dead targets are rejected");
+
+        False(ArmyRtsCombatTargetRules.ShouldAllowTarget(
+            targetAlive: true, targetHostile: true,
+            targetCanBeAttacked: false,
+            targetIsKing: false, targetIsCityLeader: false,
+            targetIsHeir: false),
+            "engine population protection can veto a civilian target");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name + ": expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(name + ": expected false");
+    }
+}

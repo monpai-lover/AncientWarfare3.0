@@ -34,8 +34,30 @@ namespace AncientWarfare3.patch
         {
             bool repaired = ActorKingdomSafetyService.
                 RepairLoadedActor(__result);
+            if (__result?.isWarrior() == true)
+                WarriorArmyMembershipService.Enqueue(__result);
             if (ActorKingdomSafetyRules.ShouldQueueDeferredRepair(repaired))
                 ActorKingdomSafetyService.QueueRepair(__result);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(City), nameof(City.isNeutral))]
+        private static bool CityIsNeutral_LoadSafetyPrefix(City __instance,
+            ref bool __result)
+        {
+            bool useFallback = ActorLoadCitySafetyRules.
+                ShouldUseNeutralFallback(
+                    cityExists: __instance != null,
+                    cityKingdomExists: __instance?.kingdom != null,
+                    cityKingdomAssetExists: __instance?.kingdom?.asset != null);
+            if (!useFallback) return true;
+
+            // Vanilla City.isNeutral() calls kingdom.isNeutral() directly.
+            // During save restore a city can be materialized before its
+            // kingdom relation, so treat this transient state as neutral.
+            __result = true;
+            return false;
         }
 
         [HarmonyPrefix]
@@ -127,7 +149,6 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.Update))]
         private static void DrainActorKingdomRepairs_Prefix()
         {
-            KingdomFounderSpeciesSafetyService.RepairLoadedKingdoms();
             long benchmark = RecentFeatureBenchmark.BeginOutsideFrameStage();
             try
             {

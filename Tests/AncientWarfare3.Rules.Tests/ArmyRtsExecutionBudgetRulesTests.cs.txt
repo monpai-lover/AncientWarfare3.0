@@ -9,6 +9,7 @@ internal static class ArmyRtsExecutionBudgetRulesTests
         NativeModeRetainsBoundedBudgets();
         FixedModeRetainsBoundedBudgets();
         EmptyAndNegativePendingWorkRemainEmpty();
+        ActiveMissionQueueBackfillIsRequiredWhenPendingQueueShrinks();
     }
 
     private static void LargeModeDrainsTheCapturedSnapshot()
@@ -102,6 +103,24 @@ internal static class ArmyRtsExecutionBudgetRulesTests
             "negative lifecycle work");
         Equal(0, budget.AbstractBattles,
             "negative abstract-battle work");
+    }
+
+    private static void ActiveMissionQueueBackfillIsRequiredWhenPendingQueueShrinks()
+    {
+        Assert(ArmyRtsExecutionBudgetRules.ShouldBackfillActiveControllers(
+                activeMissionControllers: 40, pendingControllers: 1),
+            "active missions must refill a shrunken controller queue");
+        Assert(!ArmyRtsExecutionBudgetRules.ShouldBackfillActiveControllers(
+                activeMissionControllers: 4, pendingControllers: 4),
+            "a complete controller queue does not need backfill");
+        Assert(!ArmyRtsExecutionBudgetRules.ShouldBackfillActiveControllers(
+                activeMissionControllers: 0, pendingControllers: 0),
+            "an empty mission set does not create controller work");
+    }
+
+    private static void Assert(bool condition, string name)
+    {
+        if (!condition) throw new InvalidOperationException(name);
     }
 
     private static void Equal<T>(T expected, T actual, string name)

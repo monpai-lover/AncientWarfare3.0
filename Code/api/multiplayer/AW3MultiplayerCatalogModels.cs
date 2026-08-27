@@ -63,7 +63,9 @@ namespace AncientWarfare3.api.multiplayer
         VirtualTitles = 30,
         MilitaryGovernorate = 31,
         CustomCourtWorkflow = 32,
-        BanditAmnestySettlement = 33
+        BanditAmnestySettlement = 33,
+        CourtStatistics = 34,
+        DeJureRegionMerge = 35
     }
 
     public enum AW3WindowOpenStatus : byte
@@ -348,7 +350,9 @@ namespace AncientWarfare3.api.multiplayer
         ApplyCustomCourtTemplate = 34,
         GrantBanditAmnesty = 35,
         CommitDomesticHousehold = 36,
-        FillCentralCourtVacancies = 37
+        FillCentralCourtVacancies = 37,
+        MergeDeJureRegions = 38,
+        RenameCounty = 39
     }
 
     public enum AW3CommandStatus : byte
@@ -483,15 +487,31 @@ namespace AncientWarfare3.api.multiplayer
             AW3CommandKind.StartMandateDecision, countryId,
             key: Token(decisionId, nameof(decisionId)));
 
+        public static AW3CommandRequest MergeDeJureRegions(long countryId,
+            long primaryRegionId, long secondaryRegionId) => Create(
+            AW3CommandKind.MergeDeJureRegions, countryId,
+            cityId: Positive(primaryRegionId, nameof(primaryRegionId)),
+            secondaryId: Positive(secondaryRegionId,
+                nameof(secondaryRegionId)));
+
+        public static AW3CommandRequest RenameCounty(long countryId,
+            long countyId, string countyName, bool restoreHistorical = false) =>
+            Create(AW3CommandKind.RenameCounty, countryId,
+                secondaryId: Positive(countyId, nameof(countyId)),
+                text: countyName?.Trim() ?? string.Empty,
+                boolValue: restoreHistorical);
+
         public static AW3CommandRequest AppointCourtOfficer(long countryId,
             long actorId, string officeId,
             long expectedIncumbentActorId = -1L,
-            string layer = "central", long cityId = -1L) => Create(
+            string layer = "central", long cityId = -1L,
+            long countyId = -1L) => Create(
             AW3CommandKind.AppointCourtOfficer, countryId,
             actorId: Positive(actorId, nameof(actorId)),
             targetActorId: Optional(expectedIncumbentActorId,
                 nameof(expectedIncumbentActorId)),
             cityId: Optional(cityId, nameof(cityId)),
+            secondaryId: Optional(countyId, nameof(countyId)),
             key: Token(officeId, nameof(officeId)),
             secondaryKey: Token(layer, nameof(layer)));
 

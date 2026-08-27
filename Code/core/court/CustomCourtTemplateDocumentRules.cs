@@ -19,7 +19,7 @@ namespace AncientWarfare3.core.court
         }
 
         public static CustomCourtTemplate CreateLocalDocument(
-            CustomLocalCourtTemplate pSource)
+            CustomLocalCourtTemplate pSource, int pRevision = 1)
         {
             if (pSource == null)
                 throw new ArgumentNullException(nameof(pSource));
@@ -28,7 +28,7 @@ namespace AncientWarfare3.core.court
                 SchemaVersion = CustomCourtTemplateRules.CurrentSchemaVersion,
                 Scope = CustomCourtTemplateScope.LocalGovernment,
                 Id = pSource.Id,
-                Revision = 1,
+                Revision = Math.Max(1, pRevision),
                 Name = pSource.Name ?? new CustomCourtLocalizedText(),
                 RegionalGovernmentLayer = null,
                 LocalTemplates = new List<CustomLocalCourtTemplate>

@@ -1,0 +1,28 @@
+using System;
+using System.IO;
+
+internal static class GlobalDeJureEmptyClickSourceGuardTests
+{
+    internal static void Run()
+    {
+        string service = Read(
+            "Code/core/policy/HierarchicalVassalMapModeService.cs");
+        Contains(service, "if (IsCityGlobalRegionLayer)");
+        Contains(service,
+            "HierarchicalVassalMapModeLabelLayer.KeepNativeLabelsVisible();");
+        Contains(service,
+            "HierarchicalVassalMapModeLabelLayer.RequestRefresh();");
+        Contains(service, "return true;");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            pPath.Replace('/', Path.DirectorySeparatorChar)));
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "missing global de-jure empty click guard: " + pNeedle);
+    }
+}

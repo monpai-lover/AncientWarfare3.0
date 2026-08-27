@@ -124,12 +124,6 @@ namespace AncientWarfare3.ui.windows
                                ? ""
                                : "  |  " + cityName);
 
-            if (_officeLayer == CourtOfficeLayer.City && _cityId >= 0L)
-            {
-                City city = World.world?.cities?.get(_cityId);
-                CourtService.EnsureLocalOfficerHistory(kingdom, city, _officeId);
-            }
-
             var scope = new OfficialCareerHistoryScope(_kingdomId, _cityId,
                 _officeLayer, _officeId);
             IReadOnlyList<OfficialCareerHistoryRow> rows =
@@ -274,7 +268,8 @@ namespace AncientWarfare3.ui.windows
             {
                 foreach (City city in pKingdom.getCities())
                     if (city?.data?.id == pCityId)
-                        return city.data.name ?? "";
+                        return DeJureRegionStore.
+                            ResolveCountyNameForPresentation(city);
             }
             catch { }
             return "";

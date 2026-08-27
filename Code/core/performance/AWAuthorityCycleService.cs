@@ -180,6 +180,12 @@ namespace AncientWarfare3.core.performance
             return "aw3.authority";
         }
 
+        // Read-only compatibility surface for the newer performance report.
+        public static string GetDiagnostics()
+        {
+            return "native_cycle_token=" + _nativeCycleToken;
+        }
+
         private static void Measure(int pIndex, System.Action pAction)
         {
             long benchmark = RecentFeatureBenchmark.Begin();

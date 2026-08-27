@@ -1239,16 +1239,7 @@ namespace AncientWarfare3.ui.windows
             if (EraNameRules.IsValidCustom(pReign.formal_era_stem))
                 return pReign.formal_era_stem +
                        EraNameRules.FormatYear(pReignYear);
-            if (string.IsNullOrWhiteSpace(pReign.state_name_snapshot) ||
-                string.IsNullOrWhiteSpace(pReign.given_name) ||
-                pReign.title_rank < 0) return "";
-            int rank = Mathf.Clamp(pReign.title_rank,
-                (int)KingdomTitle.Baron, (int)KingdomTitle.Emperor);
-            return RegnalChronologyRules.Format(
-                pReign.state_name_snapshot,
-                KingdomTitleService.GetTitleChar((KingdomTitle)rank),
-                pReign.given_name, pReignYear,
-                isHereditaryMonarchy: true, isRepublic: false);
+            return "";
         }
 
         private static string RichName(string pText, string pColor)
@@ -1276,6 +1267,9 @@ namespace AncientWarfare3.ui.windows
                 ? pEntry.content_rich
                 : HistoryColors.EscapeRich(pEntry.content);
             content = NormalizeLegacyCareerKeys(content);
+            content = WarDisplayLabelRules.NormalizeHistoryContent(
+                pEntry.event_type, content,
+                HistoryLocalizationRules.CurrentLanguage());
             return year + WarDisplayLabelRules.NormalizeEmbeddedKeys(content);
         }
 
@@ -1313,6 +1307,9 @@ namespace AncientWarfare3.ui.windows
                 ? pEntry.content_rich
                 : HistoryColors.EscapeRich(pEntry.content);
             content = NormalizeLegacyCareerKeys(content);
+            content = WarDisplayLabelRules.NormalizeHistoryContent(
+                pEntry.event_type, content,
+                HistoryLocalizationRules.CurrentLanguage());
             content = WarDisplayLabelRules.NormalizeEmbeddedKeys(content);
             if (pEntry.event_type == KingdomEvent.POSTHUMOUS && pEntry.target_type == "actor" && pEntry.target_id >= 0)
             {

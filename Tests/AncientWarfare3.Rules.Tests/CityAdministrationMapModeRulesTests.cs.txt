@@ -14,13 +14,23 @@ internal static class CityAdministrationMapModeRulesTests
         True(state.PushRegion(42L), "region focus pushes seat city");
         Equal(42L, state.FocusSeatCityId, "focused seat is stable");
         True(state.IsCityLevel, "region focus enters prefecture level");
+        True(state.PushCounty(88L, 42L),
+            "city focus enters county level");
+        True(state.IsCountyLevel, "county focus is distinct from city level");
+        Equal(88L, state.FocusCountyId, "focused county is stable");
+        Equal(42L, state.FocusCountyCityId,
+            "county level retains the owning city");
         True(state.PopRegion(), "outside click pops to commandery level");
+        True(state.IsCityLevel, "first pop restores city level");
+        True(state.PopRegion(), "second pop restores commandery level");
         True(state.IsRegionLevel, "pop restores commandery level");
         True(state.PopKingdom(), "outside click pops to country level");
         True(state.IsCountryLevel, "pop restores country level");
         True(state.PushKingdom(7L), "country focus can be entered again");
         True(state.PopKingdom(), "country focus can be exited");
         True(state.IsCountryLevel, "country level remains after reset");
+        Equal(-1L, state.FocusCountyCityId,
+            "leaving the hierarchy clears county city focus");
         Equal("city-admin:7:Regions:42:99", CityAdministrationMapModeRules
             .CacheKey(7L, CityAdministrationMapLevel.Regions, 42L, 99L),
             "cache key includes world level seat and entity");
@@ -47,11 +57,35 @@ internal static class CityAdministrationMapModeRulesTests
             CityAdministrationMapModeRules.ResolveClick(
                 true, -1L, -1L, false),
             "unmapped region-level click does not affect kingdom hierarchy");
+        Equal(CityAdministrationMapClickAction.InspectCity,
+            CityAdministrationMapModeRules.ResolveCountyClick(
+                true, -1L, 88L, true),
+            "mapped city click opens county layer");
+        Equal(CityAdministrationMapClickAction.None,
+            CityAdministrationMapModeRules.ResolveCountyClick(
+                true, -1L, -1L, false),
+            "empty city click does not clear county labels");
+        Equal(CityAdministrationMapClickAction.PopToRegions,
+            CityAdministrationMapModeRules.ResolveCountyClick(
+                false, 88L, 99L, true),
+            "different county returns to city level");
         Equal("#4A6FA5", CityAdministrationMapModeRules.RegionColorHex(0L),
             "first commandery uses the stable region palette");
         True(CityAdministrationMapModeRules.RegionColorHex(0L) !=
              CityAdministrationMapModeRules.RegionColorHex(1L),
             "adjacent commanderies must have visibly distinct colors");
+        True(CityAdministrationMapModeRules.IsCountyVisible(
+                42L, 42L),
+            "all counties in the focused city are visible");
+        True(!CityAdministrationMapModeRules.IsCountyVisible(
+                42L, 99L),
+            "counties outside the focused city stay hidden");
+        Equal(4, CityAdministrationMapModeRules.CountyPaletteIndex(
+                3, 1, 8),
+            "county palette advances from the realm color by ordinal");
+        True(CityAdministrationMapModeRules.CountyPaletteIndex(3, 0, 8) !=
+             CityAdministrationMapModeRules.CountyPaletteIndex(3, 1, 8),
+            "sibling counties use distinct original palette entries");
     }
 
     private static void True(bool pActual, string pMessage)

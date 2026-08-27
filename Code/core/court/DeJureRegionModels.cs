@@ -19,7 +19,11 @@ namespace AncientWarfare3.core.court
     {
         public long RegionId { get; set; } = -1L;
         public string RegionName { get; set; } = string.Empty;
+        public string HistoricalStateId { get; set; } = string.Empty;
+        public string HistoricalCommanderyId { get; set; } = string.Empty;
+        public string RegionNameSource { get; set; } = string.Empty;
         public long SeatCityId { get; set; } = -1L;
+        public bool SeatLocked { get; set; }
         public List<long> MemberCityIds { get; set; } = new List<long>();
         public int CreatedYear { get; set; } = -1;
         public string CreatedByKind { get; set; } = string.Empty;
@@ -39,5 +43,15 @@ namespace AncientWarfare3.core.court
         public int Year { get; set; } = -1;
         public long ActorId { get; set; } = -1L;
         public int Version { get; set; } = 1;
+    }
+
+    internal sealed class DeJureRegionMergeCandidate
+    {
+        public long PrimaryRegionId { get; set; }
+        public long SecondaryRegionId { get; set; }
+        public long PrimaryCityId { get; set; }
+        public long SecondaryCityId { get; set; }
+        public string PrimaryName { get; set; } = string.Empty;
+        public string SecondaryName { get; set; } = string.Empty;
     }
 }

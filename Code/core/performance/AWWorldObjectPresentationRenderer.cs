@@ -52,6 +52,8 @@ internal static class AWWorldObjectPresentationRenderer
     private static long maximumPrepareTicks;
     private static ulong lastVisibilitySignature;
     private static bool lastRenderBuildings;
+    private static bool lastRenderGameplay;
+    private static double nextCameraRefreshAt;
 
     internal static AWActorPresentationSnapshot PreparedSnapshot =>
         GetPreparedSnapshot();
@@ -71,14 +73,25 @@ internal static class AWWorldObjectPresentationRenderer
         }
 
         long startedAt = Stopwatch.GetTimestamp();
+        bool renderGameplay = MapBox.isRenderGameplay();
         bool renderBuildings =
             World.world.quality_changer.shouldRenderBuildings();
         ulong visibilitySignature =
             AWPresentationVisibility.GetSignature(
-                MapBox.isRenderGameplay());
-        if (ReferenceEquals(snapshot, preparedSnapshot) &&
-            visibilitySignature == lastVisibilitySignature &&
-            renderBuildings == lastRenderBuildings)
+                renderGameplay);
+        bool snapshotChanged = !ReferenceEquals(snapshot, preparedSnapshot);
+        bool renderModeChanged = renderGameplay != lastRenderGameplay ||
+            renderBuildings != lastRenderBuildings;
+        bool visibilityChanged = visibilitySignature !=
+            lastVisibilitySignature;
+        double now = Time.realtimeSinceStartupAsDouble;
+        if (!PresentationRefreshRules.ShouldRebuild(
+                preparedSnapshot != null,
+                snapshotChanged,
+                renderModeChanged,
+                visibilityChanged,
+                now,
+                nextCameraRefreshAt))
         {
             System.Threading.Interlocked.Increment(
                 ref reusedPreparedFrames);
@@ -102,8 +115,6 @@ internal static class AWWorldObjectPresentationRenderer
         manager.render_data.checkSize(snapshot.BuildingCount);
         manager.visible_stockpiles.Clear();
         manager.sparkles.Clear();
-        bool snapshotChanged =
-            !ReferenceEquals(snapshot, preparedSnapshot);
         if (snapshotChanged)
         {
             BuildingSnapshotIndexes.Clear();
@@ -162,6 +173,12 @@ internal static class AWWorldObjectPresentationRenderer
         lastPreparedFrame = Time.frameCount;
         lastVisibilitySignature = visibilitySignature;
         lastRenderBuildings = renderBuildings;
+        lastRenderGameplay = renderGameplay;
+        if (visibilityChanged)
+        {
+            nextCameraRefreshAt =
+                PresentationRefreshRules.ScheduleNextCameraRefresh(now);
+        }
         RecordPrepareDuration(Stopwatch.GetTimestamp() - startedAt);
         return true;
     }
@@ -681,6 +698,8 @@ internal static class AWWorldObjectPresentationRenderer
         visibleFireCount = 0;
         lastVisibilitySignature = 0UL;
         lastRenderBuildings = false;
+        lastRenderGameplay = false;
+        nextCameraRefreshAt = 0d;
         BuildingSnapshotIndexes.Clear();
     }
 

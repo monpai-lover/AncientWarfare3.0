@@ -136,7 +136,15 @@ namespace AncientWarfare3.api.multiplayer
                     "ui/icons/iconDiplomacy",
                     AW3WindowCategory.Domestic,
                     AW3WindowContextRequirement.Country |
-                    AW3WindowContextRequirement.TargetCountry)
+                    AW3WindowContextRequirement.TargetCountry),
+                Window(AW3WindowKind.CourtStatistics,
+                    "aw_court_statistics", "ui/icons/iconKingdomList",
+                    AW3WindowCategory.Domestic,
+                    AW3WindowContextRequirement.Country),
+                Window(AW3WindowKind.DeJureRegionMerge,
+                    "aw_de_jure_region_merge", "ui/icons/iconDiplomacy",
+                    AW3WindowCategory.Domestic,
+                    AW3WindowContextRequirement.Country)
             });
 
         private static readonly IReadOnlyList<AW3CommandDescriptor>
@@ -158,6 +166,10 @@ namespace AncientWarfare3.api.multiplayer
                     AW3WindowContextRequirement.TargetCountry),
                 Command(AW3CommandKind.StartMandateDecision,
                     AW3WindowCategory.Mandate, Country()),
+                Command(AW3CommandKind.MergeDeJureRegions,
+                    AW3WindowCategory.Domestic, Country()),
+                Command(AW3CommandKind.RenameCounty,
+                    AW3WindowCategory.Domestic, Country()),
                 Command(AW3CommandKind.AppointCourtOfficer,
                     AW3WindowCategory.Domestic, Country() |
                     AW3WindowContextRequirement.Actor |
@@ -263,11 +275,12 @@ namespace AncientWarfare3.api.multiplayer
 
         public static AW3CommandDescriptor GetCommand(AW3CommandKind kind)
         {
-            int index = (int)kind;
-            if (index < 0 || index >= CommandDescriptors.Count ||
-                CommandDescriptors[index].Kind != kind)
-                throw new ArgumentOutOfRangeException(nameof(kind));
-            return CommandDescriptors[index];
+            for (int index = 0; index < CommandDescriptors.Count; index++)
+            {
+                AW3CommandDescriptor descriptor = CommandDescriptors[index];
+                if (descriptor.Kind == kind) return descriptor;
+            }
+            throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
         private static AW3WindowDescriptor Window(AW3WindowKind kind,

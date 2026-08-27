@@ -132,7 +132,21 @@ namespace AncientWarfare3.core.court
                     StringComparison.Ordinal))
                 return pCityId < 0L;
             return string.Equals(pLayer, CourtOfficeLayer.City,
+                       StringComparison.Ordinal) && pCityId >= 0L ||
+                   string.Equals(pLayer, CourtOfficeLayer.County,
                        StringComparison.Ordinal) && pCityId >= 0L;
+        }
+
+        public static bool IsAuthoritativeLocalChiefScope(string pLayer,
+            bool pCityValid, bool pCityOwnedByKingdom, string pOfficeId,
+            string pResolvedCityOffice)
+        {
+            return string.Equals(pLayer, CourtOfficeLayer.City,
+                       StringComparison.Ordinal) &&
+                   pCityValid && pCityOwnedByKingdom &&
+                   !string.IsNullOrEmpty(pOfficeId) &&
+                   string.Equals(pOfficeId, pResolvedCityOffice,
+                       StringComparison.Ordinal);
         }
 
         public static CourtManualOfficeAction ResolveOfficeAction(
@@ -164,6 +178,13 @@ namespace AncientWarfare3.core.court
             long incumbentActorId)
         {
             return candidateActorId >= 0 && candidateActorId != incumbentActorId;
+        }
+
+        public static bool CanUseLayerCandidate(string pLayer,
+            bool isCityLeader)
+        {
+            return !string.Equals(pLayer, CourtOfficeLayer.County,
+                       StringComparison.Ordinal) || !isCityLeader;
         }
 
         public static bool IsMilitaryCentralOffice(string pOfficeId)

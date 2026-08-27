@@ -1,0 +1,43 @@
+using System;
+using System.IO;
+
+internal static class BanditFormerKingSourceGuardTests
+{
+    internal static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string chronicle = File.ReadAllText(Path.Combine(root,
+            "Code/core/lineage/ChronicleEvents.cs"))
+            .Replace("\r\n", "\n");
+        string formerKing = File.ReadAllText(Path.Combine(root,
+            "Code/core/lineage/FormerKingService.cs"))
+            .Replace("\r\n", "\n");
+        string state = File.ReadAllText(Path.Combine(root,
+            "Code/core/lineage/PeasantRebelBanditStrongholdState.cs"))
+            .Replace("\r\n", "\n");
+        string stronghold = File.ReadAllText(Path.Combine(root,
+            "Code/core/lineage/PeasantRebelBanditStrongholdService.cs"))
+            .Replace("\r\n", "\n");
+        string rules = File.ReadAllText(Path.Combine(root,
+            "Code/core/lineage/PeasantRebelBanditStrongholdRules.cs"))
+            .Replace("\r\n", "\n");
+        True(chronicle.Contains("pKingdom.king ??", StringComparison.Ordinal) &&
+             chronicle.Contains("ResolveRecordedRuler(pKingdom)", StringComparison.Ordinal),
+            "kingdom extinction recovers a bandit ruler after the native king link is cleared");
+        True(formerKing.Contains("IsRecordedRuler(", StringComparison.Ordinal),
+            "a recorded bandit ruler is accepted as the last king");
+        True(state.Contains("public long LeaderActorId", StringComparison.Ordinal),
+            "bandit stronghold state persists the founding ruler id");
+        True(stronghold.Contains("EnsureBanditKingIdentity(", StringComparison.Ordinal) &&
+             stronghold.Contains("SelectBanditKingCandidate(", StringComparison.Ordinal),
+            "bandit routes repair and select a local ruler instead of retaining a foreign king");
+        True(rules.Contains("IsValidBanditKing(", StringComparison.Ordinal) &&
+             rules.Contains("CanPromoteBanditKingCandidate(", StringComparison.Ordinal),
+            "bandit kingship has an explicit local-citizen identity gate");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+}

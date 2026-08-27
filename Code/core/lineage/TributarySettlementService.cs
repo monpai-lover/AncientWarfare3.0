@@ -214,15 +214,24 @@ namespace AncientWarfare3.core.lineage
                     : "tributary_unpaid";
             string label = HistoryLocalizationRules.Text(
                 "aw_hist_" + eventId);
-            string text = (tributary?.name ?? "") + " -> " +
-                (suzerain?.name ?? "") + " " + label +
-                " political=" + result.PoliticalTransferred.ToString("0.0") +
-                " gold=" + result.GoldTransferred + " factor=" +
-                result.FactorPercent;
+            HistoryText text = HistoryText.Kingdom(tributary) +
+                HistoryLocalizationRules.H("aw_hist_tributary_settlement_to") +
+                HistoryText.Kingdom(suzerain) + HistoryText.PlainText(" ") +
+                HistoryText.PlainText(label) +
+                HistoryLocalizationRules.H("aw_hist_tributary_settlement_political") +
+                HistoryText.PlainText(result.PoliticalTransferred.ToString("0.0")) +
+                HistoryLocalizationRules.H("aw_hist_tributary_settlement_gold") +
+                HistoryText.PlainText(result.GoldTransferred.ToString()) +
+                HistoryLocalizationRules.H("aw_hist_tributary_settlement_factor") +
+                HistoryText.PlainText(result.FactorPercent.ToString());
             HistoryWriter.RecordKingdom(tributary, eventId, text,
                 HistoryTarget.Kingdom(suzerain));
             HistoryWriter.RecordKingdom(suzerain, eventId, text,
                 HistoryTarget.Kingdom(tributary));
+            DiplomacyConversationService.RecordTributePayment(tributary,
+                suzerain, eventId, result.PoliticalTransferred,
+                result.GoldTransferred, result.FactorPercent,
+                result.OfferingOutcome);
         }
     }
 }

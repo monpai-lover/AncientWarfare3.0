@@ -58,9 +58,6 @@ namespace AncientWarfare3.core.performance
 
     public static class ArmyRtsExecutionBudgetRules
     {
-        // Controller work can requeue itself after every pass. Keep a fixed
-        // slice even in large-step mode so a large active war cannot consume
-        // the entire authority-cycle budget in one frame.
         private const int ControllerSliceCap = 32;
 
         public static ArmyRtsExecutionBudget Capture(
@@ -92,6 +89,13 @@ namespace AncientWarfare3.core.performance
             int pending = Math.Max(0, pPending);
             if (pMode == AWSimulationMode.Large) return pending;
             return Math.Min(pending, Math.Max(0, pNativeCap));
+        }
+
+        public static bool ShouldBackfillActiveControllers(
+            int activeMissionControllers, int pendingControllers)
+        {
+            return Math.Max(0, activeMissionControllers) >
+                   Math.Max(0, pendingControllers);
         }
     }
 }

@@ -759,6 +759,20 @@ namespace AncientWarfare3.core.lineage
             return started;
         }
 
+        public static bool ShouldWaitForProviderRoute(Actor pActor)
+        {
+            Army army = pActor?.army;
+            if (pActor?.data == null || army?.data == null ||
+                !States.TryGetValue(army.id, out MarchState state))
+                return false;
+            bool transportActive = state.LandTrailPausedForTransport ||
+                                   ArmyRtsTransportService.HasActiveVoyage(
+                                       army);
+            return ArmySharedPathRules.ShouldWaitForProviderRoute(
+                state.UsesProvider, state.ProviderComplete, state.Route.Count,
+                state.ContainsTransportStep, transportActive);
+        }
+
         public static bool NeedsCompleteSharedRoute(Actor pActor)
         {
             Army army = pActor?.army;

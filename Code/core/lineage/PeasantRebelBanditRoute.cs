@@ -54,6 +54,9 @@ namespace AncientWarfare3.core.lineage
                     out City stronghold, out string failureKey))
                 return false;
 
+            PeasantRebelBanditStrongholdService.EnsureBanditKingIdentity(
+                pContext.Rebel, "bandit_route_enter");
+
             pContext.Rebel.data.set(
                 LineageKeys.MANDATE_REBEL_FOUNDING_CITY_ID,
                 stronghold.getID());
@@ -75,6 +78,8 @@ namespace AncientWarfare3.core.lineage
             if (!PeasantRebelRouteRules.CanMutateAuthority(
                     AW3MultiplayerReplicaScope.IsReplicaSession) ||
                 AW3MultiplayerReplicaScope.IsApplying) return;
+            PeasantRebelBanditStrongholdService.EnsureBanditKingIdentity(
+                pKingdom, "bandit_route_year");
             bool guiYi = PeasantRebelGuiyiService.IsGuiyi(pKingdom);
             if (!guiYi)
             {

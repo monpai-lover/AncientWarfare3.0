@@ -259,10 +259,12 @@ namespace AncientWarfare3.core.lineage
                     break;
                 }
             if (!foundTargetFacts || !WarStrategyCandidateRules.TryEvaluate(
-                    sourceFacts, selectedTargetFacts,
-                    out WarStrategyCandidate liveCandidate) ||
+                sourceFacts, selectedTargetFacts,
+                out WarStrategyCandidate liveCandidate) ||
                 !WarStrategyCandidateRules.MatchesKind(pPlan.WarKind,
-                    liveCandidate.Kind))
+                    liveCandidate.Kind) ||
+                !WarStrategyCandidateRules.IsPreferredTarget(sourceFacts,
+                    targetFacts, target.id, liveCandidate.Kind))
                 return false;
             if (pShadowOnly) return false;
             bool shouldIssue = pPlan.WarKind ==
@@ -453,7 +455,7 @@ namespace AncientWarfare3.core.lineage
             bool blocked = sameRoot || vassalBlocked || warBlocked;
             bool sameAlliance = false;
             float targetAlliancePower = 0f;
-            bool neighbor = false;
+            bool neighbor = AreNeighbors(pSource, pTarget);
             float capitalDistance = CapitalDistance(pSource, pTarget);
             int opinion = 0;
             bool needsFabrication = preferredKind ==
@@ -462,14 +464,12 @@ namespace AncientWarfare3.core.lineage
             if (preferredKind == WarStrategyCandidateKind.Normal &&
                 !targetAtWar && !blocked)
             {
-                neighbor = AreNeighbors(pSource, pTarget);
                 opinion = Opinion(pSource, pTarget);
             }
             if (preferredKind == WarStrategyCandidateKind.MandateConquest)
             {
                 if (!blocked && !targetAtWar)
                 {
-                    neighbor = AreNeighbors(pSource, pTarget);
                     sameAlliance = WarTerritoryService.AreInSameAlliance(
                         pSource, pTarget);
                     targetAlliancePower = WarTerritoryService
@@ -488,7 +488,6 @@ namespace AncientWarfare3.core.lineage
             }
             if (preferredKind == WarStrategyCandidateKind.Zhulu)
             {
-                neighbor = AreNeighbors(pSource, pTarget);
                 sameAlliance = WarTerritoryService.AreInSameAlliance(
                     pSource, pTarget);
             }
@@ -519,8 +518,13 @@ namespace AncientWarfare3.core.lineage
             int bestScore = int.MinValue;
             WarTerritoryService.WarTargetOption noCbFallback = null;
             int noCbFallbackScore = int.MinValue;
+            WarTerritoryService.WarTargetOption preferredMandateConquest = null;
             WarAiPeopleRelation relation = ResolvePeopleRelation(
                 pKingdom, pTarget);
+            bool preferMandateConquest = MandateConquestRules.ShouldPreferAiGoal(
+                MandateService.GetCurrentMandateKingdom() == pKingdom,
+                MandateService.GetCurrentMandateKingdom() == pTarget) &&
+                WarTerritoryService.CanUseMandateConquest(pKingdom, pTarget);
             SamePeopleWarRoute route = SamePeopleWarIntentRules.Resolve(
                 relation, pKingdom.id, pTarget.id, Date.getCurrentYear(),
                 WarClaimPreparationService.IsLockedTo(pKingdom, pTarget));
@@ -541,6 +545,9 @@ namespace AncientWarfare3.core.lineage
                     option.goal_type, option.score, relation, context,
                     ObjectiveUrgency(option));
                 if (strategicScore == int.MinValue) continue;
+                if (preferMandateConquest && option.goal_type ==
+                    WarTerritoryService.GOAL_MANDATE_CONQUEST)
+                    preferredMandateConquest = option;
                 if (option.goal_type == WarTerritoryService.GOAL_NO_CB)
                 {
                     if (strategicScore <= noCbFallbackScore) continue;
@@ -552,7 +559,7 @@ namespace AncientWarfare3.core.lineage
                 bestScore = strategicScore;
                 best = option;
             }
-            return best ?? noCbFallback;
+            return preferredMandateConquest ?? best ?? noCbFallback;
         }
 
         private static bool ShouldPrepareTerritorialClaim(Kingdom pSource,

@@ -5,7 +5,12 @@ namespace AncientWarfare3.core.performance
     public static class AWPerformanceSettings
     {
         private static bool _configSchedulerEnabled;
+        private static bool _configLargeStepEnabled;
+        private static readonly AWSimulationMode? _environmentModeOverride =
+            AWFrameSchedulerRules.ParseEnvironmentOverride(
+                Environment.GetEnvironmentVariable("AW3_FRAME_SCHEDULER"));
         private static bool _configArmyRtsEnabled = true;
+        private static bool _configSyntheticMobilizationEnabled;
         private static int _configArmyRtsWarResolutionMode;
         private static bool _configShowArmyRtsVisuals;
         private static bool _configShowArmyMapInformation;
@@ -13,6 +18,7 @@ namespace AncientWarfare3.core.performance
         private static bool _configDiplomacyAiEnabled = true;
         private static bool _configAiAllianceActionsEnabled = true;
         private static bool _configAiVassalActionsEnabled = true;
+        private static bool _configHistoricalDeJureCityNames;
 
         internal static event Action ArmyRtsDiagnosticsDisabled;
         internal static event Action ArmyMapInformationDisabled;
@@ -33,6 +39,8 @@ namespace AncientWarfare3.core.performance
         public static bool EnableAsyncShadowChecks { get; private set; }
         public static bool ArmyRtsDiagnosticsEnabled { get; private set; }
         public static bool EnableArmyRts => _configArmyRtsEnabled;
+        public static bool EnableSyntheticMobilization =>
+            _configSyntheticMobilizationEnabled;
         public static int ArmyRtsWarResolutionModeIndex =>
             _configArmyRtsWarResolutionMode;
         public static bool ShowArmyRtsVisuals =>
@@ -46,19 +54,29 @@ namespace AncientWarfare3.core.performance
             _configAiAllianceActionsEnabled;
         public static bool EnableAiVassalActions =>
             _configAiVassalActionsEnabled;
+        public static bool EnableHistoricalDeJureCityNames =>
+            _configHistoricalDeJureCityNames;
 
         public const float RenderReserveMilliseconds = 2f;
         public const float MinimumSliceMilliseconds = 0.15f;
         public const float BackgroundJoinMilliseconds = 0.2f;
+        // These values are reserved for the RTS P0 domain. Vanilla and
+        // ordinary AW3 authority stages use the Cultiway-compatible values
+        // selected by AWFrameSchedulerRules per domain.
         public const float StarvationSliceMilliseconds = 2f;
         public const int StarvationFrameInterval = 1;
-        public const int SimulationBatchSize = 256;
+        // Match Cultiway master. Smaller batches keep each cooperative phase
+        // within the frame budget and prevent large-step frame-time spikes.
+        public const int SimulationBatchSize = 64;
 
         public static AWSimulationMode Mode =>
-            AWFrameSchedulerRules.ResolveMode(_configSchedulerEnabled);
+            AWFrameSchedulerRules.ResolveCachedMode(_configSchedulerEnabled,
+                _configLargeStepEnabled, _environmentModeOverride);
 
         public static bool EnableFramePriorityScheduler =>
             Mode != AWSimulationMode.Native;
+        public static bool EnableVanillaLargeSimulationStep =>
+            Mode == AWSimulationMode.Large;
 
         public static int TotalParallelBudget =>
             WorkerAllocation.TotalBudget;
@@ -80,6 +98,15 @@ namespace AncientWarfare3.core.performance
             AWFrameSchedulerRules.AllocateWorkers(
                 Environment.ProcessorCount);
 
+        internal static void ApplyParallelBudget(MapBox pMap)
+        {
+            if (pMap?.parallel_options != null)
+            {
+                pMap.parallel_options.MaxDegreeOfParallelism =
+                    ForegroundParallelism;
+            }
+        }
+
         public static void SwitchFramePriorityScheduler(bool pValue)
         {
             _configSchedulerEnabled = pValue;
@@ -87,8 +114,7 @@ namespace AncientWarfare3.core.performance
 
         public static void SwitchLargeSimulationStep(bool pValue)
         {
-            // Kept for existing saved configs; scheduler mode is now singular.
-            _ = pValue;
+            _configLargeStepEnabled = pValue;
         }
 
         public static void SwitchArmyRtsScheduler(bool pValue)
@@ -99,6 +125,22 @@ namespace AncientWarfare3.core.performance
         public static void SwitchArmyRts(bool pValue)
         {
             _configArmyRtsEnabled = pValue;
+        }
+
+        public static void SwitchSyntheticMobilization(bool pValue)
+        {
+            _configSyntheticMobilizationEnabled = pValue;
+            if (!pValue)
+            {
+                AncientWarfare3.core.lineage.
+                    SyntheticMobilizationLedgerService.
+                    DisableSyntheticGeneration();
+                AncientWarfare3.core.lineage.
+                    ArmyReplenishmentOperationService.
+                    DisableSyntheticReplenishment();
+                AncientWarfare3.core.lineage.
+                    TemporaryLevyService.ClearRuntime();
+            }
         }
 
         public static void SetArmyRtsWarResolutionMode(int pValue)
@@ -138,6 +180,11 @@ namespace AncientWarfare3.core.performance
         public static void SwitchAiVassalActions(bool pValue)
         {
             _configAiVassalActionsEnabled = pValue;
+        }
+
+        public static void SwitchHistoricalDeJureCityNames(bool pValue)
+        {
+            _configHistoricalDeJureCityNames = pValue;
         }
 
         public static void SetTargetRenderFps(float pValue)

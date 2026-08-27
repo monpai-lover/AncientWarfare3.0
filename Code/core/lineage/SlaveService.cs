@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Data.SQLite;
 using AncientWarfare3.content;
 using AncientWarfare3.content.schools;
+using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
@@ -36,9 +38,14 @@ namespace AncientWarfare3.core.lineage
         private const float SLAVE_CAPTURE_FAILURE_WAIT_MAX = 5f;
         private const float SLAVE_CAPTURE_SUCCESS_WAIT_MIN = 5f;
         private const float SLAVE_CAPTURE_SUCCESS_WAIT_MAX = 10f;
+        private const int SLAVE_STATE_BATCH_SIZE =
+            SlaveStatePersistenceRules.SynchronousBatchSize;
         private static readonly System.Random Rng = new System.Random();
+        private static readonly object SlaveStateBatchGate = new object();
         private static readonly Dictionary<long, List<PendingSlaveCaptureSummary>> PendingWarSlaveCaptures =
             new Dictionary<long, List<PendingSlaveCaptureSummary>>();
+        private static readonly Dictionary<long, SlaveStateSnapshot>
+            PendingSlaveStates = new Dictionary<long, SlaveStateSnapshot>();
 
         private sealed class PendingSlaveCaptureSummary
         {
@@ -69,6 +76,7 @@ namespace AncientWarfare3.core.lineage
         internal static void ClearRuntimeCaches()
         {
             PendingWarSlaveCaptures.Clear();
+            lock (SlaveStateBatchGate) PendingSlaveStates.Clear();
         }
 
         public static bool IsSlave(Actor pActor)
@@ -510,7 +518,8 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
-                pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+                pActor.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
             pActor.beh_actor_target = null;
             pActor.clearAttackTarget();
             UpsertSlaveState(pActor, pActive: false, pActor.city,
@@ -1138,7 +1147,9 @@ namespace AncientWarfare3.core.lineage
 
             pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
-            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pActor.addTrait(LineageKeys.TRAIT_GUIZU,
+                    pRemoveOpposites: true);
 
             string color = HistoryColors.FromKingdom(pKingdom ?? pActor.kingdom);
             pActor.data.set(LineageKeys.CAPTIVE_NOBLE_TITLE,
@@ -1321,9 +1332,179 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null) return;
             SlaveStateSnapshot state = CaptureSlaveState(pActor, pActive,
                 pCity ?? pActor.city, pKingdom ?? pActor.kingdom ?? pCity?.kingdom);
+            if (TryQueueAsyncSlaveState(state)) return;
+            lock (SlaveStateBatchGate)
+                PendingSlaveStates[state.actorId] = state;
             DeferredRuntimeWorkService.EnqueueCoalesced(
-                DeferredRuntimeWorkRules.CoalescingKey("slave_state", state.actorId),
-                DeferredWorkClass.Persistent, () => UpsertSlaveState(state));
+                "slave_state_batch",
+                DeferredWorkClass.Persistent, FlushQueuedSlaveStates);
+        }
+
+        private static void FlushQueuedSlaveStates()
+        {
+            List<SlaveStateSnapshot> batch = new List<SlaveStateSnapshot>(
+                SLAVE_STATE_BATCH_SIZE);
+            lock (SlaveStateBatchGate)
+            {
+                foreach (KeyValuePair<long, SlaveStateSnapshot> entry in
+                         PendingSlaveStates)
+                {
+                    batch.Add(entry.Value);
+                    if (batch.Count >= SLAVE_STATE_BATCH_SIZE) break;
+                }
+                for (int index = 0; index < batch.Count; index++)
+                    PendingSlaveStates.Remove(batch[index].actorId);
+            }
+
+            if (batch.Count == 0) return;
+            try
+            {
+                UpsertSlaveStatesBatch(batch);
+            }
+            catch
+            {
+                lock (SlaveStateBatchGate)
+                {
+                    for (int index = 0; index < batch.Count; index++)
+                    {
+                        SlaveStateSnapshot state = batch[index];
+                        if (!PendingSlaveStates.ContainsKey(state.actorId))
+                            PendingSlaveStates[state.actorId] = state;
+                    }
+                }
+                throw;
+            }
+
+            bool pending;
+            lock (SlaveStateBatchGate) pending = PendingSlaveStates.Count > 0;
+            if (pending)
+                DeferredRuntimeWorkService.EnqueueCoalesced(
+                    "slave_state_batch", DeferredWorkClass.Persistent,
+                    FlushQueuedSlaveStates);
+        }
+
+        private static void UpsertSlaveStatesBatch(
+            IReadOnlyList<SlaveStateSnapshot> pStates)
+        {
+            SQLiteConnection db = LineageArchiveManager.Instance?.OperatingDB;
+            if (db == null)
+                throw new InvalidOperationException(
+                    "Slave archive is unavailable.");
+            if (pStates == null || pStates.Count == 0) return;
+
+            string table = SlaveStateTableItem.GetTableName();
+            using SQLiteTransaction transaction = db.BeginTransaction();
+            using SQLiteCommand update = new SQLiteCommand(db)
+            {
+                Transaction = transaction,
+                CommandText =
+                    "UPDATE " + table + " SET " +
+                    "ACTOR_NAME=@actor_name,KINGDOM_ID=@kingdom_id," +
+                    "KINGDOM_NAME=@kingdom_name,CITY_ID=@city_id," +
+                    "CITY_NAME=@city_name,ENSLAVED_TIME=@enslaved_time," +
+                    "FREED_TIME=@freed_time,REASON=@reason," +
+                    "CAPTURED_BY_ACTOR_ID=@captured_by_actor_id," +
+                    "MERIT=@merit,ACTIVE=@active,SOLDIER=@soldier," +
+                    "SOLDIER_START_TIME=@soldier_start_time," +
+                    "FREEDMAN=@freedman WHERE ACTOR_ID=@actor_id"
+            };
+            using SQLiteCommand insert = new SQLiteCommand(db)
+            {
+                Transaction = transaction,
+                CommandText =
+                    "INSERT INTO " + table + " " +
+                    "(ACTOR_ID,ACTOR_NAME,KINGDOM_ID,KINGDOM_NAME,CITY_ID," +
+                    "CITY_NAME,ENSLAVED_TIME,FREED_TIME,REASON," +
+                    "CAPTURED_BY_ACTOR_ID,MERIT,ACTIVE,SOLDIER," +
+                    "SOLDIER_START_TIME,FREEDMAN) VALUES " +
+                    "(@actor_id,@actor_name,@kingdom_id,@kingdom_name,@city_id," +
+                    "@city_name,@enslaved_time,@freed_time,@reason," +
+                    "@captured_by_actor_id,@merit,@active,@soldier," +
+                    "@soldier_start_time,@freedman)"
+            };
+            string[] names =
+            {
+                "actor_id", "actor_name", "kingdom_id", "kingdom_name",
+                "city_id", "city_name", "enslaved_time", "freed_time",
+                "reason", "captured_by_actor_id", "merit", "active",
+                "soldier", "soldier_start_time", "freedman"
+            };
+            for (int index = 0; index < names.Length; index++)
+            {
+                update.Parameters.Add(new SQLiteParameter("@" + names[index]));
+                insert.Parameters.Add(new SQLiteParameter("@" + names[index]));
+            }
+
+            for (int index = 0; index < pStates.Count; index++)
+            {
+                SlaveStateSnapshot state = pStates[index];
+                SetSlaveStateParameters(update.Parameters, state);
+                if (update.ExecuteNonQuery() != 0) continue;
+                SetSlaveStateParameters(insert.Parameters, state);
+                insert.ExecuteNonQuery();
+            }
+            transaction.Commit();
+        }
+
+        private static void SetSlaveStateParameters(
+            SQLiteParameterCollection pParameters, SlaveStateSnapshot pState)
+        {
+            pParameters["@actor_id"].Value = pState.actorId;
+            pParameters["@actor_name"].Value = pState.actorName ?? "";
+            pParameters["@kingdom_id"].Value = pState.kingdomId;
+            pParameters["@kingdom_name"].Value = pState.kingdomName ?? "";
+            pParameters["@city_id"].Value = pState.cityId;
+            pParameters["@city_name"].Value = pState.cityName ?? "";
+            pParameters["@enslaved_time"].Value = pState.enslavedTime;
+            pParameters["@freed_time"].Value = pState.freedTime;
+            pParameters["@reason"].Value = pState.reason ?? "";
+            pParameters["@captured_by_actor_id"].Value =
+                pState.capturedByActorId;
+            pParameters["@merit"].Value = pState.merit;
+            pParameters["@active"].Value = pState.active ? 1 : 0;
+            pParameters["@soldier"].Value = pState.soldier ? 1 : 0;
+            pParameters["@soldier_start_time"].Value =
+                pState.soldierStartTime;
+            pParameters["@freedman"].Value = pState.freedman ? 1 : 0;
+        }
+
+        private static bool TryQueueAsyncSlaveState(
+            SlaveStateSnapshot pSnapshot)
+        {
+            if (pSnapshot == null || pSnapshot.actorId < 0L ||
+                !AWAsyncRuntime.DatabaseEnabled ||
+                !HistoricalWriteService.Ready) return false;
+
+            string table = SlaveStateTableItem.GetTableName();
+            var keys = new[]
+            {
+                new HistoricalSqlColumn("ACTOR_ID", pSnapshot.actorId)
+            };
+            var updates = new[]
+            {
+                new HistoricalSqlColumn("ACTOR_NAME", pSnapshot.actorName),
+                new HistoricalSqlColumn("KINGDOM_ID", pSnapshot.kingdomId),
+                new HistoricalSqlColumn("KINGDOM_NAME", pSnapshot.kingdomName),
+                new HistoricalSqlColumn("CITY_ID", pSnapshot.cityId),
+                new HistoricalSqlColumn("CITY_NAME", pSnapshot.cityName),
+                new HistoricalSqlColumn("ENSLAVED_TIME", pSnapshot.enslavedTime),
+                new HistoricalSqlColumn("FREED_TIME", pSnapshot.freedTime),
+                new HistoricalSqlColumn("REASON", pSnapshot.reason),
+                new HistoricalSqlColumn("CAPTURED_BY_ACTOR_ID",
+                    pSnapshot.capturedByActorId),
+                new HistoricalSqlColumn("MERIT", pSnapshot.merit),
+                new HistoricalSqlColumn("ACTIVE", pSnapshot.active ? 1 : 0),
+                new HistoricalSqlColumn("SOLDIER", pSnapshot.soldier ? 1 : 0),
+                new HistoricalSqlColumn("SOLDIER_START_TIME",
+                    pSnapshot.soldierStartTime),
+                new HistoricalSqlColumn("FREEDMAN", pSnapshot.freedman ? 1 : 0)
+            };
+            var inserts = new HistoricalSqlColumn[keys.Length + updates.Length];
+            Array.Copy(keys, 0, inserts, 0, keys.Length);
+            Array.Copy(updates, 0, inserts, keys.Length, updates.Length);
+            return HistoricalWriteService.TryUpsertState(
+                "slave_state:" + pSnapshot.actorId, table, keys, updates,
+                inserts, pOnCommitted: null, out _, out _);
         }
 
         private static SlaveStateSnapshot CaptureSlaveState(Actor pActor, bool pActive,

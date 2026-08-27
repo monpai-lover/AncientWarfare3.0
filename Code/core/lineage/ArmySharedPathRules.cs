@@ -173,6 +173,18 @@ namespace AncientWarfare3.core.lineage
                    !routeContainsTransportStep && !transportActive;
         }
 
+        public static bool ShouldWaitForProviderRoute(
+            bool usesProvider, bool providerComplete, int routeStepCount,
+            bool routeContainsTransportStep, bool transportActive)
+        {
+            // An empty pending request has no movement to wait for.  Let the
+            // native mission target keep the actor moving until the provider
+            // publishes its first validated step; otherwise a stalled worker
+            // turns every army into a permanent waiting-for-orders task.
+            return usesProvider && !providerComplete && routeStepCount > 0 &&
+                   !routeContainsTransportStep && !transportActive;
+        }
+
         public static bool ShouldReuseInstalledSharedRoute(
             int installedRevision, int availableRevision,
             int localPathCount, bool actorFollowingLocalPath,

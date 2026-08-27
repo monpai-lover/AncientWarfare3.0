@@ -79,7 +79,55 @@ namespace AncientWarfare3.core.court
                     CustomLocalGovernmentPresetRules.CreateMilitary);
                 pTemplate.SchemaVersion = CurrentSchemaVersion;
             }
+            foreach (CustomLocalCourtTemplate local in pTemplate.LocalTemplates)
+                EnsureChiefOfficeId(local);
             return pTemplate;
+        }
+
+        public static string ResolveChiefOfficeId(
+            CustomLocalCourtTemplate pTemplate)
+        {
+            if (pTemplate == null) return string.Empty;
+            List<CustomCourtOffice> offices = (pTemplate.Offices ??
+                    new List<CustomCourtOffice>()).Where(office =>
+                    office != null && office.Layer == CourtOfficeLayer.City &&
+                    !string.IsNullOrWhiteSpace(office.Id)).ToList();
+            if (offices.Count == 0) return string.Empty;
+            CustomCourtOffice explicitOffice = offices.FirstOrDefault(office =>
+                string.Equals(office.Id, pTemplate.ChiefOfficeId,
+                    StringComparison.Ordinal));
+            if (explicitOffice != null) return explicitOffice.Id;
+            var ids = new HashSet<string>(offices.Select(office => office.Id),
+                StringComparer.Ordinal);
+            var incoming = new HashSet<string>(StringComparer.Ordinal);
+            foreach (CustomCourtEdge edge in pTemplate.Edges ??
+                     new List<CustomCourtEdge>())
+            {
+                if (edge == null || edge.Kind != CustomCourtEdgeKind.Management ||
+                    !ids.Contains(edge.FromOfficeId) ||
+                    !ids.Contains(edge.ToOfficeId)) continue;
+                incoming.Add(edge.ToOfficeId);
+            }
+            IEnumerable<CustomCourtOffice> roots = offices.Where(office =>
+                !incoming.Contains(office.Id));
+            if (!roots.Any()) roots = offices;
+            IReadOnlyDictionary<string, int> ranks =
+                CustomCourtHierarchyLayoutRules.BuildRanks(offices,
+                    pTemplate.Edges);
+            return roots.OrderBy(office => ranks.TryGetValue(office.Id,
+                        out int rank) ? rank : int.MaxValue)
+                .ThenBy(office => office.Grade)
+                .ThenBy(office => office.Id, StringComparer.Ordinal)
+                .Select(office => office.Id).FirstOrDefault() ?? string.Empty;
+        }
+
+        public static void EnsureChiefOfficeId(
+            CustomLocalCourtTemplate pTemplate)
+        {
+            if (pTemplate == null) return;
+            string resolved = ResolveChiefOfficeId(pTemplate);
+            if (!string.IsNullOrEmpty(resolved))
+                pTemplate.ChiefOfficeId = resolved;
         }
 
         private static void UpgradeGeneratedDefault(
@@ -223,6 +271,11 @@ namespace AncientWarfare3.core.court
                     replacements.TryGetValue(required, out string next))
                     office.Requirements.RequiredOfficeId = next;
             }
+            if (replacements.TryGetValue(pTemplate.ChiefOfficeId,
+                    out string chief))
+                pTemplate.ChiefOfficeId = chief;
+            else
+                EnsureChiefOfficeId(pTemplate);
             pTemplate.Id = pNewTemplateId;
         }
 

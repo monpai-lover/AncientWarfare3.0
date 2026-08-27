@@ -80,6 +80,11 @@ namespace AncientWarfare3.core.lineage
             if (ArmyRtsWarDoctrine.IsAbstractDecisive) return;
             if (!StateByArmy.TryGetValue(pArmyId,
                     out RuntimeState state)) return;
+            if (ArmyRtsControllerService.IsRouteRetryCoolingDown(pArmyId))
+            {
+                ArmyRtsTransportDiagnostics.RecordCooldownSuppressedReplan();
+                return;
+            }
             if (pAllowTransportEscalation &&
                 ArmyRtsControllerService.
                     TryBeginCrossIslandTransportAfterRouteFailure(pArmyId))
@@ -376,6 +381,12 @@ namespace AncientWarfare3.core.lineage
                 ShouldUseAlternateEndpoint(pAction,
                     pSample?.CommandExpected == true,
                     pSample?.CommandOwned == true);
+            if (ArmyRtsControllerService.IsRouteRetryCoolingDown(pArmyId))
+            {
+                ArmyRtsTransportDiagnostics.RecordCooldownSuppressedReplan();
+                pState.Flow.SuspendForExternalOwnership();
+                return;
+            }
             if (ArmyRtsControllerService.RequestRouteReplan(pArmyId,
                     alternate))
             {

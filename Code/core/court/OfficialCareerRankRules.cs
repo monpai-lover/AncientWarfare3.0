@@ -154,11 +154,27 @@ namespace AncientWarfare3.core.court
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (string raw in pParts ?? Array.Empty<string>())
             {
-                string part = CanonicalOfficeLabel((raw ?? "").Trim());
+                string candidate = (raw ?? "").Trim();
+                if (IsPresentationOnlyOfficeId(candidate)) continue;
+                string part = CanonicalOfficeLabel(candidate);
                 if (part.Length == 0 || !seen.Add(part)) continue;
                 parts.Add(part);
             }
             return string.Join(" · ", parts.ToArray());
+        }
+
+        public static bool IsPresentationOnlyOfficeId(string pOfficeId)
+        {
+            return (pOfficeId ?? "").Trim().StartsWith(
+                "regional-folder:", StringComparison.Ordinal);
+        }
+
+        public static string ResolveVisibleOfficeTitle(string pOfficeId,
+            string pDisplayTitle, string pResolvedOfficeName)
+        {
+            return IsPresentationOnlyOfficeId(pOfficeId)
+                ? (pDisplayTitle ?? "").Trim()
+                : (pResolvedOfficeName ?? "").Trim();
         }
 
         private static string CanonicalOfficeLabel(string pLabel)
@@ -311,15 +327,18 @@ namespace AncientWarfare3.core.court
         public static int RequiredRankForOfficeGrade(int pOfficeGrade)
         {
             if (pOfficeGrade == 10) return 14;
-            if (pOfficeGrade == 20) return 10;
-            if (pOfficeGrade == 30) return 6;
+            if (pOfficeGrade == 20) return 12;
+            if (pOfficeGrade == 30) return 11;
             return MinimumRank;
         }
 
-        public static int RequiredRankForLocalOfficeGrade(int pOfficeGrade)
+        public static int RequiredRankForLocalOfficeGrade(int pOfficeGrade,
+            bool regionalGovernor = false)
         {
-            if (pOfficeGrade == 10) return 12;
-            if (pOfficeGrade == 20) return 6;
+            if (regionalGovernor) return 7;
+            if (pOfficeGrade == 10)
+                return 5;
+            if (pOfficeGrade == 20) return 1;
             if (pOfficeGrade == 30) return 1;
             return MinimumRank;
         }
@@ -369,11 +388,13 @@ namespace AncientWarfare3.core.court
 
         public static int ResolveInitialLocalAppointmentRank(int currentRank,
             int officeGrade, bool hasNineRankSystem,
-            bool hasFormalQualification, int entryBonus)
+            bool hasFormalQualification, int entryBonus,
+            bool regionalGovernor = false)
         {
             int rank = ClampRank(currentRank);
             if (!hasNineRankSystem || !hasFormalQualification) return rank;
-            int floor = RequiredRankForLocalOfficeGrade(officeGrade);
+            int floor = RequiredRankForLocalOfficeGrade(officeGrade,
+                regionalGovernor);
             if (officeGrade == 30)
             {
                 int bonus = Math.Max(0, Math.Min(2, entryBonus));
@@ -405,17 +426,17 @@ namespace AncientWarfare3.core.court
         public static int ResolveLocalVacancyPromotionRank(int currentRank,
             int officeGrade, bool hasNineRankSystem,
             bool hasFormalQualification, bool vacancyPromotion,
-            int entryBonus = 0)
+            int entryBonus = 0, bool regionalGovernor = false)
         {
             int initial = ResolveInitialLocalAppointmentRank(currentRank,
                 officeGrade, hasNineRankSystem, hasFormalQualification,
-                entryBonus);
+                entryBonus, regionalGovernor);
             if (!vacancyPromotion || !hasNineRankSystem ||
                 !hasFormalQualification ||
                 officeGrade != 10 && officeGrade != 20 && officeGrade != 30)
                 return initial;
             return Math.Max(initial,
-                RequiredRankForLocalOfficeGrade(officeGrade));
+                RequiredRankForLocalOfficeGrade(officeGrade, regionalGovernor));
         }
 
         public static float OfficeRankMatchScore(int pRank, int pOfficeGrade)

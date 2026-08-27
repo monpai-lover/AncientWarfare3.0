@@ -15,11 +15,9 @@ namespace AncientWarfare3.core.lineage
     public static class ActorAgeWorkRules
     {
         public static bool ShouldTrack(bool wasTracked, bool dirty,
-            bool dynasticEligible, bool warrior,
-            bool reproductionRecoveryActive)
+            bool dynasticEligible, bool warrior)
         {
-            return wasTracked || dirty || dynasticEligible || warrior ||
-                   reproductionRecoveryActive;
+            return wasTracked || dirty || dynasticEligible || warrior;
         }
 
         public static ActorAgeWorkStage Resolve(ActorAgeWorkState pPrevious,
@@ -34,15 +32,11 @@ namespace AncientWarfare3.core.lineage
                 pPrevious.DynasticEligible != pCurrent.DynasticEligible)
                 result |= ActorAgeWorkStage.DynasticTitle;
 
-            if ((annualFallback &&
-                 pCurrent.NeedsAnnualReproductionRecovery) ||
-                pPrevious.Profession != pCurrent.Profession ||
+            if (pPrevious.Profession != pCurrent.Profession ||
                 pPrevious.InPermanentArmy != pCurrent.InPermanentArmy ||
                 pPrevious.AtWar != pCurrent.AtWar ||
                 pPrevious.ShouldUsePeacetimeJob !=
-                pCurrent.ShouldUsePeacetimeJob ||
-                pPrevious.NeedsAnnualReproductionRecovery !=
-                pCurrent.NeedsAnnualReproductionRecovery)
+                pCurrent.ShouldUsePeacetimeJob)
                 result |= ActorAgeWorkStage.StandingArmyJob;
 
             if ((annualFallback && pCurrent.ShouldReleaseMilitaryRole) ||
@@ -60,8 +54,7 @@ namespace AncientWarfare3.core.lineage
             if (pCurrent.DynasticEligible)
                 result |= ActorAgeWorkStage.DynasticTitle;
             if (pCurrent.InPermanentArmy ||
-                pCurrent.ShouldUsePeacetimeJob ||
-                pCurrent.NeedsAnnualReproductionRecovery)
+                pCurrent.ShouldUsePeacetimeJob)
                 result |= ActorAgeWorkStage.StandingArmyJob;
             if (pCurrent.ShouldReleaseMilitaryRole)
                 result |= ActorAgeWorkStage.MilitaryRoleRelease;

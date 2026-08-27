@@ -1,0 +1,87 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.lineage;
+
+internal static class DiplomacyTributaryDetailsRulesTests
+{
+    internal static void Run()
+    {
+        True(TributaryDiplomacyDetails.ResolveDirection(true, false) ==
+             TributaryDiplomacyDirection.BasePays,
+            "base kingdom is identified as the tributary");
+        True(TributaryDiplomacyDetails.ResolveDirection(false, true) ==
+             TributaryDiplomacyDirection.OtherPays,
+            "other kingdom is identified as the tributary");
+        True(TributaryDiplomacyDetails.ResolveDirection(false, false) ==
+             TributaryDiplomacyDirection.None,
+            "unrelated kingdoms have no tributary direction");
+        True(TributaryDiplomacyDetails.ResolveDirection(true, true) ==
+             TributaryDiplomacyDirection.None,
+            "ambiguous reciprocal tributary state is rejected");
+
+        string window = Read("Code/ui/windows/DiplomacyConversationWindow.cs");
+        True(window.Contains("TryReadTributaryDiplomacyDetails",
+                 StringComparison.Ordinal),
+            "diplomacy window reads tributary details through the service");
+        True(window.Contains("aw_diplomacy_tributary_",
+                 StringComparison.Ordinal),
+            "diplomacy window uses dedicated tributary localization keys");
+        True(window.Contains("string summary = relation +", StringComparison.Ordinal) &&
+             window.Contains(": summary;", StringComparison.Ordinal),
+            "non-tributary relation summary keeps the existing fallback");
+
+        string service = Read("Code/core/lineage/VassalService.cs");
+        True(service.Contains("CONTRACT_TIER=@tier", StringComparison.Ordinal) &&
+             service.Contains("ACTIVE=1", StringComparison.Ordinal) &&
+             service.Contains("END_TIME<0", StringComparison.Ordinal),
+            "tributary details query requires an active direct relation");
+
+        string locales = Read("Locales/aw3_diplomacy.csv");
+        True(locales.Contains("aw_diplomacy_tributary_summary,",
+                 StringComparison.Ordinal) &&
+             locales.Contains("aw_diplomacy_tributary_history,",
+                 StringComparison.Ordinal) &&
+             locales.Contains("aw_diplomacy_tributary_offering_paid,",
+                 StringComparison.Ordinal),
+            "tributary summary, history, and offering strings are localized");
+
+        string bubble = Read("Code/ui/items/DiplomacyBubbleItem.cs");
+        True(!bubble.Contains("pTributaryDetail", StringComparison.Ordinal) &&
+             !bubble.Contains("aw_diplomacy_tributary_bubble_label",
+                 StringComparison.Ordinal),
+            "diplomacy bubbles render only the bound event");
+
+        True(!window.Contains("selectedTributaryDetail",
+                 StringComparison.Ordinal) &&
+             !window.Contains("RespondToProposal, selectedTributaryDetail",
+                 StringComparison.Ordinal),
+            "relationship-level tribute details are not appended to every event");
+
+        True(service.Contains("RecordTributePayment", StringComparison.Ordinal),
+            "conversation service exposes a tribute event writer");
+
+        string settlement = Read("Code/core/lineage/TributarySettlementService.cs");
+        True(settlement.Contains("DiplomacyConversationService.RecordTributePayment",
+                 StringComparison.Ordinal),
+            "each tribute settlement records a standalone diplomacy event");
+
+        string pyramid = Read("Code/core/court/CourtPyramidRules.cs");
+        True(pyramid.Contains("\"king:\" + p.ActorId", StringComparison.Ordinal),
+            "king nodes are isolated from same-actor office nodes");
+
+        string readModel = Read("Code/core/court/CourtReadModelService.cs");
+        True(readModel.Contains("Influence = 100f,\n                IsFixedRole = true",
+                 StringComparison.Ordinal),
+            "the central king card is a fixed role");
+    }
+
+    private static string Read(string pPath)
+    {
+        return File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(), pPath));
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+}

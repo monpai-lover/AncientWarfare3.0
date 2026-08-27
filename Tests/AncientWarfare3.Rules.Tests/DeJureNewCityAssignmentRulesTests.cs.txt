@@ -65,11 +65,37 @@ internal static class DeJureNewCityAssignmentRulesTests
             Array.Empty<DeJureNewCityRegionCandidate>(), pSelector: 0),
             "no candidate leaves a city unassigned");
 
+        Equal(-1L, DeJureNewCityAssignmentRules.Select(new[]
+        {
+            new DeJureNewCityRegionCandidate(8L, true, 1, 1, 1, false)
+        }, pSelector: 0),
+            "a six-city region is excluded from automatic assignment");
+
         string service = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "court",
             "DeJureNewCityAssignmentService.cs"));
+        string store = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "court",
+            "DeJureRegionStore.cs"));
         True(service.Contains("StableSelector(pCity.data.id)"),
             "new-city assignment uses a stable city/world selector");
+        int membersStart = service.IndexOf("var members", StringComparison.Ordinal);
+        int membersEnd = membersStart < 0 ? -1 : service.IndexOf(
+            ".ToList();", membersStart, StringComparison.Ordinal);
+        True(membersStart >= 0 && membersEnd > membersStart &&
+             service.Substring(membersStart, membersEnd - membersStart)
+                 .Contains("city.kingdom == pKingdom",
+                     StringComparison.Ordinal),
+            "new-city candidates are restricted to the founded city's kingdom");
+        True(store.Contains("sameKingdomMember", StringComparison.Ordinal) &&
+             store.Contains("member.kingdom == pCity.kingdom",
+                 StringComparison.Ordinal),
+            "automatic state writes reject cross-kingdom targets");
+        True(store.Contains("EnsureAllKingdomCapitalSeatsLocked();\n                    Migrate(_store)",
+                StringComparison.Ordinal),
+            "legacy migration establishes kingdom capitals before grouping");
+        False(store.Contains("legacy_single_city", StringComparison.Ordinal),
+            "legacy migration never creates an independent state for every city");
         False(service.Contains("CreateState(pCity"),
             "new-city assignment does not implicitly create a state");
     }

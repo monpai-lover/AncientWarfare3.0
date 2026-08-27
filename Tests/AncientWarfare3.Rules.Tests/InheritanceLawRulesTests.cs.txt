@@ -459,6 +459,12 @@ internal static class InheritanceLawRulesTests
                 "ResolveFactionSupport("),
             "succession disputes use the globally aggregated faction leader");
         Equal(true, disputeServiceIntegration.Contains(
+                "factionSupport.DesignatedHeirSupport,"),
+            "succession preparation compares the claimant against the designated heir");
+        Equal(true, disputeServiceIntegration.Contains(
+                "ScheduleAdvanceRetry("),
+            "succession stage failures remain queued for bounded retry");
+        Equal(true, disputeServiceIntegration.Contains(
                 "TryGetMaterializedByKingdom"),
             "succession display state rejects prepared and zero-city fake splits");
         Equal(true, disputeServiceIntegration.Contains(

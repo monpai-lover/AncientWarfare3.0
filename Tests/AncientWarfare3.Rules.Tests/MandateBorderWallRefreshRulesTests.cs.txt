@@ -13,6 +13,8 @@ internal static class MandateBorderWallRefreshRulesTests
         RequiresDecisionActivation();
         SelectsOnlyTheChangedLocalNeighborhood();
         RestoresOnlyTheWallTypeOwnedByTheManifest();
+        ExpiresOnlyAtTheWallLifespan();
+        FiltersVerticalSegments();
     }
 
     private static void UsesSingleTileWallWidth()
@@ -28,8 +30,8 @@ internal static class MandateBorderWallRefreshRulesTests
     private static void StateStartsInactiveAndEmpty()
     {
         var state = new MandateBorderWallState();
-        Equal(1, state.SchemaVersion,
-            "wall state starts at schema version one");
+        Equal(2, state.SchemaVersion,
+            "wall state starts at schema version two");
         False(state.Activated,
             "wall lifecycle is not active before the decision");
         Equal(0, state.Cities.Count,
@@ -80,6 +82,34 @@ internal static class MandateBorderWallRefreshRulesTests
             currentTopTypeId: "wall_order",
             placedWallTypeId: ""),
             "a corrupt manifest cannot restore a tile");
+    }
+
+    private static void ExpiresOnlyAtTheWallLifespan()
+    {
+        False(MandateBorderWallRefreshRules.HasExpired(2049, 2000),
+            "a wall remains before fifty full years");
+        True(MandateBorderWallRefreshRules.HasExpired(2050, 2000),
+            "a wall expires at fifty full years");
+        False(MandateBorderWallRefreshRules.HasExpired(2000,
+                int.MinValue),
+            "an uninitialized build year is not treated as expired");
+    }
+
+    private static void FiltersVerticalSegments()
+    {
+        var points = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "1,1", "2,1", "2,2"
+        };
+        True(MandateBorderWallRefreshRules.ShouldKeepHorizontalSegment(
+            1, 1, (x, y) => points.Contains(x + "," + y)),
+            "a horizontal segment point is retained");
+        True(MandateBorderWallRefreshRules.ShouldKeepHorizontalSegment(
+            2, 1, (x, y) => points.Contains(x + "," + y)),
+            "a horizontal segment endpoint is retained");
+        False(MandateBorderWallRefreshRules.ShouldKeepHorizontalSegment(
+            2, 2, (x, y) => points.Contains(x + "," + y)),
+            "a vertical-only point is removed");
     }
 
     private static void SetEqual(IEnumerable<long> expected,

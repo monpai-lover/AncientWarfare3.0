@@ -528,6 +528,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomYear(Kingdom pKingdom)
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization) return;
             if (pKingdom?.data == null || pKingdom.isRekt() || pKingdom.isNeutral()) return;
             if (AutonomousRestorationService.IsActiveCampaignKingdom(pKingdom))
             {
@@ -562,6 +563,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void ProcessPreparationMonth()
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization) return;
             if (World.world?.kingdoms == null) return;
             int monthKey = CurrentPreparationMonthKey();
             if (TemporaryLevyRules.ShouldProcessPreparationMonth(monthKey,
@@ -655,6 +657,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnWarStarted(War pWar, string pNoticeSignature)
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization) return;
             if (pWar?.data == null) return;
             foreach (Kingdom kingdom in pWar.getAttackers())
             {
@@ -670,6 +673,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnWarEnded(War pWar)
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization) return;
             if (pWar?.data == null) return;
             foreach (Kingdom kingdom in pWar.getAttackers()) OnEmergencyChanged(kingdom);
             foreach (Kingdom kingdom in pWar.getDefenders()) OnEmergencyChanged(kingdom);
@@ -709,6 +713,14 @@ namespace AncientWarfare3.core.lineage
         public static void OnEmergencyChanged(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
+            if (!AWPerformanceSettings.EnableSyntheticMobilization)
+            {
+                RecruitmentPlans.Remove(pKingdom.id);
+                CancelPreparationRecruitment(pKingdom);
+                CasualtyReinforcementPlans.Remove(pKingdom.id);
+                RemoveCaptainRecoveryPlansForKingdom(pKingdom.id);
+                return;
+            }
             LastPreparationMonthKey = int.MinValue;
             PreparationMonthlyWork.ResetScheduleGate();
             if (AutonomousRestorationService.IsActiveCampaignKingdom(pKingdom))
@@ -795,12 +807,14 @@ namespace AncientWarfare3.core.lineage
         public static void RebuildRuntime()
         {
             ClearRuntime();
+            if (!AWPerformanceSettings.EnableSyntheticMobilization) return;
             BeginLegacyMigration();
             ResumeActivePreparationPlans();
         }
 
         private static void ResumeActivePreparationPlans()
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization) return;
             if (World.world?.kingdoms == null) return;
             int monthKey = CurrentPreparationMonthKey();
             foreach (Kingdom kingdom in World.world.kingdoms)
@@ -1657,6 +1671,11 @@ namespace AncientWarfare3.core.lineage
         private static void ProcessCasualtyReinforcement(long pKingdomId,
             bool pScheduleContinuation)
         {
+            if (!AWPerformanceSettings.EnableSyntheticMobilization)
+            {
+                CasualtyReinforcementPlans.Remove(pKingdomId);
+                return;
+            }
             if (!CasualtyReinforcementPlans.TryGetValue(pKingdomId,
                     out CasualtyReinforcementPlan plan)) return;
             Kingdom kingdom = ResolveKingdom(pKingdomId);

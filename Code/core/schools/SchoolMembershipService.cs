@@ -40,6 +40,7 @@ namespace AncientWarfare3.core.schools
             public double PersistenceTime { get; }
             public bool Uncertain { get; set; }
             public bool DestroyRequested { get; set; }
+            public bool Quarantined { get; set; }
             public int Attempts { get; set; }
             public long ReadyFrame { get; set; }
         }
@@ -61,7 +62,6 @@ namespace AncientWarfare3.core.schools
         private static readonly HashSet<long> QueuedDeathRetries = new HashSet<long>();
         private static readonly Dictionary<long, PendingSchoolDeath> PendingDeathsByActor =
             new Dictionary<long, PendingSchoolDeath>();
-        private const int MaxDeathRetryBackoffFrames = 240;
         private const int MaxDeathRetryQueueScan = 16;
         private static long _deathRetryFrame;
         private static int _standingWorkYear = -1;
@@ -415,25 +415,45 @@ namespace AncientWarfare3.core.schools
             var pending = new PendingSchoolDeath(pActor, current, affiliation, master,
                 wasQualifiedTeacher, city, year, city?.data?.id ?? -1L, cause,
                 WorldTime());
-            SchoolDeathOutcome outcome = PersistPendingDeath(pending,
-                pReconcileUnknown: false);
-            if (outcome != SchoolDeathOutcome.Committed)
+
+            // Actor.die runs on the simulation thread.  The death transaction
+            // performs multiple SQLite reads and writes; quarantine the member
+            // now and let the existing bounded retry queue persist it later.
+            if (HistoricalSchoolDeathRuntimeRules.ShouldDeferDeathPersistence(
+                    activeMembership: current.Active && current.IsValid,
+                    actorExists: pActor.data != null,
+                    deathPending: PendingDeathsByActor.ContainsKey(
+                        pActor.data.id)))
             {
-                QuarantineDeadMembership(pActor, current, year);
+                pending.Quarantined = QuarantineDeadMembership(pActor,
+                    current, year);
                 QueueDeathRetry(pending, pDestroy);
+                return SchoolDeathOutcome.Failed;
             }
-            return outcome;
+
+            // Death callbacks must never perform persistence synchronously.  The
+            // actor is already inside the vanilla destruction lifecycle, so all
+            // SQLite work stays on the bounded retry/authority queue.
+            pending.Quarantined = QuarantineDeadMembership(pActor,
+                current, year);
+            QueueDeathRetry(pending, pDestroy);
+            return SchoolDeathOutcome.Failed;
         }
 
-        private static void QuarantineDeadMembership(Actor pActor,
+        private static bool QuarantineDeadMembership(Actor pActor,
             SchoolMembershipRecord pMembership, int pYear)
         {
-            if (pMembership == null) return;
+            if (pMembership == null) return false;
             RequestLeaderElection(pMembership);
+            bool closedNow = false;
             if (Memberships.CloseExpected(pMembership.ActorId,
-                    pMembership.MembershipId, pYear, "death_pending", out _))
+                    pMembership.MembershipId, pYear, "death_pending",
+                    out SchoolMembershipRecord closed) && closed != null)
+            {
+                closedNow = true;
                 HistoricalSchoolRevisionService.ApplyMembershipChange(
                     pMembership, null);
+            }
             HistoricalSchoolRuntimeIndex.Instance.Remove(pMembership.ActorId);
             try { Project(pActor, CourtSchoolId.None); }
             catch (Exception error)
@@ -441,6 +461,7 @@ namespace AncientWarfare3.core.schools
                 ModClass.LogWarning("Pending school death projection failed: " +
                                     error.Message);
             }
+            return closedNow;
         }
 
         private static SchoolDeathOutcome PersistPendingDeath(PendingSchoolDeath pending,
@@ -511,16 +532,22 @@ namespace AncientWarfare3.core.schools
                                  pending.RuntimeCity;
             try
             {
-                if (!Memberships.CloseExpected(pActor.data.id, current.MembershipId,
-                        pending.DeathYear,
-                        "death", out _))
+                // QuarantineDeadMembership already removed the expected
+                // active row. Do not attempt a second close during durable
+                // commit; doing so used to report every normal replay as an
+                // "adopt failed" error and trigger an expensive reload.
+                SchoolMembershipRecord closed = null;
+                if (!pending.Quarantined &&
+                    !Memberships.CloseExpected(pActor.data.id,
+                        current.MembershipId, pending.DeathYear, "death",
+                        out closed))
                 {
-                    ModClass.LogWarning(
-                        "Committed school death membership adopt failed: actor=" +
+                    ModClass.LogError(
+                        "Committed school death membership conflict: actor=" +
                         pActor.data.id + " membership=" + current.MembershipId);
                     ReloadMembershipAfterCommittedDeath();
                 }
-                else
+                else if (!pending.Quarantined && closed != null)
                 {
                     RequestLeaderElection(current);
                     HistoricalSchoolRevisionService.ApplyMembershipChange(current, null);
@@ -675,7 +702,7 @@ namespace AncientWarfare3.core.schools
                 return;
             }
             pending.ReadyFrame = _deathRetryFrame +
-                DeathRetryBackoffFrames(pending.Attempts);
+                ActorDeathArchiveRules.RetryDelayFrames(pending.Attempts);
         }
 
         internal static bool FlushDeathRetriesForSave()
@@ -704,12 +731,6 @@ namespace AncientWarfare3.core.schools
                 !ReferenceEquals(pending.Actor, pActor)) return false;
             pending.DestroyRequested = true;
             return true;
-        }
-
-        private static int DeathRetryBackoffFrames(int pAttempts)
-        {
-            int exponent = Math.Max(0, Math.Min(8, pAttempts - 1));
-            return Math.Min(MaxDeathRetryBackoffFrames, 1 << exponent);
         }
 
         private static void ClearDeathRetry(long pActorId, bool pCancelQueued)
@@ -825,9 +846,82 @@ namespace AncientWarfare3.core.schools
             if (nextStanding == current.Standing) return;
             SchoolMembershipRecord next =
                 current.WithStanding(nextStanding);
-            if (!HistoricalSchoolStore.UpdateMembershipStanding(
-                    current, next, WorldTime())) return;
-            AdoptCommittedStanding(current, nextStanding);
+            HistoricalSchoolWriteBufferService.TryEnqueue(
+                new StandingPromotionWriteOperation(current, next, WorldTime(), pYear));
+        }
+
+        private sealed class StandingPromotionWriteOperation :
+            IHistoricalSchoolWriteOperation, IHistoricalSchoolAsyncWriteOperation
+        {
+            private readonly SchoolMembershipRecord _current;
+            private readonly SchoolMembershipRecord _next;
+            private readonly double _worldTime;
+
+            public StandingPromotionWriteOperation(SchoolMembershipRecord pCurrent,
+                SchoolMembershipRecord pNext, double pWorldTime, int pYear)
+            {
+                _current = pCurrent;
+                _next = pNext;
+                _worldTime = pWorldTime;
+                OperationKey = "school-standing-promotion:v1:" +
+                    (_current?.ActorId ?? -1L) + ":" +
+                    (_current?.MembershipId ?? -1L) + ":" + pYear + ":" +
+                    (_next?.Standing.ToString() ?? "");
+            }
+
+            public string OperationKey { get; }
+
+            public HistoricalSchoolTeachingPersistenceOutcome Execute(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction)
+            {
+                return DetachBackgroundWrite().Execute(pDb, pTransaction);
+            }
+
+            public IHistoricalSchoolBackgroundWrite DetachBackgroundWrite()
+            {
+                return new StandingPromotionBackgroundWrite(_current, _next,
+                    _worldTime);
+            }
+
+            public void AfterCommit(
+                HistoricalSchoolTeachingPersistenceOutcome pOutcome)
+            {
+                if (pOutcome != HistoricalSchoolTeachingPersistenceOutcome.Committed &&
+                    pOutcome != HistoricalSchoolTeachingPersistenceOutcome.Replayed)
+                    return;
+                if (!AdoptCommittedStanding(_current, _next.Standing))
+                    throw new InvalidOperationException(
+                        "committed school standing projection failed");
+            }
+
+            public void OnCleanFailure()
+            {
+            }
+        }
+
+        private sealed class StandingPromotionBackgroundWrite :
+            IHistoricalSchoolBackgroundWrite
+        {
+            private readonly SchoolMembershipRecord _current;
+            private readonly SchoolMembershipRecord _next;
+            private readonly double _worldTime;
+
+            public StandingPromotionBackgroundWrite(SchoolMembershipRecord pCurrent,
+                SchoolMembershipRecord pNext, double pWorldTime)
+            {
+                _current = pCurrent;
+                _next = pNext;
+                _worldTime = pWorldTime;
+            }
+
+            public HistoricalSchoolTeachingPersistenceOutcome Execute(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction)
+            {
+                return HistoricalSchoolStore.UpdateMembershipStandingInTransaction(
+                    pDb, pTransaction, _current, _next, _worldTime);
+            }
         }
 
         internal static bool TryPromoteContinuityTeacher(long pActorId, int pYear)
@@ -899,6 +993,11 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolStanding pStanding)
         {
             if (pExpected == null) return false;
+            SchoolMembershipRecord current = Memberships.GetActive(pExpected.ActorId);
+            if (current == null || current.MembershipId != pExpected.MembershipId ||
+                current.Standing != pExpected.Standing)
+                return current?.MembershipId == pExpected.MembershipId &&
+                       current?.Standing == pStanding;
             return AdoptCommittedStanding(pExpected.ActorId, pStanding);
         }
 

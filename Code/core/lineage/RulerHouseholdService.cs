@@ -872,7 +872,8 @@ namespace AncientWarfare3.core.lineage
 
         private static void RecordHouseholdHistory(Kingdom pSource,
             Kingdom pRecipient, Actor pPartner, Actor pRuler,
-            RulerHouseholdKind pKind)
+            RulerHouseholdKind pKind, string pEventType = null,
+            string pHistoryKey = null)
         {
             string partnerName = pPartner.getName() ?? "";
             string rulerName = pRuler.getName() ?? "";
@@ -885,19 +886,33 @@ namespace AncientWarfare3.core.lineage
             string localized = HistoryLocalizationRules.Text(key);
             if (string.IsNullOrWhiteSpace(localized) || localized == key)
                 localized = fallback;
+            if (!string.IsNullOrEmpty(pHistoryKey))
+            {
+                string offeringText = HistoryLocalizationRules.Text(
+                    pHistoryKey);
+                if (!string.IsNullOrWhiteSpace(offeringText) &&
+                    offeringText != pHistoryKey)
+                    localized = offeringText;
+            }
             string text = partnerName + localized + rulerName;
+            string eventType = string.IsNullOrEmpty(pEventType)
+                ? PersonEvent.ROYAL_MARRIAGE
+                : pEventType;
+            string kingdomEventType = string.IsNullOrEmpty(pEventType)
+                ? KingdomEvent.ROYAL_MARRIAGE
+                : pEventType;
             HistoryWriter.RecordPerson(pPartner.data.id, pRecipient,
-                partnerName, PersonEvent.ROYAL_MARRIAGE, text,
+                partnerName, eventType, text,
                 ChronicleCategory.BOND, HistoryTarget.Actor(pRuler));
             HistoryWriter.RecordPerson(pRuler.data.id, pRecipient,
-                rulerName, PersonEvent.ROYAL_MARRIAGE, text,
+                rulerName, eventType, text,
                 ChronicleCategory.BOND, HistoryTarget.Actor(pPartner));
             HistoryWriter.RecordKingdom(pSource,
-                KingdomEvent.ROYAL_MARRIAGE, text,
+                kingdomEventType, text,
                 HistoryTarget.Kingdom(pRecipient));
             if (pSource != pRecipient)
                 HistoryWriter.RecordKingdom(pRecipient,
-                    KingdomEvent.ROYAL_MARRIAGE, text,
+                    kingdomEventType, text,
                     HistoryTarget.Kingdom(pSource));
         }
 
@@ -912,7 +927,8 @@ namespace AncientWarfare3.core.lineage
         internal static bool TryCommitTributaryConsort(Kingdom pSource,
             Kingdom pRecipient, Actor pOwner, Actor pCandidate,
             string pOwnerRoleAtEntry, long pRelationId, int pTributeYear,
-            int pCapacity, out string pReason)
+            int pCapacity, out string pReason,
+            string pSourceKind = "tributary_offering")
         {
             pReason = "household_commit_failed";
             if (!IsAuthority() || !Ready || !IsLiveRealm(pSource) ||
@@ -959,7 +975,7 @@ namespace AncientWarfare3.core.lineage
                 InsertRelationship(transaction, relationshipId, pOwner,
                     pCandidate, pSource, pRecipient,
                     RulerHouseholdKind.Consort, SafeYear(), -1L,
-                    pOwnerRoleAtEntry, "tributary_offering", pRelationId,
+                    pOwnerRoleAtEntry, pSourceKind ?? "tributary_offering", pRelationId,
                     pTributeYear);
                 transaction.Commit();
                 if (!MovePartner(pCandidate, pRecipient, capital))
@@ -973,7 +989,12 @@ namespace AncientWarfare3.core.lineage
                 LineageService.ArchiveActor(pCandidate, pAlive: true);
                 LineageService.ArchiveActor(pOwner, pAlive: true);
                 RecordHouseholdHistory(pSource, pRecipient, pCandidate,
-                    pOwner, RulerHouseholdKind.Consort);
+                    pOwner, RulerHouseholdKind.Consort,
+                    PersonEvent.SUBJECT_CONSORT_OFFERED,
+                    string.Equals(pSourceKind, "vassal_offering",
+                        StringComparison.Ordinal)
+                        ? "aw_hist_subject_consort_vassal_mid"
+                        : "aw_hist_subject_consort_tributary_mid");
                 pReason = "";
                 return true;
             }

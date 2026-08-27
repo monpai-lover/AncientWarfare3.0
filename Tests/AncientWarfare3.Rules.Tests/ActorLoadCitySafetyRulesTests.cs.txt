@@ -1,0 +1,33 @@
+using AncientWarfare3.core.lineage;
+
+public static class ActorLoadCitySafetyRulesTests
+{
+    public static void Run()
+    {
+        if (!ActorLoadCitySafetyRules.ShouldUseNeutralFallback(
+                cityExists: true, cityKingdomExists: false,
+                cityKingdomAssetExists: false))
+            throw new System.Exception(
+                "An unresolved city kingdom must be treated as neutral.");
+
+        if (ActorLoadCitySafetyRules.ShouldUseNeutralFallback(
+                cityExists: true, cityKingdomExists: true,
+                cityKingdomAssetExists: true))
+            throw new System.Exception(
+                "A valid city kingdom must use vanilla neutral semantics.");
+
+        if (!ActorLoadCitySafetyRules.CanRestorePersistedCity(
+                cityExists: true, cityKingdomExists: true,
+                cityKingdomAssetExists: true, actorKingdomExists: true,
+                sameKingdom: true))
+            throw new System.Exception(
+                "A matching persisted city must be restorable.");
+
+        if (ActorLoadCitySafetyRules.CanRestorePersistedCity(
+                cityExists: true, cityKingdomExists: true,
+                cityKingdomAssetExists: true, actorKingdomExists: true,
+                sameKingdom: false))
+            throw new System.Exception(
+                "A mismatched city must not be restored to an actor.");
+    }
+}

@@ -6,13 +6,13 @@ namespace AncientWarfare3.core.performance
     {
         None = 0,
         Socialize = 1,
-        EmoteSearch = 2
+        EmoteSearch = 2,
+        Sleep = 3,
+        Singing = 4
     }
 
     public static class AWIdleBehaviourThrottleRules
     {
-        public const double SocializeCooldownSeconds = 2d;
-        public const double EmoteSearchCooldownSeconds = 1.5d;
         public const double MaximumJitterSeconds = 0.5d;
 
         public static bool TryGetKind(string pTaskId,
@@ -28,33 +28,85 @@ namespace AncientWarfare3.core.performance
                 return true;
             }
             if (string.Equals(pTaskId, "happy_laughing",
-                    StringComparison.Ordinal) ||
-                string.Equals(pTaskId, "singing", StringComparison.Ordinal))
+                    StringComparison.Ordinal))
             {
                 pKind = AWIdleBehaviourKind.EmoteSearch;
+                return true;
+            }
+            if (string.Equals(pTaskId, "singing", StringComparison.Ordinal))
+            {
+                pKind = AWIdleBehaviourKind.Singing;
+                return true;
+            }
+            if (string.Equals(pTaskId, "decide_where_to_sleep",
+                    StringComparison.Ordinal))
+            {
+                pKind = AWIdleBehaviourKind.Sleep;
                 return true;
             }
             pKind = AWIdleBehaviourKind.None;
             return false;
         }
 
-        public static bool IsEligibleCivilian(bool actorAlive, bool actorRekt,
-            bool warrior, bool king)
+        public static bool TryGetActiveKind(string pTaskId,
+            out AWIdleBehaviourKind pKind)
         {
-            return actorAlive && !actorRekt && !warrior && !king;
+            if (TryGetKind(pTaskId, out pKind)) return true;
+            if (string.Equals(pTaskId, "socialize_go_to_target",
+                    StringComparison.Ordinal) ||
+                string.Equals(pTaskId, "socialize_do_talk",
+                    StringComparison.Ordinal))
+            {
+                pKind = AWIdleBehaviourKind.Socialize;
+                return true;
+            }
+            pKind = AWIdleBehaviourKind.None;
+            return false;
         }
 
-        public static double CooldownSeconds(AWIdleBehaviourKind pKind)
+        public static bool IsEligibleCivilian(bool civilian, bool actorAlive,
+            bool actorRekt, bool warrior, bool armyMember, bool king, bool boat,
+            bool militaryMovementOwned)
         {
+            return civilian && actorAlive && !actorRekt && !warrior &&
+                   !armyMember && !king && !boat && !militaryMovementOwned;
+        }
+
+        public static double CooldownSeconds(AWIdleBehaviourKind pKind,
+            double pRequestedSpeed)
+        {
+            if (!IsValidTime(pRequestedSpeed) || pRequestedSpeed < 0d)
+                return 0d;
+            bool fastest = pRequestedSpeed > 4d;
+            bool faster = pRequestedSpeed > 2d;
             switch (pKind)
             {
                 case AWIdleBehaviourKind.Socialize:
-                    return SocializeCooldownSeconds;
+                    return fastest ? 8d : faster ? 4d : 2d;
                 case AWIdleBehaviourKind.EmoteSearch:
-                    return EmoteSearchCooldownSeconds;
+                    return fastest ? 6d : faster ? 3d : 1.5d;
+                case AWIdleBehaviourKind.Singing:
+                    return fastest ? 6d : faster ? 3d : 1.5d;
+                case AWIdleBehaviourKind.Sleep:
+                    return fastest ? 10d : faster ? 4d : 0d;
                 default:
                     return 0d;
             }
+        }
+
+        public static double ResolveRequestedSpeed(bool cooperativeControl,
+            double capturedSpeed, double nativeSpeed)
+        {
+            return cooperativeControl ? capturedSpeed : nativeSpeed;
+        }
+
+        public static double ResolveRequestedSpeed(AWSimulationMode pMode,
+            bool schedulerOwnsSimulation, double capturedSpeed,
+            double nativeSpeed)
+        {
+            bool cooperativeControl = pMode != AWSimulationMode.Native &&
+                                       schedulerOwnsSimulation;
+            return cooperativeControl ? capturedSpeed : nativeSpeed;
         }
 
         public static double StableJitterSeconds(long actorId,
@@ -74,9 +126,9 @@ namespace AncientWarfare3.core.performance
         }
 
         public static double NextEligibleAt(double now, long actorId,
-            AWIdleBehaviourKind pKind)
+            AWIdleBehaviourKind pKind, double pRequestedSpeed)
         {
-            return now + CooldownSeconds(pKind) +
+            return now + CooldownSeconds(pKind, pRequestedSpeed) +
                    StableJitterSeconds(actorId, pKind);
         }
 

@@ -1,0 +1,34 @@
+using AncientWarfare3.core.lineage;
+
+internal static class MandateConquestDirectTransferRulesTests
+{
+    internal static void Run()
+    {
+        Equal(true, MandateConquestDirectTransferRules.ShouldDirectTransfer(
+                true, true, true, true),
+            "a captured mandate-conquest target transfers directly");
+        Equal(false, MandateConquestDirectTransferRules.ShouldDirectTransfer(
+                true, false, true, true),
+            "an unrelated city cannot satisfy mandate conquest");
+        Equal(false, MandateConquestDirectTransferRules.ShouldDirectTransfer(
+                true, true, false, true),
+            "a defender-side capturer cannot satisfy mandate conquest");
+        Equal(true, MandateConquestDirectTransferRules.
+            ShouldBypassOrdinarySettlement(true, true),
+            "an open mandate-conquest goal blocks ordinary peace settlement");
+        Equal(false, MandateConquestDirectTransferRules.
+            ShouldBypassOrdinarySettlement(false, true),
+            "an ended war never blocks ordinary settlement");
+        Equal(true, MandateConquestRules.ShouldPreferAiGoal(true, false),
+            "the current mandate realm prefers mandate conquest against foreign realms");
+        Equal(false, MandateConquestRules.ShouldPreferAiGoal(false, true),
+            "a non-mandate realm does not receive mandate conquest priority");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(
+                pExpected, pActual))
+            throw new System.InvalidOperationException(pMessage);
+    }
+}

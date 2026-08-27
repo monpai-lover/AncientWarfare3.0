@@ -1,0 +1,46 @@
+using System;
+using System.IO;
+
+internal static class CentralCourtVacancySourceGuardTests
+{
+    internal static void Run()
+    {
+        string service = Read("Code/core/court/CourtService.cs");
+        string qualification = Read(
+            "Code/core/court/CivilServiceQualificationService.cs");
+        string death = Read("Code/patch/AW_HistoricalSchoolPatch.cs");
+
+        Contains(service, "ReadRankFast(pActor)",
+            "central appointment filtering must inspect persisted career rank");
+        Contains(qualification, "hasCareerRank",
+            "career rank must be treated as an appointment credential");
+        Contains(service, "IsCandidatePreferred(",
+            "vacancy selection must prioritize ranked officials");
+        False(service.Contains("HasCentralVacancy(pKingdom)",
+                StringComparison.Ordinal),
+            "annual court work cannot scan for central vacancies");
+        string schoolPatch = Read("Code/patch/AW_HistoricalSchoolPatch.cs");
+        Contains(schoolPatch, "OfficerCandidateCatalog.Invalidate(pKingdomToSet)",
+            "actor kingdom changes must invalidate the yearly candidate catalog");
+        Contains(death, "RequestLocalOfficerDeathReconcile",
+            "officer death must enter the vacancy reconciliation pipeline");
+        False(service.Contains("if (++seen > CandidateLimit * 8) break;",
+                StringComparison.Ordinal),
+            "central vacancy selection cannot truncate the roster at 192 actors");
+    }
+
+    private static string Read(string relative) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            relative.Replace('/', Path.DirectorySeparatorChar)));
+
+    private static void Contains(string text, string needle, string message)
+    {
+        if (!text.Contains(needle, StringComparison.Ordinal))
+            throw new InvalidOperationException(message + ": " + needle);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+}

@@ -18,7 +18,13 @@ foreach ($requirement in @(
     @('pQualificationsCaptured',
         'candidate projection snapshot boundary'),
     @('LoadLatestQualificationsForActors\(',
-        'batched qualification persistence query')
+        'batched qualification persistence query'),
+    @('CandidateSelectionCache',
+        'one-reconcile candidate evaluation cache'),
+    @('GetCachedEligibility\(',
+        'cached candidate eligibility evaluation'),
+    @('GetCachedScore\(',
+        'cached candidate score evaluation')
 )) {
     if (($service + $qualification + $persistence) -notmatch $requirement[0]) {
         throw "Court appointment scan performance guard is missing $($requirement[1])"

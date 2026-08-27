@@ -31,8 +31,25 @@ namespace AncientWarfare3.patch
             if (SyntheticLevyService.SuppressPersonalHistory(__instance))
                 return;
             if (HistoricalSchoolActorSpawnCapture.IsTargetActor(__instance)) return;
-            AWCultureNamingTraditionService.InitializeActorProfile(__instance);
-            if (!LineageService.UsesCommonGenealogy(__instance)) return;
+            try
+            {
+                AWCultureNamingTraditionService.InitializeActorProfile(__instance);
+            }
+            catch (System.Exception e)
+            {
+                ModClass.LogError("Actor.newCreature AW naming stage failed: " + e);
+            }
+            bool usesCommonGenealogy;
+            try
+            {
+                usesCommonGenealogy = LineageService.UsesCommonGenealogy(__instance);
+            }
+            catch (System.Exception e)
+            {
+                ModClass.LogError("Actor.newCreature genealogy gate failed: " + e);
+                return;
+            }
+            if (!usesCommonGenealogy) return;
 
             try { LineageService.OnActorBorn(__instance); }
             catch (System.Exception e)
@@ -40,7 +57,11 @@ namespace AncientWarfare3.patch
                 ModClass.LogWarning("Lineage actor birth initialization failed: " +
                                     e.Message);
             }
-            SuccessionRelationshipIndex.OnBorn(__instance);
+            try { SuccessionRelationshipIndex.OnBorn(__instance); }
+            catch (System.Exception e)
+            {
+                ModClass.LogError("Actor.newCreature succession stage failed: " + e);
+            }
         }
 
         [HarmonyPostfix]

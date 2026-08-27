@@ -31,10 +31,13 @@ namespace AncientWarfare3.core.lineage
         public static void OnKingdomYear(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral()) return;
+            bool nativePolicyKingdom = IsNativePolicyKingdom(pKingdom);
+            int level = nativePolicyKingdom
+                ? XiaizationAnnualRules.FullyXiaizedLevel
+                : GetLevel(pKingdom);
+            if (!XiaizationAnnualRules.ShouldRunAnnualWork(
+                    nativePolicyKingdom, level)) return;
             ProjectCultureIntegration(pKingdom);
-            if (IsNativePolicyKingdom(pKingdom)) return;
-
-            int level = GetLevel(pKingdom);
             if (level <= LevelNone) return;
 
             int year = Date.getCurrentYear();

@@ -81,6 +81,10 @@ namespace AncientWarfare3.core.court
         public string SchoolId = "";
         public string SchoolIconPath = "";
         public long CityId = -1L;
+        public long CountyId = -1L;
+        public long HistoryCityId = -1L;
+        public string HistoryOfficeLayer = "";
+        public string HistoryOfficeId = "";
         public string CityName = "";
         public string CommandName = "";
         public string DisplayTitle = "";
@@ -122,6 +126,10 @@ namespace AncientWarfare3.core.court
                 SchoolId = SchoolId,
                 SchoolIconPath = SchoolIconPath,
                 CityId = CityId,
+                CountyId = CountyId,
+                HistoryCityId = HistoryCityId,
+                HistoryOfficeLayer = HistoryOfficeLayer,
+                HistoryOfficeId = HistoryOfficeId,
                 CityName = CityName,
                 CommandName = CommandName,
                 DisplayTitle = DisplayTitle,
@@ -183,6 +191,8 @@ namespace AncientWarfare3.core.court
                          .Where(p => !p.IsVacancy && p.ActorId >= 0)
                          .GroupBy(p => IsRegionalNode(p)
                              ? "regional:" + p.ActorId + ":" + p.OfficeId
+                             : p.RoleId == CourtPyramidRoleId.King
+                                 ? "king:" + p.ActorId
                              : "actor:" + p.ActorId))
             {
                 List<CourtPyramidNodeModel> ordered = group

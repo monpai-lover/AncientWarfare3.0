@@ -52,6 +52,7 @@ namespace AncientWarfare3.core.lineage
         public const string OFFICIAL_EVALUATION = "official_evaluation";
         public const string OFFICIAL_APPOINTMENT_EDICT =
             "official_appointment_edict";
+        public const string OFFICIAL_RANK_PROMOTED = "official_rank_promoted";
         public const string MINISTERIAL_POWER = "ministerial_power";
         public const string NINE_BESTOWMENTS = "nine_bestowments";
         public const string ROYAL_MEDICAL_CURE = "royal_medical_cure";
@@ -68,6 +69,8 @@ namespace AncientWarfare3.core.lineage
         public const string NOBLE_RANK_INHERITED = "noble_rank_inherited";
         public const string NOBLE_RANK_EXTINCT = "noble_rank_extinct";
         public const string ROYAL_MARRIAGE = "royal_marriage";
+        public const string SUBJECT_CONSORT_OFFERED =
+            "subject_consort_offered";
         public const string NOBLE_REMARRIAGE = "noble_remarriage";
         public const string SUCCESSION_DISPUTE_STARTED =
             "succession_dispute_started";
@@ -155,6 +158,8 @@ namespace AncientWarfare3.core.lineage
         public const string NOBLE_RANK_INHERITED = "noble_rank_inherited";
         public const string NOBLE_RANK_EXTINCT = "noble_rank_extinct";
         public const string ROYAL_MARRIAGE = "royal_marriage";
+        public const string SUBJECT_CONSORT_OFFERED =
+            "subject_consort_offered";
         public const string SUCCESSION_DISPUTE_STARTED =
             "succession_dispute_started";
         public const string SUCCESSION_DISPUTE_RESOLVED =
@@ -172,6 +177,7 @@ namespace AncientWarfare3.core.lineage
     {
         public const string CITY_FOUND = "city_found";
         public const string CITY_TRANSFER = "city_transfer";
+        public const string COURT_OFFICER_APPOINTED = "court_officer_appointed";
         public const string BANDIT_STRONGHOLD_ESTABLISHED =
             "bandit_stronghold_established";
         public const string BANDIT_STRONGHOLD_SUPPRESSED =

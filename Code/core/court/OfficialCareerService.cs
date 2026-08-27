@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
+using System.Linq;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
@@ -16,6 +18,7 @@ namespace AncientWarfare3.core.court
             public long KingdomId;
             public long ActorId;
             public long CityId;
+            public long CountyId = -1L;
             public string Layer = "";
             public string OfficeId = "";
             public string InstitutionAtAppointment = "";
@@ -40,7 +43,7 @@ namespace AncientWarfare3.core.court
         public static OfficialCareerAppointmentResult Appoint(Actor pActor, Kingdom pKingdom, string pLayer,
             string pOfficeId, string pSchoolId, City pCity,
             bool pActing = false, bool pVacancyPromotion = false,
-            bool pAllowLocalLowerQualification = false)
+            bool pAllowLocalLowerQualification = false, long pCountyId = -1L)
         {
             SQLiteConnection db = DB;
             if (db == null || pActor?.data == null || pKingdom?.data == null)
@@ -53,7 +56,7 @@ namespace AncientWarfare3.core.court
                 OfficialCareerAppointment appointment = PrepareAppointment(
                     pActor, pKingdom, pLayer, pOfficeId, pSchoolId, pCity,
                     Date.getCurrentYear(), LineageService.CurTime(), pActing,
-                    pVacancyPromotion, pAllowLocalLowerQualification);
+                    pVacancyPromotion, pAllowLocalLowerQualification, pCountyId);
                 if (appointment == null)
                     return new OfficialCareerAppointmentResult(
                         OfficialCareerPersistenceOutcome.CleanFailure,
@@ -84,7 +87,7 @@ namespace AncientWarfare3.core.court
             Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId, City pCity,
             int pAppointedYear, double pAppointedTime,
             bool pActing = false, bool pVacancyPromotion = false,
-            bool pAllowLocalLowerQualification = false)
+            bool pAllowLocalLowerQualification = false, long pCountyId = -1L)
         {
             if (pActor?.data == null || pKingdom?.data == null) return null;
             if (!RoyalGuardOfficeRules.CanAcceptOfficeAppointment(
@@ -106,6 +109,10 @@ namespace AncientWarfare3.core.court
                 ActorName = pActor.getName() ?? "",
                 KingdomId = pKingdom.id,
                 CityId = pCity?.data?.id ?? -1L,
+                CountyId = pCountyId >= 0L ? pCountyId :
+                    (pLayer == CourtOfficeLayer.County && pCity?.data != null
+                        ? CountyAdministrationService.CountiesForCity(pCity.data.id)
+                            .FirstOrDefault()?.CountyId ?? -1L : -1L),
                 Layer = pLayer ?? "",
                 OfficeId = pOfficeId ?? "",
                 SchoolId = pSchoolId ?? "",
@@ -170,7 +177,7 @@ namespace AncientWarfare3.core.court
                         record.AppointedYear, record.AppointedTime, record.EndedYear,
                         record.EndedTime, record.Active, record.EndReason, kingdom.Name,
                         kingdom.Color, cityName, record.RankAtAppointment,
-                        record.LocalGradeAtAppointment));
+                        record.LocalGradeAtAppointment, record.CountyId));
                 }
                 return result;
             }
@@ -255,7 +262,7 @@ namespace AncientWarfare3.core.court
             long pActorId)
         {
             using var command = new SQLiteCommand(pDb);
-            command.CommandText = "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID,CITY_ID,LAYER," +
+            command.CommandText = "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID,CITY_ID,IFNULL(COUNTY_ID,-1),LAYER," +
                 "OFFICE_ID,APPOINTED_YEAR,APPOINTED_TIME,ENDED_YEAR,ENDED_TIME,ACTIVE," +
                 "IFNULL(END_REASON,''),RANK_AT_APPOINTMENT," +
                 "LOCAL_GRADE_AT_APPOINTMENT," +
@@ -275,20 +282,21 @@ namespace AncientWarfare3.core.court
                     KingdomId = ReadLong(reader, 1, -1L),
                     ActorId = ReadLong(reader, 2, -1L),
                     CityId = ReadLong(reader, 3, -1L),
-                    Layer = ReadText(reader, 4),
-                    OfficeId = ReadText(reader, 5),
-                    AppointedYear = ReadInt(reader, 6, -1),
-                    AppointedTime = ReadDouble(reader, 7, -1d),
-                    EndedYear = ReadInt(reader, 8, -1),
-                    EndedTime = ReadDouble(reader, 9, -1d),
-                    Active = ReadInt(reader, 10, 0) == 1,
-                    EndReason = ReadText(reader, 11),
+                    CountyId = ReadLong(reader, 4, -1L),
+                    Layer = ReadText(reader, 5),
+                    OfficeId = ReadText(reader, 6),
+                    AppointedYear = ReadInt(reader, 7, -1),
+                    AppointedTime = ReadDouble(reader, 8, -1d),
+                    EndedYear = ReadInt(reader, 9, -1),
+                    EndedTime = ReadDouble(reader, 10, -1d),
+                    Active = ReadInt(reader, 11, 0) == 1,
+                    EndReason = ReadText(reader, 12),
                     RankAtAppointment = OfficialCareerRankRules.ClampRank(
-                        ReadInt(reader, 12,
+                        ReadInt(reader, 13,
                             OfficialCareerRankRules.Unranked)),
                     LocalGradeAtAppointment = NineRankRules.ClampGrade(
-                        ReadInt(reader, 13, NineRankRules.Unranked)),
-                    InstitutionAtAppointment = ReadText(reader, 14)
+                        ReadInt(reader, 14, NineRankRules.Unranked)),
+                    InstitutionAtAppointment = ReadText(reader, 15)
                 });
             }
             return records;

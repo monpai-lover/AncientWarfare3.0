@@ -1,0 +1,97 @@
+using System;
+using System.IO;
+
+internal static class GlobalDeJureMapModeSourceGuardTests
+{
+    internal static void Run()
+    {
+        string service = Read("Code/core/policy/HierarchicalVassalMapModeService.cs");
+        string state = Read("Code/core/policy/CityAdministrationMapModeRules.cs");
+        string runtime = Read("Code/core/policy/HierarchicalVassalMapLabelRuntime.cs");
+        string layer = Read(
+            "Code/core/policy/HierarchicalVassalMapModeLabelLayer.cs");
+        string store = Read("Code/core/court/DeJureRegionStore.cs");
+        string assignment = Read(
+            "Code/core/court/DeJureNewCityAssignmentService.cs");
+        True(state.Contains("IsGlobalRegionOverview", StringComparison.Ordinal),
+            "city layer exposes an explicit global region overview state");
+        True(service.Contains("IsCityGlobalRegionLayer", StringComparison.Ordinal),
+            "city layer root uses the global region state");
+        True(service.Contains("FindCity(region.SeatCityId)", StringComparison.Ordinal),
+            "region labels are anchored at the legal seat city");
+        True(runtime.Contains("source.RegionAnchor", StringComparison.Ordinal) &&
+             runtime.Contains("CreateFromZones(source.EntityId, source.DisplayName,\n                            source.Zones, !source.Country, source.RegionAnchor)",
+                 StringComparison.Ordinal),
+            "region label jobs receive an explicit seat anchor");
+        True(runtime.Contains("RegionId", StringComparison.Ordinal),
+            "region source registration keeps a region identity for deduplication");
+        True(layer.Contains("HierarchicalVassalMapLabelRuntime.NeedsProcessFrame",
+                 StringComparison.Ordinal) &&
+             !layer.Contains("internal static bool NeedsProcessFrame => false",
+                 StringComparison.Ordinal),
+            "map label layer forwards the runtime work queue state");
+        True(layer.Contains("HierarchicalVassalMapLabelRuntime.ProcessFrame();",
+                 StringComparison.Ordinal),
+            "map label layer advances the asynchronous label pipeline");
+        True(service.Contains("else if (IsCityRegionLayer)\n                        PublishNativeCityLabels();",
+                 StringComparison.Ordinal),
+            "global region overview publishes seat-anchored native labels");
+        True(service.Contains(
+                "Vector2 center = IsCityRegionLayer\n" +
+                "                    ? new Vector2(city.city_center.x, city.city_center.y)",
+                StringComparison.Ordinal),
+            "native region labels must use the legal seat center rather than a territory centroid");
+        True(!service.Contains("if (IsCityGlobalRegionLayer)\n                    HierarchicalVassalMapModeLabelLayer.\n                        HideNativeLabelsExcept(null);",
+                 StringComparison.Ordinal),
+            "global region overview must not hide its published native labels");
+        True(runtime.Contains(
+                "HierarchicalVassalMapModeService.IsCityRegionLayer &&\n                !HierarchicalVassalMapModeService.IsCityGlobalRegionLayer",
+                StringComparison.Ordinal),
+            "global region overview must not enqueue duplicate async labels");
+        True(service.Contains("BuildGlobalDeJureRegionSources", StringComparison.Ordinal) &&
+             service.Contains("pKingdomId < 0L", StringComparison.Ordinal),
+            "global city layer discovers regions without a kingdom focus");
+        True(runtime.Contains("IsCityRegionLayer", StringComparison.Ordinal) &&
+             runtime.Contains("_batchFocus", StringComparison.Ordinal),
+            "global region labels use an unscoped focus key");
+        True(service.Contains("HandleGlobalCityRegionClick", StringComparison.Ordinal),
+            "clicking a global region enters the existing detail path");
+        True(store.Contains("sameKingdomMember", StringComparison.Ordinal) ||
+             store.Contains("EnsureAllKingdomCapitalSeatsLocked", StringComparison.Ordinal),
+            "save repair retains capital and same-kingdom guards");
+        True(assignment.Contains("MaximumRegionCityCount", StringComparison.Ordinal),
+            "new-city assignment enforces the six-city region cap");
+        True(assignment.Contains("allMembers.Count", StringComparison.Ordinal),
+            "region capacity counts live legal members rather than stale IDs");
+        True(store.Contains("SelectHighestDevelopmentAnchor", StringComparison.Ordinal),
+            "legacy repair selects the highest-development city when capital is missing");
+        True(store.Contains("region_capacity", StringComparison.Ordinal),
+            "automatic writes enforce the six-city cap at the storage boundary");
+        int globalClick = service.IndexOf(
+            "private static bool HandleGlobalCityRegionClick",
+            StringComparison.Ordinal);
+        int globalClickEnd = globalClick < 0 ? -1 : service.IndexOf(
+            "        internal static bool IsCityInFocusedRegion",
+            globalClick, StringComparison.Ordinal);
+        True(globalClick >= 0 && globalClickEnd > globalClick &&
+             !service.Substring(globalClick, globalClickEnd - globalClick)
+                 .Contains("PushRegion", StringComparison.Ordinal),
+            "global region click stops at the domestic region overview");
+        True(!runtime.Contains("Vector2?)null", StringComparison.Ordinal),
+            "global region labels use the legal seat anchor");
+        string job = Read("Code/core/policy/HierarchicalVassalLabelBuildJob.cs");
+        True(job.Contains("if (_cityLabel && _hasRegionAnchor)", StringComparison.Ordinal) &&
+             job.Contains("CalculateCityLabelSize(frozenTiles.Count)", StringComparison.Ordinal),
+            "seat-anchored region labels skip centroid geometry and use tile count only");
+    }
+
+    private static string Read(string pPath)
+    {
+        return File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(), pPath));
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+}

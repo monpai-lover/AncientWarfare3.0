@@ -30,12 +30,15 @@ namespace AncientWarfare3.content.figures
         public readonly HistoricalFigureSex Sex;
         public readonly bool RequiresIntegration;
         public readonly float Chance;
+        public readonly int CombatHealth;
+        public readonly string[] CombatTraits;
 
         private HistoricalFigureDef(int pRegistryIndex, int pSpawnOrder,
             string pId, string pKey, string pFamily, string pClan,
             string pGiven, string pDynasty, string pKingdom,
             int pFoundingYear, bool pReqIntegration, float pChance,
-            HistoricalFigureSex pSex)
+            HistoricalFigureSex pSex, int pCombatHealth,
+            string[] pCombatTraits)
         {
             RegistryIndex = pRegistryIndex;
             SpawnOrder = pSpawnOrder;
@@ -53,7 +56,19 @@ namespace AncientWarfare3.content.figures
             Sex = pSex;
             RequiresIntegration = pReqIntegration;
             Chance = pChance;
+            CombatHealth = pCombatHealth;
+            CombatTraits = pCombatTraits == null
+                ? new string[0]
+                : (string[])pCombatTraits.Clone();
         }
+
+        // Both newly added historical figures intentionally use one shared,
+        // strong combat package.  Trait lookup is guarded at application time
+        // so a missing vanilla trait cannot prevent the figure from spawning.
+        private static readonly string[] UniformEliteCombatTraits =
+        {
+            "strong_minded", "tough", "regeneration", "fast", "blessed"
+        };
 
         /// <summary>
         ///     按稳定 registry 槽位排列。五项不可重排；新增人物从槽位 5 追加。
@@ -148,7 +163,11 @@ namespace AncientWarfare3.content.figures
             D(85, 69, "aw_figure_li_maozhen", "李茂贞", "李", "李", "茂贞", "岐", "岐", 901, true, 0.005f),
             D(86, 76, "aw_figure_liu_shouguang", "刘守光", "刘", "刘", "守光", "燕", "燕", 911, true, 0.005f),
             D(87, 77, "aw_figure_yelu_abaoji", "耶律阿保机", "耶律", "耶律", "阿保机", "辽", "辽", 916, true, 0.005f),
-            D(88, 83, "aw_figure_duan_siping", "段思平", "段", "段", "思平", "大理", "大理", 937, true, 0.005f)
+            D(88, 83, "aw_figure_duan_siping", "段思平", "段", "段", "思平", "大理", "大理", 937, true, 0.005f),
+            D(89, 90, "aw_figure_li_zicheng", "李自成", "李", "李", "自成", "大顺", "大顺", 1644, true, 0.005f,
+                HistoricalFigureSex.Male, 5000, UniformEliteCombatTraits),
+            D(90, 89, "aw_figure_nurhaci", "努尔哈赤", "爱新觉罗", "爱新觉罗", "努尔哈赤", "后金", "后金", 1616, true, 0.005f,
+                HistoricalFigureSex.Male, 5000, UniformEliteCombatTraits)
         };
 
         public static readonly HistoricalFigureDef[] SpawnSequence =
@@ -156,7 +175,7 @@ namespace AncientWarfare3.content.figures
         public static readonly int[] SpawnRegistryOrder =
             BuildSpawnRegistryOrder();
 
-        public const int Count = 89;
+        public const int Count = 91;
 
         public static HistoricalFigureDef Get(int pRegistryIndex)
         {
@@ -173,11 +192,13 @@ namespace AncientWarfare3.content.figures
             int pSpawnOrder, string pId, string pKey, string pFamily,
             string pClan, string pGiven, string pDynasty, string pKingdom,
             int pFoundingYear, bool pReqIntegration, float pChance,
-            HistoricalFigureSex pSex = HistoricalFigureSex.Male)
+            HistoricalFigureSex pSex = HistoricalFigureSex.Male,
+            int pCombatHealth = 1500, string[] pCombatTraits = null)
         {
             return new HistoricalFigureDef(pRegistryIndex, pSpawnOrder,
                 pId, pKey, pFamily, pClan, pGiven, pDynasty, pKingdom,
-                pFoundingYear, pReqIntegration, pChance, pSex);
+                pFoundingYear, pReqIntegration, pChance, pSex,
+                pCombatHealth, pCombatTraits);
         }
 
         private static HistoricalFigureDef[] BuildSpawnSequence()

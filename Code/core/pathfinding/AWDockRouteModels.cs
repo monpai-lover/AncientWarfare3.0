@@ -1,5 +1,18 @@
 namespace AncientWarfare3.core.pathfinding
 {
+    // Typed failure values keep RTS transport diagnostics compatible with the
+    // newer transport caller without changing route selection.
+    internal enum AWDockRouteFailureReason
+    {
+        None = 0,
+        InvalidEndpoints = 1,
+        SameIsland = 2,
+        NoWaterComponent = 3,
+        NoStableShore = 4,
+        NoDockOrShorePair = 5,
+        TopologyChanged = 6
+    }
+
     internal enum AWTransportRouteSource
     {
         DockPortal = 0,

@@ -1,0 +1,51 @@
+using System;
+using System.IO;
+
+internal static class VanillaLookupOptimizationSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "AncientWarfare3.csproj")))
+        {
+            DirectoryInfo parent = Directory.GetParent(root);
+            if (parent == null) throw new InvalidOperationException(
+                "repository root missing");
+            root = parent.FullName;
+        }
+        string patchPath = Path.Combine(root, "Code", "patch",
+            "AW_VanillaLookupOptimizationPatch.cs");
+        if (File.Exists(patchPath))
+            throw new InvalidOperationException(
+                "experimental vanilla lookup patch must remain removed");
+
+        string productionRoot = Path.Combine(root, "Code");
+        foreach (string sourcePath in Directory.EnumerateFiles(
+                     productionRoot, "*.cs", SearchOption.AllDirectories))
+        {
+            string source = File.ReadAllText(sourcePath);
+            foreach (string symbol in new[]
+                     {
+                         "AWFreeTileSearchIndex",
+                         "AWEnemyPresenceCache",
+                         "AWDeferredPathRequestBatch",
+                         "AWStatusSimulationScheduler",
+                         "AWSimulationCoordinatorThread"
+                     })
+            {
+                if (source.Contains(symbol, StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        "removed experimental symbol remains: " + symbol);
+            }
+        }
+
+        string actorPost = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWCooperativeActorPostRunner.cs"));
+        if (!actorPost.Contains("case PostStage.MilitaryP0:",
+                StringComparison.Ordinal) ||
+            !actorPost.Contains("ArmyRtsTransportService.ProcessMilitaryP0",
+                StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "RTS MilitaryP0 actor-post stage was removed");
+    }
+}

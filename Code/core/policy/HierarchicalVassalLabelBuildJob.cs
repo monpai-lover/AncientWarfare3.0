@@ -91,6 +91,8 @@ namespace AncientWarfare3.core.policy
         private readonly IReadOnlyList<TileZone> _sourceZones;
         private readonly bool _cityLabel;
         private readonly bool _deriveCountryFormat;
+        private readonly Vector2 _regionAnchor;
+        private readonly bool _hasRegionAnchor;
         private readonly HashSet<Vector2Int> _uniqueTileSet =
             new HashSet<Vector2Int>();
         private readonly List<Vector2Int> _uniqueTiles =
@@ -114,12 +116,14 @@ namespace AncientWarfare3.core.policy
             _sourceZones = null;
             _countryLabelGap = pCountryLabelGap;
             _deriveCountryFormat = false;
+            _regionAnchor = Vector2.zero;
+            _hasRegionAnchor = false;
             Phase = HierarchicalVassalLabelBuildPhase.CollectTiles;
         }
 
         private HierarchicalVassalLabelBuildJob(long pRealmId,
             string pDisplayName, IReadOnlyList<TileZone> pSourceZones,
-            bool pCityLabel)
+            bool pCityLabel, Vector2? pRegionAnchor)
         {
             _realmId = pRealmId;
             _displayName = pDisplayName ?? string.Empty;
@@ -127,6 +131,8 @@ namespace AncientWarfare3.core.policy
             _sourceZones = pSourceZones ?? Array.Empty<TileZone>();
             _cityLabel = pCityLabel;
             _deriveCountryFormat = !pCityLabel;
+            _regionAnchor = pRegionAnchor ?? Vector2.zero;
+            _hasRegionAnchor = pRegionAnchor.HasValue;
             Phase = HierarchicalVassalLabelBuildPhase.CollectTiles;
         }
 
@@ -157,10 +163,11 @@ namespace AncientWarfare3.core.policy
 
         internal static HierarchicalVassalLabelBuildJob CreateFromZones(
             long pRealmId, string pDisplayName,
-            IReadOnlyList<TileZone> pZones, bool pCityLabel)
+            IReadOnlyList<TileZone> pZones, bool pCityLabel,
+            Vector2? pRegionAnchor = null)
         {
             return new HierarchicalVassalLabelBuildJob(pRealmId,
-                pDisplayName, pZones, pCityLabel);
+                pDisplayName, pZones, pCityLabel, pRegionAnchor);
         }
 
         internal void Cancel()
@@ -223,6 +230,19 @@ namespace AncientWarfare3.core.policy
             _geometryTask = Task.Run(() =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (_cityLabel && _hasRegionAnchor)
+                {
+                    var seatPlacement =
+                        new HierarchicalVassalMapModeLabelPlacement
+                        {
+                            Centroid = _regionAnchor,
+                            Angle = 0f,
+                            Size = HierarchicalVassalMapModeGeometry.
+                                CalculateCityLabelSize(frozenTiles.Count)
+                        };
+                    return new HierarchicalVassalLabelBuildResult(
+                        seatPlacement, frozenName, 0);
+                }
                 HierarchicalVassalMapModeGeometryMetrics metrics =
                     HierarchicalVassalMapModeGeometry.CalculateMetrics(
                         frozenTiles, cancellationToken);
@@ -247,7 +267,8 @@ namespace AncientWarfare3.core.policy
                 var cityPlacement =
                     new HierarchicalVassalMapModeLabelPlacement
                     {
-                        Centroid = metrics.Centroid,
+                        Centroid = _hasRegionAnchor
+                            ? _regionAnchor : metrics.Centroid,
                         Angle = metrics.Angle,
                         Size = HierarchicalVassalMapModeGeometry.
                             CalculateCityLabelSize(metrics.Area)

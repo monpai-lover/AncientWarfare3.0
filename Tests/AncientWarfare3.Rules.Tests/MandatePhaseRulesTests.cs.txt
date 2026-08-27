@@ -1,0 +1,33 @@
+using AncientWarfare3.core.lineage;
+
+internal static class MandatePhaseRulesTests
+{
+    internal static void Run()
+    {
+        True(MandatePhaseRules.ShouldReconcileRestoredState(
+                mandateActive: true, MandatePhase.Chaos,
+                originType: "self_restoration", activeClaimants: false,
+                activeZhuluWars: false),
+            "a restored mandate without active claimants returns to renewal");
+        False(MandatePhaseRules.ShouldReconcileRestoredState(
+                mandateActive: true, MandatePhase.Chaos,
+                originType: "self_restoration", activeClaimants: true,
+                activeZhuluWars: false),
+            "active claimants keep restored chaos intact");
+        False(MandatePhaseRules.ShouldReconcileRestoredState(
+                mandateActive: true, MandatePhase.Chaos,
+                originType: "native", activeClaimants: false,
+                activeZhuluWars: false),
+            "ordinary mandate chaos is not silently rewritten");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new System.InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new System.InvalidOperationException(pMessage);
+    }
+}

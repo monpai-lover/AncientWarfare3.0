@@ -1,0 +1,33 @@
+using System;
+using System.IO;
+
+internal static class PathGeneratorBoundsRegressionSourceGuardTests
+{
+    internal static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string source = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "pathfinding", "AWStreamingPathGenerator.cs"));
+
+        int buildStart = source.IndexOf(
+            "AWPathStep[] fullRoute = workspace.BuildPath(result.NodeIndex);",
+            StringComparison.Ordinal);
+        int copyStart = source.IndexOf(
+            "private static AWPathStep[] CopyPrefix",
+            StringComparison.Ordinal);
+        if (buildStart < 0 || copyStart < 0 || buildStart >= copyStart)
+            throw new InvalidOperationException(
+                "search results must be materialized before a path view can be published");
+
+        if (source.Contains("workspace.PathStep(i)", StringComparison.Ordinal) ||
+            source.Contains("workspace.PathView(outputCount)", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "published segments must not read the mutable workspace path view");
+
+        string requestSource = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "pathfinding", "AWPathRequest.cs"));
+        if (requestSource.Contains("CachedSegmentView", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "cached path segments must not expose a request-level reusable view");
+    }
+}

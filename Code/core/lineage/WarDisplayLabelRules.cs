@@ -12,6 +12,8 @@ namespace AncientWarfare3.core.lineage
             "core_reclaim",
             "claim_war",
             "force_vassal",
+            "bandit_suppression",
+            "de_jure_war",
             "vassal_war",
             "tributary_war",
             "independence_war",
@@ -66,7 +68,12 @@ namespace AncientWarfare3.core.lineage
             string pText, string pLanguage)
         {
             string text = pText ?? "";
-            if (pEventType != "royal_marriage" || text.Length == 0)
+            if (text.Length == 0) return text;
+            if (IsTributarySettlementEvent(pEventType))
+                text = NormalizeLegacyTributaryParameters(text, pLanguage);
+            if (pEventType == "war_goal_failed")
+                text = NormalizeLegacyGoalFailureReason(text, pLanguage);
+            if (pEventType != "royal_marriage")
                 return text;
             if (HasKnownRoyalMarriageSuffix(text)) return text;
 
@@ -76,6 +83,51 @@ namespace AncientWarfare3.core.lineage
             string suffix = T("aw_hist_royal_marriage_suffix",
                 sourceLanguage);
             return string.IsNullOrEmpty(suffix) ? text : text + suffix;
+        }
+
+        private static bool IsTributarySettlementEvent(string pEventType)
+        {
+            return pEventType == "tributary_paid" ||
+                   pEventType == "tributary_refused_power" ||
+                   pEventType == "tributary_unpaid";
+        }
+
+        private static string NormalizeLegacyTributaryParameters(
+            string pText, string pLanguage)
+        {
+            string text = pText ?? "";
+            Replace(ref text, "political=",
+                T("aw_hist_tributary_settlement_political", pLanguage));
+            Replace(ref text, "gold=",
+                T("aw_hist_tributary_settlement_gold", pLanguage));
+            Replace(ref text, "factor=",
+                T("aw_hist_tributary_settlement_factor", pLanguage));
+            Replace(ref text, "outcome=",
+                T("aw_hist_tributary_settlement_outcome", pLanguage));
+            Replace(ref text, "offering=",
+                T("aw_hist_tributary_settlement_offering", pLanguage));
+            return text;
+        }
+
+        private static string NormalizeLegacyGoalFailureReason(
+            string pText, string pLanguage)
+        {
+            string text = pText ?? "";
+            Replace(ref text, "negotiated_goal_not_enforced",
+                T("aw_hist_goal_negotiated_goal_not_enforced", pLanguage));
+            Replace(ref text, "defender_victory",
+                T("aw_hist_goal_defender_win", pLanguage));
+            Replace(ref text, "white_peace",
+                T("aw_hist_goal_peace_unresolved", pLanguage));
+            return text;
+        }
+
+        private static void Replace(ref string pText, string pToken,
+            string pLocalizedToken)
+        {
+            if (string.IsNullOrEmpty(pText) || string.IsNullOrEmpty(pToken) ||
+                string.IsNullOrEmpty(pLocalizedToken)) return;
+            pText = pText.Replace(pToken, pLocalizedToken);
         }
 
         private static bool HasKnownRoyalMarriageSuffix(string pText)
@@ -166,6 +218,11 @@ namespace AncientWarfare3.core.lineage
                 case "school_guest_service": return T("aw_hist_event_school_guest_service", pLanguage);
                 default:
                     if (TryWarOrDecisionLabel(pKey, pLanguage, out string label)) return label;
+                    string eventKey = "aw_hist_event_" + (pKey ?? "");
+                    string localizedEvent = T(eventKey, pLanguage);
+                    if (!string.Equals(localizedEvent, eventKey,
+                            System.StringComparison.Ordinal))
+                        return localizedEvent;
                     return string.IsNullOrEmpty(pKey) ? T("aw_hist_event_unknown", pLanguage) : pKey;
             }
         }
@@ -201,6 +258,12 @@ namespace AncientWarfare3.core.lineage
                     return true;
                 case "force_vassal":
                     pLabel = T("aw_hist_label_force_vassal", pLanguage);
+                    return true;
+                case "bandit_suppression":
+                    pLabel = T("aw_hist_goal_bandit_suppression", pLanguage);
+                    return true;
+                case "de_jure_war":
+                    pLabel = T("aw_hist_label_de_jure_war", pLanguage);
                     return true;
                 case "vassal_war":
                     pLabel = T("aw_hist_label_vassal_war", pLanguage);
@@ -240,6 +303,7 @@ namespace AncientWarfare3.core.lineage
                     return true;
                 case "succession_dispute":
                 case "succession_dispute_war":
+                case "succession_reunification":
                     pLabel = T("aw_hist_label_succession_dispute_war",
                         pLanguage);
                     return true;

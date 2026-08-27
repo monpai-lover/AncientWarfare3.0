@@ -1,0 +1,96 @@
+using System;
+using System.IO;
+
+internal static class CountyRenameSourceGuardTests
+{
+    internal static void Run()
+    {
+        string store = Read("Code/core/county/CountyAdministrationStore.cs");
+        string service = ReadOptional(
+            "Code/core/county/CountyRenameService.cs");
+        string models = Read(
+            "Code/api/multiplayer/AW3MultiplayerCatalogModels.cs");
+        string catalog = Read(
+            "Code/api/multiplayer/AW3MultiplayerCatalog.cs");
+        string router = Read(
+            "Code/core/multiplayer/commands/AW3AuthoritativeCommandRouter.cs");
+        string handler = Read(
+            "Code/core/multiplayer/commands/AW3CourtCommandHandler.cs");
+        string window = ReadOptional(
+            "Code/ui/windows/CountyRenameWindow.cs");
+        string overlay = ReadOptional(
+            "Code/ui/components/CountyMapRenameOverlay.cs");
+        string tab = Read("Code/ui/AW_LineageTab.cs");
+        string card = Read("Code/ui/items/CourtActorNodeView.cs");
+        string courtWindow = Read("Code/ui/windows/CourtWindow.cs");
+        string map = Read(
+            "Code/core/policy/HierarchicalVassalMapModeService.cs");
+        string locale = Read("Locales/aw3_county.csv");
+
+        Contains(store, "FindById(long pCountyId)");
+        Contains(store, "ForRegion(long pRegionId)");
+        Contains(service, "CountyRenameRules.Validate");
+        Contains(service, "county.ManualName = true");
+        Contains(service, "county.ManualName = false");
+        Contains(service, "CountyAdministrationService.ReconcileCity(city)");
+        Contains(service, "HierarchicalVassalMapModeService.MarkCityDirty(city)");
+        Contains(service, "Changed?.Invoke(pKingdomId, city.id)");
+        Contains(models, "RenameCounty = 39");
+        Contains(models, "AW3CommandRequest RenameCounty(");
+        Contains(catalog, "Command(AW3CommandKind.RenameCounty");
+        Contains(catalog, "descriptor.Kind == kind");
+        Contains(router, "case AW3CommandKind.RenameCounty:");
+        Contains(handler, "case AW3CommandKind.RenameCounty:");
+        Contains(handler, "CountyRenameService.TryApply");
+        Contains(window, "AW3CommandRequest.RenameCounty");
+        Contains(window, "CountyRenameRules.Validate");
+        Contains(window, "RestoreHistorical");
+        Contains(window, "TitleBackground");
+        Contains(window, "titleRect.localPosition");
+        Contains(window, "titleText.transform.localPosition");
+        Contains(overlay, "CountyRenameWindow.Open(county.CountyId)");
+        Contains(overlay, "HierarchicalVassalMapModeService.FocusedCountyId");
+        Contains(overlay, "HierarchicalVassalMapModeService.IsCityCountyLayer");
+        Contains(tab, "CountyMapRenameOverlay.Attach(tab.transform.root)");
+        Contains(card, "CountyRenameWindow.Open(countyId)");
+        Contains(card, "pNode.OfficeLayer == CourtOfficeLayer.County");
+        Contains(map, "internal static long FocusedCountyId");
+        Contains(overlay, "CanvasGroup");
+        Contains(overlay, "_canvasGroup.alpha = pVisible ? 1f : 0f;");
+        Contains(overlay, "_canvasGroup.blocksRaycasts = pVisible;");
+        Contains(overlay, "CountyAdministrationStore.Revision");
+        Contains(courtWindow, "CountyRenameService.Changed +=");
+        string[] localeKeys =
+        {
+            "aw_county_rename_title", "aw_county_rename_input",
+            "aw_county_restore_historical", "aw_county_rename_confirm",
+            "aw_county_rename_cancel", "aw_county_rename_empty",
+            "aw_county_rename_duplicate", "aw_county_rename_inactive",
+            "aw_county_rename_unauthorized",
+            "aw_county_rename_invalid_region", "aw_county_rename_failed",
+            "aw_county_rename_pending", "aw_county_rename_success",
+            "aw_county_restore_success", "aw_county_rename_map_tip",
+            "aw_county_rename_card_tip", "aw_county_rename_current",
+            "aw_county_rename_placeholder"
+        };
+        foreach (string key in localeKeys) Contains(locale, key + ",");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            pPath.Replace('/', Path.DirectorySeparatorChar)));
+
+    private static string ReadOptional(string pPath)
+    {
+        string path = Path.Combine(Directory.GetCurrentDirectory(),
+            pPath.Replace('/', Path.DirectorySeparatorChar));
+        return File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+    }
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "missing county rename source guard: " + pNeedle);
+    }
+}

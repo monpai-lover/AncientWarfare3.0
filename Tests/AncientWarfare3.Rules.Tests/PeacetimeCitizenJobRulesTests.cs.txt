@@ -139,6 +139,12 @@ internal static class PeacetimeCitizenJobRulesTests
                service.Contains("TaxiManager.cancelRequest(request)",
                    StringComparison.Ordinal),
             "post-return cleanup must remove only the returned actor from shared taxi ownership");
+        Assert(!refreshAfterReturnBody.Contains("ModClass.LogInfo(",
+                   StringComparison.Ordinal) &&
+               refreshAfterReturnBody.Contains(
+                   "ArmyRtsMovementDiagnostic.Log(\"peacetime\",",
+                   StringComparison.Ordinal),
+            "post-return refresh must not emit one synchronous log line per actor");
 
         string releaseActorsBody = Slice(controller,
             "private static void ReleaseAfterReturnActors(Army pArmy)",

@@ -367,6 +367,16 @@ namespace AncientWarfare3.core.lineage
         public int PendingCount => _queuedIds.Count +
                                    _priorityQueuedIds.Count;
 
+        public int EnsureAllQueued()
+        {
+            if (!ArmyRtsExecutionBudgetRules.ShouldBackfillActiveControllers(
+                    _records.Count, PendingCount)) return 0;
+            int added = 0;
+            foreach (long armyId in _records.Keys)
+                if (Requeue(armyId)) added++;
+            return added;
+        }
+
         public bool AssignMission(ArmyRtsMission pMission)
         {
             if (pMission == null || pMission.ArmyId < 0L ||
@@ -664,12 +674,24 @@ namespace AncientWarfare3.core.lineage
     {
         private const int MaximumJobMutationsPerController = 128;
         private const int MaximumRoutePollsPerController = 64;
+        private const double InitialRouteRetryCooldownSeconds = 3d;
+        private const double MaximumRouteRetryCooldownSeconds = 30d;
+        // A capture changes the city's owner/war-side in several vanilla
+        // callbacks.  Do not tear down a live attack mission in that small
+        // transition window; the director will publish the settled objective
+        // on the next bounded pass.
+        private const double MissionValidityGraceWorldSeconds = 30d;
         private sealed class RuntimeState
         {
             internal bool RouteSubmitted;
             internal bool RouteArrived;
             internal bool TransportRouteConfirmed;
             internal bool ForceTransportRoute;
+            internal string RouteFailureFingerprint = string.Empty;
+            internal int RouteFailureCount;
+            internal double NextRouteAttemptAt;
+            internal string LastRouteFailureReason = string.Empty;
+            internal bool TransportAttemptActive;
             internal int AnchorTileId = -1;
             internal int AlternateTargetTileId = -1;
             internal int LastStrategicEndpointTileId = -1;
@@ -707,6 +729,7 @@ namespace AncientWarfare3.core.lineage
                 double.PositiveInfinity;
             internal double NextMissingTargetRecoveryWorldTime =
                 double.NegativeInfinity;
+            internal double MissionInvalidSinceWorldTime = -1d;
             internal ArmyRtsState MobilizationStatusState =
                 ArmyRtsState.Idle;
             internal readonly ArmyRtsProgressDeadline ReplenishmentProgress =
@@ -753,6 +776,15 @@ namespace AncientWarfare3.core.lineage
                 new Dictionary<long, PendingReplenishmentArrival>();
         private static readonly Queue<long> PendingReplenishmentArrivalQueue =
             new Queue<long>();
+
+        internal static bool IsRouteRetryCoolingDown(long pArmyId)
+        {
+            return RuntimeByArmy.TryGetValue(pArmyId,
+                    out RuntimeState runtime) &&
+                   !string.IsNullOrEmpty(runtime.RouteFailureFingerprint) &&
+                   CurrentRealtime() <
+                       runtime.NextRouteAttemptAt;
+        }
 
         public static bool TryGetProjection(Army pArmy,
             out ArmyRtsStrategicProjection pProjection)
@@ -963,7 +995,13 @@ namespace AncientWarfare3.core.lineage
                         ArmyRtsTransportService.HasActiveVoyage(army),
                         liveArmy, missionValid, targetComplete))
                 {
-                    ArmyRtsTransportService.LogDirectorOmissionPreserved(army);
+                    // The director publishes in several bounded stages. Keep
+                    // the existing controller queued while a snapshot omits
+                    // it, so the next controller slice can continue the same
+                    // attack and reassert a lost captain task. This is also
+                    // what makes the persisted mission durable between
+                    // partial planning generations.
+                    Controllers.Requeue(armyId);
                     continue;
                 }
                 stale.Add(armyId);
@@ -1469,6 +1507,13 @@ namespace AncientWarfare3.core.lineage
         public static int PendingControllerCount =>
             Controllers.PendingCount;
 
+        internal static int EnsureMissionControllersQueued()
+        {
+            if (ArmyRtsRuntimeMode.Current == ArmyRtsMode.Off ||
+                ArmyRtsWarDoctrine.IsAbstractDecisive) return 0;
+            return Controllers.EnsureAllQueued();
+        }
+
         public static int PendingReplenishmentArrivalCount =>
             PendingReplenishmentArrivalQueue.Count;
 
@@ -1880,7 +1925,7 @@ namespace AncientWarfare3.core.lineage
             bool targetAlive = pTarget?.data != null &&
                                !pTarget.isRekt() && pTarget.isAlive();
             bool canAttack = false;
-            try { canAttack = targetAlive && pActor.isTargetOkToAttack(pTarget); }
+            try { canAttack = targetAlive && CanRtsAttackTarget(pActor, pTarget); }
             catch { }
             bool sameIsland = targetAlive &&
                               pTarget.current_tile?.data != null &&
@@ -1900,7 +1945,6 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null || pTarget?.data == null ||
                 pActor.isRekt() || pTarget.isRekt() ||
                 !pActor.isAlive() || !pTarget.isAlive() ||
-                !pTarget.is_profession_warrior ||
                 pActor.current_tile?.data == null ||
                 pTarget.current_tile?.data == null ||
                 pActor.current_tile.isSameIsland(pTarget.current_tile) != true)
@@ -2081,12 +2125,46 @@ namespace AncientWarfare3.core.lineage
         {
             try
             {
-                return pTarget?.kingdom != null &&
-                       pCaptain?.kingdom != null &&
-                       pCaptain.kingdom.isEnemy(pTarget.kingdom) &&
-                       pCaptain.canAttackTarget(pTarget,
-                           pCheckForFactions: true,
+                bool targetAlive = pTarget?.data != null &&
+                                   !pTarget.isRekt() && pTarget.isAlive();
+                bool targetHostile = pTarget?.kingdom != null &&
+                                     pCaptain?.kingdom != null &&
+                                     pCaptain.kingdom.isEnemy(pTarget.kingdom);
+                bool canAttack = targetAlive &&
+                                 CanRtsAttackTarget(pCaptain, pTarget);
+                return ArmyRtsCombatTargetRules.ShouldAllowTarget(
+                    targetAlive, targetHostile, canAttack,
+                    targetIsKing: pTarget?.isKing() == true,
+                    targetIsCityLeader: pTarget?.isCityLeader() == true,
+                    targetIsHeir: IsCurrentHeir(pTarget));
+            }
+            catch { return false; }
+        }
+
+        private static bool CanRtsAttackTarget(Actor pAttacker,
+            Actor pTarget)
+        {
+            try
+            {
+                // Faction hostility is supplied by IsHostileCaptainTarget.
+                // Disabling the vanilla civilian-faction veto lets RTS
+                // soldiers select ordinary enemy residents, while the
+                // canAttackTarget postfix still enforces population sanctuary,
+                // terrain, inside-building and other physical protections.
+                return pAttacker?.data != null && pTarget?.data != null &&
+                       pAttacker.canAttackTarget(pTarget,
+                           pCheckForFactions: false,
                            pAttackBuildings: false);
+            }
+            catch { return false; }
+        }
+
+        private static bool IsCurrentHeir(Actor pTarget)
+        {
+            try
+            {
+                return pTarget?.kingdom?.data != null &&
+                       HeirService.IsCurrentHeir(pTarget.kingdom, pTarget);
             }
             catch { return false; }
         }
@@ -2256,9 +2334,37 @@ namespace AncientWarfare3.core.lineage
                 return SetMemberSiegeCombatTask(pActor);
             }
             if (pActor.isTask("fighting"))
-                return HasValidMemberCombatTarget(pActor);
+            {
+                if (HasValidMemberCombatTarget(pActor))
+                {
+                    if (fieldCombatReleased)
+                    {
+                        SetJob(pActor, ArmyRtsContent.MemberCombatJobId,
+                            ArmyRtsContent.MemberCombatTaskId,
+                            pForceReassert: true);
+                        return true;
+                    }
+                    return true;
+                }
+                // Native target acquisition can publish a protected royal or
+                // city authority before the RTS boundary runs. Clear it so
+                // vanilla fighting cannot bypass the role gate.
+                ClearActorAttackTarget(pActor);
+                if (fieldCombatReleased && HasMemberCombatMission(pActor))
+                {
+                    SetJob(pActor, ArmyRtsContent.MemberCombatJobId,
+                        ArmyRtsContent.MemberCombatTaskId,
+                        pForceReassert: true);
+                    return true;
+                }
+                return false;
+            }
             if (pActor.isTask(ArmyRtsContent.MemberCombatTaskId))
+            {
+                if (fieldCombatReleased && HasMemberCombatMission(pActor))
+                    return true;
                 RestoreVanillaMemberFollow(pActor);
+            }
             return false;
         }
 
@@ -2304,7 +2410,7 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null || army?.data == null ||
                 !Controllers.TryGet(army.id,
                     out ArmyRtsControllerRecord record) ||
-                record?.Mission == null || record.State == ArmyRtsState.Rally)
+                record?.Mission == null)
                 return false;
             bool transportOwned = HasMilitaryTransportOwnership(pActor);
             return !transportOwned && IsCaptain(pActor, army) &&
@@ -2339,6 +2445,37 @@ namespace AncientWarfare3.core.lineage
                 kind == ArmyMilitaryMovementPriorityKind.RtsMember)
                 ArmyMilitaryMovementPriorityIndex.Unregister(pActor.data.id);
             return false;
+        }
+
+        // Refresh P0 membership from the bounded RTS controller/army index.
+        // This closes the handoff window for a newly issued mission before
+        // the actor has reached a task-post callback, without scanning all
+        // world actors or taking ownership of native movement.
+        internal static void RefreshMilitaryPriorityIndex()
+        {
+            IReadOnlyList<long> armyIds = Controllers.SnapshotArmyIds();
+            for (int armyIndex = 0; armyIndex < armyIds.Count; armyIndex++)
+            {
+                Army army = FindArmy(armyIds[armyIndex]);
+                if (!IsLiveArmy(army) || !HasActiveMission(army.id)) continue;
+
+                Actor captain = SafeCaptain(army);
+                if (IsLiveCombatantActor(captain))
+                    TryRefreshMilitaryPriority(captain);
+
+                int count;
+                try { count = army.units?.Count ?? 0; }
+                catch { count = 0; }
+                for (int memberIndex = 0; memberIndex < count; memberIndex++)
+                {
+                    Actor member;
+                    try { member = army.units[memberIndex]; }
+                    catch { continue; }
+                    if (member == captain || !IsLiveWarriorActor(member))
+                        continue;
+                    TryRefreshMilitaryPriority(member);
+                }
+            }
         }
 
         public static bool ShouldHoldDeploymentMove(Actor pActor)
@@ -2381,7 +2518,7 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null || army?.data == null ||
                 !Controllers.TryGet(army.id,
                     out ArmyRtsControllerRecord record) ||
-                record?.Mission == null || record.State == ArmyRtsState.Rally)
+                record?.Mission == null)
                 return false;
             bool transportOwned = HasMilitaryTransportOwnership(pActor);
             return ArmyRtsMemberObjectiveRules.ShouldOwnMemberObjective(
@@ -2735,8 +2872,25 @@ namespace AncientWarfare3.core.lineage
             Kingdom kingdom = SafeKingdom(army);
             if (targetCity?.data == null || kingdom?.data == null ||
                 targetCity.kingdom != kingdom) return false;
-            try { pTarget = targetCity.getTile(); }
-            catch { pTarget = null; }
+            // Retreat completion is based on entering the friendly city
+            // territory, not reaching its center tile.  The center can be
+            // occupied by buildings or walls, which makes the native walker
+            // oscillate at the border forever.  Latch arrival once the
+            // captain is already inside the city/border zone.
+            if (IsInsideRetreatTerritory(pActor, targetCity))
+            {
+                runtime.RouteArrived = true;
+                pTarget = pActor.current_tile;
+                return pTarget?.data != null;
+            }
+            pTarget = FindTile(runtime.AnchorTileId) ??
+                      ResolveStableStrategicEndpoint(army, targetCity,
+                          runtime);
+            if (pTarget?.data == null)
+            {
+                try { pTarget = targetCity.getTile(); }
+                catch { pTarget = null; }
+            }
             return pTarget?.data != null;
         }
 
@@ -2802,6 +2956,7 @@ namespace AncientWarfare3.core.lineage
             runtime.JobCursor.Reopen();
             runtime.FollowerRouteInstallCursor = 0;
             ArmyFormationService.RemoveArmy(pArmy.id);
+            ResetRouteRetry(runtime);
             RequestRouteReplan(pArmy.id, pAlternateEndpoint: false);
         }
 
@@ -2943,6 +3098,11 @@ namespace AncientWarfare3.core.lineage
                 CoalitionWarTaskService.ReleaseObjectiveClaim(
                     record.Mission.WarId, armyId,
                     record.Mission.TargetCityId);
+                // The live RTS path bypasses CityAttackZoneService's legacy
+                // cleanup branch. Clear the vanilla city order before
+                // invalidation so the completed siege cannot reclaim the
+                // captain when the next mission is assigned.
+                ClearVanillaCityAttackTarget(army, pTargetCity);
                 Invalidate(armyId);
                 if (!KingdomWarDirectorService.
                         TryContinueSameArmyAfterCapture(army,
@@ -3324,6 +3484,17 @@ namespace AncientWarfare3.core.lineage
                     out ArmyRtsControllerRecord record) ||
                 !RuntimeByArmy.TryGetValue(pArmyId,
                     out RuntimeState runtime)) return false;
+            // A watchdog sample can arrive several times while the same
+            // provider failure is cooling down. Replanning the same endpoint
+            // here would cancel the existing fallback and recreate the
+            // submit/cancel loop seen in the authority log. An alternate
+            // endpoint still belongs to the same strategic mission and must
+            // observe the same failure cooldown.
+            if (IsRouteRetryCoolingDown(pArmyId))
+            {
+                ArmyRtsTransportDiagnostics.RecordCooldownSuppressedReplan();
+                return false;
+            }
             Army army = FindArmy(pArmyId);
             if (!IsLiveArmy(army)) return false;
             InvalidateNativeRoute(runtime,
@@ -3461,6 +3632,7 @@ namespace AncientWarfare3.core.lineage
                     jobId == ArmyRtsContent.HoldJobId ||
                     jobId == ArmyRtsContent.FollowerJobId ||
                     jobId == ArmyRtsContent.VanillaFollowerJobId ||
+                    jobId == ArmyRtsContent.MemberCombatJobId ||
                     jobId == ArmyRtsContent.RetreatCaptainJobId ||
                     jobId == ArmyRtsContent.RetreatFollowerJobId ||
                     pActor.isTask(ArmyRtsContent.MissionTaskId) ||
@@ -3473,7 +3645,10 @@ namespace AncientWarfare3.core.lineage
                     pActor.isTask(ArmyRtsContent.RetreatTaskId) ||
                     pActor.isTask(ArmyRtsContent.RegroupTaskId) ||
                     pActor.isTask(ArmyRtsContent.HoldTaskId) ||
-                    pActor.isTask(ArmyRtsContent.FormationTaskId);
+                    pActor.isTask(ArmyRtsContent.FormationTaskId) ||
+                    pActor.isTask(ArmyRtsContent.MemberCombatTaskId) ||
+                    pActor.isTask(ArmyRtsContent.SiegeCombatTaskId) ||
+                    pActor.isTask(ArmyMarchRules.VanillaAttackMarchTaskId);
                 if (!ownsRtsTask) return;
                 pActor.stopMovement();
                 pActor.clearOldPath();
@@ -3544,7 +3719,6 @@ namespace AncientWarfare3.core.lineage
                         pForceReassert: true);
                 }
                 if (IsLiveCombatantActor(captain) &&
-                    record.State != ArmyRtsState.Rally &&
                     ShouldOwnMilitaryActor(captain, pMissionActive: true))
                     ArmyMilitaryMovementPriorityIndex.Register(
                         captain.data.id,
@@ -4090,6 +4264,8 @@ namespace AncientWarfare3.core.lineage
             bool liveArmy = IsLiveArmy(army);
             if (!liveArmy || !IsMissionValid(army, record.Mission))
             {
+                if (TryDeferTransientMissionInvalidation(pArmyId, army,
+                        record, liveArmy)) return;
                 ArmyRtsMission invalidMission = record?.Mission;
                 War missionWar = FindWar(invalidMission?.WarId ?? -1L);
                 Kingdom missionKingdom = FindKingdom(
@@ -4135,6 +4311,7 @@ namespace AncientWarfare3.core.lineage
                 runtime = new RuntimeState();
                 RuntimeByArmy[pArmyId] = runtime;
             }
+            runtime.MissionInvalidSinceWorldTime = -1d;
 
             bool commit = ArmyRtsRuntimeModeRules.ShouldCommit(pMode);
             bool reservePoolEligible = ArmyReplenishmentOperationService.
@@ -4182,6 +4359,13 @@ namespace AncientWarfare3.core.lineage
                         jobsDiagnostic);
                 }
             }
+
+            // The controller is the single strategic-route owner.  Consume
+            // at most one provider result per authority cycle so async route
+            // progress continues without reintroducing the old per-controller
+            // polling burst.
+            if (commit)
+                ProcessPendingStrategicRoute(army, record.Mission, runtime);
 
             bool preservePlayerOrder =
                 record.Mission.PlayerOrder &&
@@ -4382,6 +4566,79 @@ namespace AncientWarfare3.core.lineage
             Controllers.Requeue(pArmyId);
         }
 
+        private static bool TryDeferTransientMissionInvalidation(
+            long pArmyId, Army pArmy, ArmyRtsControllerRecord pRecord,
+            bool pLiveArmy)
+        {
+            if (!pLiveArmy || pArmy?.data == null || pRecord?.Mission == null)
+                return false;
+            Kingdom kingdom = SafeKingdom(pArmy);
+            War war = FindWar(pRecord.Mission.WarId);
+            City target = FindCity(pRecord.Mission.TargetCityId);
+            if (kingdom?.data == null || war?.data == null ||
+                target?.data == null || !IsLiveCity(target) ||
+                !IsWarActive(war) || !IsKingdomInWar(war, kingdom))
+                return false;
+
+            Kingdom targetKingdom = target.kingdom;
+            bool sameSide = targetKingdom != null &&
+                (targetKingdom == kingdom ||
+                 IsSameWarSide(war, kingdom, targetKingdom));
+            bool targetParticipant = targetKingdom != null &&
+                IsKingdomInWar(war, targetKingdom);
+            bool captureCallbackPending = false;
+            try
+            {
+                captureCallbackPending = target.isGettingCaptured() ||
+                    target.being_captured_by != null;
+            }
+            catch { }
+
+            // Only defer a target which is still part of this war and is in a
+            // capture-side transition.  A genuinely ended war, deleted city,
+            // or unrelated kingdom must release immediately.
+            bool transientAttack =
+                pRecord.Mission.ProposalKind == ArmyRtsProposalKind.Attack &&
+                (sameSide || targetParticipant && captureCallbackPending);
+            bool transientDefense =
+                pRecord.Mission.ProposalKind == ArmyRtsProposalKind.Defend &&
+                sameSide && captureCallbackPending;
+            if (!transientAttack && !transientDefense) return false;
+
+            RuntimeState runtime;
+            if (!RuntimeByArmy.TryGetValue(pArmyId,
+                    out runtime))
+            {
+                runtime = new RuntimeState
+                {
+                    InitialRosterCount = SafeUnitCount(pArmy),
+                    MissionInvalidSinceWorldTime = -1d
+                };
+                RuntimeByArmy[pArmyId] = runtime;
+            }
+            double now = CurrentWorldTime();
+            if (double.IsNaN(now) || double.IsInfinity(now)) now = 0d;
+            if (runtime.MissionInvalidSinceWorldTime < 0d)
+            {
+                runtime.MissionInvalidSinceWorldTime = now;
+                if (AWPerformanceSettings.ArmyRtsDiagnosticsEnabled)
+                    ModClass.LogInfo("[AW3 RTS health] " +
+                        "phase=mission_invalid_deferred army=" + pArmyId +
+                        " target=" + target.id +
+                        " kind=" + pRecord.Mission.ProposalKind +
+                        " grace_world_seconds=" +
+                        MissionValidityGraceWorldSeconds);
+            }
+            if (now - runtime.MissionInvalidSinceWorldTime >
+                    MissionValidityGraceWorldSeconds)
+                return false;
+            // Keep the record and captain task alive while the city control
+            // callback settles.  Queue de-duplication keeps this O(1) per
+            // authority pass and avoids a full army scan.
+            Controllers.Requeue(pArmyId);
+            return true;
+        }
+
         private static void ObserveFormation(Army pArmy,
             ArmyRtsState pState)
         {
@@ -4423,7 +4680,15 @@ namespace AncientWarfare3.core.lineage
             {
                 bool cityCombatActive = EnterTargetCitySiegeCombat(
                     pArmy, pRecord, pRuntime, target);
-                if (cityCombatActive) return true;
+                if (cityCombatActive)
+                {
+                    // Siege ownership short-circuits the normal EnsureJobs
+                    // pass.  Vanilla fighting/transport callbacks can still
+                    // replace the captain task between two authority cycles,
+                    // so cheaply reassert only the captain command here.
+                    SetCaptainTacticalTask(captain);
+                    return true;
+                }
             }
             bool targetIsEnemy = IsEnemyWarTarget(war, target, kingdom);
             bool withdrawalRequired = ArmyRtsWarLifecycleRules.
@@ -4887,6 +5152,32 @@ namespace AncientWarfare3.core.lineage
             ClearActorAttackTarget(SafeCaptain(pArmy));
         }
 
+        private static void ClearVanillaCityAttackTarget(Army pArmy,
+            City pCompletedTarget)
+        {
+            if (pArmy?.data == null || pCompletedTarget?.data == null)
+                return;
+            City source = AWArmyService.FindAnchorCity(pArmy);
+            if (source?.data == null)
+            {
+                try { source = SafeCaptain(pArmy)?.city; }
+                catch { source = null; }
+            }
+            if (source?.data == null) return;
+            bool matches = false;
+            try
+            {
+                matches = source.target_attack_city == pCompletedTarget ||
+                    source.target_attack_zone?.city == pCompletedTarget;
+            }
+            catch { }
+            if (!matches) return;
+            try { source.target_attack_city = null; }
+            catch { }
+            try { source.target_attack_zone = null; }
+            catch { }
+        }
+
         private static void ClearActorAttackTarget(Actor pActor)
         {
             if (pActor?.data == null) return;
@@ -5266,45 +5557,241 @@ namespace AncientWarfare3.core.lineage
             if (captain?.current_tile == null || targetCity?.data == null)
                 return;
             if (!ArmyRouteProviderService.CanSubmit) return;
-            InvalidateNativeRoute(pRuntime, captain, "strategic_route_advanced");
             WorldTile strategicTarget = ResolveStableStrategicEndpoint(
                 pArmy, targetCity, pRuntime);
+            bool sameIsland = SafeSameIsland(captain.current_tile,
+                strategicTarget);
+            string routeFingerprint = BuildRouteFailureFingerprint(
+                pArmy, pMission, strategicTarget, sameIsland);
+            if (string.Equals(routeFingerprint,
+                    pRuntime.RouteFailureFingerprint,
+                    StringComparison.Ordinal) &&
+                CurrentRealtime() <
+                    pRuntime.NextRouteAttemptAt)
+                return;
+            // A submitted route owns the next movement step.  Re-entering
+            // this method is normal while the provider is pending; invalidating
+            // the native lock here would discard that step before the actor
+            // can consume it and force the army back to the boundary.
+            if (ArmyRtsRules.ShouldPreserveStrategicRoute(
+                    pRuntime.RouteSubmitted, pRuntime.RouteArrived,
+                    ArmyRtsTransportService.HasActiveVoyage(pArmy)))
+                return;
+            InvalidateNativeRoute(pRuntime, captain, "strategic_route_advanced");
             if (TryActivateStrategicTransport(pArmy, captain,
                     strategicTarget, pRuntime))
             {
                 ArmyRouteProviderService.Cancel(pArmy.id,
                     ArmyRouteCancelReason.TargetReplaced);
                 AWArmyMarchService.ClearArmy(pArmy.id);
-                pRuntime.RouteSubmitted = true;
+                pRuntime.RouteSubmitted = false;
                 pRuntime.RouteArrived = false;
                 pRuntime.AnchorTileId = -1;
                 pRuntime.AlternateTargetTileId = -1;
+                ResetRouteRetry(pRuntime);
                 return;
             }
-            if (!SafeSameIsland(captain.current_tile, strategicTarget))
+            if (!sameIsland)
             {
+                ArmyRtsTransportDiagnostics.RecordRouteCandidateFailure();
                 pRuntime.RouteSubmitted = false;
                 pRuntime.RouteArrived = false;
                 pRuntime.TransportRouteConfirmed = false;
                 pRuntime.ForceTransportRoute = false;
+                RegisterRouteFailure(pRuntime, routeFingerprint,
+                    "transport_route_unavailable");
                 LogStrategicRouteFailure(pArmy, pMission, pRuntime,
                     captain, strategicTarget, ArmyRoutePollKind.Failed,
                     "transport_route_unavailable");
                 return;
             }
-            if (pMission.ProposalKind == ArmyRtsProposalKind.Attack)
-                TryIssueVanillaCityAttackOrder(pArmy, pMission,
-                    targetCity);
-            ArmyRouteProviderService.Cancel(pArmy.id,
-                ArmyRouteCancelReason.TargetReplaced);
+            // An already published anchor is consumed by the actor/formation
+            // path lifecycle. Do not submit a second strategic owner while
+            // the shared route is being installed or followed.
+            if (FindTile(pRuntime.AnchorTileId) != null ||
+                pRuntime.RouteArrived || pRuntime.RouteSubmitted) return;
+
+            ArmyRouteHandle handle = AWArmyMarchService.
+                SubmitStrategicRoute(pArmy, strategicTarget);
+            if (handle.Accepted)
+            {
+                pRuntime.RouteSubmitted = true;
+                pRuntime.RouteArrived = false;
+                pRuntime.AnchorTileId = -1;
+                pRuntime.AlternateTargetTileId = -1;
+                pRuntime.TransportRouteConfirmed = false;
+                pRuntime.ForceTransportRoute = false;
+                ResetRouteRetry(pRuntime);
+                return;
+            }
+
+            // Keep the vanilla strategic target as a bounded fallback when
+            // the shared provider is unavailable or rejects a request. This
+            // preserves movement instead of leaving a captain in an empty
+            // "waiting for orders" task.
             AWArmyMarchService.ClearArmy(pArmy.id);
-            pRuntime.RouteSubmitted = true;
+            pRuntime.RouteSubmitted = false;
             pRuntime.RouteArrived = IsInsideTargetTerritory(captain,
                 targetCity);
-            pRuntime.AnchorTileId = -1;
+            pRuntime.AnchorTileId = strategicTarget.data.tile_id;
             pRuntime.AlternateTargetTileId = -1;
             pRuntime.TransportRouteConfirmed = false;
             pRuntime.ForceTransportRoute = false;
+            if (pMission.ProposalKind == ArmyRtsProposalKind.Attack)
+                TryIssueVanillaCityAttackOrder(pArmy, pMission,
+                    targetCity);
+            RegisterRouteFailure(pRuntime, routeFingerprint,
+                handle.FailureReason);
+            LogStrategicRouteFailure(pArmy, pMission, pRuntime,
+                captain, strategicTarget, ArmyRoutePollKind.Failed,
+                handle.FailureReason);
+        }
+
+        private static void ProcessPendingStrategicRoute(Army pArmy,
+            ArmyRtsMission pMission, RuntimeState pRuntime)
+        {
+            if (pArmy?.data == null || pMission == null || pRuntime == null ||
+                !pRuntime.RouteSubmitted ||
+                ArmyRtsTransportService.HasActiveVoyage(pArmy)) return;
+
+            WorldTile target = ResolveStableStrategicEndpoint(pArmy,
+                FindCity(pMission.TargetCityId), pRuntime);
+            if (target?.data == null) return;
+
+            // One poll is intentional: the provider is already advanced by
+            // its shared finder lifecycle, and a controller may own only one
+            // result consumption per authority cycle.
+            ArmyRoutePoll poll = AWArmyMarchService.PollStrategicRoute(pArmy);
+            if (poll.Kind == ArmyRoutePollKind.Waiting) return;
+            if (poll.Kind == ArmyRoutePollKind.StepReady)
+            {
+                if (poll.MovementMethod == AWMovementMethod.Transport)
+                {
+                    pRuntime.TransportRouteConfirmed = true;
+                    pRuntime.ForceTransportRoute = true;
+                    pRuntime.RouteSubmitted = false;
+                    pRuntime.RouteArrived = false;
+                    pRuntime.AnchorTileId = -1;
+                    AWArmyMarchService.ClearArmy(pArmy.id);
+                    Controllers.Requeue(pArmy.id);
+                }
+                else if (pRuntime.RouteProgress < int.MaxValue)
+                    pRuntime.RouteProgress++;
+                return;
+            }
+
+            if (poll.Kind == ArmyRoutePollKind.Completed)
+            {
+                bool useTransport = AWArmyMarchService.
+                    TryGetCompletedLandRouteCost(pArmy,
+                        out float landRouteCost) &&
+                    ArmyRtsTransportService.TryGetRouteEstimate(
+                        pArmy, target,
+                        out ArmyRtsTransportEstimate estimate) &&
+                    ArmyRtsRouteChoiceRules.Resolve(landRouteCost, true,
+                        estimate.PickupCost, estimate.QueueCost,
+                        estimate.SeaCost, estimate.LandingCost) ==
+                    ArmyRtsTravelChoice.Transport;
+                if (useTransport)
+                {
+                    pRuntime.TransportRouteConfirmed = true;
+                    pRuntime.ForceTransportRoute = true;
+                    pRuntime.RouteSubmitted = false;
+                    pRuntime.RouteArrived = false;
+                    pRuntime.AnchorTileId = -1;
+                    AWArmyMarchService.ClearArmy(pArmy.id);
+                    Controllers.Requeue(pArmy.id);
+                    return;
+                }
+
+                pRuntime.TransportRouteConfirmed = false;
+                pRuntime.ForceTransportRoute = false;
+                pRuntime.RouteSubmitted = false;
+                pRuntime.RouteArrived = IsInsideTargetTerritory(
+                    SafeCaptain(pArmy), FindCity(pMission.TargetCityId));
+                pRuntime.AnchorTileId = target.data.tile_id;
+                pRuntime.AlternateTargetTileId = -1;
+                if (pMission.ProposalKind == ArmyRtsProposalKind.Attack)
+                    TryIssueVanillaCityAttackOrder(pArmy, pMission,
+                        FindCity(pMission.TargetCityId));
+                ResetRouteRetry(pRuntime);
+                Controllers.Requeue(pArmy.id);
+                return;
+            }
+
+            if (poll.Kind == ArmyRoutePollKind.Failed ||
+                poll.Kind == ArmyRoutePollKind.Cancelled ||
+                poll.Kind == ArmyRoutePollKind.NoRequest)
+            {
+                Actor captain = SafeCaptain(pArmy);
+                City targetCity = FindCity(pMission.TargetCityId);
+                AWArmyMarchService.ClearArmy(pArmy.id);
+                pRuntime.RouteSubmitted = false;
+                pRuntime.RouteArrived = IsInsideTargetTerritory(captain,
+                    targetCity);
+                pRuntime.AnchorTileId = target.data.tile_id;
+                pRuntime.TransportRouteConfirmed = false;
+                pRuntime.ForceTransportRoute = false;
+                if (pMission.ProposalKind == ArmyRtsProposalKind.Attack)
+                    TryIssueVanillaCityAttackOrder(pArmy, pMission,
+                        targetCity);
+                bool terminal = poll.Kind == ArmyRoutePollKind.Failed ||
+                                poll.Kind == ArmyRoutePollKind.Cancelled;
+                if (ArmyRtsRules.ShouldRetryStrategicRouteAfterPoll(
+                        terminal, targetCity?.data != null,
+                        retryCoolingDown: IsRouteRetryCoolingDown(pArmy.id)))
+                {
+                    string fingerprint = BuildRouteFailureFingerprint(
+                        pArmy, pMission, target,
+                        SafeSameIsland(captain?.current_tile, target));
+                    RegisterRouteFailure(pRuntime, fingerprint,
+                        poll.FailureReason);
+                    ArmyStallWatchdogService.OnRouteFailed(pArmy.id);
+                    LogStrategicRouteFailure(pArmy, pMission, pRuntime,
+                        captain, target, poll.Kind, poll.FailureReason);
+                }
+            }
+        }
+
+        private static string BuildRouteFailureFingerprint(Army pArmy,
+            ArmyRtsMission pMission, WorldTile pTarget, bool pSameIsland)
+        {
+            return (pArmy?.id ?? -1L) + ":" +
+                   (pMission?.TargetCityId ?? -1L) + ":" +
+                   (pTarget?.data?.tile_id ?? -1) + ":" +
+                   AWDockTransportService.TopologyRevision + ":" +
+                   pSameIsland;
+        }
+
+        private static void ResetRouteRetry(RuntimeState pRuntime)
+        {
+            if (pRuntime == null) return;
+            pRuntime.RouteFailureFingerprint = string.Empty;
+            pRuntime.RouteFailureCount = 0;
+            pRuntime.NextRouteAttemptAt = 0d;
+            pRuntime.LastRouteFailureReason = string.Empty;
+            pRuntime.TransportAttemptActive = false;
+        }
+
+        private static void RegisterRouteFailure(RuntimeState pRuntime,
+            string pFingerprint, string pReason)
+        {
+            if (pRuntime == null) return;
+            string fingerprint = pFingerprint ?? string.Empty;
+            if (string.Equals(fingerprint,
+                    pRuntime.RouteFailureFingerprint,
+                    StringComparison.Ordinal))
+                pRuntime.RouteFailureCount = Math.Min(
+                    pRuntime.RouteFailureCount + 1, 10);
+            else
+                pRuntime.RouteFailureCount = 1;
+            pRuntime.RouteFailureFingerprint = fingerprint;
+            pRuntime.NextRouteAttemptAt = CurrentRealtime() +
+                Math.Min(MaximumRouteRetryCooldownSeconds,
+                    InitialRouteRetryCooldownSeconds * Math.Pow(2d,
+                        Math.Max(0, pRuntime.RouteFailureCount - 1)));
+            pRuntime.LastRouteFailureReason = pReason ?? string.Empty;
+            pRuntime.TransportAttemptActive = false;
         }
 
         private static bool TryActivateStrategicTransport(Army pArmy,
@@ -5316,7 +5803,9 @@ namespace AncientWarfare3.core.lineage
                 pArmy);
             bool routeAvailable = activeVoyage ||
                 AWDockTransportService.TryResolveRoute(
-                    pCaptain.current_tile, pTarget, out _);
+                    pCaptain.current_tile, pTarget, out _) ||
+                AWDockTransportService.TryResolveEmergencyShoreRoute(
+                    pCaptain.current_tile, pTarget, out _, out _);
             bool shouldActivate = ArmyRtsTransportRules.
                 ShouldActivateStrategicTransport(
                     ArmyRtsRuntimeMode.ShouldCommit,
@@ -5352,7 +5841,7 @@ namespace AncientWarfare3.core.lineage
             string reason = string.IsNullOrWhiteSpace(pFailureReason)
                 ? "unspecified"
                 : pFailureReason;
-            AncientWarfare3.ModClass.LogWarning(
+            AncientWarfare3.ModClass.LogError(
                 "[Army RTS route failure] army=" +
                 (pArmy?.id ?? -1L) +
                 " state=" + state +
@@ -5368,7 +5857,9 @@ namespace AncientWarfare3.core.lineage
                 " alternate_endpoint=" +
                 (pRuntime?.AlternateTargetTileId >= 0) +
                 " kind=" + pKind +
-                " reason=" + reason);
+                " reason=" + reason +
+                " transport_diag=" +
+                ArmyRtsTransportDiagnostics.Snapshot());
         }
 
         private static ArmyRtsState ResolvePursuitState(Actor pCaptain,
@@ -5623,9 +6114,18 @@ namespace AncientWarfare3.core.lineage
             RuntimeState pRuntime, ArmyRtsMission pMission,
             ArmyRtsState pState)
         {
-            ArmyRouteProviderService.Cancel(pArmy.id,
-                ArmyRouteCancelReason.TargetReplaced);
-            AWArmyMarchService.ClearArmy(pArmy.id);
+            bool preserveFailedFallback =
+                IsRouteRetryCoolingDown(pArmy.id) &&
+                pRuntime.AnchorTileId >= 0;
+            if (!preserveFailedFallback &&
+                !ArmyRtsRules.ShouldPreserveStrategicRoute(
+                    pRuntime.RouteSubmitted, pRuntime.RouteArrived,
+                    ArmyRtsTransportService.HasActiveVoyage(pArmy)))
+            {
+                ArmyRouteProviderService.Cancel(pArmy.id,
+                    ArmyRouteCancelReason.TargetReplaced);
+                AWArmyMarchService.ClearArmy(pArmy.id);
+            }
             ClearIndependentMemberPaths(pArmy, pRuntime);
             Actor captain = SafeCaptain(pArmy);
             if (IsLiveCombatantActor(captain))
@@ -5633,10 +6133,9 @@ namespace AncientWarfare3.core.lineage
                 SetJob(captain, ArmyRtsContent.CaptainJobId,
                     ArmyRtsContent.ResolveCaptainTaskId(pState,
                         ArmyRtsTransportService.GetPhase(pArmy)));
-                if (pState != ArmyRtsState.Rally)
-                    ArmyMilitaryMovementPriorityIndex.Register(
-                        captain.data.id,
-                        ArmyMilitaryMovementPriorityKind.RtsMember);
+                ArmyMilitaryMovementPriorityIndex.Register(
+                    captain.data.id,
+                    ArmyMilitaryMovementPriorityKind.RtsMember);
             }
             int count;
             try { count = pArmy.units.Count; }
@@ -5649,8 +6148,7 @@ namespace AncientWarfare3.core.lineage
                 Actor actor = pArmy.units[i];
                 if (actor == captain) continue;
                 SetNativeMemberMissionTask(actor, pArmy);
-                if (pState != ArmyRtsState.Rally &&
-                    IsLiveWarriorActor(actor) &&
+                if (IsLiveWarriorActor(actor) &&
                     !HasImmediateCombatPriority(actor))
                     ArmyMilitaryMovementPriorityIndex.Register(
                         actor.data.id,
@@ -5666,9 +6164,18 @@ namespace AncientWarfare3.core.lineage
         private static void EnsureVanillaRetreatJobs(Army pArmy,
             RuntimeState pRuntime)
         {
-            ArmyRouteProviderService.Cancel(pArmy.id,
-                ArmyRouteCancelReason.TargetReplaced);
-            AWArmyMarchService.ClearArmy(pArmy.id);
+            bool preserveFailedFallback =
+                IsRouteRetryCoolingDown(pArmy.id) &&
+                pRuntime.AnchorTileId >= 0;
+            if (!preserveFailedFallback &&
+                !ArmyRtsRules.ShouldPreserveStrategicRoute(
+                    pRuntime.RouteSubmitted, pRuntime.RouteArrived,
+                    ArmyRtsTransportService.HasActiveVoyage(pArmy)))
+            {
+                ArmyRouteProviderService.Cancel(pArmy.id,
+                    ArmyRouteCancelReason.TargetReplaced);
+                AWArmyMarchService.ClearArmy(pArmy.id);
+            }
             Actor captain = SafeCaptain(pArmy);
             SetJob(captain, ArmyRtsContent.RetreatCaptainJobId,
                 ArmyRtsContent.RetreatTaskId);
@@ -5715,13 +6222,11 @@ namespace AncientWarfare3.core.lineage
                     frontHold ? ArmyRtsContent.HoldTaskId
                         : ArmyRtsContent.ResolveCaptainTaskId(pState,
                             ArmyRtsTransportService.GetPhase(pArmy)));
+                ArmyMilitaryMovementPriorityIndex.Register(
+                    captain.data.id,
+                    ArmyMilitaryMovementPriorityKind.RtsMember);
                 if (pState != ArmyRtsState.Rally)
-                {
-                    ArmyMilitaryMovementPriorityIndex.Register(
-                        captain.data.id,
-                        ArmyMilitaryMovementPriorityKind.RtsMember);
                     TrySubmitCaptainObjectiveRoute(captain, pRuntime);
-                }
             }
             else
                 ReleaseActor(captain);
@@ -5746,13 +6251,11 @@ namespace AncientWarfare3.core.lineage
                 if (ownsObjective)
                 {
                     SetJob(actor, ArmyRtsContent.FollowerJobId);
+                    ArmyMilitaryMovementPriorityIndex.Register(
+                        actor.data.id,
+                        ArmyMilitaryMovementPriorityKind.RtsMember);
                     if (pState != ArmyRtsState.Rally)
-                    {
-                        ArmyMilitaryMovementPriorityIndex.Register(
-                            actor.data.id,
-                            ArmyMilitaryMovementPriorityKind.RtsMember);
                         TrySubmitMemberObjectiveRoute(actor, pRuntime);
-                    }
                 }
                 else
                     ReleaseActor(actor);
@@ -6059,13 +6562,22 @@ namespace AncientWarfare3.core.lineage
                     ArmyRtsCaptainCombatRules.ShouldUseSiegeCombatTask(
                         runtime.SiegeCombatActive,
                         IsInsideCityCombatZone(pActor, activeSiegeCity));
-                if (useSiegeCombatTask)
-                {
-                    jobId = ArmyRtsContent.MemberCombatJobId;
-                    taskId = ArmyRtsContent.SiegeCombatTaskId;
-                }
-                else if (HasValidMemberCombatTarget(pActor) &&
-                    pActor.isTask("fighting")) return;
+            if (useSiegeCombatTask)
+            {
+                jobId = ArmyRtsContent.MemberCombatJobId;
+                taskId = ArmyRtsContent.SiegeCombatTaskId;
+            }
+            else if (runtime?.FieldCombatReleased == true)
+            {
+                // Field combat owns the member task as well as the captain.
+                // The custom behaviour can discover ordinary enemy residents;
+                // vanilla fighting would reject same-species civilians before
+                // the RTS target gate gets a chance to evaluate them.
+                jobId = ArmyRtsContent.MemberCombatJobId;
+                taskId = ArmyRtsContent.MemberCombatTaskId;
+            }
+            else if (HasValidMemberCombatTarget(pActor) &&
+                pActor.isTask("fighting")) return;
             }
             bool taskMissing = !pActor.isTask(taskId);
             SetJob(pActor, jobId, taskId,
@@ -6390,6 +6902,25 @@ namespace AncientWarfare3.core.lineage
             catch { }
             return ArmyRtsWarLifecycleRules.ShouldTreatAsTargetTerritory(
                 exact, border, adjacent);
+        }
+
+        private static bool IsInsideRetreatTerritory(Actor pActor,
+            City pTarget)
+        {
+            if (pActor?.current_tile == null || pTarget?.data == null)
+                return false;
+            TileZone currentZone = null;
+            try { currentZone = pActor.current_tile.zone; }
+            catch { }
+            bool exact = currentZone?.city == pTarget;
+            bool border = false;
+            try
+            {
+                border = currentZone != null && pTarget.border_zones != null &&
+                         pTarget.border_zones.Contains(currentZone);
+            }
+            catch { }
+            return ArmyRtsRules.ShouldLatchRetreatArrival(exact, border);
         }
 
         internal static bool IsVanillaCombatArmy(Army pArmy)

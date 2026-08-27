@@ -34,6 +34,8 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomYear(Kingdom pKingdom)
         {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return;
+            MandateBorderWallRefreshService.OnKingdomYear(pKingdom);
             // 年度自动整备已改为天朝决议槽推进，保留空钩子避免旧 patch 调用报错。
         }
 
@@ -596,10 +598,17 @@ namespace AncientWarfare3.core.lineage
                 bool mandateTributary =
                     VassalService.GetTributarySuzerain(pNeighbour) ==
                     pMandate;
+                bool rebelKingdom = MandateRebelService.IsRebelKingdom(
+                    pNeighbour);
+                bool banditKingdom = PeasantRebelRouteService.
+                    IsBanditOrEntering(pNeighbour);
+                bool guiyiKingdom = PeasantRebelGuiyiService.IsGuiyi(
+                    pNeighbour);
                 bool target = MandateBorderWallRules.ShouldFortifyKingdom(
                     true, !pNeighbour.isRekt(), pNeighbour.isNeutral(),
-                    sameSystem, sameAlliance, mandateTributary);
-                if (!target || !pPoorRelationOnly) return target;
+                    sameSystem, sameAlliance, mandateTributary,
+                    rebelKingdom, banditKingdom, guiyiKingdom);
+                if (!target) return false;
                 try
                 {
                     int opinion = World.world.diplomacy.

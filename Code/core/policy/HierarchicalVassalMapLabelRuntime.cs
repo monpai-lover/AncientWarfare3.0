@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
+using UnityEngine;
 
 namespace AncientWarfare3.core.policy
 {
@@ -233,9 +234,10 @@ namespace AncientWarfare3.core.policy
             }
             if (_processFailureRetryCount >= 3)
             {
-                _activeViewDirty = false;
-                _rootCountriesDirty = false;
-                _rootCitiesDirty = false;
+                // Preserve the last published labels and stop retrying a
+                // permanent fault every frame. Any later dirty notification
+                // resets the counter and permits a fresh batch.
+                return;
             }
         }
 
@@ -415,7 +417,7 @@ namespace AncientWarfare3.core.policy
                     _currentSource = source;
                     _currentJob = HierarchicalVassalLabelBuildJob.
                         CreateFromZones(source.EntityId, source.DisplayName,
-                            source.Zones, !source.Country);
+                            source.Zones, !source.Country, source.RegionAnchor);
                 }
 
                 HierarchicalVassalLabelBuildProgress progress =
@@ -540,7 +542,8 @@ namespace AncientWarfare3.core.policy
             _pendingRegionSources = (_refreshKind ==
                 HierarchicalVassalLabelRefreshKind.RootCities ||
                 _refreshKind == HierarchicalVassalLabelRefreshKind.ActiveView) &&
-                HierarchicalVassalMapModeService.IsCityRegionLayer
+                HierarchicalVassalMapModeService.IsCityRegionLayer &&
+                !HierarchicalVassalMapModeService.IsCityGlobalRegionLayer
                 ? result.RegionSources : null;
             _pendingCitySources = _refreshKind ==
                 HierarchicalVassalLabelRefreshKind.RootCities ||
@@ -690,7 +693,7 @@ namespace AncientWarfare3.core.policy
             var source = new LabelSource(
                 BuildKey(pFocusKey, city.id, true), city.id, name,
                 false, false, city.kingdom, city, pSource.Zones,
-                pSource.ZoneIds);
+                pSource.ZoneIds, -1L, null);
             RegisterConvertedSource(source);
         }
 
@@ -706,7 +709,9 @@ namespace AncientWarfare3.core.policy
                 BuildKey(pFocusKey, pSource.Region.SeatCityId,
                     "region"), pSource.Region.SeatCityId, name, false,
                 true, pSource.SeatCity.kingdom, pSource.SeatCity, pSource.Zones,
-                pSource.ZoneIds);
+                pSource.ZoneIds, pSource.Region.RegionId,
+                new Vector2(pSource.SeatCity.city_center.x,
+                    pSource.SeatCity.city_center.y));
             RegisterConvertedSource(source);
         }
 
@@ -722,13 +727,18 @@ namespace AncientWarfare3.core.policy
             var source = new LabelSource(
                 BuildKey(pFocusKey, kingdom.id, false), kingdom.id,
                 name, true, false, kingdom, null, pTerritory.Zones,
-                pTerritory.ZoneIds);
+                pTerritory.ZoneIds, -1L, null);
             RegisterConvertedSource(source);
         }
 
         private static void RegisterConvertedSource(LabelSource pSource)
         {
             if (pSource == null) return;
+            if (pSource.Region && pSource.RegionId >= 0L)
+                for (int index = 0; index < _sources.Count; index++)
+                    if (_sources[index]?.Region == true &&
+                        _sources[index].RegionId == pSource.RegionId)
+                        return;
             _sources.Add(pSource);
             BatchSourceGenerations[pSource.Key] =
                 GetSourceGeneration(pSource.Key);
@@ -1356,12 +1366,15 @@ namespace AncientWarfare3.core.policy
             internal readonly City City;
             internal readonly IReadOnlyList<TileZone> Zones;
             internal readonly HashSet<int> ZoneIds;
+            internal readonly long RegionId;
+            internal readonly Vector2? RegionAnchor;
 
             internal LabelSource(string pKey, long pEntityId,
                 string pDisplayName, bool pCountry, bool pRegion,
                 Kingdom pKingdom,
                 City pCity, IReadOnlyList<TileZone> pZones,
-                HashSet<int> pZoneIds)
+                HashSet<int> pZoneIds, long pRegionId,
+                Vector2? pRegionAnchor)
             {
                 Key = pKey;
                 EntityId = pEntityId;
@@ -1372,6 +1385,8 @@ namespace AncientWarfare3.core.policy
                 City = pCity;
                 Zones = pZones ?? Array.Empty<TileZone>();
                 ZoneIds = pZoneIds ?? new HashSet<int>();
+                RegionId = pRegionId;
+                RegionAnchor = pRegionAnchor;
             }
         }
     }

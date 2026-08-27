@@ -22,7 +22,9 @@ $authorityPath = Join-Path $projectRoot `
     'Code/core/performance/AWAuthorityCycleService.cs'
 $authority = Get-Content -Raw -Encoding UTF8 $authorityPath
 if ($authority -notmatch
-    'if \(!pGate\.TryEnter\(pCycleToken, allowed\)\) return;') {
+    'if \(!CooperativeGate\.TryEnter\(pCycleToken, allowed\)\)' -and
+    $authority -notmatch
+    'if \(!pGate\.TryEnter\(pCycleToken, CanRunAuthorityCycle\(pPaused\)\)\)') {
     throw 'AW authority work must remain behind the cycle-token gate.'
 }
 

@@ -181,6 +181,13 @@ namespace AncientWarfare3.core.lineage
         internal static int InvalidateOpenDeJureRegionGoals(
             SQLiteConnection pDb, long pRegionId)
         {
+            return InvalidateOpenDeJureRegionGoals(pDb, pRegionId,
+                (DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds);
+        }
+
+        internal static int InvalidateOpenDeJureRegionGoals(
+            SQLiteConnection pDb, long pRegionId, double pResolvedTime)
+        {
             if (pDb == null || pRegionId < 0L) return 0;
             try
             {
@@ -192,7 +199,7 @@ namespace AncientWarfare3.core.lineage
                         "SOURCE_DE_JURE_REGION_ID=@region"
                 };
                 command.Parameters.AddWithValue("@time",
-                    LineageService.CurTime());
+                    pResolvedTime);
                 command.Parameters.AddWithValue("@result",
                     "de_jure_region_retired");
                 command.Parameters.AddWithValue("@type",

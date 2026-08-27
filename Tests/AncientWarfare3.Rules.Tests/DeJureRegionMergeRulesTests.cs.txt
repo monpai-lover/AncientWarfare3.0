@@ -1,0 +1,57 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class DeJureRegionMergeRulesTests
+{
+    internal static void Run()
+    {
+        True(DeJureRegionMergeRules.CanMerge(
+            primaryActive: true, primaryMemberCount: 1,
+            secondaryActive: true, secondaryMemberCount: 1,
+            sameKingdom: true, adjacent: true,
+            primaryEligible: true, secondaryEligible: true),
+            "two adjacent same-kingdom single-city regions can merge");
+        False(DeJureRegionMergeRules.CanMerge(
+            true, 2, true, 1, true, true, true, true),
+            "multi-city primary is rejected");
+        False(DeJureRegionMergeRules.CanMerge(
+            true, 1, true, 1, false, true, true, true),
+            "cross-kingdom regions are rejected");
+        False(DeJureRegionMergeRules.CanMerge(
+            true, 1, true, 1, true, false, true, true),
+            "non-adjacent regions are rejected");
+        False(DeJureRegionMergeRules.CanMerge(
+            true, 1, false, 1, true, true, true, true),
+            "retired region is rejected");
+        Equal(-1, DeJureRegionMergeRules.ComparePrimary(
+            100, 20, 50, 90, 4, 7),
+            "higher population wins primary tie-break");
+        Equal(-1, DeJureRegionMergeRules.ComparePrimary(
+            50, 50, 90, 20, 8, 3),
+            "higher economy wins equal-population tie-break");
+        Equal(-1, DeJureRegionMergeRules.ComparePrimary(
+            50, 50, 20, 20, 4, 7),
+            "lower region id wins final tie-break");
+        True(DeJureRegionMergeRules.CooldownAllows(-1, 100),
+            "unset cooldown allows execution");
+        False(DeJureRegionMergeRules.CooldownAllows(100, 102),
+            "same short cooldown window rejects execution");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                                                expected + ", got " + actual);
+    }
+}

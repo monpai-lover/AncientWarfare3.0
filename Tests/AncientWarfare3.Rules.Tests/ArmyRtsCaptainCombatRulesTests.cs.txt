@@ -118,7 +118,7 @@ internal static class ArmyRtsCaptainCombatRulesTests
                    StringComparison.Ordinal),
             "the captain combat task is registered in the RTS captain job");
         Assert(content.Contains("MemberCombatTaskId", StringComparison.Ordinal) &&
-               content.Contains("new BehFightCheckEnemyIsOk()",
+               content.Contains("new BehArmyRtsMemberCombat()",
                    StringComparison.Ordinal) &&
                content.Contains("GoToActorTargetType.SameTile",
                    StringComparison.Ordinal),
@@ -170,10 +170,10 @@ internal static class ArmyRtsCaptainCombatRulesTests
                    "HasValidMemberCombatTarget(pActor)",
                    StringComparison.Ordinal),
             "job repair cannot replace an individually engaged member combatant with follow before the army-wide threshold is reached");
-        Assert(!memberMissionBody.Contains(
-                   "runtime.FieldCombatReleased ||",
+        Assert(memberMissionBody.Contains(
+                   "runtime?.FieldCombatReleased == true",
                    StringComparison.Ordinal),
-            "active field combat leaves targetless soldiers on original follow");
+            "active field combat gives targetless soldiers the bounded RTS combat task");
         Assert(memberMissionBody.Contains(
                    "ArmyRtsCaptainCombatRules.ShouldUseSiegeCombatTask(",
                    StringComparison.Ordinal) &&
@@ -199,11 +199,11 @@ internal static class ArmyRtsCaptainCombatRulesTests
                    "ArmyRtsContent.SiegeCombatTaskId",
                    StringComparison.Ordinal),
             "siege entry evaluates each member's city position instead of assigning the siege task army-wide");
-        Assert(!behaviour.Contains("BehArmyRtsMemberCombat",
+        Assert(behaviour.Contains("BehArmyRtsMemberCombat",
                    StringComparison.Ordinal) &&
-               !controller.Contains("FindMemberCombatTarget(",
+               controller.Contains("FindCaptainCombatTarget(",
                    StringComparison.Ordinal),
-            "member combat has no duplicate RTS target search or chase behavior");
+            "member combat reuses the bounded RTS target search for civilian targets");
         int assignedTargetStart = controller.IndexOf(
             "internal static bool IsValidAssignedCombatTarget(",
             StringComparison.Ordinal);

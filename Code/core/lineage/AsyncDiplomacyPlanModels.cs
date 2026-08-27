@@ -410,12 +410,69 @@ namespace AncientWarfare3.core.lineage
         {
             var result = new List<WarStrategyCandidate>();
             if (pTargets == null) return result;
+            var targets = new List<StrategyTargetFacts>();
             foreach (StrategyTargetFacts target in pTargets)
+            {
+                targets.Add(target);
                 if (TryEvaluate(pSource, target,
                         out WarStrategyCandidate candidate))
                     result.Add(candidate);
+            }
             result.Sort(Compare);
-            return result;
+            return FilterByBorderPreference(result, targets);
+        }
+
+        public static bool IsPreferredTarget(KingdomStrategyFacts pSource,
+            IEnumerable<StrategyTargetFacts> pTargets, long pTargetKingdomId,
+            WarStrategyCandidateKind pExpectedKind =
+                WarStrategyCandidateKind.None)
+        {
+            IReadOnlyList<WarStrategyCandidate> candidates =
+                RankCandidates(pSource, pTargets);
+            for (int index = 0; index < candidates.Count; index++)
+            {
+                WarStrategyCandidate candidate = candidates[index];
+                if (candidate.TargetKingdomId == pTargetKingdomId &&
+                    (pExpectedKind == WarStrategyCandidateKind.None ||
+                     candidate.Kind == pExpectedKind)) return true;
+            }
+            return false;
+        }
+
+        private static IReadOnlyList<WarStrategyCandidate>
+            FilterByBorderPreference(
+                IReadOnlyList<WarStrategyCandidate> pCandidates,
+                IReadOnlyList<StrategyTargetFacts> pTargets)
+        {
+            if (pCandidates == null || pCandidates.Count == 0 ||
+                pTargets == null || pTargets.Count == 0)
+                return pCandidates ?? Array.Empty<WarStrategyCandidate>();
+
+            var neighboringIds = new HashSet<long>();
+            for (int index = 0; index < pTargets.Count; index++)
+            {
+                StrategyTargetFacts target = pTargets[index];
+                if (!target.Neighbor) continue;
+                for (int candidateIndex = 0;
+                     candidateIndex < pCandidates.Count; candidateIndex++)
+                    if (pCandidates[candidateIndex].TargetKingdomId ==
+                        target.TargetId)
+                    {
+                        neighboringIds.Add(target.TargetId);
+                        break;
+                    }
+            }
+            if (neighboringIds.Count == 0) return pCandidates;
+
+            var filtered = new List<WarStrategyCandidate>(
+                neighboringIds.Count);
+            for (int index = 0; index < pCandidates.Count; index++)
+            {
+                WarStrategyCandidate candidate = pCandidates[index];
+                if (neighboringIds.Contains(candidate.TargetKingdomId))
+                    filtered.Add(candidate);
+            }
+            return filtered;
         }
 
         public static bool MatchesKind(WarStrategyCandidateKind pPlanKind,

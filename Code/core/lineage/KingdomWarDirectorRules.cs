@@ -468,6 +468,12 @@ namespace AncientWarfare3.core.lineage
         public const int MinimumAttackRatioBasisPoints = 105;
         public const int MaximumAttackRatioBasisPoints = 160;
 
+        public static bool ShouldSelectFirstOrderArmy(bool eligible,
+            bool hasMission)
+        {
+            return eligible && !hasMission;
+        }
+
         public static IReadOnlyList<WarAllocationFacts> SelectWarPlans(
             IReadOnlyList<WarAllocationFacts> pWars, int maximumPlans)
         {

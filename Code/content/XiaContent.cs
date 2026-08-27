@@ -37,7 +37,6 @@ namespace AncientWarfare3.content
             FeudatoryContent.Init();
             WarMobilizationContent.Init();
             IslandEscapeContent.Init();
-            WartimeGarrisonContent.Init();
             StandingArmyPeacetimeContent.Init();
             XiaReproductionDecisionContent.Init();
             core.lineage.WarPlotRedirectService.Init();

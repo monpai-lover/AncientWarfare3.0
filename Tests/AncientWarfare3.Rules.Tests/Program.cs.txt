@@ -6,8 +6,67 @@ using AncientWarfare3.core.naming;
 using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.presentation;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
+
+if (args.Length == 1 && args[0] == "--legacy-deferred-work-removal")
+{
+    LegacyDeferredWorkRemovalSourceGuardTests.Run();
+    Console.WriteLine("Legacy deferred work removal guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--county-renaming")
+{
+    CountyRenameRulesTests.Run();
+    CountyRenameSourceGuardTests.Run();
+    Console.WriteLine("County rename rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--city-military-threat-facts")
+{
+    CityMilitaryThreatFactsRulesTests.Run();
+    Console.WriteLine("City military threat facts rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--city-military-threat-events")
+{
+    CityMilitaryThreatEventSourceGuardTests.Run();
+    Console.WriteLine("City military threat event guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--army-rts-succession")
+{
+    ArmyRtsSuccessionRecoveryRulesTests.Run();
+    Console.WriteLine("AW3 army RTS succession rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--warrior-army-membership")
+{
+    WarriorArmyMembershipRulesTests.Run();
+    WarriorArmyMembershipSourceGuardTests.Run();
+    Console.WriteLine("Warrior army membership rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--actor-load-city-safety")
+{
+    ActorLoadCitySafetyRulesTests.Run();
+    Console.WriteLine("Actor load city safety rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--diplomacy-tributary-details")
+{
+    DiplomacyTributaryDetailsRulesTests.Run();
+    Console.WriteLine("Diplomacy tributary details rules passed.");
+    return;
+}
 
 if (args.Length == 1 && args[0] == "--island-escape-behaviour")
 {
@@ -32,6 +91,165 @@ if (args.Length == 1 && args[0] == "--reverse-xiaization")
 if (args.Length == 1 && args[0] == "--court-history-localization")
 {
     CourtHistoryLocalizationRegressionTests.Run();
+    ManualLocalChiefAppointmentRulesTests.Run();
+    ManualLocalChiefAppointmentSourceGuardTests.Run();
+    DeJureSeatRenameSourceGuardTests.Run();
+    DeJureSeatNameSyncSourceGuardTests.Run();
+    GlobalDeJureEmptyClickSourceGuardTests.Run();
+    LocalCourtCountyMapFixSourceGuardTests.Run();
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--nameplate-refresh")
+{
+    NameplateRefreshRulesTests.Run();
+    PresentationRefreshRulesTests.Run();
+    Console.WriteLine("Nameplate refresh rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--dejure-maintenance")
+{
+    DeJureRegionMaintenanceSourceGuardTests.Run();
+    Console.WriteLine("De jure maintenance source guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--dejure-read-path")
+{
+    DeJureRegionReadPathSourceGuardTests.Run();
+    Console.WriteLine("De jure read-path guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--dejure-authority-stage")
+{
+    DeJureAuthorityStageSourceGuardTests.Run();
+    Console.WriteLine("De jure authority-stage guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--dejure-dirty-events")
+{
+    DeJureDirtyEventSourceGuardTests.Run();
+    Console.WriteLine("De jure dirty-event guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--dejure-dirty-rules")
+{
+    DeJureDirtyMaintenanceRulesTests.Run();
+    Console.WriteLine("De jure dirty-maintenance rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--incremental-simobjects-safety")
+{
+    AWIncrementalSimObjectZoneUnitsSourceGuardTests.Run();
+    Console.WriteLine("Incremental SimObjects/Zones safety guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--frame-priority-stability")
+{
+    FramePrioritySchedulerStabilitySourceGuardTests.Run();
+    Console.WriteLine("Frame-priority scheduler stability guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--path-generator-bounds")
+{
+    PathGeneratorBoundsRegressionSourceGuardTests.Run();
+    Console.WriteLine("Path generator bounds guard passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--path-generator-snapshot")
+{
+    PathGeneratorSnapshotRegressionTests.Run();
+    Console.WriteLine("Path generator snapshot regression passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--rts-authority-log-regression")
+{
+    RtsAuthorityLogRegressionTests.Run();
+    Console.WriteLine("RTS and authority log regression guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--local-court-county-map-fixes")
+{
+    CountyZonePartitionRulesTests.Run();
+    CityAdministrationMapModeRulesTests.Run();
+    StableLiveListSnapshotRulesTests.Run();
+    LocalCourtCountyMapFixSourceGuardTests.Run();
+    Console.WriteLine("Local court, county, and map fix guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--historical-county-names")
+{
+    HistoricalCountyNameRulesTests.Run();
+    Console.WriteLine("Historical county name rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--historical-dejure-naming")
+{
+    XiaHistoricalDeJureRulesTests.Run();
+    Console.WriteLine("Historical de jure naming rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--xia-boat-arrow-projectiles")
+{
+    XiaBoatProjectileSourceGuardTests.Run();
+    Console.WriteLine("Xia boat arrow projectile rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--mandate-capital-transfer")
+{
+    MandateCapitalTransferRulesTests.Run();
+    MandatePhaseRulesTests.Run();
+    Console.WriteLine("Mandate capital transfer rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--war-type-ownership-matrix")
+{
+    WarTypeOwnershipMatrixTests.Run();
+    Console.WriteLine("War type ownership matrix passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--army-replenishment-operation")
+{
+    ArmyReplenishmentOperationRulesTests.Run();
+    Console.WriteLine("Army replenishment operation rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--slave-state-persistence")
+{
+    SlaveStatePersistenceRulesTests.Run();
+    Console.WriteLine("Slave state persistence rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--court-candidate-budget")
+{
+    CourtCandidateBudgetRulesTests.Run();
+    OfficerCandidateCatalogRulesTests.Run();
+    Console.WriteLine("Court candidate budget rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--central-court-vacancy")
+{
+    CentralCourtVacancySourceGuardTests.Run();
+    Console.WriteLine("Central court vacancy source guard passed.");
     return;
 }
 
@@ -93,10 +311,18 @@ if (args.Length == 1 && args[0] == "--historical-school-xia-access")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--historical-school-death-runtime")
+{
+    HistoricalSchoolDeathRuntimeRulesTests.Run();
+    Console.WriteLine("Historical school death runtime rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--war-terminal-settlement")
 {
     WarTerminalSettlementRulesTests.Run();
     WarTerminalSettlementSourceTests.Run();
+    WarPeaceCessionPriorityRulesTests.Run();
     Console.WriteLine("War terminal settlement rules passed.");
     return;
 }
@@ -112,6 +338,13 @@ if (args.Length == 1 && args[0] == "--frame-priority-confirmation")
 {
     FramePrioritySchedulerConfirmationRulesTests.Run();
     Console.WriteLine("Frame-priority scheduler confirmation rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--actor-batch-phase-budget")
+{
+    ActorBatchSchedulerSourceGuardTests.Run();
+    Console.WriteLine("Actor batch scheduler source guards passed.");
     return;
 }
 
@@ -155,6 +388,13 @@ if (args.Length == 1 && args[0] == "--regional-government-court")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--regional-government-map-performance")
+{
+    RegionalGovernmentMapPerformanceSourceGuardTests.Run();
+    Console.WriteLine("Regional government map performance source guard passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--city-administration-mapmode")
 {
     CityAdministrationMapModeRulesTests.Run();
@@ -191,6 +431,14 @@ if (args.Length == 1 && args[0] == "--de-jure-eligibility")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--de-jure-merge-rules")
+{
+    DeJureRegionMergeRulesTests.Run();
+    DeJureRegionMergeSourceGuardTests.Run();
+    Console.WriteLine("De jure merge rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--court-statistics")
 {
     CourtStatisticsRulesTests.Run();
@@ -202,6 +450,36 @@ if (args.Length == 1 && args[0] == "--court-immediate-vacancies")
 {
     CourtImmediateVacancyModeRulesTests.Run();
     Console.WriteLine("Court immediate vacancy rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--court-vacancy-events")
+{
+    CourtVacancyRulesTests.Run();
+    CourtVacancySourceGuardTests.Run();
+    Console.WriteLine("Court vacancy event tests passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--court-appointment-failure-backoff")
+{
+    CourtAppointmentFailureBackoffRulesTests.Run();
+    CentralCourtVacancySourceGuardTests.Run();
+    Console.WriteLine("Court appointment failure backoff rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--city-bureau-retry")
+{
+    CityBureauRetryRulesTests.Run();
+    Console.WriteLine("City bureau retry rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--local-low-office-vacancy")
+{
+    LocalLowOfficeVacancyRulesTests.Run();
+    Console.WriteLine("Local low-office vacancy rules passed.");
     return;
 }
 
@@ -361,6 +639,7 @@ if (args.Length == 1 && args[0] == "--bandit-outlaw-names")
 if (args.Length == 1 && args[0] == "--peasant-rebel-routes")
 {
     PeasantRebelRouteRulesTests.Run();
+    PeasantRebelStateNameRulesTests.Run();
     Console.WriteLine("Peasant rebel route rules passed.");
     return;
 }
@@ -460,6 +739,7 @@ if (args.Length == 1 &&
 }
 KingdomPolicyInheritanceDiagnosticRulesTests.Run();
 VirtualNobleTitleRulesTests.Run();
+HereditaryTitleSuccessionRulesTests.Run();
 
 if (args.Length == 1 && args[0] == "--actor-manual-name-rules")
 {
@@ -544,6 +824,7 @@ if (args.Length == 1 && args[0] == "--rts-war-lifecycle")
     PreparationRecruitmentProtectionRulesTests.Run();
     ArmyRtsWarLifecycleStateTests.Run();
     ArmyRtsCombatHandoffRulesTests.Run();
+    ArmyRtsCombatTargetRulesTests.Run();
     ArmyRtsCaptainCombatRulesTests.Run();
     RoyalGuardTaskRecoveryRulesTests.Run();
     ArmyNativeRouteLockRulesTests.Run();
@@ -651,6 +932,7 @@ if (args.Length == 2 && args[0] == "--benchmark" &&
 if (args.Length == 1 && args[0] == "--idle-throttle-gate")
 {
     IdleBehaviourThrottleGateTests.Run();
+    VanillaLookupOptimizationSourceGuardTests.Run();
     Console.WriteLine("Idle behaviour throttle gate tests passed.");
     return;
 }
@@ -1012,7 +1294,9 @@ if (args.Length == 1 &&
 if (args.Length == 1 && args[0] == "--zhulu-war-slice")
 {
     ZhuluWarRulesTests.Run();
+    WarBorderTargetRulesTests.Run();
     ZhuluAgeRulesTests.Run();
+    MandateMilitaryStrengthRulesTests.Run();
     Console.WriteLine("Zhulu war rules passed.");
     return;
 }
@@ -1056,6 +1340,7 @@ if (args.Length == 1 && args[0] == "--actor-runtime")
     CapturedMilitaryOwnershipRulesTests.Run();
     ActorPresentationDirtyRulesTests.Run();
     AWPathRequestReuseRulesTests.Run();
+    AWPathOptimizationRulesTests.Run();
     PathfindingPerformanceTests.Run();
     PathfindingCursorTests.Run();
     SchoolRuntimePerformanceTests.Run();
@@ -1088,6 +1373,20 @@ if (args.Length == 1 && args[0] == "--ruler-household-only")
 {
     RulerHouseholdRulesTests.Run();
     Console.WriteLine("Ruler household rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--historical-figure-catalog")
+{
+    HistoricalFigureSpawnRulesTests.Run();
+    Console.WriteLine("Historical figure catalog rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--global-dejure-map")
+{
+    GlobalDeJureMapModeSourceGuardTests.Run();
+    Console.WriteLine("Global de jure map source guards passed.");
     return;
 }
 
@@ -3336,6 +3635,16 @@ Equal(-4, MandateCoreTransferRules.AllowedAnnualLossDelta(
 Equal(0, MandateCoreTransferRules.AllowedAnnualLossDelta(
         pCurrentAnnualLoss: -12, pRequestedDelta: -2),
     "a consumed annual city-loss budget blocks further loss");
+True(MandateCoreTransferRules.ShouldTransferCapitalRing(
+        pMandateWar: true, pAttackersWon: true,
+        pCapitalCaptured: true, pCityOwnedByFormerMandate: false,
+        pAlreadyTransferred: false),
+    "a captured Mandate capital transfers its adjacent legal ring once");
+Equal(false, MandateCoreTransferRules.ShouldTransferCapitalRing(
+        pMandateWar: true, pAttackersWon: true,
+        pCapitalCaptured: true, pCityOwnedByFormerMandate: false,
+        pAlreadyTransferred: true),
+    "a repeated Mandate end callback cannot transfer the ring twice");
 Equal(-4, MandateDeclineRules.WarDefeatDelta(false, false),
     "ordinary defeat costs four mandate");
 Equal(-7, MandateDeclineRules.WarDefeatDelta(true, false),
@@ -5496,6 +5805,15 @@ Equal(false, SchoolNameplateRenderRules.CanRender("none", 12f, false),
 var eligibleCourtCandidate = CourtFacts();
 True(CourtManualAppointmentRules.CanListCandidate(eligibleCourtCandidate),
     "an eligible domestic man appears in the manual appointment list");
+Equal(false, CourtManualAppointmentRules.CanUseLayerCandidate(
+        CourtOfficeLayer.County, isCityLeader: true),
+    "city leaders cannot be selected as county magistrates");
+True(CourtManualAppointmentRules.CanUseLayerCandidate(
+        CourtOfficeLayer.County, isCityLeader: false),
+    "ordinary eligible actors remain available for county magistrate");
+True(CourtManualAppointmentRules.CanUseLayerCandidate(
+        CourtOfficeLayer.City, isCityLeader: true),
+    "city leaders remain available for their authoritative city office");
 True(CourtManualAppointmentRules.IsSchoolEligible("", "medical"),
     "a schoolless actor remains eligible for every office");
 True(CourtManualAppointmentRules.IsSchoolEligible("ru", "medical"),
@@ -6529,6 +6847,9 @@ Equal(1, OfficialCareerRankRules.ApplyAutomaticRankChange(1, -2),
 True(OfficialCareerBiographyRules.IsCareerEvent(
         "official_appointment_edict"),
     "official rank promotion edicts belong to the career biography timeline");
+True(OfficialCareerBiographyRules.IsCareerEvent(
+        "official_rank_promoted"),
+    "annual merit promotions belong to the career biography timeline");
 True(OfficialCareerBiographyRules.IsCareerEvent("official_evaluation"),
     "official evaluations belong to the career biography timeline");
 True(OfficialCareerBiographyRules.IsCareerEvent("court_officer_appointed") &&
@@ -6569,10 +6890,10 @@ Near(1.17f, OfficialCareerRankRules.InfluenceMultiplier(18), 0.0001f,
     "special-grant officials use the highest influence band");
 Equal(14, OfficialCareerRankRules.RequiredRankForOfficeGrade(10),
     "chief court offices require principal third rank");
-Equal(10, OfficialCareerRankRules.RequiredRankForOfficeGrade(20),
-    "middle court offices require principal fifth rank");
-Equal(6, OfficialCareerRankRules.RequiredRankForOfficeGrade(30),
-    "specialist offices require principal seventh rank");
+Equal(12, OfficialCareerRankRules.RequiredRankForOfficeGrade(20),
+    "middle court offices require fourth rank");
+Equal(11, OfficialCareerRankRules.RequiredRankForOfficeGrade(30),
+    "specialist offices require fourth rank");
 Near(8f, OfficialCareerRankRules.OfficeRankMatchScore(14, 10), 0.0001f,
     "an exact rank-to-office match receives the best score");
 True(OfficialCareerRankRules.OfficeRankMatchScore(8, 10) < 0f,
@@ -8926,6 +9247,7 @@ if (recruitmentPriorityRule != null)
 }
 
 PathfindingPerformanceTests.Run();
+PathGeneratorSnapshotRegressionTests.Run();
 SimulationWorkerPoolTests.Run();
 TableIdAllocatorSqlTests.Run();
 BulkEraseKingdomDisposalRulesTests.Run();
@@ -8978,9 +9300,10 @@ WesternLineageAdmissionPersistenceSqlTests.Run();
 WesternPolicyEffectRulesTests.Run();
 PathfindingRuntimeModeRulesTests.Run();
 ActorRacePerformanceRulesTests.Run();
-ActorBatchPerformanceRulesTests.Run();
+ActorBatchSchedulerSourceGuardTests.Run();
 ArmyRtsControllerPerformanceRulesTests.Run();
 CityMilitaryThreatFactsRulesTests.Run();
+CityOccupationThreatRulesTests.Run();
 ArmyRtsAsyncPlanningRulesTests.Run();
 SchedulerLoadSafetyRulesTests.Run();
 BackgroundThreadCrashBoundaryRulesTests.Run();
@@ -8991,7 +9314,11 @@ SamePeopleWarIntentRulesTests.Run();
 DiplomaticWarAvailabilityRulesTests.Run();
 DiplomaticWarDeclarationLockRulesTests.Run();
 ZhuluWarRulesTests.Run();
+WarBorderTargetRulesTests.Run();
+MandateConquestDirectTransferRulesTests.Run();
+BanditFormerKingSourceGuardTests.Run();
 ZhuluAgeRulesTests.Run();
+MandateMilitaryStrengthRulesTests.Run();
 XiaizationStatusDisplayRulesTests.Run();
 WarGoalSettlementRulesTests.Run();
 DeJureWarGoalSettlementRulesTests.Run();
@@ -9016,6 +9343,7 @@ RebellionForceCollapseRulesTests.Run();
 WarForceEliminationRulesTests.Run();
 WarTerminalSettlementRulesTests.Run();
 WarTerminalSettlementSourceTests.Run();
+WarPeaceCessionPriorityRulesTests.Run();
 SpecialGovernmentWarParticipationRulesTests.Run();
 HistoricalFigureSpawnRulesTests.Run();
 Regression20260721Tests.Run();
@@ -9103,5 +9431,7 @@ HistoricalSchoolXiaAccessRulesTests.Run();
 HistoricalSchoolXiaAccessSourceGuardTests.Run();
 WarRefugeeRulesTests.Run();
 CityShiInfluenceSourceGuardTests.Run();
+CourtVacancyRulesTests.Run();
+CourtVacancySourceGuardTests.Run();
 
 Console.WriteLine("Rule tests passed.");

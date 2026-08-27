@@ -85,6 +85,12 @@ internal static class ArmyRtsSuccessionRecoveryRulesTests
                 liveWarriorCount: 0, missionActive: true,
                 wartimeEmergency: true),
             "an empty army does not retain a captain recovery item");
+        Assert(ArmyRtsSuccessionRecoveryRules.ShouldAttemptCaptainRecovery(
+                currentCycle: 60L, retryAfterCycle: 60L),
+            "captain recovery retries when its bounded cooldown expires");
+        Assert(!ArmyRtsSuccessionRecoveryRules.ShouldAttemptCaptainRecovery(
+                currentCycle: 59L, retryAfterCycle: 60L),
+            "captain recovery does not rescan during its bounded cooldown");
         Assert(ArmyRtsSuccessionRecoveryRules.ShouldInstallWarriorCaptain(
                 candidateEligible: true, captainAlreadyOperational: false),
             "a valid army warrior receives the captain lease even when general appointment is unavailable");

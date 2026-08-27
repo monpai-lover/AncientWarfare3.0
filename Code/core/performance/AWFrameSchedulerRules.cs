@@ -126,6 +126,38 @@ namespace AncientWarfare3.core.performance
             return pEnabled ? AWSimulationMode.Large : AWSimulationMode.Native;
         }
 
+        // Compatibility helpers used by the newer settings and diagnostics
+        // layers. They select a mode without changing the baseline scheduler.
+        public static AWSimulationMode ResolveCachedMode(bool pSchedulerEnabled,
+            bool pLargeStepEnabled, AWSimulationMode? pEnvironmentOverride)
+        {
+            if (pEnvironmentOverride.HasValue)
+                return pEnvironmentOverride.Value;
+            if (!pSchedulerEnabled) return AWSimulationMode.Native;
+            return pLargeStepEnabled ? AWSimulationMode.Large :
+                AWSimulationMode.Fixed;
+        }
+
+        public static AWSimulationMode? ParseEnvironmentOverride(string pValue)
+        {
+            if (string.IsNullOrEmpty(pValue)) return null;
+            switch (pValue.Trim().ToLowerInvariant())
+            {
+                case "0":
+                case "false":
+                case "native":
+                    return AWSimulationMode.Native;
+                case "1":
+                case "true":
+                case "fixed":
+                    return AWSimulationMode.Fixed;
+                case "large":
+                    return AWSimulationMode.Large;
+                default:
+                    return null;
+            }
+        }
+
         public static float ClampTargetFps(float pValue)
         {
             if (float.IsNaN(pValue) || float.IsInfinity(pValue)) return 60f;
@@ -278,6 +310,18 @@ namespace AncientWarfare3.core.performance
             bool loading, bool paused, bool replicaSession)
         {
             return gameLoaded && !loading && !paused && !replicaSession;
+        }
+
+        public static string ResolveAuthorityBlockReason(bool gameLoaded,
+            bool loading, bool paused, bool replicaSession,
+            bool initializationPending)
+        {
+            if (!gameLoaded) return "not_loaded";
+            if (loading) return "loading";
+            if (paused) return "paused";
+            if (replicaSession) return "replica";
+            if (initializationPending) return "initializing";
+            return "none";
         }
 
         public static AWSaveBoundaryAction ResolveSaveBoundary(

@@ -7,6 +7,19 @@ internal static class RegionalGovernmentRulesTests
 {
     public static void Run()
     {
+        Equal("历史县", CountyNameRules.ResolveForPresentation(
+                "ch", "历史县", "City"),
+            "Chinese county labels prefer the historical-name JSON value");
+        Equal("City", CountyNameRules.ResolveForPresentation(
+                "en", "历史县", "City"),
+            "non-Chinese county labels reuse the city naming projection");
+        Equal("City", CountyNameRules.ResolveForPresentation(
+                "ch", "", "City"),
+            "missing historical county names fall back to the city name");
+        Equal("", CountyNameRules.ResolveForPresentation(
+                "en", "历史县", ""),
+            "an empty city name remains empty instead of inventing a county");
+
         var facts = new[]
         {
             Fact(10, 1, "临淄州", 0.80f, 100, 11, 12),
@@ -54,8 +67,8 @@ internal static class RegionalGovernmentRulesTests
             RegionalGovernmentRules.Build(capped, "郡");
         RegionalGovernmentFact cappedSeat = cappedRegions.Single(
             region => region.SeatCityId == 100);
-        Equal(5, cappedSeat.MemberCityIds.Count,
-            "a region contains at most the seat and four neighbors");
+        Equal(6, cappedSeat.MemberCityIds.Count,
+            "a region contains at most six cities");
         Equal(false, cappedSeat.MemberCityIds.Contains(107),
             "cross-kingdom neighbors are excluded");
         Equal(1, RegionalGovernmentRules.Build(new[] {

@@ -77,6 +77,12 @@ namespace AncientWarfare3.core.lineage
                 pCachedAt);
         }
 
+        internal static bool ShouldReuseAuthorityCycle(
+            bool pAuthorityCycleActive, long pEntryEpoch, long pCurrentEpoch)
+        {
+            return pAuthorityCycleActive && pEntryEpoch == pCurrentEpoch;
+        }
+
         internal static bool KeyMatches(CityMilitaryThreatKey pLeft,
             CityMilitaryThreatKey pRight)
         {

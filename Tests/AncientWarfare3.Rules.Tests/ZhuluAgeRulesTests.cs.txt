@@ -87,9 +87,9 @@ internal static class ZhuluAgeRulesTests
                 isZhuluAge: false, MandatePhase.Chaos,
                 sourceCanUseMandateSystem: false),
             "ordinary non-Mandate realms keep the local candidate scope");
-        Equal(int.MaxValue, ZhuluAgeRules.WarCandidateLimit(
+        Equal(24, ZhuluAgeRules.WarCandidateLimit(
                 isZhuluAge: true),
-            "Zhulu age does not hide an eligible realm behind the normal scan cap");
+            "Zhulu age uses the bounded candidate scan cap");
         Equal(24, ZhuluAgeRules.WarCandidateLimit(
                 isZhuluAge: false),
             "ordinary war AI keeps its bounded candidate scan");
@@ -121,8 +121,14 @@ internal static class ZhuluAgeRulesTests
                 isZhuluAge: false, targetCanUseMandateSystem: true),
             "ordinary Chaos scanning keeps Mandate-capable distant targets");
         False(ZhuluAgeRules.IsEligibleDistantTarget(
-                isZhuluAge: false, targetCanUseMandateSystem: false),
+            isZhuluAge: false, targetCanUseMandateSystem: false),
             "ordinary scanning does not broaden its species scope");
+        True(ZhuluAgeRules.CanOpenNewWar(0, 0),
+            "a realm can open a Zhulu war below both active-war caps");
+        False(ZhuluAgeRules.CanOpenNewWar(12, 0),
+            "the global Zhulu active-war cap blocks new declarations");
+        False(ZhuluAgeRules.CanOpenNewWar(0, 2),
+            "the per-realm Zhulu active-war cap blocks new declarations");
     }
 
     private static ZhuluAgeTargetFacts Target(long kingdomId,

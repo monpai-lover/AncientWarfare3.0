@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.ui.components;
 using NeoModLoader.General;
 using NeoModLoader.General.UI.Tab;
 using NeoModLoader.ui;
@@ -233,6 +234,7 @@ namespace AncientWarfare3.ui
                 supportersButton);
 
             ApplyNativeLayout(tab, groups);
+            CountyMapRenameOverlay.Attach(tab.transform.root);
         }
 
         private static Dictionary<string, List<PowerButton>> CreateButtonGroups()

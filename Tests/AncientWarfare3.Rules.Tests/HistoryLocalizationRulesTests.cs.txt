@@ -40,6 +40,18 @@ internal static class HistoryLocalizationRulesTests
         Equal("\u5b97\u5ba4\u5a5a\u76df",
             WarDisplayLabelRules.EventLabel("royal_marriage", "cz"),
             "royal marriage history resolves a localized event label");
+        Equal("\u5347\u5b98",
+            WarDisplayLabelRules.EventLabel("official_rank_promoted", "cz"),
+            "official promotion history resolves a localized event label");
+        Equal("\u85e9\u738b\u79fb\u5c01",
+            WarDisplayLabelRules.EventLabel("feudatory_relocated", "cz"),
+            "feudatory relocation history resolves a localized event label");
+        string mandateService = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "MandateService.cs"));
+        Equal(true, mandateService.Contains(
+                "case \"zhulu_age_entered\": return T(\"aw_hist_mandate_end_zhulu_age_entered\");"),
+            "Zhulu age mandate handoff uses a localized end reason");
         Equal("\u7532\u4e0e\u4e59\u7f14\u7ed3\u5a5a\u76df",
             WarDisplayLabelRules.NormalizeHistoryContent(
                 "royal_marriage", "\u7532\u4e0e\u4e59", "cz"),
@@ -52,6 +64,27 @@ internal static class HistoryLocalizationRulesTests
             WarDisplayLabelRules.NormalizeHistoryContent(
                 "royal_marriage", "A married B", "en"),
             "English royal marriage history remains a complete sentence");
+        Equal("\u527f\u706d\u571f\u532a",
+            WarDisplayLabelRules.Label("bandit_suppression", "cz"),
+            "bandit suppression reason is localized instead of leaking its key");
+        Equal("\u6cd5\u7406\u6218\u4e89",
+            WarDisplayLabelRules.Label("de_jure_war", "cz"),
+            "de jure reason is localized instead of leaking its key");
+        Equal("\u4efb\u5b98",
+            WarDisplayLabelRules.EventLabel("court_officer_appointed", "cz"),
+            "court appointment event label is localized");
+        string legacyTribute = WarDisplayLabelRules.NormalizeHistoryContent(
+            "tributary_paid",
+            "甲 → 乙 按期纳贡 political=0.0 gold=0 factor=100",
+            "cz");
+        Equal(false, legacyTribute.Contains("political=") ||
+            legacyTribute.Contains("gold=") || legacyTribute.Contains("factor="),
+            "legacy tributary history parameters are localized on read");
+        string legacyGoalFailure = WarDisplayLabelRules.NormalizeHistoryContent(
+            "war_goal_failed", "未能达成战争目标：卩美纳贡 (negotiated_goal_not_enforced)",
+            "cz");
+        Equal(false, legacyGoalFailure.Contains("negotiated_goal_not_enforced"),
+            "legacy negotiated goal failure reason is localized on read");
 
         foreach ((string key, string cz, string en, string ch) in new[]
                  {

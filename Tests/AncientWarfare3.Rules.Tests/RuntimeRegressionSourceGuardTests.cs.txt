@@ -20,6 +20,14 @@ internal static class RuntimeRegressionSourceGuardTests
             "HistoricalSchoolDescentService.cs");
         string chronicle = Read("Code", "core", "lineage",
             "ChronicleEvents.cs");
+        string chronicleKeys = Read("Code", "core", "lineage",
+            "ChronicleKeys.cs");
+        string historyListWindow = Read("Code", "ui", "windows",
+            "HistoryListWindow.cs");
+        string warLabels = Read("Code", "core", "lineage",
+            "WarDisplayLabelRules.cs");
+        string tributarySettlement = Read("Code", "core", "lineage",
+            "TributarySettlementService.cs");
         string diplomacy = Read("Code", "content", "DiplomacyContent.cs");
         string warIcons = Read("Code", "core", "lineage",
             "WarIconPathRules.cs");
@@ -27,6 +35,10 @@ internal static class RuntimeRegressionSourceGuardTests
             "AWHistoricalReadService.cs");
         string deferredRuntimePatch = Read("Code", "patch",
             "AW_DeferredRuntimeWorkPatch.cs");
+        string actorKingdomSafetyPatch = Read("Code", "patch",
+            "AW_ActorKingdomSafetyPatch.cs");
+        string founderSpeciesSafety = Read("Code", "core", "lineage",
+            "KingdomFounderSpeciesSafetyService.cs");
 
         Assert(bootstrap.Contains("TraversalCache.DirtyTileCount") &&
                bootstrap.Contains("DirtyTileBudgetForFrame"),
@@ -58,6 +70,34 @@ internal static class RuntimeRegressionSourceGuardTests
                chronicle.Contains("HistoryWriter.TryRecordKingdom") &&
                chronicle.Contains("HistoryWriter.TryRecordPerson"),
             "heir designation must use durable projection-key idempotency");
+        Assert(chronicleKeys.Contains(
+                   "public const string COURT_OFFICER_APPOINTED = \"court_officer_appointed\";"),
+            "city chronicle must have a stable court appointment event key");
+        Assert(chronicle.Contains("HistoryWriter.RecordCity(officeCity, pKingdom") &&
+               chronicle.Contains("layer == CourtOfficeLayer.City") &&
+               chronicle.Contains("!regionalGovernor") &&
+               chronicle.Contains("regionalGovernor || ChronicleGate.IsImportant"),
+            "ordinary local appointments must be recorded in the appointed city chronicle");
+        Assert(warLabels.Contains("\"bandit_suppression\",\n            \"de_jure_war\"") &&
+               warLabels.Contains("case \"bandit_suppression\":") &&
+               warLabels.Contains("case \"de_jure_war\":"),
+            "war reason keys must be normalized and localized in history content");
+        Assert(!tributarySettlement.Contains(
+                   "HistoryText.PlainText(\" political=\"") &&
+               !tributarySettlement.Contains(
+                   "HistoryText.PlainText(\" gold=\"") &&
+               !tributarySettlement.Contains(
+                   "HistoryText.PlainText(\" factor=\""),
+            "tributary history must not leak raw diagnostic parameter labels");
+        Assert(historyListWindow.Contains(
+                   "WarDisplayLabelRules.NormalizeHistoryContent") &&
+               historyListWindow.Contains("pEntry.event_type"),
+            "history list must normalize legacy localized content on display");
+        Assert(chronicle.Contains(
+                   "aw_hist_goal_negotiated_goal_not_enforced") ||
+               warLabels.Contains(
+                   "aw_hist_goal_negotiated_goal_not_enforced"),
+            "negotiated war goal failure reason must have a localized label");
         Assert(diplomacy.Contains("ui/wars/war_bandit_suppression") &&
                warIcons.Contains(
                    "case \"bandit_suppression\": return \"ui/wars/war_bandit_suppression\""),
@@ -73,6 +113,20 @@ internal static class RuntimeRegressionSourceGuardTests
         Assert(deferredRuntimePatch.Contains(
                 "AWHistoricalReadService.PendingDrainCount"),
             "the frame drain must run when only historical read callbacks remain");
+        Assert(!actorKingdomSafetyPatch.Contains(
+                   "KingdomFounderSpeciesSafetyService.RepairLoadedKingdoms();"),
+            "MapBox.Update must not scan every kingdom for founder species");
+        Assert(!founderSpeciesSafety.Contains(
+                   "public static void RepairLoadedKingdoms()"),
+            "the unused whole-world founder-species repair entry must be removed");
+        Assert(actorKingdomSafetyPatch.Contains(
+                   "KingdomGetFounderSpecies_Prefix") &&
+               actorKingdomSafetyPatch.Contains(
+                   "KingdomFounderSpeciesSafetyService.TryResolve"),
+            "invalid legacy founder species must still be repaired on demand");
+        Assert(actorKingdomSafetyPatch.Contains(
+                   "ActorKingdomSafetyService.DrainPendingRepairs()"),
+            "actor kingdom repair draining must remain intact");
     }
 
     private static string Read(params string[] pParts)

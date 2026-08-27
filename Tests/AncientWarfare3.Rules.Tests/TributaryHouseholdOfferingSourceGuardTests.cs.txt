@@ -19,7 +19,18 @@ internal static class TributaryHouseholdOfferingSourceGuardTests
         True(offering.Contains("TryCommitTributaryConsort("),
             "offering uses explicit-owner household commit");
         True(offering.Contains("acceptedPrinceCandidates"),
-            "invalid princes do not exhaust the bounded recipient page");
+             "invalid princes do not exhaust the bounded recipient page");
+        True(offering.Contains("pSourceKind") &&
+             offering.Contains("vassal_offering"),
+             "subject offering source kind is persisted distinctly");
+        string vassal = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "VassalService.cs"));
+        True(vassal.Contains("TributaryHouseholdOfferingService.TryOffer") &&
+             vassal.Contains("vassal_offering"),
+             "formal vassals trigger household offering after annual tribute");
+        True(offering.Contains("SUBJECT_CONSORT_OFFERED") ||
+             offering.Contains("RecordHouseholdHistory"),
+             "subject consort offering writes dedicated history");
         True(settlement.IndexOf("MarkPaid", StringComparison.Ordinal) <
              settlement.IndexOf("TributaryHouseholdOfferingService.TryOffer",
                  StringComparison.Ordinal),

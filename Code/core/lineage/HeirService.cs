@@ -712,7 +712,8 @@ namespace AncientWarfare3.core.lineage
                 if (pHeir.hasArmy()) pHeir.removeFromArmy();
                 if (home?.data == null && pHeir.city?.kingdom != pKingdom)
                     pHeir.setCity(null);
-                if (pHeir.kingdom != pKingdom) pHeir.kingdom = null;
+                if (pHeir.kingdom != pKingdom)
+                    ActorKingdomSafetyService.DetachForTransfer(pHeir);
                 using (FormalAffiliationTransferScope.Open(
                            pHeir.data.id, pKingdom.id,
                            home?.data?.id ?? -1L))
@@ -722,6 +723,9 @@ namespace AncientWarfare3.core.lineage
                     if (home?.data != null && pHeir.city != home)
                         pHeir.joinCity(home);
                 }
+                if (!HistoricalAffiliationService.
+                        SynchronizeHomeForSuccession(pHeir, pKingdom, home))
+                    return false;
                 pHeir.clearGraphicsFully();
             }
             catch { return false; }

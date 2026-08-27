@@ -49,6 +49,8 @@ internal static class AWActorPresentationRenderer
     private static long lastPrepareTicks;
     private static ulong lastVisibilitySignature;
     private static bool lastSmoothingEnabled;
+    private static bool lastRenderGameplay;
+    private static double nextCameraRefreshAt;
 
     internal static bool TryPrepare(
         ActorManager manager,
@@ -70,10 +72,20 @@ internal static class AWActorPresentationRenderer
         bool renderGameplay = MapBox.isRenderGameplay();
         ulong visibilitySignature =
             AWPresentationVisibility.GetSignature(renderGameplay);
-        if (ReferenceEquals(snapshot, preparedSnapshot) &&
-            visibilitySignature == lastVisibilitySignature &&
-            lastSmoothingEnabled ==
-            AWPerformanceSettings.EnablePresentationSmoothing)
+        bool snapshotChanged = !ReferenceEquals(snapshot, preparedSnapshot);
+        bool renderModeChanged = renderGameplay != lastRenderGameplay ||
+            lastSmoothingEnabled !=
+                AWPerformanceSettings.EnablePresentationSmoothing;
+        bool visibilityChanged = visibilitySignature !=
+            lastVisibilitySignature;
+        double now = Time.realtimeSinceStartupAsDouble;
+        if (!PresentationRefreshRules.ShouldRebuild(
+                preparedSnapshot != null,
+                snapshotChanged,
+                renderModeChanged,
+                visibilityChanged,
+                now,
+                nextCameraRefreshAt))
         {
             RefreshContinuousPresentation(manager, snapshot);
             Interlocked.Increment(ref reusedPreparedFrames);
@@ -157,6 +169,12 @@ internal static class AWActorPresentationRenderer
         lastVisibilitySignature = visibilitySignature;
         lastSmoothingEnabled =
             AWPerformanceSettings.EnablePresentationSmoothing;
+        lastRenderGameplay = renderGameplay;
+        if (visibilityChanged)
+        {
+            nextCameraRefreshAt =
+                PresentationRefreshRules.ScheduleNextCameraRefresh(now);
+        }
         lastMissingActorCount = missingActorCount;
         AWActorTransientPresentationFrame.Prepare();
         RecordPrepareDuration(Stopwatch.GetTimestamp() - startedAt);
@@ -488,6 +506,8 @@ internal static class AWActorPresentationRenderer
         lastMissingActorCount = 0;
         lastVisibilitySignature = 0UL;
         lastSmoothingEnabled = false;
+        lastRenderGameplay = false;
+        nextCameraRefreshAt = 0d;
         AWActorTransientPresentationFrame.Reset();
     }
 

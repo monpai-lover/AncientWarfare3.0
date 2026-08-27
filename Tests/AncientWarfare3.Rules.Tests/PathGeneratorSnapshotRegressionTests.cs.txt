@@ -1,0 +1,135 @@
+using System;
+using System.Threading;
+using AncientWarfare3.core.pathfinding;
+
+internal static class PathGeneratorSnapshotRegressionTests
+{
+    internal static void Run()
+    {
+        SegmentResultsRemainStableAfterTheNextSearch();
+        StraightSegmentResultsRemainStableAfterTheNextSearch();
+        CachedSegmentResultsRemainStableAfterTheNextSegment();
+    }
+
+    private static void SegmentResultsRemainStableAfterTheNextSearch()
+    {
+        const int length = 80;
+        var tiles = new AWTileTraversalSnapshot[length];
+        for (int i = 0; i < length; i++)
+        {
+            var neighbours = new System.Collections.Generic.List<int>(2);
+            if (i > 0) neighbours.Add(i - 1);
+            if (i + 1 < length) neighbours.Add(i + 1);
+            tiles[i] = new AWTileTraversalSnapshot(i, i, 0,
+                ground: true, pNeighbors: neighbours.ToArray());
+        }
+
+        using var generation = AWTraversalGeneration.FromTiles(7001, length, 1,
+            tiles);
+        var options = AWPathRequestOptions.Default.WithBoundedMilitaryWater(3);
+        using var firstRequest = new AWPathRequest(7001, 0, length - 1,
+            options, AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        using var secondRequest = new AWPathRequest(7002, 1, length - 2,
+            options, AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+
+        var generator = new AWStreamingPathGenerator();
+        AWPathGenerationResult first = generator.GenerateSegment(firstRequest,
+            CancellationToken.None, 8);
+        if (!first.Succeeded || first.Steps.Count != 8)
+            throw new InvalidOperationException("expected a bounded first segment");
+        int firstTile = first.Steps[0].TileId;
+
+        AWPathGenerationResult second = generator.GenerateSegment(secondRequest,
+            CancellationToken.None, 8);
+        if (!second.Succeeded)
+            throw new InvalidOperationException("expected the second segment to succeed");
+        if (first.Steps.Count != 8 || first.Steps[0].TileId != firstTile)
+            throw new InvalidOperationException(
+                "a completed segment must not be mutated by the next search");
+    }
+
+    private static void StraightSegmentResultsRemainStableAfterTheNextSearch()
+    {
+        const int length = 80;
+        var tiles = new AWTileTraversalSnapshot[length];
+        for (int i = 0; i < length; i++)
+        {
+            var neighbours = new System.Collections.Generic.List<int>(2);
+            if (i > 0) neighbours.Add(i - 1);
+            if (i + 1 < length) neighbours.Add(i + 1);
+            tiles[i] = new AWTileTraversalSnapshot(i, i, 0,
+                ground: true, pNeighbors: neighbours.ToArray());
+        }
+
+        using var generation = AWTraversalGeneration.FromTiles(7002, length, 1,
+            tiles);
+        using var firstRequest = new AWPathRequest(7002, 0, length - 1,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        using var secondRequest = new AWPathRequest(7003, 1, length - 2,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+
+        var generator = new AWStreamingPathGenerator();
+        AWPathGenerationResult first = generator.GenerateSegment(firstRequest,
+            CancellationToken.None, 8);
+        if (!first.Succeeded || first.Steps.Count != 8)
+            throw new InvalidOperationException("expected a bounded straight segment");
+        int firstTile = first.Steps[0].TileId;
+
+        AWPathGenerationResult second = generator.GenerateSegment(secondRequest,
+            CancellationToken.None, 8);
+        if (!second.Succeeded)
+            throw new InvalidOperationException("expected the second straight segment to succeed");
+        if (first.Steps.Count != 8 || first.Steps[0].TileId != firstTile)
+            throw new InvalidOperationException(
+                "a straight segment must not be mutated by the next search");
+    }
+
+    private static void CachedSegmentResultsRemainStableAfterTheNextSegment()
+    {
+        const int length = 80;
+        var tiles = new AWTileTraversalSnapshot[length];
+        for (int i = 0; i < length; i++)
+        {
+            var neighbours = new System.Collections.Generic.List<int>(2);
+            if (i > 0) neighbours.Add(i - 1);
+            if (i + 1 < length) neighbours.Add(i + 1);
+            tiles[i] = new AWTileTraversalSnapshot(i, i, 0,
+                ground: true, pNeighbors: neighbours.ToArray());
+        }
+
+        using var generation = AWTraversalGeneration.FromTiles(7003, length, 1,
+            tiles);
+        var options = AWPathRequestOptions.Default.WithBoundedMilitaryWater(3);
+        using var request = new AWPathRequest(7003, 0, length - 1,
+            options, AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        var generator = new AWStreamingPathGenerator();
+
+        AWPathGenerationResult first = generator.GenerateSegment(request,
+            CancellationToken.None, 8);
+        if (!first.Succeeded || first.Steps.Count != 8)
+            throw new InvalidOperationException("expected a bounded first segment");
+
+        request.AdvanceStartTile(first.EndTileId);
+        AWPathGenerationResult second = generator.GenerateSegment(request,
+            CancellationToken.None, 8);
+        if (!second.Succeeded || second.Steps.Count != 8)
+            throw new InvalidOperationException("expected a cached second segment");
+        int secondTile = second.Steps[0].TileId;
+
+        request.AdvanceStartTile(second.EndTileId);
+        AWPathGenerationResult third = generator.GenerateSegment(request,
+            CancellationToken.None, 8);
+        if (!third.Succeeded || third.Steps.Count != 8)
+            throw new InvalidOperationException("expected a cached third segment");
+        if (second.Steps.Count != 8 || second.Steps[0].TileId != secondTile)
+            throw new InvalidOperationException(
+                "a cached segment must not be mutated by the next cached segment");
+    }
+}

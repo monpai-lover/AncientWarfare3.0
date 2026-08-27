@@ -5,6 +5,16 @@ namespace AncientWarfare3.core.lineage
 {
     public static class MandateBorderWallRefreshRules
     {
+        public const int WallLifespanYears = 50;
+
+        public static bool HasExpired(int pCurrentYear, int pBuiltYear,
+            int pLifespanYears = WallLifespanYears)
+        {
+            if (pLifespanYears <= 0 || pBuiltYear == int.MinValue ||
+                pCurrentYear < pBuiltYear) return false;
+            return pCurrentYear - pBuiltYear >= pLifespanYears;
+        }
+
         public static bool ShouldRefresh(bool activated,
             bool cityEligible)
         {
@@ -29,7 +39,14 @@ namespace AncientWarfare3.core.lineage
         {
             return !string.IsNullOrWhiteSpace(placedWallTypeId) &&
                    string.Equals(currentTopTypeId, placedWallTypeId,
-                       StringComparison.Ordinal);
+                   StringComparison.Ordinal);
+        }
+
+        public static bool ShouldKeepHorizontalSegment(int pX, int pY,
+            Func<int, int, bool> pHasPoint)
+        {
+            if (pHasPoint == null) return false;
+            return pHasPoint(pX - 1, pY) || pHasPoint(pX + 1, pY);
         }
 
         private static void AddPositive(HashSet<long> values, long value)

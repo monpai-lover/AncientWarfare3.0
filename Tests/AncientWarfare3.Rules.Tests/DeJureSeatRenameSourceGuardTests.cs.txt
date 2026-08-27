@@ -1,0 +1,38 @@
+using System;
+using System.IO;
+
+internal static class DeJureSeatRenameSourceGuardTests
+{
+    internal static void Run()
+    {
+        string store = Read("Code/core/court/DeJureRegionStore.cs");
+        string renamePatch = Read("Code/patch/AW_KingdomRenamePatch.cs");
+
+        Contains(store,
+            "internal static bool SyncSeatName(City pCity, string pCommittedName,");
+        Contains(store, "pTrackedRename");
+        Contains(store, "ShouldApplyTrackedSeatRename");
+        Contains(store, "DeJureRegionRenamedFromSeat");
+        Contains(store, "\"\\u5dde\")");
+        Contains(store, "p != null && p.Active &&");
+        Contains(store, "p.SeatCityId == pCity.data.id");
+        Contains(store, "RegionNameSource");
+        Contains(store, "ManualSeatRename");
+        Contains(store, "RegionalGovernmentAggregationService.Clear()");
+        Contains(renamePatch,
+            "DeJureRegionStore.SyncSeatName(city, committedCityName,");
+        Contains(renamePatch,
+            "HierarchicalVassalMapModeService.MarkCityDirty(city)");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            pPath.Replace('/', Path.DirectorySeparatorChar)));
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "missing de-jure seat rename source guard: " + pNeedle);
+    }
+}

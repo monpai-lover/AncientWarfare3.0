@@ -34,7 +34,10 @@ namespace AncientWarfare3.core.lineage
         {
             Kingdom defender = ZhuluWarService.ResolveLiveDeclaredDefender(pWar);
             if (defender?.data == null) return;
-            bool isCapital = defender.capital == pCapturedCity;
+            long startCapitalId = ZhuluWarService.ReadWarStartCapitalId(pWar);
+            bool isCapital = startCapitalId >= 0L
+                ? startCapitalId == pCapturedCity.data.id
+                : defender.capital == pCapturedCity;
             bool isSeat = DeJureRegionStore.TryGetBySeat(
                 pCapturedCity.data.id, out DeJureRegion ignored);
             string key = BuildKey(pWar.data.id, pCapturedCity.data.id);

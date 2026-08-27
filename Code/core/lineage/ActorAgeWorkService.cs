@@ -23,21 +23,17 @@ namespace AncientWarfare3.core.lineage
             bool dirty = DirtyActors.Remove(actorId);
             bool dynasticEligible = IsDynasticEligible(pActor);
             bool warrior = SafeIsWarrior(pActor);
-            bool reproductionRecoveryActive =
-                HasAnnualReproductionRecovery(pActor);
             if (!ActorAgeWorkRules.ShouldTrack(hasPrevious, dirty,
-                    dynasticEligible, warrior,
-                    reproductionRecoveryActive)) return;
+                    dynasticEligible, warrior)) return;
 
             ActorAgeWorkState current = Capture(pActor, dynasticEligible,
-                warrior, reproductionRecoveryActive);
+                warrior);
             bool force = dirty || !hasPrevious;
             ActorAgeWorkStage stages = ActorAgeWorkRules.Resolve(previous,
                 current, force);
             if (stages == ActorAgeWorkStage.None)
             {
-                StoreOrRemove(actorId, current, dynasticEligible, warrior,
-                    reproductionRecoveryActive);
+                StoreOrRemove(actorId, current, dynasticEligible, warrior);
                 return;
             }
 
@@ -53,13 +49,9 @@ namespace AncientWarfare3.core.lineage
             {
                 dynasticEligible = IsDynasticEligible(pActor);
                 warrior = SafeIsWarrior(pActor);
-                reproductionRecoveryActive =
-                    HasAnnualReproductionRecovery(pActor);
                 ActorAgeWorkState refreshed = Capture(pActor,
-                    dynasticEligible, warrior,
-                    reproductionRecoveryActive);
-                StoreOrRemove(actorId, refreshed, dynasticEligible, warrior,
-                    reproductionRecoveryActive);
+                    dynasticEligible, warrior);
+                StoreOrRemove(actorId, refreshed, dynasticEligible, warrior);
             }
             else
                 Remove(actorId);
@@ -87,8 +79,7 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static ActorAgeWorkState Capture(Actor pActor,
-            bool pDynasticEligible, bool pWarrior,
-            bool pReproductionRecoveryActive)
+            bool pDynasticEligible, bool pWarrior)
         {
             bool adult = pActor.isAdult();
             bool permanent = pWarrior && StandingArmyPeacetimeService
@@ -106,7 +97,7 @@ namespace AncientWarfare3.core.lineage
                     .ShouldUsePeacetimeJob(pActor),
                 pWarrior && DynasticReproductionService
                     .ShouldReleaseExistingMilitaryRole(pActor),
-                pReproductionRecoveryActive, year);
+                year);
         }
 
         private static bool SafeIsWarrior(Actor pActor)
@@ -115,19 +106,12 @@ namespace AncientWarfare3.core.lineage
             catch { return false; }
         }
 
-        private static bool HasAnnualReproductionRecovery(Actor pActor)
-        {
-            return DynasticReproductionRules.IsSexualReproductionTask(
-                pActor?.ai?.task?.id);
-        }
-
         private static void StoreOrRemove(long pActorId,
             ActorAgeWorkState pState, bool pDynasticEligible,
-            bool pWarrior, bool pReproductionRecoveryActive)
+            bool pWarrior)
         {
             if (ActorAgeWorkRules.ShouldTrack(false, false,
-                    pDynasticEligible, pWarrior,
-                    pReproductionRecoveryActive))
+                    pDynasticEligible, pWarrior))
                 States[pActorId] = pState;
             else
                 Remove(pActorId);

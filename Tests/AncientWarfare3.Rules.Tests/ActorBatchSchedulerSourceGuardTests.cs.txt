@@ -1,0 +1,22 @@
+using System.IO;
+
+internal static class ActorBatchSchedulerSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string runner = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "performance", "AWCooperativeBatchRunner.cs"));
+        if (!runner.Contains(
+                "public bool WaitingForPresentationDispatch => false;") ||
+            runner.Contains("AWSimulationCoordinatorThread"))
+            throw new InvalidOperationException(
+                "actor batches must use the Cultiway single scheduler channel");
+
+        if (!runner.Contains("FindNextMainThreadBatchIndex",
+                StringComparison.Ordinal) ||
+            !runner.Contains(".parallel.", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "batch scheduling must expose fine-grained phase names for adaptive large-step budgeting");
+    }
+}

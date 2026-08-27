@@ -70,7 +70,15 @@ namespace AncientWarfare3.core.court
                 if (actor?.data == null || kingdom?.data == null ||
                     actor.kingdom != kingdom || !actor.isAlive() ||
                     actor.isRekt()) continue;
+                actor.data.get(LineageKeys.CIVIL_SERVICE_QUALIFICATION,
+                    out string previousQualification, "none");
                 Project(actor, record);
+                actor.data.get(LineageKeys.CIVIL_SERVICE_QUALIFICATION,
+                    out string currentQualification, "none");
+                if (!string.Equals(previousQualification,
+                        currentQualification, StringComparison.OrdinalIgnoreCase))
+                    CourtVacancyReconciliationService.CandidatePoolChanged(
+                        kingdom);
             }
         }
 
@@ -88,11 +96,25 @@ namespace AncientWarfare3.core.court
             if (!examinationSystem && !nineRankSystem) return true;
             if (IsAppointmentExempt(pActor, pKingdom, pLayer, pOfficeId))
                 return true;
-            if (pAllowLocalLowerQualification &&
-                pLayer == CourtOfficeLayer.City && pActor.isCityLeader())
-                return true;
-            if (!HistoricalSchoolEducationService.CanAppoint(pActor,
-                    pKingdom, pLayer, pOfficeId)) return false;
+            int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
+                pKingdom, pLayer, pOfficeId, pCity);
+            bool regionalGovernor = OfficialCareerStateService.
+                IsRegionalGovernorSeat(pKingdom, pLayer, pOfficeId, pCity);
+            bool countyLayer = pLayer == CourtOfficeLayer.County;
+            bool localLayer = pLayer == CourtOfficeLayer.City || countyLayer;
+            bool localLeaderQualificationBypass = pAllowLocalLowerQualification &&
+                localLayer && pActor.isCityLeader();
+            int currentRank = OfficialCareerStateService.ReadRankFast(pActor);
+            bool hasCareerRank = nineRankSystem && currentRank >
+                OfficialCareerRankRules.Unranked;
+            if (!hasCareerRank && !HistoricalSchoolEducationService.CanAppoint(
+                    pActor, pKingdom, pLayer, pOfficeId) &&
+                !localLeaderQualificationBypass) return false;
+            bool allowUnqualifiedLocalFallback =
+                LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
+                    localLayer, officeGrade,
+                    pAllowVacancyPromotion &&
+                    pAllowLocalLowerQualification);
             CivilServiceQualificationRecord qualification = examinationSystem
                 ? pQualificationsCaptured
                     ? pQualification
@@ -108,19 +130,17 @@ namespace AncientWarfare3.core.court
                 CivilServiceLegacyTransitionService.HasUsableCredential(
                     pActor, pKingdom, pLayer, pOfficeId);
             bool appointmentQualificationEligible = hasFormalQualification ||
-                hasLegacyCredential;
+                hasLegacyCredential || hasCareerRank ||
+                allowUnqualifiedLocalFallback || localLeaderQualificationBypass;
             if (!appointmentQualificationEligible)
                 return false;
 
-            int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
-                pKingdom, pLayer, pOfficeId, pCity);
-            int currentRank = OfficialCareerStateService.ReadRankFast(pActor);
             if (currentRank <= OfficialCareerRankRules.Unranked)
-                currentRank = pLayer == CourtOfficeLayer.City
+                currentRank = localLayer
                     ? OfficialCareerRankRules.ResolveInitialLocalAppointmentRank(
                         OfficialCareerRankRules.Unranked, officeGrade,
                         hasNineRankSystem: true, hasFormalQualification: true,
-                        qualification?.EntryBonus ?? 0)
+                        qualification?.EntryBonus ?? 0, regionalGovernor)
                     : OfficialCareerRankRules.ResolveInitialAppointmentRank(
                         OfficialCareerRankRules.Unranked, officeGrade,
                         hasNineRankSystem: true, hasFormalQualification: true,
@@ -132,9 +152,10 @@ namespace AncientWarfare3.core.court
             pActor.data.get(LineageKeys.OFFICER_LAST_KAOKE,
                 out int evaluation, -1);
             bool passingEvaluation = evaluation >= 0 && evaluation <= 2;
-            bool rankEligible = pLayer == CourtOfficeLayer.City
+            bool rankEligible = localLayer
                 ? currentRank >= OfficialCareerRankRules.
-                    RequiredRankForLocalOfficeGrade(officeGrade)
+                    RequiredRankForLocalOfficeGrade(officeGrade,
+                        regionalGovernor)
                 : currentRank >= OfficialCareerRankRules.
                     RequiredRankForOfficeGrade(officeGrade);
             bool strictEligible = rankEligible &&
