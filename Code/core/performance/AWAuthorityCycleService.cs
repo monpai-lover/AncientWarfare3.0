@@ -31,6 +31,7 @@ namespace AncientWarfare3.core.performance
             ArmyMembershipReconciliation,
             WarriorArmyMembership,
             UnownedZoneRepair,
+            DeJureMaintenance,
             EmptyCityResettlement,
             TemporaryMilitaryReturn,
             WarArmyReturn,
@@ -73,6 +74,7 @@ namespace AncientWarfare3.core.performance
             "aw3.authority.army_membership_reconciliation",
             "aw3.authority.warrior_army_membership",
             "aw3.authority.unowned_zone_repair",
+            "aw3.authority.de_jure_maintenance",
             "aw3.authority.empty_city_resettlement",
             "aw3.authority.temporary_military_return",
             "aw3.authority.war_army_return",
@@ -214,6 +216,7 @@ namespace AncientWarfare3.core.performance
             TemporaryMilitaryReturnService.ClearRuntime();
             WarArmyReturnService.ClearRuntime();
             ArmyRtsAssignmentReconciliationService.Reset();
+            DeJureRegionMaintenanceService.Reset();
             CityReservePoolService.ClearRuntime();
             SyntheticMobilizationLedgerService.ClearRuntime();
             WarForceEliminationSettlementService.ClearRuntime();
@@ -325,6 +328,10 @@ namespace AncientWarfare3.core.performance
                 case CooperativeAuthorityStage.UnownedZoneRepair:
                     MeasureAuthority("unowned_zone_repair",
                         EnclosedUnownedZoneRepairService.ProcessAuthorityCycle);
+                    break;
+                case CooperativeAuthorityStage.DeJureMaintenance:
+                    MeasureAuthority("de_jure_maintenance", () =>
+                        DeJureRegionMaintenanceService.ProcessAuthorityCycle(2));
                     break;
                 case CooperativeAuthorityStage.EmptyCityResettlement:
                     MeasureAuthority("empty_city_resettlement",

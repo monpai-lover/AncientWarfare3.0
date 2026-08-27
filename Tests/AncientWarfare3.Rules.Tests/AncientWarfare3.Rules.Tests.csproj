@@ -43,6 +43,11 @@
     <Compile Include="DeJureRegionMergeRulesTests.cs.txt" />
     <Compile Include="DeJureRegionMergeSourceGuardTests.cs.txt" />
     <Compile Include="GlobalDeJureMapModeSourceGuardTests.cs.txt" />
+    <Compile Include="DeJureRegionMaintenanceSourceGuardTests.cs.txt" />
+    <Compile Include="DeJureRegionReadPathSourceGuardTests.cs.txt" />
+    <Compile Include="DeJureAuthorityStageSourceGuardTests.cs.txt" />
+    <Compile Include="DeJureDirtyEventSourceGuardTests.cs.txt" />
+    <Compile Include="DeJureDirtyMaintenanceRulesTests.cs.txt" />
     <Compile Include="LocalCourtCountyMapFixSourceGuardTests.cs.txt" />
     <Compile Include="StableLiveListSnapshotRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\policy\StableLiveListSnapshotRules.cs" Link="Production\StableLiveListSnapshotRules.cs" />
