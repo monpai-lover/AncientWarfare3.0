@@ -88,7 +88,6 @@ namespace AncientWarfare3.core.pathfinding
         private bool _cachedRouteHasRevision;
         private int _cachedRouteExpectedStartTile = -1;
         private bool _cachedRouteInsideBoat;
-        private CachedSegmentView _cachedSegmentView;
         private long _recoveryTerrainRevision;
         private long _recoveryWorldGeneration;
         private int _recoveryTargetId = -1;
@@ -357,11 +356,10 @@ namespace AncientWarfare3.core.pathfinding
                 return false;
             }
             int count = Math.Min(Math.Max(1, pMaximumSteps), route.Length - offset);
-            _cachedSegmentView ??= new CachedSegmentView();
-            _cachedSegmentView.SetCapacity(count);
-            Array.Copy(route, offset, _cachedSegmentView.Buffer, 0, count);
-            _cachedSegmentView.SetCount(count);
-            pSteps = _cachedSegmentView;
+            // The cached route is an owned immutable array. Expose only this
+            // stable slice; never publish a request-level reusable view whose
+            // next copy could mutate a prior result.
+            pSteps = new ArraySegment<AWPathStep>(route, offset, count);
             _cachedRouteOffset = offset + count;
             _cachedRouteExpectedStartTile = route[_cachedRouteOffset - 1].TileId;
             bool routeExhausted = _cachedRouteOffset >= route.Length;
@@ -430,44 +428,6 @@ namespace AncientWarfare3.core.pathfinding
             _cachedRouteHasRevision = false;
             _cachedRouteExpectedStartTile = -1;
             _cachedRouteInsideBoat = false;
-        }
-
-        private sealed class CachedSegmentView : IReadOnlyList<AWPathStep>
-        {
-            private AWPathStep[] _buffer = Array.Empty<AWPathStep>();
-            private int _count;
-
-            internal AWPathStep[] Buffer => _buffer;
-
-            internal void SetCapacity(int pCount)
-            {
-                if (_buffer.Length >= pCount) return;
-                int capacity = Math.Max(8, _buffer.Length);
-                while (capacity < pCount) capacity *= 2;
-                Array.Resize(ref _buffer, capacity);
-            }
-
-            internal void SetCount(int pCount) => _count = pCount;
-
-            public int Count => _count;
-
-            public AWPathStep this[int pIndex]
-            {
-                get
-                {
-                    if (pIndex < 0 || pIndex >= _count)
-                        throw new ArgumentOutOfRangeException(nameof(pIndex));
-                    return _buffer[pIndex];
-                }
-            }
-
-            public IEnumerator<AWPathStep> GetEnumerator()
-            {
-                return ((IEnumerable<AWPathStep>)new ArraySegment<AWPathStep>(
-                    _buffer, 0, _count)).GetEnumerator();
-            }
-
-            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private static int StartRegion(int pTileId,
