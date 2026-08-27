@@ -115,6 +115,13 @@ if (args.Length == 1 && args[0] == "--dejure-maintenance")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--central-court-county-exclusion")
+{
+    CentralCourtCountyExclusionSourceGuardTests.Run();
+    Console.WriteLine("Central court county exclusion guards passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--dejure-read-path")
 {
     DeJureRegionReadPathSourceGuardTests.Run();
