@@ -1,0 +1,52 @@
+using System;
+using System.IO;
+
+internal static class LegacyLocalChiefRestoreSourceGuardTests
+{
+    internal static void Run()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(),
+            "Code/core/court/CourtService.cs"));
+        string classifier = Between(source,
+            "private static bool IsAuthoritativeCityLeaderOffice",
+            "public static CourtSnapshot GetSnapshot");
+        string restore = Between(source,
+            "private static bool RestoreOfficerProjection",
+            "internal static bool TryExpireActingCityGovernor");
+        string clear = Between(source,
+            "internal static bool ClearCityGovernor",
+            "internal static bool ClearFeudatoryChiefClerk");
+        string validity = Between(source,
+            "private static bool IsValidActiveOfficeActor",
+            "private static IEnumerable<Actor> SafeUnits");
+
+        Contains(classifier, "ResolveCityOffice(pKingdom, pCity)");
+        Contains(classifier, "CourtOfficeLayer.City");
+        Contains(restore, "IsAuthoritativeCityLeaderOffice");
+        Contains(restore, "city.setLeader(pActor, pNew: false)");
+        Contains(clear, "IsAuthoritativeCityLeaderOffice");
+        Contains(clear, "city?.leader == pActor");
+        Contains(validity, "IsAuthoritativeCityLeaderOffice");
+        Contains(validity, "city?.leader == pActor");
+        Contains(validity, "pActor.isCityLeader()");
+    }
+
+    private static string Between(string pText, string pStart, string pEnd)
+    {
+        int start = pText.IndexOf(pStart, StringComparison.Ordinal);
+        int end = start < 0 ? -1 : pText.IndexOf(pEnd, start,
+            StringComparison.Ordinal);
+        if (start < 0 || end <= start)
+            throw new InvalidOperationException(
+                "legacy local-chief source block missing: " + pStart);
+        return pText.Substring(start, end - start);
+    }
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "legacy local-chief restore guard missing: " + pNeedle);
+    }
+}
