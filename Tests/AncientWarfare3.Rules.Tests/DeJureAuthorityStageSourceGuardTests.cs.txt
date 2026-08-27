@@ -1,0 +1,29 @@
+using System;
+using System.IO;
+
+internal static class DeJureAuthorityStageSourceGuardTests
+{
+    internal static void Run()
+    {
+        string source = Read("Code/core/performance/AWAuthorityCycleService.cs");
+        True(source.Contains("DeJureMaintenance", StringComparison.Ordinal),
+            "authority cycle contains a de jure maintenance stage");
+        True(source.Contains("de_jure_maintenance", StringComparison.Ordinal),
+            "de jure maintenance has a diagnostic phase");
+        True(source.Contains("ProcessAuthorityCycle(2)", StringComparison.Ordinal),
+            "de jure maintenance uses a finite item budget");
+        True(source.Contains("DeJureRegionMaintenanceService.Reset()",
+            StringComparison.Ordinal),
+            "authority reset clears de jure runtime state");
+        True(!source.Contains("RepairAfterWorldLoaded", StringComparison.Ordinal),
+            "authority stage does not invoke full world repair");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(), pPath));
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+}

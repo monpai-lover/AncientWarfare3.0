@@ -20,6 +20,9 @@ namespace AncientWarfare3.core.court
 
         internal static void OnCityFounded(City pCity)
         {
+            if (pCity?.kingdom?.data != null)
+                DeJureRegionMaintenanceService.MarkKingdomDirty(
+                    pCity.kingdom.data.id, DeJureDirtyReason.CityRoster);
             if (TryAssign(pCity, allowRetry: true)) return;
         }
 

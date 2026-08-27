@@ -1,0 +1,39 @@
+using System;
+using System.IO;
+
+internal static class DeJureRegionMaintenanceSourceGuardTests
+{
+    internal static void Run()
+    {
+        string source = Read(
+            "Code/core/court/DeJureRegionMaintenanceService.cs");
+        True(source.Contains("MarkKingdomDirty", StringComparison.Ordinal),
+            "maintenance exposes kingdom dirty marks");
+        True(source.Contains("MarkRegionDirty", StringComparison.Ordinal),
+            "maintenance exposes region dirty marks");
+        True(source.Contains("ProcessAuthorityCycle", StringComparison.Ordinal),
+            "maintenance drains through an authority-cycle method");
+        True(source.Contains("Dictionary<long, Ticket>", StringComparison.Ordinal),
+            "dirty identities are coalesced in dictionaries");
+        True(source.Contains("MaxRetries = 5", StringComparison.Ordinal),
+            "maintenance has a deterministic retry limit");
+        True(source.Contains("MaxBackoff = 16", StringComparison.Ordinal),
+            "maintenance caps exponential backoff");
+        True(source.Contains("ticket.Dormant", StringComparison.Ordinal),
+            "failed tickets become dormant instead of being discarded");
+        True(!source.Contains("World.world.cities", StringComparison.Ordinal) &&
+             !source.Contains("World.world.kingdoms", StringComparison.Ordinal),
+            "maintenance queue does not enumerate the world");
+    }
+
+    private static string Read(string pPath)
+    {
+        return File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+            pPath));
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+}

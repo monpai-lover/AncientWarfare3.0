@@ -1,0 +1,41 @@
+using System;
+using System.IO;
+
+internal static class DeJureDirtyMaintenanceRulesTests
+{
+    internal static void Run()
+    {
+        string queue = Read(
+            "Code/core/court/DeJureRegionMaintenanceService.cs");
+        True(queue.Contains("ticket.Reasons |= pReason", StringComparison.Ordinal),
+            "repeated dirty marks merge reason flags");
+        True(queue.Contains("ticket.Dormant = false", StringComparison.Ordinal),
+            "new related events wake dormant tickets");
+        True(queue.Contains("pTicket.RetryCount++", StringComparison.Ordinal),
+            "failed tickets advance retry state");
+        True(queue.Contains("pTicket.NextCycle = _cycle + delay", StringComparison.Ordinal),
+            "retry uses a future cycle rather than a tight loop");
+        True(queue.Contains("pTicket.Dormant = true", StringComparison.Ordinal),
+            "retry exhaustion leaves a dormant marker");
+
+        string store = Read("Code/core/court/DeJureRegionStore.cs");
+        True(store.Contains("DeJureAdministrationStore snapshot = CloneStore(_store)",
+            StringComparison.Ordinal),
+            "dirty processing takes a working snapshot");
+        True(store.Contains("_store = snapshot", StringComparison.Ordinal),
+            "dirty processing restores the published snapshot on failure");
+        True(store.Contains("if (changed) _store.StoreRevision++", StringComparison.Ordinal),
+            "no-op dirty processing does not increment revision");
+        True(store.Contains("if (!region.Active) return true",
+            StringComparison.Ordinal),
+            "retired regions are not recreated by maintenance");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(), pPath));
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+}
