@@ -100,19 +100,19 @@ internal static class ZhuluWarRulesTests
         Equal(ZhuluZeroForceFallback.AttackersWin,
             ZhuluWarRules.ResolveZeroForceFallback(1, 0),
             "defender-only exhaustion awards all defender land to attackers");
-        False(ZhuluWarRules.ShouldEnrollInAw3WarSystems(
+        True(ZhuluWarRules.ShouldEnrollInAw3WarSystems(
                 ZhuluWarRules.WarTypeId, active: true),
-            "active Zhulu wars stay on native military systems");
+            "active Zhulu wars receive RTS military control like every other war type");
         True(ZhuluWarRules.ShouldEnrollInAw3WarSystems(
                 "aw_normal_war", active: true),
             "active ordinary wars retain AW3 military systems");
         False(ZhuluWarRules.ShouldEnrollInAw3WarSystems(
                 "aw_normal_war", active: false),
             "ended wars never rebuild AW3 military state");
-        True(ZhuluWarRules.RequiresLegacyRosterMigration(
+        False(ZhuluWarRules.RequiresLegacyRosterMigration(
                 ZhuluWarRules.WarTypeId, active: true,
                 hasDeclaredDefender: false),
-            "an unmarked active Zhulu war is a legacy roster");
+            "an unmarked active Zhulu war remains active and rebuilds RTS state");
         False(ZhuluWarRules.RequiresLegacyRosterMigration(
                 ZhuluWarRules.WarTypeId, active: true,
                 hasDeclaredDefender: true),
@@ -465,16 +465,18 @@ internal static class ZhuluWarRulesTests
             ? warPatch.Substring(zhuluStartBranch,
                 zhuluStartReturn - zhuluStartBranch)
             : "";
-        False(zhuluStartBody.Contains("ArmyRtsWarLifecycleService.",
-                StringComparison.Ordinal) ||
+        True(zhuluStartBody.Contains("ArmyRtsWarLifecycleService.",
+                StringComparison.Ordinal) &&
+             zhuluStartBody.Contains("KingdomWarDirectorService.",
+                StringComparison.Ordinal) &&
              zhuluStartBody.Contains("ArmyLogisticsService.",
-                StringComparison.Ordinal) ||
-             zhuluStartBody.Contains("SyntheticMobilizationLedgerService.",
                 StringComparison.Ordinal),
-            "Zhulu starts do not enter AW3 army, logistics, or levy lifecycle");
+            "Zhulu starts enter the shared RTS military lifecycle");
         True(File.Exists(migrationPath) &&
              restore.Contains("ZhuluWarMigrationService.RebuildRuntime"),
-            "save restore migrates legacy Zhulu rosters");
+            "save restore rebuilds active Zhulu runtime identity");
+        False(migration.Contains("endWar(war"),
+            "save restore never ends an active Zhulu war to avoid RTS enrollment");
         True(restore.IndexOf("ZhuluWarMigrationService.RebuildRuntime",
                  StringComparison.Ordinal) <
              restore.IndexOf("CoalitionWarTaskService.RebuildRuntime",
@@ -485,7 +487,9 @@ internal static class ZhuluWarRulesTests
              logistics.Contains("ShouldEnrollInAw3Systems(pWar)") &&
              emergency.Contains("ShouldEnrollInAw3Systems(pWar)"),
             "all war-index rebuild boundaries share the Zhulu enrollment gate");
-        True(missionPersistence.Contains("IsZhuluWar(war") &&
+        False(missionPersistence.Contains("ZhuluWarService.IsZhuluWar(war"),
+            "restored Zhulu missions are not rejected from RTS");
+        True(
              missionPersistence.Contains(
                  "AW3MultiplayerReplicaScope.IsReplicaSession") &&
              warPatch.Contains("AW3MultiplayerReplicaScope.IsReplicaSession"),
@@ -497,10 +501,11 @@ internal static class ZhuluWarRulesTests
              forceSpecial.Contains("ResolveLiveDeclaredDefender(pWar)"),
             "zero-force fallback uses the declared defender and rechecks each transfer");
         True(warPatch.Contains("ZhuluWarService.OnWarEnded(pWar)") &&
-             migration.Contains("ResolveLegacyZhuluGoals(") &&
+             warPatch.Contains("KingdomWarDirectorService.OnWarEnded(pWar)") &&
+             warPatch.Contains("ArmyRtsWarLifecycleService.OnWarEnded(pWar)") &&
              territory.Contains("ResolveLegacyZhuluGoals(") &&
              territory.Contains("WAR_ID=@war AND GOAL_TYPE=@goal AND RESOLVED=0"),
-            "Zhulu end clears its native index while migration closes only legacy open goals");
+            "Zhulu end clears its native index and shared RTS military state");
         True(territory.Contains("WAR_ID=@w AND RESOLVED=0"),
             "resolved legacy goals no longer pollute active goal checks");
         True(locales.Contains("war_type_zhulu_war") &&

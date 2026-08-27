@@ -125,6 +125,18 @@ namespace AncientWarfare3.patch
                     ZhuluWarDeclarationScope.CurrentDefenderId);
                 ZhuluWarService.OnWarStarted(__result);
                 WarRecordWriter.OnWarStart(__result);
+                SyntheticMobilizationLedgerService.OnWarStarted(__result);
+                CityReservePoolService.OnWarStarted(__result);
+                ArmyRtsWarLifecycleService.OnWarStarted(__result);
+                KingdomWarDirectorService.OnWarStarted(__result);
+                ArmyLogisticsService.OnWarStarted(__result);
+                MilitaryEmergencyService.OnWarStarted(__result);
+                WartimeGarrisonService.OnWarStarted(__result);
+                TemporarySlaveVanguardService.OnWarStarted(__result);
+                TemporaryLevyService.OnWarStarted(__result,
+                    WarNoticeService.FindSignatureForWar(__result));
+                CoalitionWarTaskService.OnWarStarted(__result);
+                ArmyRtsPlanSnapshotService.OnWarStarted(__result);
                 RecordNativeZhuluStart(__result);
                 return;
             }
@@ -311,6 +323,21 @@ namespace AncientWarfare3.patch
             {
                 ZhuluWarService.OnWarEnded(pWar);
                 if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
+                ArmyReplenishmentOperationService.OnWarEnded(pWar);
+                KingdomWarDirectorService.OnWarEnded(pWar);
+                ArmyRtsWarLifecycleService.OnWarEnded(pWar);
+                CoalitionWarTaskService.OnWarEnded(pWar);
+                WarMilitaryFactsService.OnWarEnded(pWar);
+                ArmyLogisticsService.OnWarEnded(pWar);
+                ArmyStallWatchdogService.OnWarEnded(pWar);
+                WarBattleEpisodeService.OnWarEnded(pWar);
+                MilitaryEmergencyService.OnWarEnded(pWar);
+                SyntheticMobilizationLedgerService.OnWarEnded(pWar);
+                CityReservePoolService.OnWarEnded(pWar);
+                TemporaryLevyService.OnReplenishmentWarEnded(pWar);
+                WartimeGarrisonService.OnWarEnded(pWar);
+                TemporarySlaveVanguardService.OnWarEnded(pWar);
+                ArmyRtsPlanSnapshotService.OnWarEnded(pWar);
                 WarRecordWriter.OnWarEnd(pWar, pWinner);
                 DiplomacyConversationService.RecordWarEnded(pWar, pWinner);
                 RecordNativeZhuluEnd(pWar, pWinner);

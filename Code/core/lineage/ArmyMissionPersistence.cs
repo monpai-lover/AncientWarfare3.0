@@ -218,12 +218,16 @@ namespace AncientWarfare3.core.lineage
             pInitialState = ArmyRtsState.Idle;
             if (pArmy?.data == null) return false;
             ArmyMissionStoredIntent stored = Read(pArmy);
-            if (stored == null) return false;
+            if (stored == null)
+            {
+                // 存档里没有任务意图(存档时就无任务,或字段未持久化)。
+                // 这里原本静默返回,军队于是永久停在 Idle 显示"等待军令",
+                // 之后没有任何机制会再为它分配任务。交回战争总监重新评估。
+                RequestDirectorAssignment(pArmy);
+                return false;
+            }
             Kingdom kingdom = SafeKingdom(pArmy);
             War war = FindWar(stored.WarId);
-            if (ZhuluWarService.IsZhuluWar(war,
-                    requireActive: false))
-                return RejectRestore(pArmy);
             City target = FindCity(stored.TargetCityId);
             var facts = new ArmyMissionRestoreFacts
             {
@@ -349,7 +353,21 @@ namespace AncientWarfare3.core.lineage
         {
             if (!AW3MultiplayerReplicaScope.IsReplicaSession)
                 Clear(pArmy);
+            // 旧任务作废后同样要交回战争总监,否则军队清掉任务就再没人管,
+            // 停在"等待军令"直到下次战争事件偶然唤醒。
+            RequestDirectorAssignment(pArmy);
             return false;
+        }
+
+        // 让战争总监在下一轮把这支军队纳入提案评估。
+        private static void RequestDirectorAssignment(Army pArmy)
+        {
+            if (pArmy?.data == null) return;
+            if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
+            Kingdom kingdom = SafeKingdom(pArmy);
+            if (kingdom?.data == null) return;
+            try { KingdomWarDirectorService.OnArmyChanged(kingdom); }
+            catch { }
         }
 
         private static bool IsTargetInWar(War pWar, City pTarget,
