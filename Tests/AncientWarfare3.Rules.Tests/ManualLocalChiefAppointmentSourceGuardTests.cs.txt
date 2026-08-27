@@ -16,9 +16,18 @@ internal static class ManualLocalChiefAppointmentSourceGuardTests
         Contains(courtService, "IsAuthoritativeLocalChiefScope");
         Contains(courtService,
             "ManualLocalChiefAppointmentService.TryAppoint");
+        Contains(courtService,
+            "TryAssignLocalOfficerRecord");
+        Contains(courtService,
+            "IsCityLeaderOffice(pOfficeId)");
+        Contains(Read("Code/core/court/CourtReadModelService.cs"),
+            "EnsureNativeCityLeaderProjection");
         Contains(service, "using (GovernorRotationRuntimeScope.Enter())");
         Contains(service, "pCandidate.joinCity(pCity)");
         Contains(service, "pCity.setLeader(pCandidate, pNew: true)");
+        Contains(service, "pCandidate.isCityLeader()");
+        Contains(Read("Code/core/court/DeJureRegionReadModelService.cs"),
+            "effectiveSeat.leader.isCityLeader()");
         Contains(service, "ReferenceEquals(pCity.leader, pCandidate)");
         Contains(service, "RestoreRuntimePlacement");
         Contains(service, "pCity.setLeader(pFormerLeader, pNew: false)");
@@ -34,6 +43,7 @@ internal static class ManualLocalChiefAppointmentSourceGuardTests
         DoesNotContain(local, "CandidateScanState");
         DoesNotContain(local, "LoadAllCandidates(");
         Contains(local, "TryFillRegisteredLocalVacancy");
+        Contains(local, "TryAssignLocalOfficerRecord");
     }
 
     private static string Read(string pPath) => File.ReadAllText(

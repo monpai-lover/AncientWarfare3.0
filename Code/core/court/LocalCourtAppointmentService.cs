@@ -82,8 +82,8 @@ namespace AncientWarfare3.core.court
             {
                 bool committed = ManualLocalChiefAppointmentService.TryAppoint(
                     pKingdom, pCity, candidate, () =>
-                        CourtService.TryAssignLocalOfficer(candidate, pKingdom,
-                            pCity, pVacancy.OfficeId, true));
+                        CourtService.TryAssignLocalOfficerRecord(candidate,
+                            pKingdom, pCity, pVacancy.OfficeId, true));
                 return committed ? CourtVacancyOutcome.Filled :
                     CourtVacancyOutcome.TechnicalFailure;
             }

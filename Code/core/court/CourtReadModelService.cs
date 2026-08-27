@@ -105,6 +105,7 @@ namespace AncientWarfare3.core.court
             foreach (RegionalGovernmentReadModel region in regions)
             {
                 City seatCity = FindCity(pKingdom, region.EffectiveSeatCityId);
+                EnsureNativeCityLeaderProjection(pKingdom, seatCity);
                 Actor governor = seatCity?.leader;
                 if (!IsCurrentRegionalGovernor(governor, pKingdom,
                         seatCity) && region.GovernorActorId >= 0L)
@@ -245,11 +246,29 @@ namespace AncientWarfare3.core.court
                 pCity?.leader?.data == null || pCity.kingdom != pKingdom ||
                 pOfficers?.Any(row => row != null &&
                     row.office_id == pSeats[0]) == true) return;
+            EnsureNativeCityLeaderProjection(pKingdom, pCity);
+            if (pCity.leader?.data == null) return;
             // Older saves can have a valid city leader projected in the UI
             // without the corresponding career row. Backfill once through
             // the normal appointment path so history is persistent.
-            CourtService.TryAssignLocalOfficer(pCity.leader, pKingdom,
+            CourtService.TryAssignLocalOfficerRecord(pCity.leader, pKingdom,
                 pCity, pSeats[0], pVacancyPromotion: true);
+        }
+
+        private static void EnsureNativeCityLeaderProjection(Kingdom pKingdom,
+            City pCity)
+        {
+            if (pKingdom?.data == null || pCity?.data == null ||
+                pCity.isRekt() || pCity.kingdom != pKingdom ||
+                pCity.leader?.data == null) return;
+            bool nativeCityLeader;
+            try { nativeCityLeader = pCity.leader.isCityLeader(); }
+            catch { return; }
+            if (nativeCityLeader) return;
+            string officeId = CourtService.ResolveCityOffice(pKingdom, pCity);
+            if (string.IsNullOrEmpty(officeId)) return;
+            CourtService.TryAssignLocalOfficer(pCity.leader, pKingdom,
+                pCity, officeId, pVacancyPromotion: true);
         }
 
         private static void AddRegionalSuperiorNode(LocalCourtReadModel pModel,
@@ -266,6 +285,8 @@ namespace AncientWarfare3.core.court
             }
             catch { }
             Actor governor = seatCity?.leader;
+            EnsureNativeCityLeaderProjection(pKingdom, seatCity);
+            governor = seatCity?.leader;
             if (!IsCurrentRegionalGovernor(governor, pKingdom, seatCity) &&
                 pModel.RegionalGovernorActorId >= 0L)
                 governor = World.world?.units?.get(
@@ -836,7 +857,8 @@ namespace AncientWarfare3.core.court
                 pSeatCity.leader != pActor)
                 return false;
             bool live;
-            try { live = pActor.isAlive() && !pActor.isRekt(); }
+            try { live = pActor.isAlive() && !pActor.isRekt() &&
+                pActor.isCityLeader(); }
             catch { live = false; }
             return LocalGovernorIdentityRules.IsCurrentSeatLeader(
                 seatControlled: true, actorIsLeader: pSeatCity.leader == pActor,
@@ -850,7 +872,8 @@ namespace AncientWarfare3.core.court
                 pCity.kingdom != pKingdom || pCity.leader?.data == null)
                 return false;
             bool live;
-            try { live = pCity.leader.isAlive() && !pCity.leader.isRekt(); }
+            try { live = pCity.leader.isAlive() &&
+                !pCity.leader.isRekt() && pCity.leader.isCityLeader(); }
             catch { live = false; }
             return LocalGovernorIdentityRules.IsCurrentCityLeader(
                 cityControlled: true, actorLive: live);

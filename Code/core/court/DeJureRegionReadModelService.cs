@@ -59,7 +59,8 @@ namespace AncientWarfare3.core.court
                         effectiveSeat != null,
                         effectiveSeat?.leader?.data?.id ?? -1L,
                         effectiveSeat?.leader != null && effectiveSeat.leader.isAlive() &&
-                        !effectiveSeat.leader.isRekt()),
+                        !effectiveSeat.leader.isRekt() &&
+                        effectiveSeat.leader.isCityLeader()),
                     MemberCityIds = members,
                     LocalGovernmentCityIds = members.ToList(),
                     TotalMemberCount = allMembers.Count,

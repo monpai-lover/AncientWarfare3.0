@@ -115,7 +115,7 @@ namespace AncientWarfare3.core.court
                         seat?.kingdom == pKingdom,
                         seat?.leader?.data?.id ?? -1L,
                         seat?.leader != null && seat.leader.isAlive() &&
-                        !seat.leader.isRekt()),
+                        !seat.leader.isRekt() && seat.leader.isCityLeader()),
                     MemberCityIds = group.MemberCityIds.ToList(),
                     LocalGovernmentCityIds = group.MemberCityIds.ToList()
                 });
@@ -184,7 +184,7 @@ namespace AncientWarfare3.core.court
                 if (live)
                 {
                     try { live = seat.leader.isAlive() &&
-                        !seat.leader.isRekt(); }
+                        !seat.leader.isRekt() && seat.leader.isCityLeader(); }
                     catch { live = false; }
                 }
                 region.GovernorActorId =

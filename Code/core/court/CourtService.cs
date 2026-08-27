@@ -1981,7 +1981,22 @@ namespace AncientWarfare3.core.court
                 pCity.leader != pActor) return false;
             string officeId = ResolveCityOffice(pKingdom, pCity);
             return !string.IsNullOrEmpty(officeId) &&
-                SetOfficer(pActor, pKingdom, CourtOfficeLayer.City, officeId,
+                TryAssignLocalOfficerRecord(pActor, pKingdom,
+                pCity, officeId,
+                pVacancyPromotion);
+        }
+
+        // The actor must already be City.leader here.  Callers that are
+        // appointing a new local chief must use the guarded public path below
+        // so the vanilla City.setLeader transition runs first.
+        internal static bool TryAssignLocalOfficerRecord(Actor pActor,
+            Kingdom pKingdom, City pCity, string pOfficeId,
+            bool pVacancyPromotion = true)
+        {
+            if (pActor?.data == null || pKingdom?.data == null ||
+                pCity?.data == null || pCity.kingdom != pKingdom ||
+                string.IsNullOrEmpty(pOfficeId)) return false;
+            return SetOfficer(pActor, pKingdom, CourtOfficeLayer.City, pOfficeId,
                 SchoolMembershipService.GetSchool(pActor.data.id), pCity,
                 pVacancyPromotion: pVacancyPromotion);
         }
@@ -1993,10 +2008,27 @@ namespace AncientWarfare3.core.court
             if (pActor?.data == null || pKingdom?.data == null ||
                 pCity?.data == null || pCity.kingdom != pKingdom ||
                 string.IsNullOrEmpty(pOfficeId)) return false;
-            return SetOfficer(pActor, pKingdom, CourtOfficeLayer.City,
-                pOfficeId, SchoolMembershipService.GetSchool(pActor.data.id),
-                pCity, pActing: false, pVacancyPromotion,
-                pAllowLocalLowerQualification: true);
+            bool localChief = IsCityLeaderOffice(pOfficeId) ||
+                string.Equals(ResolveCityOffice(pKingdom, pCity), pOfficeId,
+                    StringComparison.Ordinal);
+            if (!localChief)
+                return SetOfficer(pActor, pKingdom, CourtOfficeLayer.City,
+                    pOfficeId, SchoolMembershipService.GetSchool(pActor.data.id),
+                    pCity, pActing: false, pVacancyPromotion,
+                    pAllowLocalLowerQualification: true);
+            if (pCity.leader == pActor)
+            {
+                bool nativeCityLeader = false;
+                try { nativeCityLeader = pActor.isCityLeader(); }
+                catch { }
+                if (nativeCityLeader)
+                    return TryAssignLocalOfficerRecord(pActor, pKingdom,
+                        pCity, pOfficeId, pVacancyPromotion);
+            }
+            return ManualLocalChiefAppointmentService.TryAppoint(
+                pKingdom, pCity, pActor, () =>
+                    TryAssignLocalOfficerRecord(pActor, pKingdom, pCity,
+                        pOfficeId, pVacancyPromotion));
         }
 
         internal static bool TryAssignCountyMagistrate(Actor pActor,

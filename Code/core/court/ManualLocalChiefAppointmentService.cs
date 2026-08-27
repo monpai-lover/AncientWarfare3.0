@@ -22,7 +22,11 @@ namespace AncientWarfare3.core.court
                 {
                     pCandidate.joinCity(pCity);
                     pCity.setLeader(pCandidate, pNew: true);
+                    bool nativeCityLeader = false;
+                    try { nativeCityLeader = pCandidate.isCityLeader(); }
+                    catch { }
                     if (!ReferenceEquals(pCity.leader, pCandidate) ||
+                        !nativeCityLeader ||
                         !pPersistAppointment())
                     {
                         RestoreRuntimePlacement(pKingdom, pCity, pCandidate,
