@@ -595,9 +595,11 @@ namespace AncientWarfare3.core.court
             var filled = new HashSet<string>();
             foreach (CourtOfficerView officer in pOfficers ?? new List<CourtOfficerView>())
             {
-                // City officials are rendered under their regional folder in
-                // the central court; keeping them here creates duplicate cards.
+                // Local officials are rendered in their city government card.
+                // Keeping either layer here duplicates them in the central tree.
                 if (string.Equals(officer.layer, CourtOfficeLayer.City,
+                        System.StringComparison.Ordinal) ||
+                    string.Equals(officer.layer, CourtOfficeLayer.County,
                         System.StringComparison.Ordinal)) continue;
                 if (customGraph && !expectedOrder.ContainsKey(
                         officer.office_id)) continue;

@@ -1,0 +1,25 @@
+using System;
+using System.IO;
+
+internal static class CentralCourtCountyExclusionSourceGuardTests
+{
+    internal static void Run()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(),
+            "Code/core/court/CourtReadModelService.cs"));
+        int start = source.IndexOf(
+            "private static void AddOfficersAndVacancies",
+            StringComparison.Ordinal);
+        int end = source.IndexOf(
+            "private static void AddGenerals", start,
+            StringComparison.Ordinal);
+        if (start < 0 || end <= start)
+            throw new InvalidOperationException("central officer builder missing");
+        string block = source.Substring(start, end - start);
+        if (!block.Contains("CourtOfficeLayer.County", StringComparison.Ordinal) ||
+            !block.Contains("continue", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "central court must exclude county-layer officers");
+    }
+}

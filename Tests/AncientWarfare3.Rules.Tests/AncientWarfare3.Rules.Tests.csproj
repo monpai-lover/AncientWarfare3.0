@@ -44,6 +44,7 @@
     <Compile Include="DeJureRegionMergeRulesTests.cs.txt" />
     <Compile Include="DeJureRegionMergeSourceGuardTests.cs.txt" />
     <Compile Include="GlobalDeJureMapModeSourceGuardTests.cs.txt" />
+    <Compile Include="CentralCourtCountyExclusionSourceGuardTests.cs.txt" />
     <Compile Include="DeJureRegionMaintenanceSourceGuardTests.cs.txt" />
     <Compile Include="DeJureRegionReadPathSourceGuardTests.cs.txt" />
     <Compile Include="DeJureAuthorityStageSourceGuardTests.cs.txt" />
