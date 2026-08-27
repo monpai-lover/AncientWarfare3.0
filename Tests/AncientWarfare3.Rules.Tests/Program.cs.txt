@@ -100,6 +100,13 @@ if (args.Length == 1 && args[0] == "--court-history-localization")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--local-chief-legacy-restore")
+{
+    LegacyLocalChiefRestoreSourceGuardTests.Run();
+    Console.WriteLine("Legacy local-chief restore guards passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--nameplate-refresh")
 {
     NameplateRefreshRulesTests.Run();

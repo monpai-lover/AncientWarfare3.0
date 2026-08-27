@@ -308,6 +308,20 @@ namespace AncientWarfare3.core.court
             return CourtCityOfficeRules.IsCityLeaderOffice(pOfficeId);
         }
 
+        private static bool IsAuthoritativeCityLeaderOffice(
+            Kingdom pKingdom, City pCity, string pLayer, string pOfficeId)
+        {
+            if (pKingdom?.data == null || pCity?.data == null ||
+                pCity.kingdom != pKingdom ||
+                !string.Equals(pLayer, CourtOfficeLayer.City,
+                    StringComparison.Ordinal) ||
+                string.IsNullOrEmpty(pOfficeId)) return false;
+            string resolved = ResolveCityOffice(pKingdom, pCity);
+            return !string.IsNullOrEmpty(resolved) &&
+                   string.Equals(pOfficeId, resolved,
+                       StringComparison.Ordinal);
+        }
+
         public static CourtSnapshot GetSnapshot(Kingdom pKingdom)
         {
             var snapshot = new CourtSnapshot();
@@ -2008,9 +2022,8 @@ namespace AncientWarfare3.core.court
             if (pActor?.data == null || pKingdom?.data == null ||
                 pCity?.data == null || pCity.kingdom != pKingdom ||
                 string.IsNullOrEmpty(pOfficeId)) return false;
-            bool localChief = IsCityLeaderOffice(pOfficeId) ||
-                string.Equals(ResolveCityOffice(pKingdom, pCity), pOfficeId,
-                    StringComparison.Ordinal);
+            bool localChief = IsAuthoritativeCityLeaderOffice(pKingdom,
+                pCity, CourtOfficeLayer.City, pOfficeId);
             if (!localChief)
                 return SetOfficer(pActor, pKingdom, CourtOfficeLayer.City,
                     pOfficeId, SchoolMembershipService.GetSchool(pActor.data.id),
@@ -2149,8 +2162,8 @@ namespace AncientWarfare3.core.court
             if (pAppointment.CityId >= 0L &&
                 (city?.data == null || city.isRekt() || city.kingdom != kingdom))
                 return false;
-            bool cityOffice = pAppointment.Layer == CourtOfficeLayer.City &&
-                              IsCityLeaderOffice(pAppointment.OfficeId);
+            bool cityOffice = IsAuthoritativeCityLeaderOffice(kingdom, city,
+                pAppointment.Layer, pAppointment.OfficeId);
             if (cityOffice && city?.leader != null && city.leader != pActor)
                 return false;
             if (!OfficialCareerStateService.RestoreAppointmentProjection(
@@ -2243,10 +2256,20 @@ namespace AncientWarfare3.core.court
             string pReason)
         {
             if (pActor?.data == null) return false;
+            pActor.data.get(LineageKeys.COURT_KINGDOM_ID,
+                out long kingdomId, -1L);
+            pActor.data.get(LineageKeys.COURT_CITY_ID,
+                out long cityId, -1L);
             pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
-            if (layer != CourtOfficeLayer.City ||
-                !IsCityLeaderOffice(office)) return false;
+            Kingdom kingdom = World.world?.kingdoms?.get(kingdomId);
+            City city = World.world?.cities?.get(cityId);
+            bool authoritative = IsAuthoritativeCityLeaderOffice(kingdom,
+                city, layer, office);
+            bool liveLeader = string.Equals(layer, CourtOfficeLayer.City,
+                                  StringComparison.Ordinal) &&
+                              city?.leader == pActor;
+            if (!authoritative && !liveLeader) return false;
             ClearOfficer(pActor, pReason ?? "city_governor_ended");
             return true;
         }
@@ -2945,8 +2968,20 @@ namespace AncientWarfare3.core.court
                 "");
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string runtimeOffice,
                 "");
-            return runtimeKingdomId == pKingdom.id && runtimeLayer == pLayer &&
-                   runtimeOffice == pOfficeId;
+            if (runtimeKingdomId != pKingdom.id || runtimeLayer != pLayer ||
+                runtimeOffice != pOfficeId) return false;
+            if (pLayer != CourtOfficeLayer.City) return true;
+            pActor.data.get(LineageKeys.COURT_CITY_ID,
+                out long cityId, -1L);
+            City city = null;
+            try { city = World.world?.cities?.get(cityId); }
+            catch { }
+            if (!IsAuthoritativeCityLeaderOffice(pKingdom, city, pLayer,
+                    pOfficeId)) return true;
+            bool nativeCityLeader = false;
+            try { nativeCityLeader = pActor.isCityLeader(); }
+            catch { }
+            return nativeCityLeader && city?.leader == pActor;
         }
 
         private static IEnumerable<Actor> SafeUnits(Kingdom pKingdom)
