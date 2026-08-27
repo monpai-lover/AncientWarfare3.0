@@ -56,19 +56,30 @@ internal static class RoyalGuardTaskRecoveryRulesTests
             "unknown guard tasks are repaired directly to follow");
         Assert(priorityIndex.Contains("ResolveP0PriorityRank", StringComparison.Ordinal),
             "military P0 snapshot puts royal guards ahead of RTS followers");
-        int transportRefresh = postRunner.IndexOf(
-            "ArmyRtsTransportService.RefreshMilitaryP0Priority();",
-            StringComparison.Ordinal);
-        int guardRefreshOrder = postRunner.IndexOf(
-            "RefreshRoyalGuardMilitaryPriorities();",
+        int refreshCall = postRunner.IndexOf(
+            "RefreshMilitaryPriorityInputsForFrame();",
             StringComparison.Ordinal);
         int frozenSnapshot = postRunner.IndexOf(
             "ArmyMilitaryMovementPriorityIndex.CopySnapshot(militaryP0ActorIds);",
             StringComparison.Ordinal);
-        Assert(transportRefresh >= 0 &&
+        int refreshHelper = postRunner.IndexOf(
+            "private static void RefreshMilitaryPriorityInputsForFrame()",
+            StringComparison.Ordinal);
+        int transportRefresh = postRunner.IndexOf(
+            "ArmyRtsTransportService.RefreshMilitaryP0Priority();",
+            refreshHelper,
+            StringComparison.Ordinal);
+        int guardRefreshOrder = postRunner.IndexOf(
+            "RefreshRoyalGuardMilitaryPriorities();",
+            refreshHelper,
+            StringComparison.Ordinal);
+        Assert(refreshCall >= 0 &&
+               frozenSnapshot > refreshCall &&
+               refreshHelper > frozenSnapshot &&
+               transportRefresh > refreshHelper &&
                guardRefreshOrder > transportRefresh &&
-               frozenSnapshot > guardRefreshOrder,
-            "every actor-post cycle refreshes guards and transport members before freezing the military P0 snapshot");
+               guardRefreshOrder >= 0,
+            "each render frame refreshes transport members and guards before freezing the actor-post P0 snapshot");
         Assert(postRunner.Contains(
                 "RoyalGuardService.TryRefreshMilitaryPriority(actor);",
                 StringComparison.Ordinal),

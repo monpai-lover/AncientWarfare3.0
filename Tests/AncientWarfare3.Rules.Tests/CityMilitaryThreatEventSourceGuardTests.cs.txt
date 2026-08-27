@@ -1,0 +1,36 @@
+using System;
+using System.IO;
+
+internal static class CityMilitaryThreatEventSourceGuardTests
+{
+    internal static void Run()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string attackZone = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "CityAttackZoneService.cs"));
+        string occupationPatch = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_CityOccupationAccelerationPatch.cs"));
+        string facts = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "CityMilitaryThreatFacts.cs"));
+
+        Require(!attackZone.Contains("CityMilitaryThreatFacts.TryGet(",
+                StringComparison.Ordinal),
+            "city threat queries must not use the expiring per-query cache");
+        Require(attackZone.Contains("TryGetCaptureState(",
+                StringComparison.Ordinal),
+            "city threat queries must read the event-driven capture state");
+        Require(occupationPatch.Contains("ObserveCaptureState(",
+                StringComparison.Ordinal),
+            "capture transitions must publish an event-driven state update");
+        Require(occupationPatch.Contains("ClearCaptureState(",
+                StringComparison.Ordinal),
+            "capture completion and failure must clear the event state");
+        Require(facts.Contains("CaptureState", StringComparison.Ordinal),
+            "threat facts must retain the latest city capture event");
+    }
+
+    private static void Require(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

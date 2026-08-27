@@ -673,8 +673,9 @@ namespace AncientWarfare3.core.schools
             string pReason, out SchoolMembershipRecord pClosed)
         {
             pClosed = null;
-            if (!_activeByActor.TryGetValue(pActorId, out SchoolMembershipRecord current) ||
-                current.MembershipId != pMembershipId) return false;
+            if (!_activeByActor.TryGetValue(pActorId,
+                    out SchoolMembershipRecord current)) return false;
+            if (current.MembershipId != pMembershipId) return false;
             pClosed = current.Close(pYear, pReason);
             RemoveActive(current);
             MarkChanged();

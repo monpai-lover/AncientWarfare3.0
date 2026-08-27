@@ -60,9 +60,14 @@ namespace AncientWarfare3.core.performance
         public const float RenderReserveMilliseconds = 2f;
         public const float MinimumSliceMilliseconds = 0.15f;
         public const float BackgroundJoinMilliseconds = 0.2f;
+        // These values are reserved for the RTS P0 domain. Vanilla and
+        // ordinary AW3 authority stages use the Cultiway-compatible values
+        // selected by AWFrameSchedulerRules per domain.
         public const float StarvationSliceMilliseconds = 2f;
         public const int StarvationFrameInterval = 1;
-        public const int SimulationBatchSize = 256;
+        // Match Cultiway master. Smaller batches keep each cooperative phase
+        // within the frame budget and prevent large-step frame-time spikes.
+        public const int SimulationBatchSize = 64;
 
         public static AWSimulationMode Mode =>
             AWFrameSchedulerRules.ResolveCachedMode(_configSchedulerEnabled,
@@ -92,6 +97,15 @@ namespace AncientWarfare3.core.performance
         private static AWPathWorkerAllocation WorkerAllocation =>
             AWFrameSchedulerRules.AllocateWorkers(
                 Environment.ProcessorCount);
+
+        internal static void ApplyParallelBudget(MapBox pMap)
+        {
+            if (pMap?.parallel_options != null)
+            {
+                pMap.parallel_options.MaxDegreeOfParallelism =
+                    ForegroundParallelism;
+            }
+        }
 
         public static void SwitchFramePriorityScheduler(bool pValue)
         {

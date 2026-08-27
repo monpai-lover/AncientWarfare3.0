@@ -172,6 +172,8 @@ namespace AncientWarfare3.patch
             KingdomStrategyRevisionService.MarkChanged(
                 __state?.id ?? -1L,
                 (__instance?.kingdom ?? pKingdom)?.id ?? -1L);
+            WarRefugeeService.OnCityOwnerChanged(
+                __instance, __state, __instance?.kingdom ?? pKingdom);
             CitySchoolSnapshotService.MarkDirty(__instance);
             CourtVacancyReconciliationService.CityChangedKingdom(
                 __instance, __state, __instance?.kingdom ?? pKingdom);

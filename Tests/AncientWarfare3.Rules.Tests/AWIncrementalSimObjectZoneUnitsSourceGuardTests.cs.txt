@@ -1,0 +1,15 @@
+using System;
+using System.IO;
+
+internal static class AWIncrementalSimObjectZoneUnitsSourceGuardTests
+{
+    internal static void Run()
+    {
+        string patchPath = Path.Combine(Directory.GetCurrentDirectory(),
+            "Code/patch/AW_SimObjectsZonesPerformancePatch.cs");
+        if (File.Exists(patchPath))
+            throw new InvalidOperationException(
+                "Cultiway master does not register the experimental " +
+                "SimObjectsZones incremental patch: " + patchPath);
+    }
+}

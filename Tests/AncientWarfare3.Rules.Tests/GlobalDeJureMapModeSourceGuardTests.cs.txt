@@ -36,6 +36,11 @@ internal static class GlobalDeJureMapModeSourceGuardTests
         True(service.Contains("else if (IsCityRegionLayer)\n                        PublishNativeCityLabels();",
                  StringComparison.Ordinal),
             "global region overview publishes seat-anchored native labels");
+        True(service.Contains(
+                "Vector2 center = IsCityRegionLayer\n" +
+                "                    ? new Vector2(city.city_center.x, city.city_center.y)",
+                StringComparison.Ordinal),
+            "native region labels must use the legal seat center rather than a territory centroid");
         True(!service.Contains("if (IsCityGlobalRegionLayer)\n                    HierarchicalVassalMapModeLabelLayer.\n                        HideNativeLabelsExcept(null);",
                  StringComparison.Ordinal),
             "global region overview must not hide its published native labels");

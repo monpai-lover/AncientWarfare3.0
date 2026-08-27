@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
 
@@ -14,14 +15,28 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ProcessAuthorityCycle()
         {
+            ProcessAuthorityCycle(int.MaxValue);
+        }
+
+        // A stronghold population check can walk every resident in a city.
+        // Bound the event queue so a large-step pass cannot turn a backlog
+        // into one long main-thread authority phase.
+        internal static void ProcessAuthorityCycle(int pMaximumCities)
+        {
             if (Pending.Count == 0 ||
                 !PeasantRebelRouteRules.CanMutateAuthority(
                     AW3MultiplayerReplicaScope.IsReplicaSession) ||
                 AW3MultiplayerReplicaScope.IsApplying) return;
 
-            long[] cityIds = new long[Pending.Count];
-            Pending.CopyTo(cityIds);
-            for (int i = 0; i < cityIds.Length; i++)
+            int limit = Math.Max(1, pMaximumCities);
+            long[] cityIds = new long[Math.Min(Pending.Count, limit)];
+            int snapshotCount = 0;
+            foreach (long pendingCityId in Pending)
+            {
+                if (snapshotCount >= cityIds.Length) break;
+                cityIds[snapshotCount++] = pendingCityId;
+            }
+            for (int i = 0; i < snapshotCount; i++)
             {
                 long cityId = cityIds[i];
                 Pending.Remove(cityId);

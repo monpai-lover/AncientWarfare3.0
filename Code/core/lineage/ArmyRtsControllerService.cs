@@ -2956,6 +2956,7 @@ namespace AncientWarfare3.core.lineage
             runtime.JobCursor.Reopen();
             runtime.FollowerRouteInstallCursor = 0;
             ArmyFormationService.RemoveArmy(pArmy.id);
+            ResetRouteRetry(runtime);
             RequestRouteReplan(pArmy.id, pAlternateEndpoint: false);
         }
 
@@ -3483,6 +3484,17 @@ namespace AncientWarfare3.core.lineage
                     out ArmyRtsControllerRecord record) ||
                 !RuntimeByArmy.TryGetValue(pArmyId,
                     out RuntimeState runtime)) return false;
+            // A watchdog sample can arrive several times while the same
+            // provider failure is cooling down. Replanning the same endpoint
+            // here would cancel the existing fallback and recreate the
+            // submit/cancel loop seen in the authority log. An alternate
+            // endpoint still belongs to the same strategic mission and must
+            // observe the same failure cooldown.
+            if (IsRouteRetryCoolingDown(pArmyId))
+            {
+                ArmyRtsTransportDiagnostics.RecordCooldownSuppressedReplan();
+                return false;
+            }
             Army army = FindArmy(pArmyId);
             if (!IsLiveArmy(army)) return false;
             InvalidateNativeRoute(runtime,
@@ -5727,7 +5739,7 @@ namespace AncientWarfare3.core.lineage
                                 poll.Kind == ArmyRoutePollKind.Cancelled;
                 if (ArmyRtsRules.ShouldRetryStrategicRouteAfterPoll(
                         terminal, targetCity?.data != null,
-                        retryCoolingDown: false))
+                        retryCoolingDown: IsRouteRetryCoolingDown(pArmy.id)))
                 {
                     string fingerprint = BuildRouteFailureFingerprint(
                         pArmy, pMission, target,
@@ -6102,7 +6114,11 @@ namespace AncientWarfare3.core.lineage
             RuntimeState pRuntime, ArmyRtsMission pMission,
             ArmyRtsState pState)
         {
-            if (!ArmyRtsRules.ShouldPreserveStrategicRoute(
+            bool preserveFailedFallback =
+                IsRouteRetryCoolingDown(pArmy.id) &&
+                pRuntime.AnchorTileId >= 0;
+            if (!preserveFailedFallback &&
+                !ArmyRtsRules.ShouldPreserveStrategicRoute(
                     pRuntime.RouteSubmitted, pRuntime.RouteArrived,
                     ArmyRtsTransportService.HasActiveVoyage(pArmy)))
             {
@@ -6148,7 +6164,11 @@ namespace AncientWarfare3.core.lineage
         private static void EnsureVanillaRetreatJobs(Army pArmy,
             RuntimeState pRuntime)
         {
-            if (!ArmyRtsRules.ShouldPreserveStrategicRoute(
+            bool preserveFailedFallback =
+                IsRouteRetryCoolingDown(pArmy.id) &&
+                pRuntime.AnchorTileId >= 0;
+            if (!preserveFailedFallback &&
+                !ArmyRtsRules.ShouldPreserveStrategicRoute(
                     pRuntime.RouteSubmitted, pRuntime.RouteArrived,
                     ArmyRtsTransportService.HasActiveVoyage(pArmy)))
             {

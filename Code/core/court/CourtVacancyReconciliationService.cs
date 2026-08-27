@@ -140,10 +140,21 @@ namespace AncientWarfare3.core.court
 
         internal static void DrainDueRetryTickets()
         {
+            DrainDueRetryTickets(int.MaxValue);
+        }
+
+        internal static void DrainDueRetryTickets(int pMaximumTickets)
+        {
             int frame = Time.frameCount;
-            var due = RetryTickets.Values.Where(ticket =>
-                ticket != null && ticket.NotBeforeFrame <= frame)
-                .Select(ticket => ticket.KingdomId).ToArray();
+            int limit = Math.Max(1, pMaximumTickets);
+            int processed = 0;
+            var due = new List<long>(Math.Min(RetryTickets.Count, limit));
+            foreach (RetryTicket ticket in RetryTickets.Values)
+            {
+                if (ticket == null || ticket.NotBeforeFrame > frame) continue;
+                due.Add(ticket.KingdomId);
+                if (++processed >= limit) break;
+            }
             foreach (long kingdomId in due)
             {
                 RetryTickets.Remove(kingdomId);
@@ -159,10 +170,7 @@ namespace AncientWarfare3.core.court
 
         private static void ExecuteRequest(long pKingdomId, int pAttempt)
         {
-            try
-            {
-                Reconcile(FindKingdom(pKingdomId));
-            }
+            try { Reconcile(FindKingdom(pKingdomId)); }
             catch (Exception error)
             {
                 if (CourtVacancyRules.ShouldRetry(
@@ -202,10 +210,8 @@ namespace AncientWarfare3.core.court
                 CourtVacancyOutcome outcome;
                 if (key.Layer == CourtOfficeLayer.Central ||
                     key.Layer == CourtOfficeLayer.Military)
-                {
                     outcome = CourtService.TryFillRegisteredCentralVacancy(
                         pKingdom, key, session);
-                }
                 else
                 {
                     City city = World.world?.cities?.get(key.CityId);
@@ -226,17 +232,11 @@ namespace AncientWarfare3.core.court
                 if (outcome == CourtVacancyOutcome.Invalid)
                     CourtVacancyRegistry.Remove(key);
                 if (outcome == CourtVacancyOutcome.TechnicalFailure)
-                {
-                    if (CourtVacancyRules.ShouldRetry(outcome, 0))
-                        RetryTickets[pKingdom.id] = new RetryTicket
-                        {
-                            KingdomId = pKingdom.id,
-                            NotBeforeFrame = Time.frameCount + 1
-                        };
-                    else
-                        ModClass.LogError("Court vacancy technical failure: " +
-                            pKingdom.id + ":" + key.OfficeId);
-                }
+                    RetryTickets[pKingdom.id] = new RetryTicket
+                    {
+                        KingdomId = pKingdom.id,
+                        NotBeforeFrame = Time.frameCount + 1
+                    };
                 processed.Add(key);
             }
         }

@@ -448,8 +448,6 @@ namespace AncientWarfare3.patch
             }
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__state == null || __state == __instance?.army) return;
-            ArmyInvalidCleanupQueue.ScheduleIfEmpty(__state,
-                SafeCity(__state), SafeKingdom(__state, null, null));
         }
 
         [HarmonyPrefix]
@@ -506,8 +504,6 @@ namespace AncientWarfare3.patch
                 catch { }
                 if (count > 0) return;
             }
-            ArmyInvalidCleanupQueue.ScheduleIfEmpty(__state, pCity,
-                pCity?.kingdom);
         }
 
         [HarmonyPrefix]

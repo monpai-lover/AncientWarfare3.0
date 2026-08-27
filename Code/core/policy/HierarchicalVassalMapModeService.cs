@@ -303,6 +303,8 @@ namespace AncientWarfare3.core.policy
             }
             if (IsCityCountryLayer || IsCityMemberLayer)
             {
+                if (IsCityMemberLayer && !IsCityInFocusedRegion(pCity))
+                    return null;
                 EnsureHierarchyIndex();
                 long cityRepresentativeId = _hierarchyIndex?.ResolveRepresentative(
                     pPhysicalKingdom.id) ?? -1L;
@@ -365,7 +367,8 @@ namespace AncientWarfare3.core.policy
             if (IsCityMemberLayer)
             {
                 City city = cached.City;
-                if (city?.data == null || city.isRekt()) return;
+                if (city?.data == null || city.isRekt() ||
+                    !IsCityInFocusedRegion(city)) return;
                 if (!NativeCityLabels.TryGetValue(city.id,
                         out NativeCityLabelEntry cityEntry))
                 {
@@ -488,9 +491,11 @@ namespace AncientWarfare3.core.policy
                 string displayName = entry.DisplayName ??
                     city?.data?.name?.Trim();
                 if (string.IsNullOrWhiteSpace(displayName)) continue;
-                Vector2 center = entry.TryGetCenter(out Vector2 labelCenter)
-                    ? labelCenter
-                    : new Vector2(city.city_center.x, city.city_center.y);
+                Vector2 center = IsCityRegionLayer
+                    ? new Vector2(city.city_center.x, city.city_center.y)
+                    : entry.TryGetCenter(out Vector2 labelCenter)
+                        ? labelCenter
+                        : new Vector2(city.city_center.x, city.city_center.y);
                 var placement = new HierarchicalVassalMapModeLabelPlacement
                 {
                     Centroid = center,

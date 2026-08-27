@@ -11,10 +11,6 @@ namespace AncientWarfare3.core.performance
 {
     internal sealed class AWCooperativeSimulationRunner
     {
-        private const int MaximumStagesPerBurst = 256;
-        private const double MinimumBurstMilliseconds = 0.25d;
-        private const double MaximumBurstMilliseconds = 2d;
-        private const double TargetFrameBurstRatio = 0.01d;
         private const double InitialActorParallelStageMilliseconds = 2d;
         private const double InitialBuildingParallelStageMilliseconds = 0.5d;
         private const double SynchronousStageHeadroomRatio = 1.25d;
@@ -65,16 +61,6 @@ namespace AncientWarfare3.core.performance
             DelayedActions,
             Aw3Authority,
             Complete
-        }
-
-        private enum StageBurstStopReason
-        {
-            None,
-            Completed,
-            AsyncBoundary,
-            DomainBoundary,
-            Deadline,
-            StageLimit
         }
 
         private static readonly string[] StagePhaseNames =
@@ -149,9 +135,8 @@ namespace AncientWarfare3.core.performance
         private readonly List<WorldBehaviourAsset> _worldBehaviours =
             new List<WorldBehaviourAsset>();
         private readonly Action _startAdmissionCycleAction;
-        private readonly Action _executeCurrentStageBurstAction;
+        private readonly Action _executeCurrentStageAction;
         private readonly Action _executeCurrentStageCoreAction;
-        private readonly Action _executeVanillaStageBurstCoreAction;
         private readonly Action _dispatchDeferredParallelWorkAction;
         private readonly Action _joinBackgroundWorkAction;
 
@@ -199,17 +184,6 @@ namespace AncientWarfare3.core.performance
         private long _lastBuildingPresentationOverlapWallTicks;
         private long _lastBuildingPresentationOverlapWaitTicks;
         private string _lastBuildingPresentationBoundaryReason = "none";
-        private long _vanillaStageBursts;
-        private long _vanillaStageBurstSteps;
-        private int _maximumVanillaStageBurstSteps;
-        private long _vanillaStageBurstCompletedStops;
-        private long _vanillaStageBurstAsyncStops;
-        private long _vanillaStageBurstDomainStops;
-        private long _vanillaStageBurstDeadlineStops;
-        private long _vanillaStageBurstLimitStops;
-        private long _activeStageBurstDeadline;
-        private int _activeStageBurstSteps;
-        private StageBurstStopReason _activeStageBurstStopReason;
         private double _actorParallelStageEstimateMilliseconds =
             InitialActorParallelStageMilliseconds;
         private double _buildingParallelStageEstimateMilliseconds =
@@ -225,10 +199,8 @@ namespace AncientWarfare3.core.performance
                 new AWSchedulerResourceOwnership<MapBox>(
                     ReadParallelism, WriteParallelism);
             _startAdmissionCycleAction = StartPendingAdmissionCycle;
-            _executeCurrentStageBurstAction = ExecuteCurrentStageBurst;
+            _executeCurrentStageAction = ExecuteCurrentStage;
             _executeCurrentStageCoreAction = ExecuteCurrentStageCore;
-            _executeVanillaStageBurstCoreAction =
-                ExecuteVanillaStageBurstCore;
             _dispatchDeferredParallelWorkAction =
                 DispatchDeferredParallelWork;
             _joinBackgroundWorkAction = JoinBackgroundWork;
@@ -272,6 +244,12 @@ namespace AncientWarfare3.core.performance
             try
             {
                 AWFramePriorityGovernor.BeginFrame();
+                // Keep the vanilla job contract synchronized on every frame.
+                // WorldBox and other patches may rewrite these values between
+                // logical cycles; Cultiway master reapplies them at this
+                // boundary before admitting any cooperative work.
+                JobConst.MAX_ELEMENTS = AWPerformanceSettings.SimulationBatchSize;
+                AWPerformanceSettings.ApplyParallelBudget(pMap);
                 _presentationRefresh.ClearIfWorldMismatch(pMap);
                 if (Active && !ReferenceEquals(_world, pMap)) Abort();
                 _lastControlledFrame = UnityEngine.Time.frameCount;
@@ -435,7 +413,7 @@ namespace AncientWarfare3.core.performance
                     }
 
                     AWFramePriorityGovernor.RunPhase(domain, phase,
-                        _executeCurrentStageBurstAction);
+                        _executeCurrentStageAction);
                 }
 
                 if (!Active) RestoreNativeParallelism();
@@ -723,25 +701,6 @@ namespace AncientWarfare3.core.performance
                 _buildingRunner.HasParallelPresentationWorkInFlight);
         }
 
-        public string GetStageBurstDiagnostics()
-        {
-            long bursts = _vanillaStageBursts;
-            return string.Format(CultureInfo.InvariantCulture,
-                "bursts={0} steps={1} avg={2:0.00} max={3} " +
-                "stops={4}/{5}/{6}/{7}/{8}" +
-                "(completed/async/domain/deadline/limit)",
-                bursts, _vanillaStageBurstSteps,
-                bursts == 0L
-                    ? 0d
-                    : _vanillaStageBurstSteps / (double)bursts,
-                _maximumVanillaStageBurstSteps,
-                _vanillaStageBurstCompletedStops,
-                _vanillaStageBurstAsyncStops,
-                _vanillaStageBurstDomainStops,
-                _vanillaStageBurstDeadlineStops,
-                _vanillaStageBurstLimitStops);
-        }
-
         public void Abort()
         {
             try
@@ -966,10 +925,11 @@ namespace AncientWarfare3.core.performance
 
         private AWSimulationDomain GetCurrentDomain()
         {
-            return _stage == SimulationStage.Aw3Authority ||
-                   _stage == SimulationStage.Aw3RtsLogicalPulse
-                ? AWSimulationDomain.Aw3Authority
-                : AWSimulationDomain.Vanilla;
+            return _stage == SimulationStage.Aw3RtsLogicalPulse
+                ? AWSimulationDomain.RtsP0
+                : _stage == SimulationStage.Aw3Authority
+                    ? AWSimulationDomain.Aw3Authority
+                    : AWSimulationDomain.Vanilla;
         }
 
         private void ExecuteCurrentStage()
@@ -978,109 +938,6 @@ namespace AncientWarfare3.core.performance
                 _cycleElapsed,
                 _cycleMode == AWSimulationMode.Fixed,
                 _cycleTimeScale, _executeCurrentStageCoreAction);
-        }
-
-        private void ExecuteCurrentStageBurst()
-        {
-            if (AWSimulationTickBenchmark.IsCapturing ||
-                GetCurrentDomain() != AWSimulationDomain.Vanilla)
-            {
-                ExecuteCurrentStage();
-                return;
-            }
-
-            double targetFrameMilliseconds =
-                1000d / AWPerformanceSettings.TargetRenderFps;
-            double desiredBurstMilliseconds = Math.Max(
-                MinimumBurstMilliseconds,
-                Math.Min(MaximumBurstMilliseconds,
-                    targetFrameMilliseconds * TargetFrameBurstRatio));
-            double remainingMilliseconds = AWFramePriorityGovernor
-                .GetRemainingSimulationBudgetMilliseconds();
-            double burstMilliseconds = remainingMilliseconds > 0d
-                ? Math.Min(desiredBurstMilliseconds,
-                    Math.Max(MinimumBurstMilliseconds,
-                        remainingMilliseconds))
-                : MinimumBurstMilliseconds;
-            long burstStartedAt = Stopwatch.GetTimestamp();
-            _activeStageBurstDeadline = burstStartedAt + Math.Max(1L,
-                (long)(burstMilliseconds * Stopwatch.Frequency / 1000d));
-            _activeStageBurstSteps = 0;
-            _activeStageBurstStopReason = StageBurstStopReason.None;
-
-            AWSimulationStepContext.Run(_world, _cyclePaused,
-                _cycleElapsed,
-                _cycleMode == AWSimulationMode.Fixed,
-                _cycleTimeScale, _executeVanillaStageBurstCoreAction);
-
-            _vanillaStageBursts++;
-            _vanillaStageBurstSteps += _activeStageBurstSteps;
-            if (_activeStageBurstSteps > _maximumVanillaStageBurstSteps)
-                _maximumVanillaStageBurstSteps = _activeStageBurstSteps;
-            switch (_activeStageBurstStopReason)
-            {
-                case StageBurstStopReason.Completed:
-                    _vanillaStageBurstCompletedStops++;
-                    break;
-                case StageBurstStopReason.AsyncBoundary:
-                    _vanillaStageBurstAsyncStops++;
-                    break;
-                case StageBurstStopReason.DomainBoundary:
-                    _vanillaStageBurstDomainStops++;
-                    break;
-                case StageBurstStopReason.Deadline:
-                    _vanillaStageBurstDeadlineStops++;
-                    break;
-                case StageBurstStopReason.StageLimit:
-                    _vanillaStageBurstLimitStops++;
-                    break;
-            }
-        }
-
-        private void ExecuteVanillaStageBurstCore()
-        {
-            while (true)
-            {
-                ExecuteCurrentStageCore();
-                _activeStageBurstSteps++;
-
-                if (!Active)
-                {
-                    _activeStageBurstStopReason =
-                        StageBurstStopReason.Completed;
-                    return;
-                }
-                if (GetCurrentDomain() != AWSimulationDomain.Vanilla)
-                {
-                    _activeStageBurstStopReason =
-                        StageBurstStopReason.DomainBoundary;
-                    return;
-                }
-                if ((_stage == SimulationStage.Actors &&
-                     (_actorRunner.WaitingForPresentationDispatch ||
-                      _actorRunner.WaitingForBackgroundWork)) ||
-                    (_stage == SimulationStage.Buildings &&
-                     (_buildingRunner.WaitingForPresentationDispatch ||
-                      _buildingRunner.WaitingForBackgroundWork)))
-                {
-                    _activeStageBurstStopReason =
-                        StageBurstStopReason.AsyncBoundary;
-                    return;
-                }
-                if (_activeStageBurstSteps >= MaximumStagesPerBurst)
-                {
-                    _activeStageBurstStopReason =
-                        StageBurstStopReason.StageLimit;
-                    return;
-                }
-                if ((_activeStageBurstSteps & 3) == 0 &&
-                    Stopwatch.GetTimestamp() >= _activeStageBurstDeadline)
-                {
-                    _activeStageBurstStopReason =
-                        StageBurstStopReason.Deadline;
-                    return;
-                }
-            }
         }
 
         private void ExecuteCurrentStageCore()

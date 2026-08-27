@@ -381,6 +381,12 @@ namespace AncientWarfare3.core.lineage
                 ShouldUseAlternateEndpoint(pAction,
                     pSample?.CommandExpected == true,
                     pSample?.CommandOwned == true);
+            if (ArmyRtsControllerService.IsRouteRetryCoolingDown(pArmyId))
+            {
+                ArmyRtsTransportDiagnostics.RecordCooldownSuppressedReplan();
+                pState.Flow.SuspendForExternalOwnership();
+                return;
+            }
             if (ArmyRtsControllerService.RequestRouteReplan(pArmyId,
                     alternate))
             {

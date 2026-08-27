@@ -82,6 +82,13 @@ namespace AncientWarfare3.core.lineage
             return (pKind ?? "") + ":" + pObjectId;
         }
 
+        public static string DiagnosticPrefix(string pKey)
+        {
+            if (string.IsNullOrEmpty(pKey)) return "<ordered>";
+            int separator = pKey.IndexOf(':');
+            return separator <= 0 ? pKey : pKey.Substring(0, separator);
+        }
+
         public static string FormatFailure(string pKey,
             System.Exception pError)
         {

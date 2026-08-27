@@ -41,8 +41,6 @@ namespace AncientWarfare3.core.policy
         public const string ArmyCleanupGuardStrip = "aw3_city_army_cleanup_guard_strip";
         public const string ArmyCleanupSlaveCaptain = "aw3_city_army_cleanup_slave_captain";
         public const string ArmyCleanupFiefName = "aw3_city_army_cleanup_fief_name";
-        public const string EmptyArmyDetection = "aw3_empty_army_detection";
-        public const string EmptyArmyRemoval = "aw3_empty_army_removal";
         public const string FiefCommandResolve = "aw3_city_fief_command_resolve";
         public const string FiefCommandApply = "aw3_city_fief_command_apply";
         public const string FiefCommandCaptain = "aw3_city_fief_command_captain";
@@ -92,8 +90,6 @@ namespace AncientWarfare3.core.policy
             ArmyCleanupGuardStrip,
             ArmyCleanupSlaveCaptain,
             ArmyCleanupFiefName,
-            EmptyArmyDetection,
-            EmptyArmyRemoval,
             FiefCommandResolve,
             FiefCommandApply,
             FiefCommandCaptain,

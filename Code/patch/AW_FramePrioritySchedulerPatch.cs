@@ -343,6 +343,7 @@ namespace AncientWarfare3.patch
             nameof(MapBox.checkMainSimulationUpdate))]
         private static void RunNativeAuthorityAfterSimulation(bool __state)
         {
+            AWAuthorityCycleService.ObserveNativeHook(__state);
             if (AW3MultiplayerReplicaScope.IsReplicaSession)
             {
                 return;
@@ -355,6 +356,15 @@ namespace AncientWarfare3.patch
 
             try
             {
+                // Keep the native path lifecycle at the same outer simulation
+                // boundary as AW3 authority work. The cooperative runner owns
+                // its own tick in CompleteCycle(); this branch is native-only.
+                EnsureSimulationTimeBound(World.world);
+                if (AWSimulationTime.IsBound)
+                {
+                    AWSimulationTime.SynchronizeFromWorld(World.world);
+                    AWPathfindingBootstrap.Tick();
+                }
                 AWAuthorityCycleService.ProcessNativeCycle();
             }
             catch (Exception error)
@@ -364,46 +374,6 @@ namespace AncientWarfare3.patch
                 ModClass.LogError(
                     "AW native authority cycle failed; game paused: " +
                     error);
-            }
-        }
-
-        // Cultiway's master keeps path retries and traversal invalidation at
-        // the native updateSimulation boundary as well as the cooperative
-        // cycle boundary.  AW3's cooperative runner bypasses this vanilla
-        // method, so the ownership check prevents a duplicate path pulse.
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(MapBox), "updateSimulation")]
-        private static void RunNativePathfindingAfterSimulationTick(
-            MapBox __instance)
-        {
-            if (AW3MultiplayerReplicaScope.IsReplicaSession ||
-                !Config.game_loaded || SmoothLoader.isLoading())
-            {
-                return;
-            }
-
-            AWCooperativeSimulationRunner runner =
-                AWCooperativeSimulationRunner.Instance;
-            if (runner.RequiresControl)
-            {
-                return;
-            }
-
-            try
-            {
-                EnsureSimulationTimeBound(__instance);
-                if (!AWSimulationTime.IsBound)
-                {
-                    return;
-                }
-
-                AWSimulationTime.SynchronizeFromWorld(__instance);
-                AWPathfindingBootstrap.Tick();
-            }
-            catch (Exception error)
-            {
-                ModClass.LogError(
-                    "AW native pathfinding tick failed: " + error);
             }
         }
 

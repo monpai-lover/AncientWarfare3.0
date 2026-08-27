@@ -112,6 +112,7 @@ namespace AncientWarfare3.patch
         public static void NewWar_Postfix(War __result)
         {
             if (__result?.data == null) return;
+            WarRefugeeService.OnWarStarted(__result);
             Kingdom mainAttacker = __result.getMainAttacker();
             Kingdom mainDefender = __result.getMainDefender();
             if (ZhuluWarService.IsZhuluWar(__result,
@@ -432,6 +433,7 @@ namespace AncientWarfare3.patch
 
         private static void OnKingdomJoinedWar(War pWar, Kingdom pKingdom, bool pDefender)
         {
+            WarRefugeeService.OnWarStarted(pWar);
             WarScoreService.RegisterParticipantMobilization(pWar, pKingdom);
             ArmyRtsWarLifecycleService.OnWarParticipantChanged(pWar,
                 pKingdom);

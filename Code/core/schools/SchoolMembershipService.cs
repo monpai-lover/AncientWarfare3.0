@@ -40,6 +40,7 @@ namespace AncientWarfare3.core.schools
             public double PersistenceTime { get; }
             public bool Uncertain { get; set; }
             public bool DestroyRequested { get; set; }
+            public bool Quarantined { get; set; }
             public int Attempts { get; set; }
             public long ReadyFrame { get; set; }
         }
@@ -424,7 +425,8 @@ namespace AncientWarfare3.core.schools
                     deathPending: PendingDeathsByActor.ContainsKey(
                         pActor.data.id)))
             {
-                QuarantineDeadMembership(pActor, current, year);
+                pending.Quarantined = QuarantineDeadMembership(pActor,
+                    current, year);
                 QueueDeathRetry(pending, pDestroy);
                 return SchoolDeathOutcome.Failed;
             }
@@ -432,20 +434,26 @@ namespace AncientWarfare3.core.schools
             // Death callbacks must never perform persistence synchronously.  The
             // actor is already inside the vanilla destruction lifecycle, so all
             // SQLite work stays on the bounded retry/authority queue.
-            QuarantineDeadMembership(pActor, current, year);
+            pending.Quarantined = QuarantineDeadMembership(pActor,
+                current, year);
             QueueDeathRetry(pending, pDestroy);
             return SchoolDeathOutcome.Failed;
         }
 
-        private static void QuarantineDeadMembership(Actor pActor,
+        private static bool QuarantineDeadMembership(Actor pActor,
             SchoolMembershipRecord pMembership, int pYear)
         {
-            if (pMembership == null) return;
+            if (pMembership == null) return false;
             RequestLeaderElection(pMembership);
+            bool closedNow = false;
             if (Memberships.CloseExpected(pMembership.ActorId,
-                    pMembership.MembershipId, pYear, "death_pending", out _))
+                    pMembership.MembershipId, pYear, "death_pending",
+                    out SchoolMembershipRecord closed) && closed != null)
+            {
+                closedNow = true;
                 HistoricalSchoolRevisionService.ApplyMembershipChange(
                     pMembership, null);
+            }
             HistoricalSchoolRuntimeIndex.Instance.Remove(pMembership.ActorId);
             try { Project(pActor, CourtSchoolId.None); }
             catch (Exception error)
@@ -453,6 +461,7 @@ namespace AncientWarfare3.core.schools
                 ModClass.LogWarning("Pending school death projection failed: " +
                                     error.Message);
             }
+            return closedNow;
         }
 
         private static SchoolDeathOutcome PersistPendingDeath(PendingSchoolDeath pending,
@@ -523,16 +532,22 @@ namespace AncientWarfare3.core.schools
                                  pending.RuntimeCity;
             try
             {
-                if (!Memberships.CloseExpected(pActor.data.id, current.MembershipId,
-                        pending.DeathYear,
-                        "death", out _))
+                // QuarantineDeadMembership already removed the expected
+                // active row. Do not attempt a second close during durable
+                // commit; doing so used to report every normal replay as an
+                // "adopt failed" error and trigger an expensive reload.
+                SchoolMembershipRecord closed = null;
+                if (!pending.Quarantined &&
+                    !Memberships.CloseExpected(pActor.data.id,
+                        current.MembershipId, pending.DeathYear, "death",
+                        out closed))
                 {
-                    ModClass.LogWarning(
-                        "Committed school death membership adopt failed: actor=" +
+                    ModClass.LogError(
+                        "Committed school death membership conflict: actor=" +
                         pActor.data.id + " membership=" + current.MembershipId);
                     ReloadMembershipAfterCommittedDeath();
                 }
-                else
+                else if (!pending.Quarantined && closed != null)
                 {
                     RequestLeaderElection(current);
                     HistoricalSchoolRevisionService.ApplyMembershipChange(current, null);

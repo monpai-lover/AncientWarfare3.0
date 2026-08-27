@@ -7,28 +7,22 @@ namespace AncientWarfare3.core.lineage
     internal static class ArmyInvalidCleanupQueue
     {
         private const int MaxMembershipDeferrals = 4;
-        private const int PostLoadBatchSize = 16;
 
-        private sealed class EmptyCleanupContext
+        private sealed class ShellCleanupContext
         {
             public Army Army;
             public City CityHint;
             public Kingdom KingdomHint;
             public int Deferrals;
-            public bool ForceShellCleanup;
         }
 
         private static readonly HashSet<Army> Pending = new HashSet<Army>();
-        private static readonly Dictionary<Army, EmptyCleanupContext>
-            PendingEmpty = new Dictionary<Army, EmptyCleanupContext>();
-        private static readonly Queue<Army> PostLoadCandidates =
-            new Queue<Army>();
-
+        private static readonly Dictionary<Army, ShellCleanupContext>
+            PendingShell = new Dictionary<Army, ShellCleanupContext>();
         public static void ClearRuntime()
         {
             Pending.Clear();
-            PendingEmpty.Clear();
-            PostLoadCandidates.Clear();
+            PendingShell.Clear();
         }
 
         public static void Schedule(Army pArmy)
@@ -39,19 +33,11 @@ namespace AncientWarfare3.core.lineage
                 DeferredWorkClass.Runtime, () => Remove(pArmy));
         }
 
-        public static void ScheduleIfEmpty(Army pArmy, City pCityHint = null,
-            Kingdom pKingdomHint = null)
-        {
-            ScheduleEmptyInspection(pArmy, pCityHint, pKingdomHint,
-                pForceShellCleanup: false);
-        }
-
         public static void ScheduleShell(Army pArmy, City pCityHint = null,
             Kingdom pKingdomHint = null)
         {
             MarkNonReplacingShell(pArmy);
-            ScheduleEmptyInspection(pArmy, pCityHint, pKingdomHint,
-                pForceShellCleanup: true);
+            ScheduleShellInspection(pArmy, pCityHint, pKingdomHint);
         }
 
         private static void MarkNonReplacingShell(Army pArmy)
@@ -61,44 +47,35 @@ namespace AncientWarfare3.core.lineage
             ArmyFieldIndexService.OnArmyChanged(pArmy);
         }
 
-        private static void ScheduleEmptyInspection(Army pArmy,
-            City pCityHint, Kingdom pKingdomHint,
-            bool pForceShellCleanup)
+        private static void ScheduleShellInspection(Army pArmy,
+            City pCityHint, Kingdom pKingdomHint)
         {
             if (pArmy == null) return;
-            if (PendingEmpty.TryGetValue(pArmy,
-                    out EmptyCleanupContext existing))
+            if (PendingShell.TryGetValue(pArmy,
+                    out ShellCleanupContext existing))
             {
                 if (existing.CityHint?.data == null && pCityHint?.data != null)
                     existing.CityHint = pCityHint;
                 if (existing.KingdomHint?.data == null &&
                     pKingdomHint?.data != null)
                     existing.KingdomHint = pKingdomHint;
-                existing.ForceShellCleanup |= pForceShellCleanup;
                 return;
             }
 
-            var context = new EmptyCleanupContext
+            var context = new ShellCleanupContext
             {
                 Army = pArmy,
                 CityHint = pCityHint,
-                KingdomHint = pKingdomHint,
-                ForceShellCleanup = pForceShellCleanup
+                KingdomHint = pKingdomHint
             };
-            PendingEmpty[pArmy] = context;
-            EnqueueEmptyCheck(context);
+            PendingShell[pArmy] = context;
+            EnqueueShellCheck(context);
         }
 
         public static void BeginPostLoadSweep(IEnumerable<Army> pSnapshot)
         {
-            PostLoadCandidates.Clear();
-            if (pSnapshot != null)
-            {
-                foreach (Army army in pSnapshot)
-                    if (army != null)
-                        PostLoadCandidates.Enqueue(army);
-            }
-            SchedulePostLoadBatch();
+            // Vanilla performs the empty-army existence check after loading.
+            // Do not mirror that sweep in an AW3 deferred queue.
         }
 
         public static void RemoveFailedCreation(Army pArmy, Actor pCaptain,
@@ -122,19 +99,19 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private static void EnqueueEmptyCheck(EmptyCleanupContext pContext)
+        private static void EnqueueShellCheck(ShellCleanupContext pContext)
         {
             if (pContext?.Army == null) return;
-            string key = "empty_army:" +
+            string key = "invalid_army_shell:" +
                          RuntimeHelpers.GetHashCode(pContext.Army);
             DeferredRuntimeWorkService.EnqueueCoalesced(key,
-                DeferredWorkClass.Runtime, () => InspectEmpty(pContext.Army));
+                DeferredWorkClass.Runtime, () => InspectShell(pContext.Army));
         }
 
-        private static void InspectEmpty(Army pArmy)
+        private static void InspectShell(Army pArmy)
         {
-            if (pArmy == null || !PendingEmpty.TryGetValue(pArmy,
-                    out EmptyCleanupContext context)) return;
+            if (pArmy == null || !PendingShell.TryGetValue(pArmy,
+                    out ShellCleanupContext context)) return;
             bool dirty = false;
             try { dirty = pArmy.isDirtyUnits(); }
             catch { }
@@ -142,56 +119,26 @@ namespace AncientWarfare3.core.lineage
                     context.Deferrals, MaxMembershipDeferrals))
             {
                 context.Deferrals++;
-                EnqueueEmptyCheck(context);
+                EnqueueShellCheck(context);
                 return;
             }
 
             try
             {
-                if (context.ForceShellCleanup)
-                {
-                    int listedCount = 0;
-                    try { listedCount = pArmy.units?.Count ?? 0; }
-                    catch { }
-                    if (ArmyLifecycleRules.
-                            ShouldQueueArmyShellForCleanup(listedCount))
-                        AWArmyService.RemoveArmyObject(pArmy,
-                            pClearCityReference: true, context.CityHint,
-                            context.KingdomHint,
-                            pRequestReplacement: false);
-                }
-                else
-                {
-                    AWArmyService.TryRemoveEmptyArmy(pArmy,
-                        context.CityHint, context.KingdomHint);
-                }
+                int listedCount = 0;
+                try { listedCount = pArmy.units?.Count ?? 0; }
+                catch { }
+                if (ArmyLifecycleRules.
+                        ShouldQueueArmyShellForCleanup(listedCount))
+                    AWArmyService.RemoveArmyObject(pArmy,
+                        pClearCityReference: true, context.CityHint,
+                        context.KingdomHint,
+                        pRequestReplacement: false);
             }
             finally
             {
-                PendingEmpty.Remove(pArmy);
+                PendingShell.Remove(pArmy);
             }
-        }
-
-        private static void SchedulePostLoadBatch()
-        {
-            if (PostLoadCandidates.Count == 0) return;
-            DeferredRuntimeWorkService.EnqueueCoalesced(
-                "empty_army_post_load_sweep", DeferredWorkClass.Runtime,
-                ProcessPostLoadBatch);
-        }
-
-        private static void ProcessPostLoadBatch()
-        {
-            int remaining = PostLoadBatchSize;
-            while (remaining-- > 0 && PostLoadCandidates.Count > 0)
-            {
-                Army army = PostLoadCandidates.Dequeue();
-                if (AWArmyService.IsNonReplacingShell(army))
-                    ScheduleShell(army);
-                else
-                    ScheduleIfEmpty(army);
-            }
-            SchedulePostLoadBatch();
         }
 
         private static void Remove(Army pArmy)

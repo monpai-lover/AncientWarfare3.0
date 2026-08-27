@@ -30,6 +30,18 @@ internal static class DeferredRuntimeWorkRulesTests
         Contains("key=<ordered>", ordered,
             "ordered work without a coalescing key remains identifiable");
 
+        AssertEqual("wartime_garrison_city",
+            DeferredRuntimeWorkRules.DiagnosticPrefix(
+                "wartime_garrison_city:42"),
+            "deferred diagnostics group object-specific keys by producer");
+        AssertEqual("deployment_assign",
+            DeferredRuntimeWorkRules.DiagnosticPrefix(
+                "deployment_assign:war-signature:17"),
+            "deferred diagnostics stop at the first key separator");
+        AssertEqual("<ordered>",
+            DeferredRuntimeWorkRules.DiagnosticPrefix(null),
+            "ordered work remains visible in prefix diagnostics");
+
         MethodInfo runtimePriority = typeof(DeferredRuntimeWorkRules)
             .GetMethod("ShouldPrioritizeRuntimeWork",
                 BindingFlags.Public | BindingFlags.Static);
@@ -85,6 +97,14 @@ internal static class DeferredRuntimeWorkRulesTests
     private static void AssertEqual(int expected, int actual, string name)
     {
         if (expected != actual)
+            throw new InvalidOperationException(name +
+                $": expected {expected}, got {actual}");
+    }
+
+    private static void AssertEqual(string expected, string actual,
+        string name)
+    {
+        if (!string.Equals(expected, actual, StringComparison.Ordinal))
             throw new InvalidOperationException(name +
                 $": expected {expected}, got {actual}");
     }

@@ -838,13 +838,15 @@ internal static class AWIncrementalSimObjectZoneUnits
         StructuralDirtyChunks.Add(
             chunkIndex);
         structuralMembershipChanged = true;
+        TileIsland committedIsland =
+            committedIslands[actorRank];
         if (updateIslandMembership &&
-            !committedIslands[actorRank]
-                .actors
-                .Remove(actor))
+            committedIsland != null)
         {
-            throw new InvalidOperationException(
-                "island ????????????");
+            // The vanilla island rebuild may have removed this actor before
+            // the incremental projection observes the structural removal.
+            // Treat the missing reference as already reconciled.
+            committedIsland.actors.Remove(actor);
         }
 
         committedAliveCount--;

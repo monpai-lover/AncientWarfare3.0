@@ -23,5 +23,11 @@ internal static class PathGeneratorBoundsRegressionSourceGuardTests
             source.Contains("workspace.PathView(outputCount)", StringComparison.Ordinal))
             throw new InvalidOperationException(
                 "published segments must not read the mutable workspace path view");
+
+        string requestSource = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "pathfinding", "AWPathRequest.cs"));
+        if (requestSource.Contains("CachedSegmentView", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "cached path segments must not expose a request-level reusable view");
     }
 }

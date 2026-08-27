@@ -13,6 +13,7 @@ $watchdogPath = Join-Path $projectRoot 'Code\core\lineage\ArmyStallWatchdogServi
 $lifecyclePath = Join-Path $projectRoot 'Code\core\lineage\ArmyRtsWarLifecycleService.cs'
 $reconciliationPath = Join-Path $projectRoot 'Code\core\lineage\ArmyRtsAssignmentReconciliationService.cs'
 $successionPath = Join-Path $projectRoot 'Code\core\lineage\ArmyRtsSuccessionRecoveryService.cs'
+$slaveVanguardPath = Join-Path $projectRoot 'Code\core\lineage\TemporarySlaveVanguardService.cs'
 
 function Require-Contains([string] $text, [string] $needle, [string] $message) {
     if (-not $text.Contains($needle)) {
@@ -96,3 +97,11 @@ Require-Contains $reconciliation 'ProcessAuthorityCycle(int pMaximumRecords)' 'A
 $succession = Get-Content -Raw $successionPath
 Require-Contains $succession 'internal static int PendingRecoveryUpperBound' 'Authority recovery must expose its pending snapshot.'
 Require-Contains $succession 'ProcessPendingRecoveries(int pMaximum,' 'Authority recovery must accept an explicit combined budget.'
+
+$slaveVanguard = Get-Content -Raw $slaveVanguardPath
+Require-Contains $slaveVanguard 'bool member = IsMember(pActor);' `
+    'Slave vanguard kingdom changes must snapshot membership before cleanup.'
+Require-Contains $slaveVanguard 'bool slave = SlaveService.IsSlave(pActor);' `
+    'Slave vanguard kingdom changes must snapshot slave status before cleanup.'
+Require-Contains $slaveVanguard 'if (!member && !slave) return;' `
+    'Slave vanguard kingdom changes must reject non-slave actors before queuing transfer work.'

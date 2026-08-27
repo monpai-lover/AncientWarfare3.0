@@ -6,8 +6,16 @@ using AncientWarfare3.core.naming;
 using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.presentation;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
+
+if (args.Length == 1 && args[0] == "--legacy-deferred-work-removal")
+{
+    LegacyDeferredWorkRemovalSourceGuardTests.Run();
+    Console.WriteLine("Legacy deferred work removal guards passed.");
+    return;
+}
 
 if (args.Length == 1 && args[0] == "--county-renaming")
 {
@@ -21,6 +29,13 @@ if (args.Length == 1 && args[0] == "--city-military-threat-facts")
 {
     CityMilitaryThreatFactsRulesTests.Run();
     Console.WriteLine("City military threat facts rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--city-military-threat-events")
+{
+    CityMilitaryThreatEventSourceGuardTests.Run();
+    Console.WriteLine("City military threat event guards passed.");
     return;
 }
 
@@ -82,6 +97,77 @@ if (args.Length == 1 && args[0] == "--court-history-localization")
     DeJureSeatNameSyncSourceGuardTests.Run();
     GlobalDeJureEmptyClickSourceGuardTests.Run();
     LocalCourtCountyMapFixSourceGuardTests.Run();
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--nameplate-refresh")
+{
+    NameplateRefreshRulesTests.Run();
+    PresentationRefreshRulesTests.Run();
+    Console.WriteLine("Nameplate refresh rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--dejure-maintenance")
+{
+    DeJureRegionMaintenanceSourceGuardTests.Run();
+    Console.WriteLine("De jure maintenance source guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--dejure-read-path")
+{
+    DeJureRegionReadPathSourceGuardTests.Run();
+    Console.WriteLine("De jure read-path guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--dejure-authority-stage")
+{
+    DeJureAuthorityStageSourceGuardTests.Run();
+    Console.WriteLine("De jure authority-stage guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--dejure-dirty-events")
+{
+    DeJureDirtyEventSourceGuardTests.Run();
+    Console.WriteLine("De jure dirty-event guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--dejure-dirty-rules")
+{
+    DeJureDirtyMaintenanceRulesTests.Run();
+    Console.WriteLine("De jure dirty-maintenance rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--incremental-simobjects-safety")
+{
+    AWIncrementalSimObjectZoneUnitsSourceGuardTests.Run();
+    Console.WriteLine("Incremental SimObjects/Zones safety guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--frame-priority-stability")
+{
+    FramePrioritySchedulerStabilitySourceGuardTests.Run();
+    Console.WriteLine("Frame-priority scheduler stability guards passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--path-generator-bounds")
+{
+    PathGeneratorBoundsRegressionSourceGuardTests.Run();
+    Console.WriteLine("Path generator bounds guard passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--path-generator-snapshot")
+{
+    PathGeneratorSnapshotRegressionTests.Run();
+    Console.WriteLine("Path generator snapshot regression passed.");
     return;
 }
 
@@ -9161,6 +9247,7 @@ if (recruitmentPriorityRule != null)
 }
 
 PathfindingPerformanceTests.Run();
+PathGeneratorSnapshotRegressionTests.Run();
 SimulationWorkerPoolTests.Run();
 TableIdAllocatorSqlTests.Run();
 BulkEraseKingdomDisposalRulesTests.Run();

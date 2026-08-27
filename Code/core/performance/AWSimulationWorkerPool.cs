@@ -165,7 +165,6 @@ namespace AncientWarfare3.core.performance
             long maximumTicks = Math.Max(1L,
                 (long)(pMaximumMilliseconds * Stopwatch.Frequency / 1000d));
             long deadline = startedAt + maximumTicks;
-            int idleSpins = 0;
             while (!_operationCompleted.IsSet)
             {
                 if (Stopwatch.GetTimestamp() >= deadline)
@@ -175,15 +174,7 @@ namespace AncientWarfare3.core.performance
                     return false;
                 }
 
-                if (TryAssistActiveOperationUntil(deadline))
-                    idleSpins = 0;
-                else if (idleSpins++ < 64)
-                    Thread.SpinWait(64);
-                else
-                {
-                    Thread.Yield();
-                    idleSpins = 0;
-                }
+                Thread.SpinWait(64);
             }
 
             Interlocked.Add(ref _mainWaitTicks,

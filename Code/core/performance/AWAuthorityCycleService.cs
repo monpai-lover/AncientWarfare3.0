@@ -110,6 +110,11 @@ namespace AncientWarfare3.core.performance
         private static bool _cooperativeCyclePaused;
         private static CooperativeAuthorityStage _cooperativeStage =
             CooperativeAuthorityStage.Complete;
+        private static long _nativeHookCalls;
+        private static long _nativeHookStateTrue;
+        private static long _nativeCycleRequests;
+        private static long _nativeCycleAdmitted;
+        private static string _lastNativeBlockReason = "none";
 
         public static string GetCooperativePhaseName()
         {
@@ -190,11 +195,33 @@ namespace AncientWarfare3.core.performance
 
         public static void ProcessNativeCycle()
         {
+            _nativeCycleRequests++;
             if (_nativeCycleToken < long.MaxValue)
                 _nativeCycleToken++;
             bool paused = MapBox.instance == null ||
                           MapBox.instance.isPaused();
+            _lastNativeBlockReason = AWFrameSchedulerRules.
+                ResolveAuthorityBlockReason(
+                    Config.game_loaded, SmoothLoader.isLoading(), paused,
+                    AW3MultiplayerReplicaScope.IsReplicaSession,
+                    AWWorldInitializationGate.IsPending());
+            if (_lastNativeBlockReason == "none") _nativeCycleAdmitted++;
             ProcessCycle(NativeGate, _nativeCycleToken, paused);
+        }
+
+        internal static void ObserveNativeHook(bool pState)
+        {
+            _nativeHookCalls++;
+            if (pState) _nativeHookStateTrue++;
+        }
+
+        internal static string GetDiagnostics()
+        {
+            return "hook_calls=" + _nativeHookCalls +
+                   ",hook_state_true=" + _nativeHookStateTrue +
+                   ",requests=" + _nativeCycleRequests +
+                   ",admitted=" + _nativeCycleAdmitted +
+                   ",last_block=" + _lastNativeBlockReason;
         }
 
         public static void Reset()
@@ -203,6 +230,11 @@ namespace AncientWarfare3.core.performance
             NativeGate.Reset();
             ResetCooperativeState();
             _nativeCycleToken = 0L;
+            _nativeHookCalls = 0L;
+            _nativeHookStateTrue = 0L;
+            _nativeCycleRequests = 0L;
+            _nativeCycleAdmitted = 0L;
+            _lastNativeBlockReason = "none";
             ArmyRtsSchedulingService.Reset();
             NobleHeirPregnancyService.Reset();
             RulerHouseholdPregnancyService.Reset();
@@ -450,21 +482,25 @@ namespace AncientWarfare3.core.performance
 
         private static void DrainDeferredAuthorityWork()
         {
-            CourtVacancyReconciliationService.DrainDueRetryTickets();
-            PeasantRebelBanditStrongholdPopulationService.
-                ProcessAuthorityCycle();
-            BanditStrongholdCityDisposalService.ProcessAuthorityCycle();
+            MeasureAuthority("deferred.court_vacancy_retry", () =>
+                CourtVacancyReconciliationService.DrainDueRetryTickets(1));
+            MeasureAuthority("deferred.stronghold_population", () =>
+                PeasantRebelBanditStrongholdPopulationService.
+                    ProcessAuthorityCycle(1));
+            MeasureAuthority("deferred.stronghold_disposal", () =>
+                BanditStrongholdCityDisposalService.ProcessAuthorityCycle(1));
             int pending = DeferredRuntimeWorkService.PendingCount;
             int itemLimit = DeferredRuntimeWorkRules.
                 ResolveItemsPerAuthorityFrame(pending);
             if (itemLimit <= 0) return;
-            int catchUpLimit = DeferredRuntimeWorkRules.
-                ResolveCatchUpItemsPerAuthorityFrame(pending);
-            itemLimit = Math.Max(itemLimit, catchUpLimit);
-            DeferredRuntimeWorkService.DrainFrame(
-                pMilliseconds: DeferredRuntimeWorkRules.
-                    ResolveDrainMillisecondsPerAuthorityFrame(pending),
-                pMaxItems: itemLimit);
+            // Keep the Cultiway authority boundary strict: a backlog must be
+            // drained over later frames, never amplified into a four-item
+            // burst on the main thread.
+            MeasureAuthority("deferred.runtime_queue", () =>
+                DeferredRuntimeWorkService.DrainFrame(
+                    pMilliseconds: DeferredRuntimeWorkRules.
+                        ResolveDrainMillisecondsPerAuthorityFrame(pending),
+                    pMaxItems: itemLimit));
         }
 
         private static void FlushPendingWarParticipantSources()

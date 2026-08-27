@@ -189,7 +189,15 @@ namespace AncientWarfare3.core.policy
 
         public static long BeginAuthorityStage()
         {
-            return _sampling ? Stopwatch.GetTimestamp() : 0L;
+            // Authority stages are synchronous main-thread work. Keep timing
+            // active between text-log sampling windows so deferred spikes
+            // retain their actual stage owner.
+            return _frameStarted != 0L ? Stopwatch.GetTimestamp() : 0L;
+        }
+
+        public static long BeginDeferredItemScope()
+        {
+            return _frameStarted != 0L ? Stopwatch.GetTimestamp() : 0L;
         }
 
         public static void EndAuthorityStage(string pId, long pStarted)
@@ -613,6 +621,8 @@ namespace AncientWarfare3.core.policy
                 " deferred_runtime_work=" + deferredRuntimeWork +
                 " deferred_runtime_detail=" +
                 DeferredRuntimeWorkService.GetDiagnostics() +
+                " native_authority=" +
+                AWAuthorityCycleService.GetDiagnostics() +
                 " kingdom_repair_queue=" + kingdomRepairQueue +
                 " army_count=" + armyCount +
                 " frame_ms=" + Milliseconds(frameTicks) +
@@ -751,6 +761,7 @@ namespace AncientWarfare3.core.policy
                 " path_cancelled=" + pathDiagnostics.Cancelled +
                 " path_completed=" + pathDiagnostics.Completed +
                 " path_failed=" + pathDiagnostics.Failed +
+                " path_failed_by_reason=" + pathDiagnostics.FailedByReason() +
                 " path_operational_requests=" +
                 pathDiagnostics.OperationalRequests +
                 " path_essential_requests=" +
@@ -770,6 +781,8 @@ namespace AncientWarfare3.core.policy
                 pathDiagnostics.AmbientQueueHighWater +
                 " path_expanded_nodes=" + pathDiagnostics.ExpandedNodes +
                 " path_owner_state=" + PathfindingOwnershipService.State +
+                " presentation_visibility=" +
+                AWPresentationVisibility.GetDiagnostics() +
                 " actor_path_workers=" + actorPathWorkers +
                 " actor_path_active=" + actorPathActive +
                 " actor_path_queue=" + actorPathQueue +

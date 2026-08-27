@@ -42,6 +42,10 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private static long diagnosticEnemyCalls;
     private static long diagnosticEnemyCandidates;
     private static long diagnosticEnemyEmpty;
+    // Priority inputs are world-wide indexes. A large-step cycle can contain
+    // several logical passes in one render frame, so refreshing them for
+    // every pass needlessly repeats the same army/taxi scans.
+    private static int militaryPriorityRefreshFrame = -1;
     private static readonly List<long> militaryPriorityRefreshActorIds =
         new List<long>();
 
@@ -55,6 +59,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private readonly Action<int> taskVerifierWorkItemAction;
     private readonly Action<int> searchWorkItemAction;
     private readonly List<long> militaryP0ActorIds = new List<long>();
+    private readonly List<BaseSimObject> aggressionCandidates =
+        new List<BaseSimObject>();
 
     private enum PostStage
     {
@@ -70,6 +76,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         ScheduleEnemySearch,
         AwaitEnemySearch,
         CommitEnemySearch,
+        AfterEnemySearch,
         BeforePathMovement,
         Finish
     }
@@ -175,11 +182,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         float cycleElapsed,
         ParallelOptions pParallelOptions)
     {
-        ArmyMilitaryMovementPriorityIndex.BeginCycle();
-        ArmyMilitaryMovementPriorityIndex.RefreshVanillaTaxiSnapshot();
-        ArmyRtsControllerService.RefreshMilitaryPriorityIndex();
-        ArmyRtsTransportService.RefreshMilitaryP0Priority();
-        RefreshRoyalGuardMilitaryPriorities();
+        RefreshMilitaryPriorityInputsForFrame();
         ArmyMilitaryMovementPriorityIndex.CopySnapshot(militaryP0ActorIds);
         militaryP0Cursor = 0;
         batches = activeBatches;
@@ -190,13 +193,12 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         workIndex = 0;
         workCount = 0;
         tileActionCommitIndex = 0;
-        splitPostJobs =
-            AWSimulationTickBenchmark.ShouldSplitActorPostJobs;
+        splitPostJobs = AWSimulationTickBenchmark.IsCapturing;
         taskVerifierStageCompleted = false;
         searchTicket = default;
         searchScheduleStartedAt = 0L;
         searchScheduleCompletedAt = 0L;
-        PrepareActiveBehaviorPartitions(batches.Count);
+        aggressionCandidates.Clear();
 
         if (batches.Count == 0)
         {
@@ -255,9 +257,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 "Actor post jobs 中 u8/b1/b2/b3 顺序无效");
         }
 
-        ValidateUpdateEligibilityJobs();
-        ValidateActorGateJobs();
-
         taskVerifierJobIndex = FindPostJobIndex(
             batches[0].jobs_post,
             TaskVerifierJobId);
@@ -269,7 +268,21 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
         // P0 owns the military actor lifecycle only after native timer and
         // current-target checks have established this cycle's search state.
-        stage = PostStage.BeforeDeadCheck;
+        stage = PostStage.BeforeEnemySearch;
+    }
+
+    private static void RefreshMilitaryPriorityInputsForFrame()
+    {
+        int frame = UnityEngine.Time.frameCount;
+        if (militaryPriorityRefreshFrame == UnityEngine.Time.frameCount)
+            return;
+
+        militaryPriorityRefreshFrame = frame;
+        ArmyMilitaryMovementPriorityIndex.BeginCycle();
+        ArmyMilitaryMovementPriorityIndex.RefreshVanillaTaxiSnapshot();
+        ArmyRtsControllerService.RefreshMilitaryPriorityIndex();
+        ArmyRtsTransportService.RefreshMilitaryP0Priority();
+        RefreshRoyalGuardMilitaryPriorities();
     }
 
     private static void RefreshRoyalGuardMilitaryPriorities()
@@ -805,6 +818,77 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         if (stage == PostStage.MilitaryP0)
             return phasePrefix + ".post.military_p0.chunk";
 
+        if (stage == PostStage.BeforeEnemySearch &&
+            batchIndex >= batches.Count)
+        {
+            return ShouldRunMilitaryP0Stage()
+                ? phasePrefix + ".post.military_p0.chunk"
+                : phasePrefix + ".post.b3.prepare.batch.0";
+        }
+
+        if (stage == PostStage.PrepareEnemySearch &&
+            batchIndex >= batches.Count)
+        {
+            return workCount > 0
+                ? phasePrefix + ".post.b3.search.schedule"
+                : GetNextPostRangePhaseName(
+                    phasePrefix,
+                    enemySearchJobIndex + 1,
+                    int.MaxValue,
+                    "after_b3",
+                    restartRange: true);
+        }
+
+        if (stage == PostStage.CommitEnemySearch && workIndex >= workCount)
+        {
+            return GetNextPostRangePhaseName(
+                phasePrefix,
+                enemySearchJobIndex + 1,
+                int.MaxValue,
+                "after_b3",
+                restartRange: true);
+        }
+
+        if (stage == PostStage.AfterEnemySearch &&
+            batchIndex >= batches.Count)
+        {
+            return phasePrefix + ".post.finish";
+        }
+
+        return stage switch
+        {
+            PostStage.BeforeEnemySearch =>
+                GetNextPostRangePhaseName(
+                    phasePrefix,
+                    0,
+                    enemySearchJobIndex,
+                    "before_b3"),
+            PostStage.PrepareEnemySearch =>
+                phasePrefix + ".post.b3.prepare.batch." + batchIndex,
+            PostStage.ScheduleEnemySearch =>
+                phasePrefix + ".post.b3.search.schedule",
+            PostStage.AwaitEnemySearch =>
+                IsBackgroundWorkCompleted
+                    ? phasePrefix + ".post.b3.search.complete"
+                    : phasePrefix + ".post.b3.search.await",
+            PostStage.CommitEnemySearch =>
+                phasePrefix + ".post.b3.commit.batch_group." + workIndex,
+            PostStage.AfterEnemySearch =>
+                GetNextPostRangePhaseName(
+                    phasePrefix,
+                    enemySearchJobIndex + 1,
+                    int.MaxValue,
+                    "after_b3"),
+            PostStage.Finish => phasePrefix + ".post.finish",
+            _ => phasePrefix + ".post.idle"
+        };
+    }
+
+    private string GetLegacyNextPhaseName(string phasePrefix)
+    {
+        if (stage == PostStage.MilitaryP0)
+            return phasePrefix + ".post.military_p0.chunk";
+
         if (stage == PostStage.BeforeDeadCheck &&
             batchIndex >= batches.Count)
         {
@@ -940,6 +1024,122 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     }
 
     public bool Step()
+    {
+        while (true)
+        {
+            switch (stage)
+            {
+                case PostStage.Idle:
+                    return true;
+                case PostStage.BeforeEnemySearch:
+                    if (TryRunNextPostRange(0, enemySearchJobIndex))
+                        return false;
+
+                    batchIndex = 0;
+                    postJobIndex = 0;
+                    stage = ShouldRunMilitaryP0Stage()
+                        ? PostStage.MilitaryP0
+                        : PostStage.PrepareEnemySearch;
+                    continue;
+                case PostStage.MilitaryP0:
+                    ArmyRtsTransportService.ProcessMilitaryP0(elapsed);
+                    RunMilitaryP0Chunk(elapsed);
+                    bool militaryP0Pending =
+                        militaryP0Cursor < militaryP0ActorIds.Count;
+                    if (!ArmyMilitaryMovementPriorityRules.
+                            CanAdmitOrdinaryActorWork(militaryP0Pending))
+                        return false;
+                    if (batches.Count == 0)
+                    {
+                        stage = PostStage.Finish;
+                        return false;
+                    }
+
+                    batchIndex = 0;
+                    postJobIndex = 0;
+                    stage = PostStage.PrepareEnemySearch;
+                    return false;
+                case PostStage.PrepareEnemySearch:
+                    if (TryPrepareNextBatch())
+                        return false;
+
+                    workIndex = 0;
+                    if (workCount == 0)
+                    {
+                        batchIndex = 0;
+                        postJobIndex = enemySearchJobIndex + 1;
+                        stage = PostStage.AfterEnemySearch;
+                        continue;
+                    }
+
+                    stage = PostStage.ScheduleEnemySearch;
+                    continue;
+                case PostStage.ScheduleEnemySearch:
+                    searchScheduleStartedAt = StartBenchmarkMeasurement();
+                    try
+                    {
+                        searchTicket = AWSimulationWorkerPool.Instance.BeginIndexed(
+                            0,
+                            workCount,
+                            searchWorkItemAction);
+                    }
+                    finally
+                    {
+                        if (searchScheduleStartedAt != 0L)
+                            searchScheduleCompletedAt = Stopwatch.GetTimestamp();
+                    }
+
+                    stage = PostStage.AwaitEnemySearch;
+                    return false;
+                case PostStage.AwaitEnemySearch:
+                    AWSimulationWorkerPool.Instance.Wait(searchTicket);
+                    AWSimulationWorkerPool.WorkResult searchResult;
+                    try
+                    {
+                        searchResult = AWSimulationWorkerPool.Instance.Complete(
+                            searchTicket);
+                    }
+                    finally
+                    {
+                        searchTicket = default;
+                    }
+
+                    if (CaptureDiagnostics)
+                    {
+                        Interlocked.Add(ref diagnosticWorkerTicks,
+                            searchResult.WallTicks);
+                    }
+                    RecordSearchBenchmark(searchResult);
+                    workIndex = 0;
+                    stage = PostStage.CommitEnemySearch;
+                    return false;
+                case PostStage.CommitEnemySearch:
+                    if (TryCommitNextGroup())
+                        return false;
+
+                    batchIndex = 0;
+                    postJobIndex = enemySearchJobIndex + 1;
+                    stage = PostStage.AfterEnemySearch;
+                    continue;
+                case PostStage.AfterEnemySearch:
+                    if (TryRunNextPostRange(
+                            enemySearchJobIndex + 1,
+                            int.MaxValue))
+                        return false;
+
+                    stage = PostStage.Finish;
+                    continue;
+                case PostStage.Finish:
+                    ResetCycleReferences(clearPendingWork: false);
+                    stage = PostStage.Idle;
+                    return true;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+    }
+
+    private bool LegacyStep()
     {
         while (true)
         {
@@ -1237,28 +1437,16 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             return false;
         }
 
-        int batchEnd = Math.Min(
-            batches.Count,
-            batchIndex + workGroupSize);
-        while (batchIndex < batchEnd)
+        int aggregateBatchIndex = batchIndex;
+        BatchActors aggregateBatch = batches[batchIndex++];
+        List<Job<Actor>> aggregateJobs = aggregateBatch.jobs_post;
+        int aggregateEnd = Math.Min(endJobIndex, aggregateJobs.Count);
+        for (int i = startJobIndex; i < aggregateEnd; i++)
         {
-            int aggregateBatchIndex = batchIndex;
-            BatchActors aggregateBatch =
-                batches[batchIndex++];
-            List<Job<Actor>> aggregateJobs =
-                aggregateBatch.jobs_post;
-            int aggregateEnd = Math.Min(
-                endJobIndex,
-                aggregateJobs.Count);
-            for (int i = startJobIndex;
-                 i < aggregateEnd;
-                 i++)
-            {
-                RunPostJob(
-                    aggregateBatch,
-                    aggregateJobs[i],
-                    aggregateBatchIndex);
-            }
+            RunPostJob(
+                aggregateBatch,
+                aggregateJobs[i],
+                aggregateBatchIndex);
         }
 
         return true;
@@ -1284,9 +1472,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             return;
         }
 
-        double startedAt = splitPostJobs
-            ? Time.realtimeSinceStartupAsDouble
-            : 0.0;
+        double startedAt = Time.realtimeSinceStartupAsDouble;
         int actorsChecked = job.container.Count;
         if (job.id.Equals(
                 InsideBoatJobId,
@@ -1300,19 +1486,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         {
             actorsChecked = RunActionLandedJob(batch, job.container);
         }
-        else if (job.id.Equals(
-                     TileActionJobId,
-                     StringComparison.Ordinal))
-        {
-            RunTileActionJob(job.container);
-        }
-        else if (IsActiveBehaviorJob(job.id) &&
-                 TryRunActiveBehaviorJob(
-                     job,
-                     currentBatchIndex,
-                     out actorsChecked))
-        {
-        }
         else
         {
             job.job_updater();
@@ -1323,12 +1496,9 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             job.current_skips = Randy.randomInt(0, job.random_tick_skips);
         }
 
-        if (splitPostJobs)
-        {
-            job.time_benchmark +=
-                Time.realtimeSinceStartupAsDouble - startedAt;
-            job.counter += actorsChecked;
-        }
+        job.time_benchmark +=
+            Time.realtimeSinceStartupAsDouble - startedAt;
+        job.counter += actorsChecked;
     }
 
     private int RunInsideBoatJob(BatchActors batch)
@@ -2544,8 +2714,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private void BeginEnemySearch()
     {
         batchIndex = 0;
-        postJobIndex = currentEnemyTargetJobIndex;
-        PrepareEnemySearchClassifications();
+        postJobIndex = 0;
         stage = PostStage.PrepareEnemySearch;
     }
 
@@ -2556,6 +2725,57 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     }
 
     private bool TryPrepareNextBatch()
+    {
+        if (batchIndex >= batches.Count)
+            return false;
+
+        BatchActors batch = batches[batchIndex++];
+        Job<Actor> job = batch.jobs_post[enemySearchJobIndex];
+        batch._elapsed = elapsed;
+        batch._cur_container = job.container;
+        if (job.current_skips > 0)
+        {
+            job.current_skips--;
+            return true;
+        }
+
+        long startedAt = StartBenchmarkMeasurement();
+        int actorsChecked = PrepareEnemySearchBatch(batch, job.container);
+        if (job.random_tick_skips > 0)
+        {
+            job.current_skips = Randy.randomInt(0, job.random_tick_skips);
+        }
+
+        job.counter += actorsChecked;
+        RecordBenchmarkMeasurement(
+            "b3_findEnemyTarget.prepare",
+            startedAt,
+            actorsChecked);
+        return true;
+    }
+
+    private int PrepareEnemySearchBatch(
+        BatchActors batch,
+        ObjectContainer<Actor> container)
+    {
+        if (container == null ||
+            (container.Count == 0 && !container.isDirtyContainer()))
+            return 0;
+
+        container.checkAddRemove();
+        Actor[] array = container.getFastSimpleArray();
+        int count = container.Count;
+        batch._array = array;
+        batch._count = count;
+        if (World.world.isPaused())
+            return count;
+
+        for (int i = 0; i < count; i++)
+            PrepareEnemySearch(array[i]);
+        return count;
+    }
+
+    private bool LegacyTryPrepareNextBatch()
     {
         if (batchIndex >= batches.Count)
         {
@@ -2786,8 +3006,18 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             }
         }
 
-        int aggressionSourceCount =
-            actor._aggression_targets.Count;
+        int aggressionStart = aggressionCandidates.Count;
+        int aggressionSourceCount = actor._aggression_targets.Count;
+        if (aggressionSourceCount > 0)
+        {
+            foreach (long targetId in actor._aggression_targets)
+            {
+                Actor target = World.world.units.get(targetId);
+                if (target != null && !target.isRekt())
+                    aggressionCandidates.Add(target);
+            }
+        }
+
         if (primaryCandidates.Count == 0 &&
             aggressionSourceCount == 0 &&
             !applyBackoff)
@@ -2801,6 +3031,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             primaryCandidates,
             findClosest,
             randomOffset,
+            aggressionStart,
+            aggressionCandidates.Count - aggressionStart,
             aggressionSourceCount,
             applyBackoff);
     }
@@ -2828,7 +3060,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
     private void SearchWorkItemAt(int index)
     {
-        workItems[index].Search();
+        workItems[index].Search(aggressionCandidates);
     }
 
     private bool TryCommitNextGroup()
@@ -2983,6 +3215,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
         workCount = 0;
         workIndex = 0;
+        aggressionCandidates.Clear();
         militaryP0ActorIds.Clear();
         militaryP0Cursor = 0;
         tileActionCommitIndex = 0;
@@ -3675,12 +3908,12 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private sealed class SearchWorkItem
     {
         private readonly CandidateView candidateView = new();
-        private readonly List<BaseSimObject>
-            aggressionCandidates = new();
         private Actor actor;
         private List<BaseSimObject> primaryCandidates;
         private bool findClosest;
         private int randomOffset;
+        private int aggressionStart;
+        private int aggressionCount;
         private int originalAggressionCount;
         private bool hadAggressionTargets;
         private bool clearAggressionTargets;
@@ -3692,6 +3925,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             List<BaseSimObject> sourcePrimaryCandidates,
             bool sourceFindClosest,
             int sourceRandomOffset,
+            int sourceAggressionStart,
+            int sourceAggressionCount,
             int sourceOriginalAggressionCount,
             bool sourceApplyBackoff)
         {
@@ -3699,6 +3934,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             primaryCandidates = sourcePrimaryCandidates;
             findClosest = sourceFindClosest;
             randomOffset = sourceRandomOffset;
+            aggressionStart = sourceAggressionStart;
+            aggressionCount = sourceAggressionCount;
             originalAggressionCount = sourceOriginalAggressionCount;
             hadAggressionTargets = sourceOriginalAggressionCount > 0;
             clearAggressionTargets = false;
@@ -3706,7 +3943,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             result = null;
         }
 
-        internal void Search()
+        internal void Search(List<BaseSimObject> allAggressionCandidates)
         {
             if (primaryCandidates.Count > 0)
             {
@@ -3734,28 +3971,16 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 return;
             }
 
-            aggressionCandidates.Clear();
-            foreach (long targetId in
-                     actor._aggression_targets)
-            {
-                Actor target =
-                    World.world.units.get(targetId);
-                if (target != null && !target.isRekt())
-                {
-                    aggressionCandidates.Add(target);
-                }
-            }
-
-            if (aggressionCandidates.Count == 0)
+            if (aggressionCount == 0)
             {
                 clearAggressionTargets = true;
                 return;
             }
 
             candidateView.Configure(
-                aggressionCandidates,
-                0,
-                aggressionCandidates.Count,
+                allAggressionCandidates,
+                aggressionStart,
+                aggressionCount,
                 0);
             result = actor.checkObjectList(
                 candidateView,
@@ -3811,7 +4036,6 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         {
             actor = null;
             primaryCandidates = null;
-            aggressionCandidates.Clear();
             applyBackoff = false;
             result = null;
             candidateView.ResetSource();

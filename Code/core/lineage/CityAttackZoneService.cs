@@ -104,20 +104,35 @@ namespace AncientWarfare3.core.lineage
         {
             if (pWar?.data == null || pCity?.data == null ||
                 pKingdom?.data == null) return false;
-            if (CityMilitaryThreatFacts.TryGet(pWar, pCity, pKingdom,
-                    out bool cached))
-                return cached;
             bool physicalOccupation = false;
             bool physicalControllerHostile = false;
             try
             {
-                Kingdom controller = pCity.being_captured_by;
-                physicalOccupation = pCity.isGettingCaptured() &&
-                                     controller?.data != null;
-                if (physicalOccupation)
-                    physicalControllerHostile =
-                        !pWar.onTheSameSide(pKingdom, controller) &&
-                        pWar.isInWarWith(pKingdom, controller);
+                if (CityMilitaryThreatFacts.TryGetCaptureState(pCity,
+                        out long controllerId, out bool active))
+                {
+                    Kingdom controller = controllerId >= 0L
+                        ? World.world?.kingdoms?.get(controllerId)
+                        : null;
+                    physicalOccupation = active && controller?.data != null;
+                    if (physicalOccupation)
+                        physicalControllerHostile =
+                            !pWar.onTheSameSide(pKingdom, controller) &&
+                            pWar.isInWarWith(pKingdom, controller);
+                }
+                else
+                {
+                    // A loaded save can already contain an occupation before
+                    // the first transition event. Read vanilla state for
+                    // compatibility, but never publish a query cache entry.
+                    Kingdom controller = pCity.being_captured_by;
+                    physicalOccupation = pCity.isGettingCaptured() &&
+                                         controller?.data != null;
+                    if (physicalOccupation)
+                        physicalControllerHostile =
+                            !pWar.onTheSameSide(pKingdom, controller) &&
+                            pWar.isInWarWith(pKingdom, controller);
+                }
             }
             catch { }
 
@@ -141,7 +156,6 @@ namespace AncientWarfare3.core.lineage
             bool hostile = CityOccupationThreatRules.IsEnemyOccupationActive(
                 physicalOccupation, physicalControllerHostile,
                 frozenOccupation, frozenControllerHostile);
-            CityMilitaryThreatFacts.Store(pWar, pCity, pKingdom, hostile);
             return hostile;
         }
 

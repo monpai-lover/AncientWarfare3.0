@@ -313,46 +313,16 @@ namespace AncientWarfare3.core.lineage
         public static bool TryRemoveEmptyArmy(Army pArmy,
             City pCityHint = null, Kingdom pKingdomHint = null)
         {
-            Bench.bench(CityMaintenanceBenchmarkRules.EmptyArmyDetection,
-                CityMaintenanceBenchmarkRules.Group);
-            bool shouldRemove;
-            try
-            {
-                bool alive = false;
-                int listedUnitCount = 0;
-                bool hasLinkedLiveUnit = false;
-                try { alive = pArmy != null && pArmy.isAlive(); }
-                catch { }
-                try { listedUnitCount = pArmy?.countUnits() ?? 0; }
-                catch { }
-                if (listedUnitCount <= 1)
-                    hasLinkedLiveUnit = HasLinkedLiveUnit(pArmy);
-                shouldRemove = ArmyLifecycleRules.ShouldRemoveEmptyArmy(
-                    pArmy?.data != null, alive, listedUnitCount,
-                    hasLinkedLiveUnit, IsSpecialArmyCreationInProgress(pArmy));
-            }
-            finally
-            {
-                Bench.benchEnd(
-                    CityMaintenanceBenchmarkRules.EmptyArmyDetection,
-                    CityMaintenanceBenchmarkRules.Group);
-            }
-            if (!shouldRemove) return false;
-
-            Bench.bench(CityMaintenanceBenchmarkRules.EmptyArmyRemoval,
-                CityMaintenanceBenchmarkRules.Group);
-            try
-            {
-                bool nonReplacingShell = IsNonReplacingShell(pArmy);
-                return RemoveArmyObject(pArmy, pClearCityReference: true,
-                    pCityHint, pKingdomHint,
-                    pRequestReplacement: !nonReplacingShell);
-            }
-            finally
-            {
-                Bench.benchEnd(CityMaintenanceBenchmarkRules.EmptyArmyRemoval,
-                    CityMaintenanceBenchmarkRules.Group);
-            }
+            // Empty ordinary armies are owned by the vanilla city/army
+            // lifecycle.  Do not duplicate its unit-count scan or enqueue a
+            // replacement decision from AW3.  The hints are intentionally
+            // ignored: callers may be running during a native membership
+            // mutation, so forcing removal here can race the vanilla list
+            // rebuild and create another empty shell.
+            // Vanilla's City.checkArmyExistence/ArmyManager.checkLists own
+            // the actual cleanup.  Calling either here would immediately
+            // repeat their world/list walk from an AW3 lifecycle callback.
+            return false;
         }
 
         public static void RemoveSpecialArmy(Army pArmy)

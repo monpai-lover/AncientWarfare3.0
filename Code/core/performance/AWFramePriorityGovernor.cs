@@ -6,12 +6,6 @@ using UnityEngine;
 
 namespace AncientWarfare3.core.performance
 {
-    internal enum AWSimulationDomain
-    {
-        Vanilla,
-        Aw3Authority
-    }
-
     internal static class AWFramePriorityGovernor
     {
         private const int BaselineWindowSize = 120;
@@ -34,12 +28,14 @@ namespace AncientWarfare3.core.performance
         private static double _simulationCpuMilliseconds;
         private static double _vanillaCpuMilliseconds;
         private static double _aw3CpuMilliseconds;
+        private static double _rtsP0CpuMilliseconds;
         private static double _lastFrameDeltaMilliseconds;
-        private static double _lastFrameSimulationMilliseconds;
         private static double _frameBudgetMilliseconds;
         private static int _lastVanillaRunFrame =
-            -AWPerformanceSettings.StarvationFrameInterval;
+            -AWFrameSchedulerRules.VanillaStarvationFrameInterval;
         private static int _lastAw3RunFrame =
+            -AWFrameSchedulerRules.VanillaStarvationFrameInterval;
+        private static int _lastRtsP0RunFrame =
             -AWPerformanceSettings.StarvationFrameInterval;
         private static string _currentPhase = "idle";
         private static string _currentVanillaPhase = "idle";
@@ -85,6 +81,7 @@ namespace AncientWarfare3.core.performance
             _simulationCpuMilliseconds = 0d;
             _vanillaCpuMilliseconds = 0d;
             _aw3CpuMilliseconds = 0d;
+            _rtsP0CpuMilliseconds = 0d;
             RecalculateBudget();
         }
 
@@ -178,8 +175,17 @@ namespace AncientWarfare3.core.performance
             else
             {
                 _aw3CpuMilliseconds += elapsed;
-                _lastAw3RunFrame = _frameId;
-                _currentAw3Phase = pPhase;
+                if (pDomain == AWSimulationDomain.RtsP0)
+                {
+                    _rtsP0CpuMilliseconds += elapsed;
+                    _lastRtsP0RunFrame = _frameId;
+                    _currentAw3Phase = "rts_p0." + pPhase;
+                }
+                else
+                {
+                    _lastAw3RunFrame = _frameId;
+                    _currentAw3Phase = pPhase;
+                }
             }
 
             _currentPhase = pPhase;
@@ -297,7 +303,6 @@ namespace AncientWarfare3.core.performance
             }
 
             _lastFrameDeltaMilliseconds = Time.unscaledDeltaTime * 1000d;
-            _lastFrameSimulationMilliseconds = _simulationCpuMilliseconds;
         }
 
         private static void DecayLongestPhase()
@@ -319,10 +324,11 @@ namespace AncientWarfare3.core.performance
             double rawBudget = targetMilliseconds -
                                AWPerformanceSettings.RenderReserveMilliseconds -
                                _baselineP90;
-            double previousFrameOverrun = Math.Min(
-                _lastFrameSimulationMilliseconds,
-                Math.Max(0d,
-                    _lastFrameDeltaMilliseconds - targetMilliseconds - 1d));
+            // Match Cultiway master: a render, UI, GC, or simulation overrun
+            // is still real frame pressure. Back off the next simulation
+            // slice instead of immediately repeating the overload.
+            double previousFrameOverrun = Math.Max(0d,
+                _lastFrameDeltaMilliseconds - targetMilliseconds - 1d);
             rawBudget -= previousFrameOverrun;
             _frameBudgetMilliseconds = Math.Max(0d,
                 Math.Min(AWPerformanceSettings
@@ -334,18 +340,25 @@ namespace AncientWarfare3.core.performance
         {
             int lastRunFrame = pDomain == AWSimulationDomain.Vanilla
                 ? _lastVanillaRunFrame
-                : _lastAw3RunFrame;
+                : pDomain == AWSimulationDomain.RtsP0
+                    ? _lastRtsP0RunFrame
+                    : _lastAw3RunFrame;
+            int starvationInterval =
+                AWFrameSchedulerRules.ResolveStarvationFrameInterval(pDomain);
             if (lastRunFrame != _frameId &&
                 _frameId - lastRunFrame <
-                    AWPerformanceSettings.StarvationFrameInterval)
+                    starvationInterval)
                 return false;
 
             double starvationBudget = Math.Min(
-                AWPerformanceSettings.StarvationSliceMilliseconds,
+                AWFrameSchedulerRules.ResolveStarvationSliceMilliseconds(
+                    pDomain),
                 AWPerformanceSettings.MaxSimulationMillisecondsPerFrame);
             double domainSpent = pDomain == AWSimulationDomain.Vanilla
                 ? _vanillaCpuMilliseconds
-                : _aw3CpuMilliseconds;
+                : pDomain == AWSimulationDomain.RtsP0
+                    ? _rtsP0CpuMilliseconds
+                    : _aw3CpuMilliseconds - _rtsP0CpuMilliseconds;
             return domainSpent < starvationBudget &&
                    _simulationCpuMilliseconds <
                    _frameBudgetMilliseconds + starvationBudget;

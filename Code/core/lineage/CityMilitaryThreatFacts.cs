@@ -83,10 +83,24 @@ namespace AncientWarfare3.core.lineage
             internal double CachedAt { get; }
         }
 
+        private readonly struct CaptureStateEntry
+        {
+            internal CaptureStateEntry(long pControllerId, bool pActive)
+            {
+                ControllerId = pControllerId;
+                Active = pActive;
+            }
+
+            internal long ControllerId { get; }
+            internal bool Active { get; }
+        }
+
         private static readonly Dictionary<CityMilitaryThreatKey, FactEntry>
             Facts = new Dictionary<CityMilitaryThreatKey, FactEntry>();
         private static readonly Dictionary<PresenceKey, PresenceEntry>
             PresenceFacts = new Dictionary<PresenceKey, PresenceEntry>();
+        private static readonly Dictionary<long, CaptureStateEntry>
+            CaptureState = new Dictionary<long, CaptureStateEntry>();
         private static long _requests;
         private static long _physicalScans;
         private static long _hits;
@@ -153,6 +167,47 @@ namespace AncientWarfare3.core.lineage
                 RealtimeSeconds());
         }
 
+        // The vanilla City object owns capture transitions. Keep the latest
+        // transition as a fact so RTS queries do not rediscover it through a
+        // short-lived per-query cache.
+        internal static bool ObserveCaptureState(City pCity,
+            Kingdom pController, bool pActive)
+        {
+            long cityId = pCity?.data == null ? -1L : pCity.id;
+            if (cityId < 0L) return false;
+            long controllerId = pActive && pController?.data != null
+                ? pController.id
+                : -1L;
+            var next = new CaptureStateEntry(controllerId,
+                pActive && controllerId >= 0L);
+            if (CaptureState.TryGetValue(cityId,
+                    out CaptureStateEntry previous) &&
+                previous.ControllerId == next.ControllerId &&
+                previous.Active == next.Active) return false;
+            CaptureState[cityId] = next;
+            return true;
+        }
+
+        internal static bool TryGetCaptureState(City pCity,
+            out long pControllerId, out bool pActive)
+        {
+            pControllerId = -1L;
+            pActive = false;
+            long cityId = pCity?.data == null ? -1L : pCity.id;
+            if (cityId < 0L || !CaptureState.TryGetValue(cityId,
+                    out CaptureStateEntry state)) return false;
+            pControllerId = state.ControllerId;
+            pActive = state.Active;
+            return true;
+        }
+
+        internal static void ClearCaptureState(City pCity)
+        {
+            long cityId = pCity?.data == null ? -1L : pCity.id;
+            if (cityId < 0L) return;
+            CaptureState[cityId] = new CaptureStateEntry(-1L, false);
+        }
+
         internal static void RecordPhysicalScan()
         {
             _physicalScans++;
@@ -204,6 +259,7 @@ namespace AncientWarfare3.core.lineage
         {
             Facts.Clear();
             PresenceFacts.Clear();
+            CaptureState.Clear();
             _requests = 0L;
             _physicalScans = 0L;
             _hits = 0L;

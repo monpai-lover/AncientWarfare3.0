@@ -15,7 +15,14 @@ namespace AncientWarfare3.core.lineage
         private static int _month;
         private static int _cityCursor;
         private static long _journeyCursor = -1L;
-        private static readonly HashSet<long> MissionTargetCityIds = new HashSet<long>();
+        private static readonly HashSet<long> ThreatenedCityIds = new HashSet<long>();
+        private static readonly Dictionary<long, HashSet<long>> DestinationCityIdsByKingdom =
+            new Dictionary<long, HashSet<long>>();
+        private static readonly Dictionary<long, long> DestinationOwnerByCity =
+            new Dictionary<long, long>();
+        private static Dictionary<long, int> _monthlyReservations =
+            new Dictionary<long, int>();
+        private static bool _destinationSnapshotInitialized;
 
         private enum WarRefugeeLifecycleResult
         {
@@ -33,9 +40,34 @@ namespace AncientWarfare3.core.lineage
             if (currentMonth == _month) return;
             _month = currentMonth;
             if (!CanMutate()) return;
-            RefreshThreatSnapshot();
+            RefreshMonthlyReservations();
             ProcessPersistedJourneys(currentMonth, JourneyBudgetPerMonth);
             CaptureThreatenedCities(currentMonth, CityBudgetPerMonth);
+        }
+
+        internal static void OnWarStarted(War pWar)
+        {
+            if (pWar?.data == null || _destinationSnapshotInitialized) return;
+            BuildDestinationSnapshot();
+        }
+
+        internal static void OnCityOwnerChanged(City pCity,
+            Kingdom pOldKingdom, Kingdom pNewKingdom)
+        {
+            if (!_destinationSnapshotInitialized || pCity?.data == null) return;
+            long cityId = pCity.id;
+            RemoveDestination(cityId, pOldKingdom?.data?.id ?? -1L);
+            long newKingdomId = pNewKingdom?.data?.id ??
+                pCity.kingdom?.data?.id ?? -1L;
+            if (newKingdomId >= 0L) AddDestination(cityId, newKingdomId);
+        }
+
+        internal static void OnCityThreatStateChanged(City pCity, bool pActive)
+        {
+            long cityId = pCity?.data?.id ?? -1L;
+            if (cityId < 0L) return;
+            if (pActive) ThreatenedCityIds.Add(cityId);
+            else ThreatenedCityIds.Remove(cityId);
         }
 
         internal static void RebuildRuntime()
@@ -48,6 +80,7 @@ namespace AncientWarfare3.core.lineage
                 {
                     WarRefugeePersistence.EnsureSchema(archive.OperatingDB);
                     RecoverActiveJourneys(archive.OperatingDB);
+                    BuildDestinationSnapshot();
                 }
             }
             catch { }
@@ -182,7 +215,11 @@ namespace AncientWarfare3.core.lineage
             _month = 0;
             _cityCursor = 0;
             _journeyCursor = -1L;
-            MissionTargetCityIds.Clear();
+            ThreatenedCityIds.Clear();
+            DestinationCityIdsByKingdom.Clear();
+            DestinationOwnerByCity.Clear();
+            _monthlyReservations = new Dictionary<long, int>();
+            _destinationSnapshotInitialized = false;
         }
 
         private static int ResolveMonthKey()
@@ -204,17 +241,17 @@ namespace AncientWarfare3.core.lineage
             LineageArchiveManager archive = LineageArchiveManager.Instance;
             if (archive?.OperatingDB == null || World.world?.cities == null ||
                 pBudget <= 0) return;
-            var cities = new List<City>();
-            try { foreach (City value in World.world.cities) cities.Add(value); }
+            long[] cityIds;
+            try { cityIds = new List<long>(ThreatenedCityIds).ToArray(); }
             catch { return; }
-            int count = cities.Count;
+            int count = cityIds.Length;
             if (count <= 0) return;
             int processed = 0;
             int remainingWorldBudget = 32;
             while (processed++ < pBudget && remainingWorldBudget > 0)
             {
                 if (_cityCursor >= count) _cityCursor = 0;
-                City city = cities[_cityCursor++];
+                City city = ResolveCity(cityIds[_cityCursor++]);
                 if (!IsLivingCity(city) || !HasDirectThreat(city)) continue;
                 Kingdom owner = city.kingdom;
                 if (!IsLivingKingdom(owner)) continue;
@@ -225,8 +262,8 @@ namespace AncientWarfare3.core.lineage
                 int hungry = Math.Max(0, city.status?.hungry ?? 0);
                 var facts = new WarRefugeeThreatFacts(
                     pNearbyArmy: true,
-                    pSiege: city.being_captured_by != null,
-                    pCombatOrTransfer: city.being_captured_by != null,
+                    pSiege: true,
+                    pCombatOrTransfer: true,
                     pFamine: hungry >= Math.Max(5, population / 3),
                     pActiveWar: HasAnyWar(owner));
                 int permille = WarRefugeeRules.DeparturePermille(facts, city.id);
@@ -239,6 +276,7 @@ namespace AncientWarfare3.core.lineage
                 if (!IsLivingCity(destination)) continue;
                 int created = CreateJourney(archive.OperatingDB, city,
                     destination, eligible, quota, pMonthKey);
+                AddMonthlyReservation(destination.id, created);
                 remainingWorldBudget -= Math.Max(0, created);
             }
         }
@@ -937,13 +975,17 @@ namespace AncientWarfare3.core.lineage
             bool hasBest = false;
             try
             {
-                IReadOnlyDictionary<long, int> reservations =
-                    WarRefugeePersistence.LoadActiveReservations(
-                        LineageArchiveManager.Instance?.OperatingDB);
-                foreach (City candidate in World.world.cities)
+                if (!DestinationCityIdsByKingdom.TryGetValue(pOwner.id,
+                        out HashSet<long> indexedCities)) return null;
+                foreach (long candidateId in indexedCities)
                 {
+                    City candidate = ResolveCity(candidateId);
                     if (!IsLivingCity(candidate) || candidate == pOrigin ||
-                        candidate.kingdom == null) continue;
+                        candidate.kingdom == null ||
+                        !DestinationOwnerByCity.TryGetValue(candidateId,
+                            out long indexedOwnerId) ||
+                        indexedOwnerId != pOwner.id ||
+                        candidate.kingdom.id != pOwner.id) continue;
                     WarRefugeeRelation relation;
                     bool enemy;
                     try { enemy = candidate.kingdom.isEnemy(pOwner); }
@@ -959,10 +1001,10 @@ namespace AncientWarfare3.core.lineage
                         relation = WarRefugeeRelation.ProtectedPartner;
                     else relation = WarRefugeeRelation.Neutral;
                     var facts = new WarRefugeeDestinationFacts(candidate.id,
-                        true, MissionTargetCityIds.Contains(candidate.id),
+                        true, ThreatenedCityIds.Contains(candidate.id),
                         false, IsCityDangerous(candidate), SafeFood(candidate),
                         SafeHousing(candidate), SafeCapacity(candidate, 0,
-                            reservations), relation,
+                            _monthlyReservations), relation,
                         Distance(pOrigin.getTile(), candidate.getTile()),
                         IsFamine(candidate));
                     if (!WarRefugeeRules.CanReceive(facts, pBatchSize) ||
@@ -1007,7 +1049,7 @@ namespace AncientWarfare3.core.lineage
                 AreAllied(pOwner, pCity.kingdom)
                     ? WarRefugeeRelation.ProtectedPartner : WarRefugeeRelation.Neutral;
             return new WarRefugeeDestinationFacts(pCity.id, true,
-                MissionTargetCityIds.Contains(pCity.id), false,
+                ThreatenedCityIds.Contains(pCity.id), false,
                 IsCityDangerous(pCity),
                 SafeFood(pCity), SafeHousing(pCity),
                 SafeCapacity(pCity, pOwnReservation), relation,
@@ -1023,43 +1065,91 @@ namespace AncientWarfare3.core.lineage
 
         private static bool HasDirectThreat(City pCity)
         {
-            try { return pCity.being_captured_by != null ||
-                MissionTargetCityIds.Contains(pCity.id) || IsCityDangerous(pCity); }
-            catch { return false; }
+            return pCity?.data != null && ThreatenedCityIds.Contains(pCity.id);
         }
 
         private static bool IsCityDangerous(City pCity)
         {
-            try { return pCity != null && pCity.isInDanger(); }
-            catch { return false; }
+            return pCity?.data != null && ThreatenedCityIds.Contains(pCity.id);
         }
 
-        private static void RefreshThreatSnapshot()
+        private static void BuildDestinationSnapshot()
         {
-            MissionTargetCityIds.Clear();
+            DestinationCityIdsByKingdom.Clear();
+            DestinationOwnerByCity.Clear();
             try
             {
-                IReadOnlyList<ArmyRtsMission> missions =
-                    ArmyRtsControllerService.SnapshotMissions();
-                for (int i = 0; i < missions.Count; i++)
+                foreach (City city in World.world.cities)
                 {
-                    ArmyRtsMission mission = missions[i];
-                    if (mission == null || mission.ProposalKind !=
-                        ArmyRtsProposalKind.Attack) continue;
-                    City target = ResolveCity(mission.TargetCityId);
-                    Kingdom missionKingdom = ResolveKingdom(mission.KingdomId);
-                    bool enemy = false;
-                    try { enemy = target?.kingdom != null &&
-                        missionKingdom?.data != null &&
-                        missionKingdom.isEnemy(target.kingdom); }
-                    catch { }
-                    if (WarRefugeeRules.IsThreateningMission(
-                        mission.ProposalKind == ArmyRtsProposalKind.Attack,
-                        enemy, mission.TargetCityId, target?.id ?? -1L))
-                        MissionTargetCityIds.Add(mission.TargetCityId);
+                    long cityId = city?.data?.id ?? -1L;
+                    long kingdomId = city?.kingdom?.data?.id ?? -1L;
+                    if (cityId >= 0L && kingdomId >= 0L)
+                        AddDestination(cityId, kingdomId);
                 }
+                _destinationSnapshotInitialized = true;
             }
             catch { }
+        }
+
+        private static void RefreshMonthlyReservations()
+        {
+            try
+            {
+                var loaded = WarRefugeePersistence.LoadActiveReservations(
+                    LineageArchiveManager.Instance?.OperatingDB);
+                var snapshot = new Dictionary<long, int>();
+                if (loaded != null)
+                    foreach (KeyValuePair<long, int> pair in loaded)
+                        snapshot[pair.Key] = pair.Value;
+                _monthlyReservations = snapshot;
+            }
+            catch
+            {
+                _monthlyReservations = new Dictionary<long, int>();
+            }
+        }
+
+        private static void AddMonthlyReservation(long pCityId, int pCount)
+        {
+            if (pCityId < 0L || pCount <= 0) return;
+            _monthlyReservations.TryGetValue(pCityId, out int current);
+            _monthlyReservations[pCityId] = current + pCount;
+        }
+
+        private static void AddDestination(long pCityId, long pKingdomId)
+        {
+            if (pCityId < 0L || pKingdomId < 0L) return;
+            if (!DestinationCityIdsByKingdom.TryGetValue(pKingdomId,
+                    out HashSet<long> ids))
+            {
+                ids = new HashSet<long>();
+                DestinationCityIdsByKingdom[pKingdomId] = ids;
+            }
+            ids.Add(pCityId);
+            DestinationOwnerByCity[pCityId] = pKingdomId;
+        }
+
+        private static void RemoveDestination(long pCityId, long pKingdomId)
+        {
+            if (pCityId < 0L) return;
+            long indexedKingdomId = -1L;
+            DestinationOwnerByCity.TryGetValue(pCityId,
+                out indexedKingdomId);
+            RemoveDestinationFromKingdom(pCityId, indexedKingdomId);
+            if (pKingdomId != indexedKingdomId)
+                RemoveDestinationFromKingdom(pCityId, pKingdomId);
+            DestinationOwnerByCity.Remove(pCityId);
+        }
+
+        private static void RemoveDestinationFromKingdom(long pCityId,
+            long pKingdomId)
+        {
+            if (pKingdomId >= 0L && DestinationCityIdsByKingdom.TryGetValue(
+                    pKingdomId, out HashSet<long> ids))
+            {
+                ids.Remove(pCityId);
+                if (ids.Count == 0) DestinationCityIdsByKingdom.Remove(pKingdomId);
+            }
         }
 
         private static bool HasAnyWar(Kingdom pKingdom)

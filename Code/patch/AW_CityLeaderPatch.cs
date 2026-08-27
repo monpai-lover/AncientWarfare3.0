@@ -22,9 +22,6 @@ namespace AncientWarfare3.patch
                 catch { return false; }
             }
             if (pCity.isGettingCaptured()) return false;
-            Kingdom kingdom = pCity.kingdom;
-            CourtVacancyReconciliationService.RegisterCityVacancies(
-                kingdom, pCity);
             return false;
         }
 

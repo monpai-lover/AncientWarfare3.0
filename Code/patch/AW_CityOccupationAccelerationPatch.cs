@@ -112,8 +112,22 @@ namespace AncientWarfare3.patch
                     CityOccupationAccelerationService.TrySetCaptureProgress(
                         __instance, adjusted);
                 }
-                KingdomWarDirectorService.OnCityThreatStateObserved(
-                    __instance);
+                bool active = false;
+                Kingdom controller = null;
+                try
+                {
+                    controller = __instance?.getCapturingKingdom();
+                    active = __instance?.isGettingCaptured() == true &&
+                             __instance.getCaptureTicks() > 0f;
+                }
+                catch { }
+                if (CityMilitaryThreatFacts.ObserveCaptureState(
+                        __instance, controller, active))
+                {
+                    WarRefugeeService.OnCityThreatStateChanged(__instance, active);
+                    KingdomWarDirectorService.OnCityThreatStateObserved(
+                        __instance);
+                }
             }
             finally
             {
@@ -176,6 +190,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), "clearCapture")]
         public static void ClearCapture_Postfix(City __instance)
         {
+            CityMilitaryThreatFacts.ClearCaptureState(__instance);
+            WarRefugeeService.OnCityThreatStateChanged(__instance, false);
             WarScoreService.OnCaptureProgressCleared(__instance);
             KingdomWarDirectorService.OnCityControlChanged(__instance, null);
         }
@@ -294,6 +310,8 @@ namespace AncientWarfare3.patch
             long benchmark = RecentFeatureBenchmark.Begin();
             try
             {
+                CityMilitaryThreatFacts.ClearCaptureState(__instance);
+                WarRefugeeService.OnCityThreatStateChanged(__instance, false);
                 WartimeGarrisonService.OnCityOwnerChanged(__instance,
                     __state.OldOwner);
                 KingdomWarDirectorService.OnCityControlChanged(__instance,

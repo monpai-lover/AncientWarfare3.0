@@ -20,6 +20,7 @@
       <HintPath>$(WorldBoxManaged)\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Compile Include="Program.cs.txt" />
+    <Compile Include="LegacyDeferredWorkRemovalSourceGuardTests.cs.txt" />
     <Compile Include="ReverseXiaizationRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\ReverseXiaizationRules.cs" Link="Production\ReverseXiaizationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\XiaizationAnnualRules.cs" Link="Production\XiaizationAnnualRules.cs" />
@@ -120,6 +121,7 @@
     <Compile Include="..\..\Code\core\lineage\CorruptionRules.cs" Link="Production\CorruptionRules.cs" />
     <Compile Include="CorruptionSourceGuardTests.cs.txt" />
     <Compile Include="FramePrioritySchedulerConfirmationRulesTests.cs.txt" />
+    <Compile Include="FramePrioritySchedulerStabilitySourceGuardTests.cs.txt" />
     <Compile Include="..\..\Code\core\performance\FramePrioritySchedulerConfirmationRules.cs" Link="Production\FramePrioritySchedulerConfirmationRules.cs" />
     <Compile Include="HistoricalSchoolXiaAccessRulesTests.cs.txt" />
     <Compile Include="HistoricalSchoolXiaAccessSourceGuardTests.cs.txt" />
@@ -270,6 +272,8 @@
     <Compile Include="AWDockEndpointRulesTests.cs.txt" />
     <Compile Include="AWOceanConnectivityRulesTests.cs.txt" />
     <Compile Include="PathfindingPerformanceTests.cs.txt" />
+    <Compile Include="PathGeneratorBoundsRegressionSourceGuardTests.cs.txt" />
+    <Compile Include="PathGeneratorSnapshotRegressionTests.cs.txt" />
     <Compile Include="..\..\Code\core\performance\AWSchedulerStageDiagnostics.cs" Link="Production\AWSchedulerStageDiagnostics.cs" />
     <Compile Include="SimulationWorkerPoolTests.cs.txt" />
     <Compile Include="..\..\Code\core\performance\AWSimulationWorkerDispatchGate.cs" Link="Production\AWSimulationWorkerDispatchGate.cs" />
@@ -450,6 +454,7 @@
     <Compile Include="SyntheticLevyRulesTests.cs.txt" />
     <Compile Include="SyntheticMobilizationRulesTests.cs.txt" />
     <Compile Include="CityMilitaryThreatFactsRulesTests.cs.txt" />
+    <Compile Include="CityMilitaryThreatEventSourceGuardTests.cs.txt" />
     <Compile Include="CityOccupationThreatRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\CityOccupationThreatRules.cs" Link="Production\CityOccupationThreatRules.cs" />
     <Compile Include="ArmyRtsAsyncPlanningRulesTests.cs.txt" />
@@ -1002,6 +1007,11 @@
     <Compile Include="..\..\Code\core\policy\SchoolMapSelectionRules.cs" Link="Production\SchoolMapSelectionRules.cs" />
     <Compile Include="..\..\Code\core\policy\MandateMapMarkerRules.cs" Link="Production\MandateMapMarkerRules.cs" />
     <Compile Include="..\..\Code\core\policy\SchoolNameplateRenderRules.cs" Link="Production\SchoolNameplateRenderRules.cs" />
+    <Compile Include="NameplateRefreshRulesTests.cs.txt" />
+    <Compile Include="PresentationRefreshRulesTests.cs.txt" />
+    <Compile Include="AWIncrementalSimObjectZoneUnitsSourceGuardTests.cs.txt" />
+    <Compile Include="..\..\Code\core\performance\PresentationRefreshRules.cs" Link="Production\PresentationRefreshRules.cs" />
+    <Compile Include="..\..\Code\core\performance\NameplateRefreshRules.cs" Link="Production\NameplateRefreshRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathTypes.cs" Link="Production\AWPathTypes.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathMigrationRules.cs" Link="Production\AWPathMigrationRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathSession.cs" Link="Production\AWPathSession.cs" />

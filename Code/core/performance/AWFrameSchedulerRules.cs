@@ -2,6 +2,13 @@ using System;
 
 namespace AncientWarfare3.core.performance
 {
+    public enum AWSimulationDomain
+    {
+        Vanilla,
+        Aw3Authority,
+        RtsP0
+    }
+
     public enum AWSimulationMode
     {
         Native = 0,
@@ -120,6 +127,13 @@ namespace AncientWarfare3.core.performance
     {
         public const float FixedSimulationStepSeconds = 0.02f;
         public const double BaseSimulationTicksPerSecond = 50d;
+        // Vanilla and ordinary AW3 authority stages follow Cultiway's
+        // starvation guard. RTS P0 is the only domain that keeps a tighter
+        // cadence, so ordinary mod logic cannot steal its frame budget.
+        public const double VanillaStarvationSliceMilliseconds = 0.5d;
+        public const int VanillaStarvationFrameInterval = 8;
+        public const double Aw3StarvationSliceMilliseconds = 2d;
+        public const int Aw3StarvationFrameInterval = 1;
 
         public static AWSimulationMode ResolveMode(bool pEnabled)
         {
@@ -214,6 +228,22 @@ namespace AncientWarfare3.core.performance
             bool pDiagnosticsEnabled)
         {
             return pRequiresControl || pDiagnosticsEnabled;
+        }
+
+        public static int ResolveStarvationFrameInterval(
+            AWSimulationDomain pDomain)
+        {
+            return pDomain == AWSimulationDomain.RtsP0
+                ? Aw3StarvationFrameInterval
+                : VanillaStarvationFrameInterval;
+        }
+
+        public static double ResolveStarvationSliceMilliseconds(
+            AWSimulationDomain pDomain)
+        {
+            return pDomain == AWSimulationDomain.RtsP0
+                ? Aw3StarvationSliceMilliseconds
+                : VanillaStarvationSliceMilliseconds;
         }
 
         public static bool ShouldAdvancePresentationClock(
@@ -315,6 +345,18 @@ namespace AncientWarfare3.core.performance
             bool loading, bool paused, bool replicaSession)
         {
             return gameLoaded && !loading && !paused && !replicaSession;
+        }
+
+        public static string ResolveAuthorityBlockReason(bool gameLoaded,
+            bool loading, bool paused, bool replicaSession,
+            bool initializationPending)
+        {
+            if (!gameLoaded) return "not_loaded";
+            if (loading) return "loading";
+            if (paused) return "paused";
+            if (replicaSession) return "replica";
+            if (initializationPending) return "initializing";
+            return "none";
         }
 
         public static AWSaveBoundaryAction ResolveSaveBoundary(
