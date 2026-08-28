@@ -802,6 +802,24 @@ namespace AncientWarfare3.core.schools
             return Memberships.ActiveRecords();
         }
 
+        // 原本每周期只晋升一个 actor,是为了摊平尖峰 —— 但实测这么做反而更贵。
+        // 写缓冲同样是每周期排空一次,于是「一进一出」,每次晋升都独占一个
+        // SQLite 事务。在真实运行库上实测(SchoolMembership 991 行、WAL、
+        // synchronous=NORMAL、MEMBERSHIP_ID 主键直查):
+        //   只 SELECT 无事务         58.6us
+        //   SELECT+UPDATE 共用事务  153.3us
+        //   只 UPDATE 每次独立事务   987us
+        //   空事务(BEGIN+COMMIT)   15.3us
+        // 空事务几乎免费,说明那 ~830us 是「含写入的事务」的固定开销(WAL 页
+        // 写入 + 提交),与事务里装几条语句基本无关 —— 成本按事务算,不按语句
+        // 算。于是 29 次晋升被从 ~4ms 放大到实测的 52ms。
+        //
+        // 攒一批再交给写缓冲。PromotionDueIds 已按年份桶预筛,绝大多数尝试都
+        // 会真的产生一条写入,所以 16 次尝试约等于 16 条写入,正好装得进写缓冲
+        // 的 32 条一批(scheduler 步在 write_buffer 步之前,同一次
+        // ProcessFrameCore 内就会被排空),单帧新增 CPU 约 2.5ms。
+        private const int PromotionAttemptsPerFrame = 16;
+
         internal static bool ProcessStandingFrame(int pYear)
         {
             if (pYear < 0 || _completedStandingYear == pYear) return true;
@@ -816,8 +834,11 @@ namespace AncientWarfare3.core.schools
 
             if (_promotionActorIndex < _duePromotionActorIds.Length)
             {
-                long actorId = _duePromotionActorIds[_promotionActorIndex++];
-                TryPromoteTeacher(actorId, pYear);
+                int limit = Math.Min(_duePromotionActorIds.Length,
+                    _promotionActorIndex + PromotionAttemptsPerFrame);
+                while (_promotionActorIndex < limit)
+                    TryPromoteTeacher(
+                        _duePromotionActorIds[_promotionActorIndex++], pYear);
                 return false;
             }
 

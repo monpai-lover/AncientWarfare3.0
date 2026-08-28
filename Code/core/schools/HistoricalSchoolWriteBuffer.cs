@@ -102,12 +102,50 @@ namespace AncientWarfare3.core.schools
         public bool ProcessFrame(long pFrame,
             IHistoricalSchoolWriteBatchExecutor pExecutor)
         {
-            if (pExecutor == null || pFrame == _lastProcessFrame || _queue.Count == 0)
+            return ProcessFrame(pFrame, pExecutor, pMaxBatches: 1,
+                pBudgetMilliseconds: 0d);
+        }
+
+        /// <summary>
+        /// 每帧提交若干批。默认 pMaxBatches=1,与原来的「一帧一批」完全一致。
+        ///
+        /// 一帧一批原本是硬上限,和积压量无关:队列容量 512、批大小 32,排空一个
+        /// 满队列要 16 帧。实测积压后每批都装满 32 条,单批成本从 0.61ms 涨到
+        /// 2.02ms,而学派步 73~79% 的耗时就是这些提交。
+        ///
+        /// 退避语义不受影响:重试项的 ReadyFrame > pFrame,循环里下一次
+        /// ProcessOneBatch 会因为队头未就绪而返回 false 并跳出,所以指数退避和
+        /// _isolateHead 的隔离节奏都保持原样 —— 隔离时依旧是一帧一条。
+        /// </summary>
+        public bool ProcessFrame(long pFrame,
+            IHistoricalSchoolWriteBatchExecutor pExecutor,
+            int pMaxBatches, double pBudgetMilliseconds)
+        {
+            if (pExecutor == null || pFrame == _lastProcessFrame ||
+                _queue.Count == 0)
                 return false;
             Entry first = _queue.Peek();
             if (first.ReadyFrame > pFrame) return false;
             _lastProcessFrame = pFrame;
-            ProcessOneBatch(pFrame, pExecutor, pIgnoreBackoff: false);
+
+            int batches = Math.Max(1, pMaxBatches);
+            long deadline = pBudgetMilliseconds > 0d
+                ? Stopwatch.GetTimestamp() + (long)(pBudgetMilliseconds *
+                    Stopwatch.Frequency / 1000d)
+                : 0L;
+            for (int i = 0; i < batches; i++)
+            {
+                if (!ProcessOneBatch(pFrame, pExecutor,
+                        pIgnoreBackoff: false))
+                    break;
+                if (_queue.Count == 0) break;
+                // 隔离模式下每批只有一条,继续循环等于绕过「一帧一条」的隔离
+                // 节奏,所以一旦进入隔离就当帧收手。
+                if (_isolateHead) break;
+                if (deadline != 0L &&
+                    Stopwatch.GetTimestamp() >= deadline) break;
+            }
+
             return true;
         }
 
@@ -274,7 +312,12 @@ namespace AncientWarfare3.core.schools
                     pOperations.Count];
                 for (int index = 0; index < pOperations.Count; index++)
                 {
+                    // 按 key 前缀记账,才知道这些写入到底是谁产生的:
+                    // write_buffer 占学派 74~98%,而它本身只是执行者。
+                    long operationStarted = Stopwatch.GetTimestamp();
                     outcomes[index] = pOperations[index].Execute(_db, transaction);
+                    HistoricalSchoolWriteDiagnostics.AccountOperation(
+                        pOperations[index].OperationKey, operationStarted);
                     if (outcomes[index] ==
                         HistoricalSchoolTeachingPersistenceOutcome.Unknown)
                     {
@@ -284,7 +327,11 @@ namespace AncientWarfare3.core.schools
                         return HistoricalSchoolWriteBatchResult.Unknown;
                     }
                 }
+                // 语句执行与事务提交分开计时:前者大说明写入条数/单条成本是
+                // 问题,后者大说明是事务本身的固定开销(批数太多)。
+                long commitStarted = Stopwatch.GetTimestamp();
                 transaction.Commit();
+                HistoricalSchoolWriteDiagnostics.AccountCommit(commitStarted);
                 retry = false;
                 return HistoricalSchoolWriteBatchResult.Committed(outcomes);
             }
