@@ -338,6 +338,7 @@ namespace AncientWarfare3.patch
                 WartimeGarrisonService.OnWarEnded(pWar);
                 TemporarySlaveVanguardService.OnWarEnded(pWar);
                 ArmyRtsPlanSnapshotService.OnWarEnded(pWar);
+                WarRefugeeService.OnWarEnded(pWar);
                 WarRecordWriter.OnWarEnd(pWar, pWinner);
                 DiplomacyConversationService.RecordWarEnded(pWar, pWinner);
                 RecordNativeZhuluEnd(pWar, pWinner);
@@ -387,6 +388,10 @@ namespace AncientWarfare3.patch
                 WartimeGarrisonService.OnWarEnded(pWar));
             MeasureWarEndStage("temporary_slave_vanguard", () =>
                 TemporarySlaveVanguardService.OnWarEnded(pWar));
+            // 难民的回归/同化判定改成事件驱动,这里是唯一入口:母国的战争一结束
+            // 就一次性结算,不再有按月推进的计时。
+            MeasureWarEndStage("war_refugee", () =>
+                WarRefugeeService.OnWarEnded(pWar));
             MeasureWarEndStage("war_record", () =>
                 WarRecordWriter.OnWarEnd(pWar, pWinner));
             MeasureWarEndStage("war_territory", () =>
