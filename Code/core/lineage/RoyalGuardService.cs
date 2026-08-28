@@ -1460,9 +1460,13 @@ namespace AncientWarfare3.core.lineage
                 // 极贵的头像重建(clearGraphicsFully)+ 归档改到有预算的 FlushGuardGraphics 里做,先标脏。
                 pActor.data.set(LineageKeys.ROYAL_GUARD_GFX_DIRTY, true);
 
+            // 快照上面已经取好,RecordDeferred* 的语义就是「快照已备、现在写」。
+            // 再套一层无 key 的 EnqueueOrdered 只会让它进不能合并的队列:实测
+            // <ordered> 前缀从 35 涨到 55、pending 从 43 涨到 123 从不回落,而这
+            // 件事本身只是拼两段 HistoryText 加两条 INSERT。直接写。
             if (!wasGuard || wasCaptain != pCaptain)
-                DeferredRuntimeWorkService.EnqueueOrdered(DeferredWorkClass.Persistent,
-                    () => ChronicleEvents.OnRoyalGuardAppointed(chronicleSnapshot, pGuardName, pCaptain));
+                ChronicleEvents.OnRoyalGuardAppointed(chronicleSnapshot,
+                    pGuardName, pCaptain);
 
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardRefreshPersist,
                 CityMaintenanceBenchmarkRules.Group);
@@ -1611,9 +1615,10 @@ namespace AncientWarfare3.core.lineage
             GuardStateSnapshot stateSnapshot = CaptureGuardState(pActor, pActive: false, wasCaptain,
                 ChronicleGate.IsNobleActor(pActor), guardName, pReason);
             EnqueueGuardState(stateSnapshot);
+            // 同上:快照已备,不需要再排一次队。
             if (pRecord)
-                DeferredRuntimeWorkService.EnqueueOrdered(DeferredWorkClass.Persistent,
-                    () => ChronicleEvents.OnRoyalGuardDismissed(chronicleSnapshot, pReason));
+                ChronicleEvents.OnRoyalGuardDismissed(chronicleSnapshot,
+                    pReason);
 
             if (!pActor.isRekt())
             {

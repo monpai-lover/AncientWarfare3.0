@@ -101,11 +101,27 @@ namespace AncientWarfare3.core.lineage
 
         public static void DrainFrame(double pMilliseconds = 1.5, int pMaxItems = 1)
         {
+            DrainFrame(pMilliseconds, pMaxItems, pIgnoreFrameGate: false);
+        }
+
+        /// <summary>
+        /// pIgnoreFrameGate:供渲染帧上的「积压出口」使用。_lastDrainFrame 是
+        /// 一道共享的每帧闸门,谁先跑谁独占这一帧。权威周期跑在 MapBox.Update
+        /// 之内、渲染帧出口挂在它的 postfix 上,所以权威总是先到 —— 积压出口
+        /// 若也走这道闸门就永远被挡掉,等于没加。两个出口各自限流(权威每周期
+        /// 1 项、积压出口有阈值+预算+项数上限),不需要再靠这道闸门互斥。
+        /// </summary>
+        public static void DrainFrame(double pMilliseconds, int pMaxItems,
+            bool pIgnoreFrameGate)
+        {
             if (PendingCount == 0) return;
             int frame = Time.frameCount;
-            if (!DeferredRuntimeWorkRules.ShouldStartFrameDrain(
-                    _lastDrainFrame, frame)) return;
-            _lastDrainFrame = frame;
+            if (!pIgnoreFrameGate)
+            {
+                if (!DeferredRuntimeWorkRules.ShouldStartFrameDrain(
+                        _lastDrainFrame, frame)) return;
+                _lastDrainFrame = frame;
+            }
             long start = Stopwatch.GetTimestamp();
             long budget = MillisecondsToTicks(pMilliseconds);
             int processed = 0;

@@ -26,6 +26,8 @@ namespace AncientWarfare3.patch
 
             MeasureOutside(RecentFeatureBenchmarkRules.AsyncCommitIndex,
                 "async_completion_drain", DrainPresentationCompletions);
+            MeasureOutside(RecentFeatureBenchmarkRules.DeferredWorkIndex,
+                "deferred_backlog_drain", DrainDeferredBacklog);
             MeasureOutside(
                 RecentFeatureBenchmarkRules.LocalizedNameRefreshIndex,
                 "localized_name_refresh",
@@ -71,6 +73,27 @@ namespace AncientWarfare3.patch
                 HistoricalWriteService.DrainCompletions(
                     AWAsyncCompletionDrainRules.RemainingMilliseconds(
                         deadline), writeLimit);
+        }
+
+        // 延迟队列此前只有一个出口:权威周期里每次一项(该配额被
+        // AuthorityDeferredDrainBudgetTests 明确锁死,不能动)。而 <ordered> 这类
+        // 编年史事件按史实入队、无法合并,入队速度长期高于 1 项/周期 —— 实测
+        // pending 从 43 单调涨到 123,从不回落。
+        //
+        // 这里加第二个出口,挂在渲染帧上:不在模拟阶段内,不会抬高每个逻辑
+        // tick 的成本(那是倍速的分母),因此对倍速只有好处。仅在积压超过权威
+        // 出口的处理能力时才动工,平时 PendingCount 小于阈值直接返回。
+        private const int BacklogDrainThreshold = 24;
+        private const double BacklogDrainBudgetMilliseconds = 1.5d;
+        private const int BacklogDrainMaxItems = 4;
+
+        private static void DrainDeferredBacklog()
+        {
+            if (DeferredRuntimeWorkService.PendingCount <=
+                BacklogDrainThreshold) return;
+            DeferredRuntimeWorkService.DrainFrame(
+                BacklogDrainBudgetMilliseconds, BacklogDrainMaxItems,
+                pIgnoreFrameGate: true);
         }
 
         private static void DrainFamilyTreeCleanup()

@@ -1032,17 +1032,18 @@ namespace AncientWarfare3.core.schools
             HistoryText cityContent = HistoryText.Actor(pActor, pActorName) +
                 HistoryLocalizationRules.H("aw_hist_school_arrived_to_study");
 
-            DeferredRuntimeWorkService.EnqueueOrdered(
-                DeferredWorkClass.Persistent,
-                () => HistoryWriter.RecordDeferredPerson(personContext,
-                    personSnapshot, actorId, pActorName,
-                    "school_master_travel", personContent,
-                    ChronicleCategory.LIFE, HistoryTarget.Actor(actorId)));
-            DeferredRuntimeWorkService.EnqueueOrdered(
-                DeferredWorkClass.Persistent,
-                () => HistoryWriter.RecordDeferredCity(cityContext, cityId,
-                    cityName, "school_master_arrival", cityContent,
-                    HistoryTarget.From("city", cityId)));
+            // 快照(CapturePersonSnapshot / CaptureDeferredContext)上面已经取好,
+            // RecordDeferred* 本就表示「快照已备、现在写」。再包一层无 key 的
+            // EnqueueOrdered 只是让它挤进不能合并的 <ordered> 队列 —— 和禁卫军
+            // 那两处是同一个错误。全项目 8 处 RecordDeferred* 只有这 4 处套了
+            // 队列,其余 4 处都是直接调。
+            HistoryWriter.RecordDeferredPerson(personContext,
+                personSnapshot, actorId, pActorName,
+                "school_master_travel", personContent,
+                ChronicleCategory.LIFE, HistoryTarget.Actor(actorId));
+            HistoryWriter.RecordDeferredCity(cityContext, cityId,
+                cityName, "school_master_arrival", cityContent,
+                HistoryTarget.From("city", cityId));
         }
 
         private sealed class JourneyArrivalWriteOperation :
