@@ -392,6 +392,13 @@ namespace AncientWarfare3.core.lineage
                 changed = !ArmyRtsControllerRules.SameStrategicIntent(
                     current.Mission, copy);
                 current.Mission = copy;
+                // 任务本体被换掉,缓存的有效性判定随之作废。
+                // ArmyRtsControllerService 整类都在 #if !AW3_RULES_TESTS 内
+                // (665~7269 行),规则测试项目里不存在,失效调用要跟着排除。
+#if !AW3_RULES_TESTS
+                ArmyRtsControllerService.InvalidateMissionValidity(
+                    pMission.ArmyId);
+#endif
                 if (changed && resetOperationalProgress)
                     current.State = ArmyRtsState.Rally;
             }
@@ -402,6 +409,12 @@ namespace AncientWarfare3.core.lineage
                     Mission = copy,
                     State = ArmyRtsState.Rally
                 };
+                // 新登记的任务同样要作废旧判定,否则本帧早先缓存的 false
+                // 会让刚下达的任务看起来无效,军队会停在原地。
+#if !AW3_RULES_TESTS
+                ArmyRtsControllerService.InvalidateMissionValidity(
+                    pMission.ArmyId);
+#endif
             }
             Enqueue(pMission.ArmyId,
                 ArmyRtsControllerRules.ShouldPrioritizeMission(copy));
@@ -3394,14 +3407,65 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        // IsMissionValid 每次要做 SafeKingdom + FindWar + FindCity 三次查找、
+        // IsKingdomInWar 四次、IsCityFrozenControlledByEnemySide、以及
+        // ArmyRtsObjectiveService.Classify(内含城市威胁判定),外加一次
+        // ArmyRtsMissionTargetFacts 分配。实测在 P0 战斗路径上占 31µs/次。
+        //
+        // 但它的结果只取决于(军队, 战争, 目标城市),与调用它的那个 actor 无关。
+        // 一趟 P0 遍历里 206 个 actor 各问一遍,算的是同样 20 支军队的答案。
+        // 这里按帧缓存:key 用 Time.frameCount,和 ArmyMilitaryMovementPriorityIndex
+        // 判定「本帧是否已处理」用的是同一个时钟,所以缓存的生存期恰好是一趟遍历。
+        //
+        // 任务状态在同一帧内可能被改写,所以不能只靠按帧失效。但核对过
+        // IsMissionValid 的全部输入后,它只读 pMission 的 WarId /
+        // TargetCityId / ProposalKind / FrontId,加上世界侧的 kingdom / war /
+        // city —— 完全不读 record.State,也不读 RuntimeState。所以那约 24 处
+        // Controllers.SetState / RuntimeByArmy 赋值都改不了判定结果,不需要失效。
+        // 真正要失效的只有三处:任务本体被替换、新任务登记、以及军队失效/整体
+        // 清空。漏挂的后果是读到陈旧的任务有效性,可能让军队停在原地,所以这
+        // 三处都显式挂了钩。
+        //
+        // 世界侧(战争结束、城市易主)不在此列:那些变化由原版在 authority 阶段
+        // 之后推进,而缓存生存期只有一帧,跨帧自然重算。
+        private static readonly Dictionary<long, bool> MissionValidityCache =
+            new Dictionary<long, bool>();
+        private static int _missionValidityFrame = -1;
+
+        internal static void InvalidateMissionValidity(long pArmyId)
+        {
+            MissionValidityCache.Remove(pArmyId);
+        }
+
+        internal static void InvalidateAllMissionValidity()
+        {
+            MissionValidityCache.Clear();
+        }
+
         public static bool HasActiveMission(long pArmyId)
         {
             if (!ArmyRtsRuntimeMode.ShouldCommit ||
                 !Controllers.TryGet(pArmyId,
                     out ArmyRtsControllerRecord record) ||
                 !RuntimeByArmy.ContainsKey(pArmyId)) return false;
+
+            int frame = UnityEngine.Time.frameCount;
+            if (frame != _missionValidityFrame)
+            {
+                MissionValidityCache.Clear();
+                _missionValidityFrame = frame;
+            }
+            else if (MissionValidityCache.TryGetValue(pArmyId,
+                         out bool cached))
+            {
+                return cached;
+            }
+
             Army army = FindArmy(pArmyId);
-            return IsLiveArmy(army) && IsMissionValid(army, record.Mission);
+            bool valid = IsLiveArmy(army) &&
+                         IsMissionValid(army, record.Mission);
+            MissionValidityCache[pArmyId] = valid;
+            return valid;
         }
 
         public static bool HasActiveMissionForKingdom(Kingdom pKingdom)
@@ -4075,6 +4139,7 @@ namespace AncientWarfare3.core.lineage
             GarrisonSortieService.OnMissionCompleted(army);
             ArmyMissionPersistence.Invalidate(army);
             Controllers.Invalidate(pArmyId);
+            InvalidateMissionValidity(pArmyId);
             MissionIndex.Remove(pArmyId);
             ActiveWartimeArmyIds.Remove(pArmyId);
             RuntimeByArmy.Remove(pArmyId);
@@ -4226,6 +4291,7 @@ namespace AncientWarfare3.core.lineage
         {
             Controllers.Clear();
             RuntimeByArmy.Clear();
+            InvalidateAllMissionValidity();
             MissionIndex.Clear();
             ActiveWartimeArmyIds.Clear();
             ReplicaProjectionByArmy.Clear();
