@@ -38,6 +38,7 @@ namespace AncientWarfare3.core.court
                 case "official_evaluation":
                 case "official_appointment_edict":
                 case "official_rank_promoted":
+                case "official_transferred":
                 case "civil_service_qualified":
                 case "civil_service_top_ranked":
                 case "civil_service_first_appointment":

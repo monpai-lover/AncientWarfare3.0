@@ -6861,6 +6861,9 @@ True(OfficialCareerBiographyRules.IsCareerEvent(
 True(OfficialCareerBiographyRules.IsCareerEvent(
         "official_rank_promoted"),
     "annual merit promotions belong to the career biography timeline");
+True(OfficialCareerBiographyRules.IsCareerEvent(
+        "official_transferred"),
+    "official transfers belong to the career biography timeline");
 True(OfficialCareerBiographyRules.IsCareerEvent("official_evaluation"),
     "official evaluations belong to the career biography timeline");
 True(OfficialCareerBiographyRules.IsCareerEvent("court_officer_appointed") &&

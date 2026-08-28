@@ -1444,6 +1444,34 @@ namespace AncientWarfare3.core.lineage
                 HistoryTarget.Kingdom(pKingdom));
         }
 
+        public static void OnOfficialTransferred(Actor pActor,
+            Kingdom pKingdom, string pOfficeId, City pFormerCity,
+            City pDestinationCity, int pYear)
+        {
+            if (pActor?.data == null || pKingdom?.data == null ||
+                pFormerCity?.data == null || pDestinationCity?.data == null ||
+                pFormerCity == pDestinationCity) return;
+
+            HistoryText text = HistoryText.Actor(pActor) +
+                               H("aw_hist_official_transfer_from") +
+                               HistoryText.City(pFormerCity, pKingdom) +
+                               H("aw_hist_official_transfer_to") +
+                               HistoryText.City(pDestinationCity, pKingdom) +
+                               H("aw_hist_official_transfer_office_mid") +
+                               HistoryText.PlainText(CourtOfficeName(
+                                   pKingdom, pOfficeId)) +
+                               H("aw_hist_official_transfer_suffix");
+            string projectionKey = "official_transfer:" + pKingdom.id + ":" +
+                                   pActor.data.id + ":" + pYear + ":" +
+                                   (pOfficeId ?? "") + ":" +
+                                   pFormerCity.data.id + ":" +
+                                   pDestinationCity.data.id;
+            HistoryWriter.TryRecordPerson(pActor.data.id, pKingdom,
+                pActor.getName(), PersonEvent.OFFICIAL_TRANSFERRED, text,
+                ChronicleCategory.CAREER, HistoryTarget.City(pDestinationCity),
+                projectionKey);
+        }
+
         public static void OnCourtFactionDominant(Kingdom pKingdom, string pSchoolId)
         {
             if (pKingdom?.data == null || string.IsNullOrEmpty(pSchoolId)) return;

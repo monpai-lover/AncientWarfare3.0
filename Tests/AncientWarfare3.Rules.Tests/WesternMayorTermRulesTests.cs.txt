@@ -45,6 +45,23 @@ internal static class WesternMayorTermRulesTests
         Contains(service,
             "OfficialCirculationRules.IsRotatingCityOffice(",
             "annual rotation identifies Mayor independently of Xia ranks");
+        Contains(service, "bool xiaCirculationUnlocked",
+            "annual rotation reads the Nine-Rank circulation unlock");
+        Contains(service, "customCityLeader && xiaCirculationUnlocked",
+            "custom city leaders follow the circulation unlock");
+        Contains(service, "LocalOfficialTermRules.TermLength(",
+            "ordinary local rotation assigns a fresh finite term");
+        Contains(service,
+            "item.Mutation.State.OfficeId != CourtOfficeId.WestMayor",
+            "ordinary local rotation does not overwrite the Mayor shared cycle");
+        Contains(service, "dueLocalSubordinates = new List<Actor>()",
+            "expired local subordinate officials enter replacement handling");
+        Contains(service, "TryDismissOfficer(dueLocalSubordinate",
+            "expired local subordinate officials are released for refilling");
+        Contains(service, "RenewLocalTerm(mutation, year)",
+            "locked local leaders receive a fresh finite term");
+        Contains(service, "pYearAfter(year)",
+            "single-city local leaders defer rotation without expiring permanently");
         Contains(service, "item.Mutation.State.OfficeId",
             "rotation persistence uses each assignment's explicit office id");
         Contains(service, "AdvanceExpiredCycleEndYear(",
@@ -64,6 +81,58 @@ internal static class WesternMayorTermRulesTests
         Equal(false, service.Contains(
                 "Parameters.AddWithValue(\"@office\",\r\n                        CourtOfficeId.Governor)"),
             "rotation SQL no longer hard-codes Governor");
+
+        PersonalBiographyRecordsOfficialTransfers(service);
+    }
+
+    private static void PersonalBiographyRecordsOfficialTransfers(string service)
+    {
+        string keys = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "ChronicleKeys.cs"));
+        string biographyRules = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "court",
+            "OfficialCareerBiographyRules.cs"));
+        string chronicle = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "ChronicleEvents.cs"));
+        string localization = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "HistoryLocalizationRules.cs"));
+
+        Contains(keys, "OFFICIAL_TRANSFERRED = \"official_transferred\"",
+            "official transfer has a dedicated person event");
+        Contains(biographyRules, "case \"official_transferred\":",
+            "official transfer is included in career biography events");
+        Contains(chronicle, "OnOfficialTransferred(Actor pActor",
+            "official transfer has a dedicated chronicle writer");
+        Contains(chronicle, "HistoryWriter.TryRecordPerson(pActor.data.id",
+            "official transfer is written to the person's biography");
+        Contains(chronicle, "official_transfer:",
+            "official transfer biography writes are idempotent");
+        Contains(chronicle, "HistoryTarget.City(pDestinationCity)",
+            "official transfer points to the destination city");
+        Contains(localization, "aw_hist_event_official_transferred",
+            "official transfer has an event label");
+        Contains(localization, "aw_hist_official_transfer_from",
+            "official transfer has localized movement text");
+
+        int processStart = service.IndexOf(
+            "private static void ProcessDueGovernorRotations",
+            StringComparison.Ordinal);
+        int commit = service.IndexOf(
+            "if (!CommitGovernorRotationPersistence(pKingdom, pPlan))",
+            processStart, StringComparison.Ordinal);
+        int transfer = service.IndexOf(
+            "ChronicleEvents.OnOfficialTransferred(", processStart,
+            StringComparison.Ordinal);
+        int publish = service.IndexOf(
+            "PublishCommittedGovernorRotation(pPlan);", processStart,
+            StringComparison.Ordinal);
+        Equal(true, commit >= 0 && publish >= 0 && transfer > publish,
+            "successful rotation commits before biography records are written");
+        Contains(service, "item.FormerCity, item.DestinationCity",
+            "transfer biography receives both former and destination cities");
     }
 
     private static void Contains(string source, string expected,

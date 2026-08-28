@@ -71,6 +71,11 @@ namespace AncientWarfare3.core.lineage
 
         private static readonly Entry[] Entries =
         {
+            new Entry("aw_hist_event_official_transferred", "\u8c03\u4efb", "Official Transfer", "\u8abf\u4efb"),
+            new Entry("aw_hist_official_transfer_from", "\u7531", " was transferred from ", "\u7531"),
+            new Entry("aw_hist_official_transfer_to", "\u8c03\u4efb\u81f3", " to ", "\u8abf\u4efb\u81f3"),
+            new Entry("aw_hist_official_transfer_office_mid", "\uff0c\u51fa\u4efb", ", serving as ", "\uff0c\u51fa\u4efb"),
+            new Entry("aw_hist_official_transfer_suffix", "\u3002", ".", "\u3002"),
             new Entry("aw_hist_military_governorate_created_at",
                 "\u4e8e\u8fb9\u57ce", "established a frontier command at ",
                 "\u65bc\u908a\u57ce"),

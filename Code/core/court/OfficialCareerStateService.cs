@@ -541,10 +541,13 @@ namespace AncientWarfare3.core.court
             var orderedStates = new List<OfficialCareerStateView>(states.Values);
             orderedStates.Sort((left, right) => left.ActorId.CompareTo(right.ActorId));
             int realmCityCount = CountLiveCities(pKingdom);
+            bool xiaCirculationUnlocked =
+                CourtService.HasNineRankSystem(pKingdom);
             bool nineRankSystem = CourtService.HasNineRankSystem(pKingdom);
             CourtTermLaw termLaw = CourtAuxiliaryLawService.GetTermLaw(pKingdom);
             int lifetimeMigrations = 0;
             int petitions = 0;
+            var dueLocalSubordinates = new List<Actor>();
             foreach (OfficialCareerStateView state in orderedStates)
             {
                 Actor actor = World.world?.units?.get(state.ActorId);
@@ -556,6 +559,12 @@ namespace AncientWarfare3.core.court
                     LocalCourtOfficeRules.IsLocalOffice(state.OfficeId);
                 bool cityLeaderOffice = localOffice && actor.isCityLeader() ||
                     CourtCityOfficeRules.IsCityLeaderOffice(state.OfficeId);
+                bool customCityLeader = cityLeaderOffice &&
+                    !CourtCityOfficeRules.IsCityLeaderOffice(state.OfficeId);
+                bool rotatingLocalLeader = cityLeaderOffice &&
+                    (OfficialCirculationRules.IsRotatingCityOffice(
+                         state.OfficeId, xiaCirculationUnlocked) ||
+                     customCityLeader && xiaCirculationUnlocked);
                 if (!cityLeaderOffice &&
                     state.WaitingSinceYear >= 0 &&
                     state.TermEndYear <= year &&
@@ -671,6 +680,16 @@ namespace AncientWarfare3.core.court
                             pPreserveTerm: true);
                     else
                         RenewDueOfficial(mutation, year, pKingdom);
+                    if (cityLeaderOffice && rotatingLocalLeader &&
+                        realmCityCount <= 1)
+                        mutation.TermEndYear = state.OfficeId ==
+                            CourtOfficeId.WestMayor
+                            ? WesternMayorTermRules.RetryTermEndYear(year)
+                            : pYearAfter(year);
+                    else if (cityLeaderOffice && !rotatingLocalLeader)
+                        RenewLocalTerm(mutation, year);
+                    else if (!cityLeaderOffice)
+                        dueLocalSubordinates.Add(actor);
                 }
                 else if (westernMayorDue && realmCityCount <= 1)
                     mutation.TermEndYear =
@@ -691,9 +710,7 @@ namespace AncientWarfare3.core.court
                     mutation.LocalGradeReviewYear = year;
                 }
                 mutation.RotationDue =
-                    OfficialCirculationRules.ShouldRotateLocalLeader(
-                        localOffice, cityLeaderOffice, termDue,
-                        realmCityCount);
+                    rotatingLocalLeader && termDue && realmCityCount > 1;
                 mutations.Add(mutation);
             }
 
@@ -730,6 +747,12 @@ namespace AncientWarfare3.core.court
                         pKingdom, mutation.State.Track, mutation.PreviousRank,
                         mutation.Rank, mutation.State.OfficeId);
             }
+            foreach (Actor dueLocalSubordinate in dueLocalSubordinates)
+                if (!CourtService.TryDismissOfficer(dueLocalSubordinate,
+                        pKingdom, "local_term_ended"))
+                    ModClass.LogWarning(
+                        "Local subordinate term release deferred: actor=" +
+                        dueLocalSubordinate.data.id);
             if (rotationPlan?.Count > 0)
                 ProcessDueGovernorRotations(pKingdom, rotationPlan, year);
             if (influenceChanged) CourtDirectionService.MarkDirty(pKingdom);
@@ -780,6 +803,18 @@ namespace AncientWarfare3.core.court
                 CourtAuxiliaryLawService.ResolveTermEndYear(pKingdom,
                     SafeAge(pMutation.Actor), pMutation.LastEvaluation,
                     pMutation.State.ActorId, pYear);
+        }
+
+        private static void RenewLocalTerm(AnnualMutation pMutation,
+            int pYear)
+        {
+            if (pMutation?.Actor?.data == null || pMutation.State == null)
+                return;
+            pMutation.TermEndYear = pYear +
+                LocalOfficialTermRules.TermLength(
+                    MainAttribute(pMutation.Actor),
+                    (int)Math.Max(0f, pMutation.Merit),
+                    SafeAge(pMutation.Actor), pMutation.State.ActorId, pYear);
         }
 
         private static float AnnualMerit(Actor pActor,
@@ -1020,6 +1055,14 @@ namespace AncientWarfare3.core.court
                     if (item.Mutation.State.OfficeId == CourtOfficeId.WestMayor)
                         item.Mutation.TermEndYear = nextMayorCycleEndYear;
             }
+            foreach (GovernorRotationRuntimeAssignment item in pPlan)
+                if (item.Mutation.State.OfficeId != CourtOfficeId.WestMayor)
+                    item.Mutation.TermEndYear = pYear +
+                        LocalOfficialTermRules.TermLength(
+                            MainAttribute(item.Actor),
+                            (int)Math.Max(0f, item.Mutation.Merit),
+                            SafeAge(item.Actor),
+                            item.Mutation.State.ActorId, pYear);
             if (!CommitGovernorRotationPersistence(pKingdom, pPlan))
             {
                 bool deferred = ScheduleGovernorRotationRetry(pKingdom, pPlan,
@@ -1035,6 +1078,10 @@ namespace AncientWarfare3.core.court
                     nextMayorCycleEndYear);
             using (GovernorRotationRuntimeScope.Enter())
                 PublishCommittedGovernorRotation(pPlan);
+            foreach (GovernorRotationRuntimeAssignment item in pPlan)
+                ChronicleEvents.OnOfficialTransferred(item.Actor, pKingdom,
+                    item.Mutation.State.OfficeId, item.FormerCity,
+                    item.DestinationCity, pYear);
         }
 
         private static void PublishCommittedGovernorRotation(
