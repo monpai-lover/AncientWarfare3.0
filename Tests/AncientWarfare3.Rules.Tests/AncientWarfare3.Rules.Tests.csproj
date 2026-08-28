@@ -997,6 +997,7 @@
     <Compile Include="..\..\Code\core\court\CitySchoolDirtyQueue.cs" Link="Production\CitySchoolDirtyQueue.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolDiagnostics.cs" Link="Production\HistoricalSchoolDiagnostics.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolWriteBuffer.cs" Link="Production\HistoricalSchoolWriteBuffer.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolWriteDiagnostics.cs" Link="Production\HistoricalSchoolWriteDiagnostics.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolTravelPersistenceRules.cs" Link="Production\HistoricalSchoolTravelPersistenceRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolLedgerDecayRules.cs" Link="Production\HistoricalSchoolLedgerDecayRules.cs" />
     <Compile Include="..\..\Code\core\schools\SchoolMembershipPersistenceRules.cs" Link="Production\SchoolMembershipPersistenceRules.cs" />

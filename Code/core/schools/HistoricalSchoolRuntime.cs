@@ -13,6 +13,55 @@ namespace AncientWarfare3.core.schools
         private static int _lastQuarterKey = -1;
         private static bool _loaded;
 
+        // 学派是 authority 唯一的大头(实测 32.5 / 89.9 / 79.3ms,第二名才 15ms),
+        // 但 ProcessFrameCore 里十来个服务背靠背跑,只有总数没有分布。已有的
+        // EndDetail 是按帧取「最慢项」,发日志的采样帧上通常什么都没在跑,所以
+        // 看不出账。这里按子步骤跨帧累计、发日志时取走 —— 和 authority_steps
+        // 同一套做法。纯观测:不改顺序、不改分支。
+        private static readonly Dictionary<string, long[]> StepCost =
+            new Dictionary<string, long[]>(StringComparer.Ordinal);
+
+        private static void Step(string pId, Action pAction)
+        {
+            long started = Stopwatch.GetTimestamp();
+            try { pAction(); }
+            finally
+            {
+                long elapsed = Stopwatch.GetTimestamp() - started;
+                if (!StepCost.TryGetValue(pId, out long[] entry))
+                {
+                    entry = new long[2];
+                    StepCost[pId] = entry;
+                }
+
+                entry[0] += elapsed;
+                entry[1]++;
+            }
+        }
+
+        internal static string TakeStepDiagnostics()
+        {
+            if (StepCost.Count == 0) return "none";
+            var ranked = new List<KeyValuePair<string, long[]>>(StepCost);
+            StepCost.Clear();
+            ranked.Sort((left, right) =>
+            {
+                int byTicks = right.Value[0].CompareTo(left.Value[0]);
+                return byTicks != 0
+                    ? byTicks
+                    : string.CompareOrdinal(left.Key, right.Key);
+            });
+            int limit = Math.Min(14, ranked.Count);
+            var parts = new string[limit];
+            for (int i = 0; i < limit; i++)
+                parts[i] = ranked[i].Key + ":" +
+                    (ranked[i].Value[0] * 1000.0 / Stopwatch.Frequency)
+                        .ToString("0.###",
+                            System.Globalization.CultureInfo.InvariantCulture) +
+                    "/" + ranked[i].Value[1];
+            return string.Join(",", parts);
+        }
+
         public static int EligibleYear => HistoricalSchoolScheduler.EligibleYear;
         internal static bool IsLoaded => _loaded;
 
@@ -104,16 +153,19 @@ namespace AncientWarfare3.core.schools
             // AW3's cooperative runner advances world time without calling
             // MapBox.updateObjectAge. Enqueue here as a path-independent
             // fallback; the scheduler state coalesces duplicate years.
-            EnqueueWorldYear();
-            HistoricalSchoolAcademyConstructionService.ProcessPendingRebuilds();
-            HistoricalSchoolScheduler.ProcessFrame();
-            HistoricalSchoolEducationJourneyService.
-                ProcessLoadRecoveryFrame();
+            Step("world_year", EnqueueWorldYear);
+            Step("academy_rebuild", () =>
+                HistoricalSchoolAcademyConstructionService
+                    .ProcessPendingRebuilds());
+            Step("scheduler", () => HistoricalSchoolScheduler.ProcessFrame());
+            Step("load_recovery", () =>
+                HistoricalSchoolEducationJourneyService
+                    .ProcessLoadRecoveryFrame());
             long diagnostic = RuntimePerformanceDiagnostic.BeginScope();
             try
             {
-                HistoricalSchoolDescentService.
-                    ProcessPendingDescentReconciliations();
+                Step("descent", () => HistoricalSchoolDescentService
+                    .ProcessPendingDescentReconciliations());
             }
             finally
             {
@@ -121,22 +173,35 @@ namespace AncientWarfare3.core.schools
                     diagnostic);
             }
             diagnostic = RuntimePerformanceDiagnostic.BeginScope();
-            try { SchoolGuestOfficeService.ProcessPendingFrame(); }
+            try
+            {
+                Step("guest_office",
+                    () => SchoolGuestOfficeService.ProcessPendingFrame());
+            }
             finally
             {
                 RuntimePerformanceDiagnostic.EndDetail("school_guest_office",
                     diagnostic);
             }
             diagnostic = RuntimePerformanceDiagnostic.BeginScope();
-            try { HistoricalSchoolActionService.ProcessDeferredFrame(); }
+            try
+            {
+                Step("deferred_actions",
+                    () => HistoricalSchoolActionService.ProcessDeferredFrame());
+            }
             finally
             {
                 RuntimePerformanceDiagnostic.EndDetail(
                     "school_deferred_actions", diagnostic);
             }
-            HistoricalSchoolActivityQueue.ProcessFrame();
+            Step("activity_queue",
+                () => HistoricalSchoolActivityQueue.ProcessFrame());
             diagnostic = RuntimePerformanceDiagnostic.BeginScope();
-            try { HistoricalSchoolWriteBufferService.ProcessFrame(); }
+            try
+            {
+                Step("write_buffer",
+                    () => HistoricalSchoolWriteBufferService.ProcessFrame());
+            }
             finally
             {
                 RuntimePerformanceDiagnostic.EndDetail("school_write_buffer",
@@ -150,7 +215,9 @@ namespace AncientWarfare3.core.schools
                 diagnostic = RuntimePerformanceDiagnostic.BeginScope();
                 try
                 {
-                    HistoricalSchoolTravelService.ProcessQuarter(quarterKey);
+                    Step("travel_quarter", () =>
+                        HistoricalSchoolTravelService.ProcessQuarter(
+                            quarterKey));
                 }
                 finally
                 {
@@ -159,7 +226,11 @@ namespace AncientWarfare3.core.schools
                 }
             }
             diagnostic = RuntimePerformanceDiagnostic.BeginScope();
-            try { HistoricalSchoolTravelService.ProcessFrame(); }
+            try
+            {
+                Step("travel_frame",
+                    () => HistoricalSchoolTravelService.ProcessFrame());
+            }
             finally
             {
                 RuntimePerformanceDiagnostic.EndDetail("school_travel_frame",

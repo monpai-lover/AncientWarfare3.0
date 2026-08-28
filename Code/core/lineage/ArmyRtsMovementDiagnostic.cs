@@ -36,6 +36,41 @@ namespace AncientWarfare3.core.lineage
                 : "kind=RtsMember";
         }
 
+        // 同理:P0 战斗路径上每个 actor 每遍要拼 3 次 "boundary=X kind=Y"。
+        // boundary 只有 6 个字面量、kind 只有 2 个值,一共 12 种组合,全部预生成。
+        // 这样开关关着时是一次字典查找 + 直接返回常量,不再有任何字符串分配。
+        private static readonly Dictionary<string, string>
+            BoundaryDetailRtsMember = BuildBoundaryDetails("kind=RtsMember");
+        private static readonly Dictionary<string, string>
+            BoundaryDetailRoyalGuard = BuildBoundaryDetails("kind=RoyalGuard");
+
+        private static Dictionary<string, string> BuildBoundaryDetails(
+            string pKindDetail)
+        {
+            var map = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (string boundary in new[]
+                     {
+                         "entry", "current_enemy", "enemy_search",
+                         "task_verifier", "path", "ai", "prepare"
+                     })
+                map[boundary] = "boundary=" + boundary + " " + pKindDetail;
+            return map;
+        }
+
+        /// <summary>返回 "boundary=X kind=Y" 的预生成常量,热路径上零分配。</summary>
+        internal static string BoundaryDetail(string pBoundary,
+            ArmyMilitaryMovementPriorityKind pKind)
+        {
+            Dictionary<string, string> map =
+                pKind == ArmyMilitaryMovementPriorityKind.RoyalGuard
+                    ? BoundaryDetailRoyalGuard
+                    : BoundaryDetailRtsMember;
+            return map.TryGetValue(pBoundary ?? string.Empty,
+                out string detail)
+                ? detail
+                : "boundary=" + pBoundary + " " + KindDetail(pKind);
+        }
+
         internal static void Log(string pScope, string pStage,
             Actor pActor, string pDetail = "")
         {

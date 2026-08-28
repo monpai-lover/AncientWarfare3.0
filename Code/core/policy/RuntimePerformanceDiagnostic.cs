@@ -721,6 +721,9 @@ namespace AncientWarfare3.core.policy
                 Milliseconds(schedulerStages.UnaccountedTicks) +
                 " scheduler_host_unaccounted_ms=" +
                 Milliseconds(schedulerStages.HostUnaccountedTicks) +
+                " sched_interval_ms=" +
+                AWSchedulerStageDiagnostics.TakeIntervalDiagnostics() +
+                " sim_rate=" + BuildSimulationRateDiagnostics(intervalTicks) +
                  " simulation_coordinator=master_batch_runner" +
                 " simulation_workers=" +
                 AWSimulationWorkerPool.Instance.GetDiagnostics() +
@@ -747,6 +750,8 @@ namespace AncientWarfare3.core.policy
                 Milliseconds(actorPostDiagnostics.CommitTicks) +
                 " actor_post_stages=" +
                 AWCooperativeActorPostRunner.TakeStageBreakdown() +
+                " post_jobs=" +
+                AWCooperativeActorPostRunner.TakePostJobBreakdown() +
                 " p0_segments=" +
                 AWCooperativeActorPostRunner.TakeP0Breakdown() +
                 " p0_index=" +
@@ -950,6 +955,10 @@ namespace AncientWarfare3.core.policy
                 Milliseconds(_slowestAuthorityStageTicks) +
                 " authority_steps=" +
                 AWAuthorityCycleService.TakeAuthorityBreakdown() +
+                " school_steps=" +
+                HistoricalSchoolRuntime.TakeStepDiagnostics() +
+                " school_writes=" +
+                HistoricalSchoolWriteDiagnostics.TakeDiagnostics() +
                 " deferred_prefix_ms=" +
                 DeferredRuntimeWorkService.TakePrefixCostDiagnostics() +
                 " gc0_collections=" + gc0Collections +
@@ -1163,6 +1172,48 @@ namespace AncientWarfare3.core.policy
 
         // 最坏帧里各桶的耗时,外加落在所有桶之外的余量。余量大就说明尖峰不在
         // 我们的代码里(原版模拟、渲染、或者被 GC 停了)。
+        private static long _lastLogicalTicksCompleted = -1L;
+
+        /// <summary>
+        /// 玩家看到的倍速 = 请求倍速 × 实际完成的逻辑 tick 率 ÷ 50。
+        /// Large 模式下每个 admission 只推进 0.02×倍速 世界秒,而 credit 速率恒为
+        /// 50/秒且与倍速无关(AWFrameSchedulerRules.AdmissionRate),所以无论选几倍速
+        /// 都必须每秒跑满 50 个逻辑 tick 才能兑现。跑不满就等比掉速,而这个比值
+        /// 此前完全没有输出通道 —— 只能从 authority_steps 的调用次数反推。
+        /// </summary>
+        private static string BuildSimulationRateDiagnostics(long pIntervalTicks)
+        {
+            AWCooperativeSimulationRunner runner =
+                AWCooperativeSimulationRunner.Instance;
+            long completed = runner.LogicalTicksCompleted;
+            long delta = _lastLogicalTicksCompleted < 0L
+                ? 0L
+                : Math.Max(0L, completed - _lastLogicalTicksCompleted);
+            _lastLogicalTicksCompleted = completed;
+            double seconds = pIntervalTicks > 0L
+                ? pIntervalTicks / (double)Stopwatch.Frequency
+                : 0d;
+            double perSecond = seconds > 0d ? delta / seconds : 0d;
+            double required =
+                AWFrameSchedulerRules.BaseSimulationTicksPerSecond;
+            double fulfilment = required > 0d ? perSecond / required : 0d;
+            return "ticks=" + delta +
+                   " tick_hz=" + Format(perSecond) +
+                   " tick_hz_required=" + Format(required) +
+                   " fulfilment=" + Format(fulfilment * 100d) + "%" +
+                   " requested=" + Format(runner.RequestedSpeed) + "x" +
+                   " actual=" + Format(runner.ActualSpeed) + "x" +
+                   " credits=" + Format(runner.AdmissionCredits) +
+                   " frame_budget_ms=" + Format(
+                       AWFramePriorityGovernor.FrameBudgetMilliseconds);
+        }
+
+        private static string Format(double pValue)
+        {
+            return pValue.ToString("0.###",
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         private static string BuildWorstFrameBreakdown()
         {
             var builder = new StringBuilder();

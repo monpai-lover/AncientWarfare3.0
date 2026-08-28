@@ -71,6 +71,14 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         CombatEnemyCurrent,
         CombatEnemySearch,
         CombatTaskSwitch,
+        // CombatTaskSwitch 实测 61.8µs/次,是 UpdateAi(2.6µs)的 24 倍,和
+        // CombatEntryTask 合计占 Combat 的 84%。它是三个函数串起来的,三者都要
+        // 穿过 Controllers / RuntimeByArmy 查表、SafeCaptain、以及 SetJob 里那一
+        // 长串所有权判定。到底是哪一个吃掉了这 61.8µs,读代码只能猜 —— 这三段
+        // 是纯观测探针,不改任何分支、顺序或早退时机。
+        CombatSwitchEnterField,
+        CombatSwitchCaptainTask,
+        CombatSwitchMemberTask,
         CombatVerifierPath,
         CombatUpdateAi,
         CombatSecondPass,
@@ -116,6 +124,54 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         new long[Enum.GetValues(typeof(PostStage)).Length];
     private static readonly long[] diagnosticStageCalls =
         new long[Enum.GetValues(typeof(PostStage)).Length];
+
+    // 按原版 post job 的 id 累计。AfterPathMovement 之类的阶段只是「跑一段
+    // job 区间」的壳,成本落在区间里的具体 job 上,不按 id 拆就看不出该动谁。
+    private static readonly Dictionary<string, long[]> diagnosticPostJobCost =
+        new Dictionary<string, long[]>(StringComparer.Ordinal);
+
+    private static void AccountPostJob(string pJobId, long pStarted)
+    {
+        if (pStarted == 0L || string.IsNullOrEmpty(pJobId)) return;
+        long elapsed = Stopwatch.GetTimestamp() - pStarted;
+        if (elapsed <= 0L) return;
+        lock (diagnosticPostJobCost)
+        {
+            if (!diagnosticPostJobCost.TryGetValue(pJobId, out long[] entry))
+            {
+                entry = new long[2];
+                diagnosticPostJobCost[pJobId] = entry;
+            }
+
+            entry[0] += elapsed;
+            entry[1]++;
+        }
+    }
+
+    internal static string TakePostJobBreakdown()
+    {
+        lock (diagnosticPostJobCost)
+        {
+            if (diagnosticPostJobCost.Count == 0) return "none";
+            var ranked =
+                new List<KeyValuePair<string, long[]>>(diagnosticPostJobCost);
+            diagnosticPostJobCost.Clear();
+            ranked.Sort((left, right) =>
+            {
+                int byTicks = right.Value[0].CompareTo(left.Value[0]);
+                return byTicks != 0
+                    ? byTicks
+                    : string.CompareOrdinal(left.Key, right.Key);
+            });
+            int limit = Math.Min(14, ranked.Count);
+            var parts = new string[limit];
+            for (int i = 0; i < limit; i++)
+                parts[i] = ranked[i].Key + ":" +
+                    (ranked[i].Value[0] * 1000.0 / Stopwatch.Frequency)
+                        .ToString("0.###") + "/" + ranked[i].Value[1];
+            return string.Join(",", parts);
+        }
+    }
 
     internal static string TakeStageBreakdown()
     {
@@ -583,11 +639,9 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 if (returnActive)
                     ArmyRtsMovementDiagnostic.Log("return",
                         "return_transport_yield", actor,
-                        "boundary=prepare " +
-                    ArmyRtsMovementDiagnostic.KindDetail(kind));
+                        ArmyRtsMovementDiagnostic.BoundaryDetail("prepare", kind));
                 ArmyRtsMovementDiagnostic.Log("p0", "transport_yield", actor,
-                    "boundary=prepare " +
-                    ArmyRtsMovementDiagnostic.KindDetail(kind));
+                    ArmyRtsMovementDiagnostic.BoundaryDetail("prepare", kind));
                 ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
                 return;
             }
@@ -837,7 +891,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             ArmyRtsControllerService.TrySetMemberCombatTask(actor);
         AccountP0(P0Segment.CombatEntryTask, combatScope);
         ArmyRtsMovementDiagnostic.Log("p0", "combat_p0", actor,
-            "boundary=" + boundary + " " + ArmyRtsMovementDiagnostic.KindDetail(kind));
+            ArmyRtsMovementDiagnostic.BoundaryDetail(boundary, kind));
         combatScope = Stopwatch.GetTimestamp();
         actor.b2_checkCurrentEnemyTarget(cycleElapsed);
         AccountP0(P0Segment.CombatEnemyCurrent, combatScope);
@@ -847,9 +901,15 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         combatScope = Stopwatch.GetTimestamp();
         if (kind == ArmyMilitaryMovementPriorityKind.RtsMember)
         {
+            long switchScope = Stopwatch.GetTimestamp();
             ArmyRtsControllerService.TryEnterFieldCombatFromP0(actor);
+            AccountP0(P0Segment.CombatSwitchEnterField, switchScope);
+            switchScope = Stopwatch.GetTimestamp();
             ArmyRtsControllerService.TrySetCaptainTacticalTask(actor);
+            AccountP0(P0Segment.CombatSwitchCaptainTask, switchScope);
+            switchScope = Stopwatch.GetTimestamp();
             ArmyRtsControllerService.TrySetMemberCombatTask(actor);
+            AccountP0(P0Segment.CombatSwitchMemberTask, switchScope);
         }
         AccountP0(P0Segment.CombatTaskSwitch, combatScope);
         combatScope = Stopwatch.GetTimestamp();
@@ -865,7 +925,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         actor.b6_updateAI(cycleElapsed);
         AccountP0(P0Segment.CombatUpdateAi, combatScope);
         ArmyRtsMovementDiagnostic.Log("p0", "combat_after_ai", actor,
-            "boundary=" + boundary + " " + ArmyRtsMovementDiagnostic.KindDetail(kind));
+            ArmyRtsMovementDiagnostic.BoundaryDetail(boundary, kind));
         int actionIndexAfterAi = actor.ai?.action_index ?? -1;
         if (ArmyMilitaryMovementPriorityRules.
                 ShouldAdvanceNewFightTaskInSameP0(
@@ -884,7 +944,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             AccountP0(P0Segment.CombatSecondPass, combatScope);
             ArmyRtsMovementDiagnostic.Log("p0",
                 "combat_after_move_command", actor,
-                "boundary=" + boundary + " " + ArmyRtsMovementDiagnostic.KindDetail(kind));
+                ArmyRtsMovementDiagnostic.BoundaryDetail(boundary, kind));
         }
         combatScope = Stopwatch.GetTimestamp();
         actor.u10_checkSmoothMovement(cycleElapsed);
@@ -925,7 +985,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         if (!transportOwned)
             return false;
         ArmyRtsMovementDiagnostic.Log("p0", "transport_yield", actor,
-            "boundary=" + boundary + " " + ArmyRtsMovementDiagnostic.KindDetail(kind));
+            ArmyRtsMovementDiagnostic.BoundaryDetail(boundary, kind));
         ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
         return true;
     }
@@ -1755,6 +1815,13 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             return;
         }
 
+        // AfterPathMovement 现在是 actors 阶段最大的单项(221ms/区间、占该阶段
+        // 43%),但它只是「跑原版 post job 区间 [path+1, smooth)」的壳,真正的
+        // 成本分布在区间内的若干个原版 job 上。按 job.id 跨帧累计,才知道该动谁。
+        // 纯观测:不改分支、不改顺序、不改 skip 时机。
+        long jobCostStarted = CaptureDiagnostics
+            ? Stopwatch.GetTimestamp() : 0L;
+
         double startedAt = splitPostJobs
             ? Time.realtimeSinceStartupAsDouble
             : 0.0;
@@ -1793,6 +1860,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         {
             job.current_skips = Randy.randomInt(0, job.random_tick_skips);
         }
+
+        AccountPostJob(job.id, jobCostStarted);
 
         if (splitPostJobs)
         {
