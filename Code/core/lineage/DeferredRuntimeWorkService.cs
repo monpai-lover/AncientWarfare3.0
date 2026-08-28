@@ -31,6 +31,9 @@ namespace AncientWarfare3.core.lineage
             new LinkedList<WorkItem>();
         private static readonly LinkedList<WorkItem> CriticalRuntimeQueue =
             new LinkedList<WorkItem>();
+        // 按 key 前缀累计每类 work item 的执行耗时,跨帧累加、按采样区间取走。
+        private static readonly Dictionary<string, long[]> PrefixCost =
+            new Dictionary<string, long[]>(StringComparer.Ordinal);
         private static readonly Dictionary<string, LinkedListNode<WorkItem>> Coalesced =
             new Dictionary<string, LinkedListNode<WorkItem>>(StringComparer.Ordinal);
         private static int _consecutiveCriticalRuntimeWork;
@@ -150,6 +153,10 @@ namespace AncientWarfare3.core.lineage
             // A deferred item may execute outside a diagnostic sampling frame;
             // measure it directly at the active frame boundary.
             long diagnostic = RuntimePerformanceDiagnostic.BeginDeferredItemScope();
+            // deferred_key / deferred_item_ms 是按帧字段,13 个采样里 11 个报
+            // none/0 —— 采样帧上通常没有 item 在跑。这里按前缀跨帧累加,才能看出
+            // 那 2.555ms/项 到底花在哪类活上。这一份不受采样门控,每次都收。
+            long costStarted = Stopwatch.GetTimestamp();
             try
             {
                 pItem.action();
@@ -167,9 +174,49 @@ namespace AncientWarfare3.core.lineage
             }
             finally
             {
+                AccountPrefixCost(pItem.key, costStarted);
                 RuntimePerformanceDiagnostic.EndDeferredItem(pItem.key,
                     diagnostic);
             }
+        }
+
+        private static void AccountPrefixCost(string pKey, long pStarted)
+        {
+            string prefix = DeferredRuntimeWorkRules.DiagnosticPrefix(pKey);
+            if (string.IsNullOrEmpty(prefix)) return;
+            if (!PrefixCost.TryGetValue(prefix, out long[] entry))
+            {
+                entry = new long[2];
+                PrefixCost[prefix] = entry;
+            }
+
+            entry[0] += Stopwatch.GetTimestamp() - pStarted;
+            entry[1]++;
+        }
+
+        public static string TakePrefixCostDiagnostics()
+        {
+            if (PrefixCost.Count == 0) return "none";
+            var ranked = new List<KeyValuePair<string, long[]>>(PrefixCost);
+            PrefixCost.Clear();
+            ranked.Sort((left, right) =>
+            {
+                int byTicks = right.Value[0].CompareTo(left.Value[0]);
+                return byTicks != 0 ? byTicks :
+                    string.CompareOrdinal(left.Key, right.Key);
+            });
+            int limit = Math.Min(12, ranked.Count);
+            var parts = new string[limit];
+            for (int i = 0; i < limit; i++)
+            {
+                parts[i] = ranked[i].Key + ":" +
+                    (ranked[i].Value[0] * 1000.0 / Stopwatch.Frequency)
+                        .ToString("0.###",
+                            System.Globalization.CultureInfo.InvariantCulture) +
+                    "/" + ranked[i].Value[1];
+            }
+
+            return string.Join(",", parts);
         }
 
         private static void Requeue(WorkItem pItem)

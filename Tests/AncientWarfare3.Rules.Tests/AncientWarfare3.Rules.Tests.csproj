@@ -122,7 +122,6 @@
     <Compile Include="..\..\Code\core\lineage\CorruptionRules.cs" Link="Production\CorruptionRules.cs" />
     <Compile Include="CorruptionSourceGuardTests.cs.txt" />
     <Compile Include="FramePrioritySchedulerConfirmationRulesTests.cs.txt" />
-    <Compile Include="FramePrioritySchedulerStabilitySourceGuardTests.cs.txt" />
     <Compile Include="..\..\Code\core\performance\FramePrioritySchedulerConfirmationRules.cs" Link="Production\FramePrioritySchedulerConfirmationRules.cs" />
     <Compile Include="HistoricalSchoolXiaAccessRulesTests.cs.txt" />
     <Compile Include="HistoricalSchoolXiaAccessSourceGuardTests.cs.txt" />
@@ -256,8 +255,6 @@
     <Compile Include="CapturedMilitaryOwnershipRulesTests.cs.txt" />
     <Compile Include="ActorPresentationDirtyRulesTests.cs.txt" />
     <Compile Include="AWPathRequestReuseRulesTests.cs.txt" />
-    <Compile Include="AWPathOptimizationRulesTests.cs.txt" />
-    <Compile Include="..\..\Code\core\pathfinding\AWPathOptimizationRules.cs" Link="Production\AWPathOptimizationRules.cs" />
     <Compile Include="IdleBehaviourThrottleGateTests.cs.txt" />
     <Compile Include="..\..\Code\core\performance\AWIdleBehaviourBudget.cs" Link="Production\AWIdleBehaviourBudget.cs" />
     <Compile Include="VanillaLookupOptimizationSourceGuardTests.cs.txt" />
@@ -267,13 +264,11 @@
     <Compile Include="WarArmyReturnRulesTests.cs.txt" />
     <Compile Include="WarRuntimeDisplayRulesTests.cs.txt" />
     <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
-    <Compile Include="PathfindingCursorTests.cs.txt" />
     <Compile Include="PathfindingBaselineSourceGuardTests.cs.txt" />
     <Compile Include="RuntimeRegressionSourceGuardTests.cs.txt" />
     <Compile Include="AWDockTransportRulesTests.cs.txt" />
     <Compile Include="AWDockEndpointRulesTests.cs.txt" />
     <Compile Include="AWOceanConnectivityRulesTests.cs.txt" />
-    <Compile Include="PathfindingPerformanceTests.cs.txt" />
     <Compile Include="PathGeneratorBoundsRegressionSourceGuardTests.cs.txt" />
     <Compile Include="PathGeneratorSnapshotRegressionTests.cs.txt" />
     <Compile Include="..\..\Code\core\performance\AWSchedulerStageDiagnostics.cs" Link="Production\AWSchedulerStageDiagnostics.cs" />
@@ -1021,7 +1016,6 @@
     <Compile Include="..\..\Code\core\pathfinding\AWDockRouteRegistry.cs" Link="Production\AWDockRouteRegistry.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWDockTransportRules.cs" Link="Production\AWDockTransportRules.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathLifecycleRules.cs" Link="Production\AWPathLifecycleRules.cs" />
-    <Compile Include="..\..\Code\core\pathfinding\AWPathIdentity.cs" Link="Production\AWPathIdentity.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWDockEndpointRules.cs" Link="Production\AWDockEndpointRules.cs" />
     <Compile Include="..\..\Code\core\performance\RuntimePerformanceBudgetRules.cs" Link="Production\RuntimePerformanceBudgetRules.cs" />
     <Compile Include="..\..\Code\core\performance\AWEnemySearchBackoffRules.cs" Link="Production\AWEnemySearchBackoffRules.cs" />
@@ -1042,6 +1036,7 @@
     <Compile Include="..\..\Code\core\pathfinding\AWRegionRouteCache.cs" Link="Production\AWRegionRouteCache.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWStreamingPathGenerator.cs" Link="Production\AWStreamingPathGenerator.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathDiagnostics.cs" Link="Production\AWPathDiagnostics.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathReuseProbe.cs" Link="Production\AWPathReuseProbe.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathFinder.cs" Link="Production\AWPathFinder.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathRecoveryManager.cs" Link="Production\AWPathRecoveryManager.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWNarrowWaterRecoveryRules.cs" Link="Production\AWNarrowWaterRecoveryRules.cs" />

@@ -141,6 +141,18 @@ namespace AncientWarfare3.core.performance
         internal static int Count => Entries.Count;
         internal static int RtsMemberCount => Math.Max(0, _rtsMemberCount);
 
+        // 观测:P0 每帧按 Entries 全量 CopySnapshot,但死亡链未清理本索引
+        // (只靠 ProcessMilitaryP0Actor 下一轮兜底 Unregister),而 BeginFrame
+        // 是空实现导致 ProcessedFrameByActor 从不收缩。用这两个数确认真实规模。
+        internal static string Diagnostics()
+        {
+            return "entries=" + Entries.Count +
+                   ",order=" + Order.Count +
+                   ",rts=" + Math.Max(0, _rtsMemberCount) +
+                   ",processed_map=" + ProcessedFrameByActor.Count +
+                   ",taxi=" + VanillaTaxiActors.Count;
+        }
+
         internal static void BeginCycle()
         {
             BeginFrame(UnityEngine.Time.frameCount);

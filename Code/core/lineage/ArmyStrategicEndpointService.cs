@@ -32,6 +32,12 @@ namespace AncientWarfare3.core.lineage
                 ScanAdjacent(pTargetCity, targetCenter, origin,
                     pExcludedTileId, seen, ref examined, ref best,
                     ref bestTier, ref bestDistance);
+            // 边界带、内圈、相邻格全部落空时,退回城市中心而不是返回 null。
+            // 返回 null 会让 ResolveMovementTarget 得不到任何目标,军队进入
+            // March 后既无路线也无目标,任务又不会被回收,导致永久停在原地。
+            // 城市中心至少是个方向正确的目标,后续 tick 仍会重新尝试精确端点。
+            if (best == null && targetCenter.data.tile_id != pExcludedTileId)
+                best = targetCenter;
             return best;
         }
 

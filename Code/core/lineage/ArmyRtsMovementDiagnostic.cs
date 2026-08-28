@@ -21,6 +21,21 @@ namespace AncientWarfare3.core.lineage
         private static readonly Dictionary<string, Entry> Entries =
             new Dictionary<string, Entry>();
 
+        internal static bool Enabled =>
+            AWPerformanceSettings.ArmyRtsDiagnosticsEnabled;
+
+        // P0 每个 actor 每帧要把 kind 拼进诊断详情十余次。Log 内部虽然一进门
+        // 就按开关返回,但实参在调用之前就已经求值完毕 —— 枚举 ToString 加拼接
+        // 每采样区间要跑数万次,开关关着也照付。换成常量表后关闭时几乎零成本,
+        // 打开时也不再分配。
+        internal static string KindDetail(
+            ArmyMilitaryMovementPriorityKind pKind)
+        {
+            return pKind == ArmyMilitaryMovementPriorityKind.RoyalGuard
+                ? "kind=RoyalGuard"
+                : "kind=RtsMember";
+        }
+
         internal static void Log(string pScope, string pStage,
             Actor pActor, string pDetail = "")
         {
@@ -48,14 +63,21 @@ namespace AncientWarfare3.core.lineage
                          (pStage ?? "unknown") + ":" +
                          (schedulerStage ? -1L : actorId);
             double now = Time.realtimeSinceStartupAsDouble;
+            // 限流先于状态构造:BuildState 会拼出数百字节的诊断串,而绝大多数
+            // 调用最终都被时间窗挡掉。先做纯时间判定,确定要写才付分配代价。
+            bool hasPrevious = Entries.TryGetValue(key, out Entry previous);
+            if (hasPrevious)
+            {
+                double elapsedTicks = now - previous.Realtime;
+                if (ArmyRtsP0Rules.ShouldRateLimitDiagnostic(anomaly,
+                        elapsedTicks, RepeatIntervalSeconds)) return;
+            }
             string state = schedulerStage
                 ? BuildSchedulerState(pDetail)
                 : BuildState(pActor, pDetail);
-            if (Entries.TryGetValue(key, out Entry previous))
+            if (hasPrevious)
             {
                 double elapsed = now - previous.Realtime;
-                if (ArmyRtsP0Rules.ShouldRateLimitDiagnostic(anomaly,
-                        elapsed, RepeatIntervalSeconds)) return;
                 if (string.Equals(previous.Signature, state,
                         StringComparison.Ordinal) &&
                     elapsed < RepeatIntervalSeconds) return;

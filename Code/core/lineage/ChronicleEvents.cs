@@ -2284,19 +2284,30 @@ namespace AncientWarfare3.core.lineage
         {
             if (pDead?.data == null) return;
             if (!DeathBondRules.ShouldRecordBondDeathForParentsAndLover(pDeadIsTraceable: true)) return;
-            string deadName = pDead.getName();
 
-            // 配偶
+            // 大批死亡里绝大多数是无谱系平民,悼念记录最终都会被 IsNobleActor
+            // 挡掉。先按悼念者逐个门控,命中了才付 getName / HistoryText 的代价;
+            // 一个都没有就完全不进入记录路径。
             Actor lover = pDead.hasLover() ? pDead.lover : null;
+            Actor parent1 = GetUnit(pDead.data.parent_id_1);
+            Actor parent2 = GetUnit(pDead.data.parent_id_2);
+            bool anyMourner = IsBondMourner(lover, pDead) ||
+                              IsBondMourner(parent1, pDead) ||
+                              IsBondMourner(parent2, pDead);
+            if (!anyMourner) return;
+
+            string deadName = pDead.getName();
             RecordBondDeath(lover, pDead, deadName, T("aw_hist_partner"));
+            RecordBondDeath(parent1, pDead, deadName, T("aw_hist_relative"));
+            RecordBondDeath(parent2, pDead, deadName, T("aw_hist_relative"));
+        }
 
-            // 父母(用 data 上的 parent id 取,已验证字段;避免依赖 getParents 的具体返回类型)
-            RecordBondDeath(GetUnit(pDead.data.parent_id_1), pDead, deadName, T("aw_hist_relative"));
-            RecordBondDeath(GetUnit(pDead.data.parent_id_2), pDead, deadName, T("aw_hist_relative"));
-
-            // 子女
-            foreach (Actor child in GetChildren(pDead))
-                RecordBondDeath(child, pDead, deadName, T("aw_hist_relative"));
+        // 与 RecordBondDeath 的准入条件保持一致,只做判定不产生分配。
+        private static bool IsBondMourner(Actor pMourner, Actor pDead)
+        {
+            if (pMourner == null || pMourner == pDead) return false;
+            if (pMourner.isRekt() || !pMourner.isAlive()) return false;
+            return ChronicleGate.IsNobleActor(pMourner);
         }
 
         private static Actor GetUnit(long pId)
@@ -2315,55 +2326,6 @@ namespace AncientWarfare3.core.lineage
                 HistoryText.Actor(pMourner, name) + H("aw_hist_lost_bond") +
                 HistoryText.PlainText(pRelation + " ") + HistoryText.Actor(pDead, pDeadName),
                 ChronicleCategory.BOND);
-        }
-
-        // 取子女:遍历死者所在世界单位,找 parent 是死者的(数量小,死亡时一次性)。
-        private static System.Collections.Generic.IEnumerable<Actor> GetChildren(Actor pParent)
-        {
-            var result = new System.Collections.Generic.List<Actor>();
-            if (pParent?.data == null) return result;
-
-            bool actorChildrenAvailable = TryCollectActorChildren(pParent, result);
-            if (!DeathBondRules.ShouldUseWorldScanForChildren(
-                    pCanUseActorChildrenList: actorChildrenAvailable,
-                    pDeadIsImportant: IsImportantForBondDeathChildFallback(pParent)))
-                return result;
-
-            Bench.bench(CityMaintenanceBenchmarkRules.DeathBondChildScan, CityMaintenanceBenchmarkRules.Group);
-            long pid = pParent.data.id;
-            foreach (Actor a in World.world.units)
-            {
-                if (a?.data == null || a == pParent) continue;
-                if (a.data.parent_id_1 == pid || a.data.parent_id_2 == pid) result.Add(a);
-            }
-            Bench.benchEnd(CityMaintenanceBenchmarkRules.DeathBondChildScan, CityMaintenanceBenchmarkRules.Group);
-            return result;
-        }
-
-        private static bool TryCollectActorChildren(Actor pParent, System.Collections.Generic.List<Actor> pResult)
-        {
-            if (pParent?.data == null || pResult == null) return false;
-            try
-            {
-                foreach (Actor child in pParent.getChildren(pOnlyCurrentFamily: false))
-                {
-                    if (child?.data == null || child == pParent) continue;
-                    pResult.Add(child);
-                }
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static bool IsImportantForBondDeathChildFallback(Actor pActor)
-        {
-            if (pActor?.data == null) return false;
-            if (ChronicleGate.IsImportant(pActor) || ChronicleGate.IsNobleActor(pActor)) return true;
-            try { return pActor.isArmyGroupLeader(); }
-            catch { return false; }
         }
 
         public static void OnVirtualNobleTitleGranted(Kingdom pKingdom,

@@ -6028,9 +6028,15 @@ namespace AncientWarfare3.core.lineage
             int selectedTileId = ArmyRtsRules.ResolveStableStrategicEndpoint(
                 lockedTileId, lockedLive, candidate?.data?.tile_id ?? -1);
             WorldTile selected = FindTile(selectedTileId);
+            bool hadLockedEndpoint = lockedTileId >= 0;
             pRuntime.LastStrategicEndpointTileId = selected?.data != null
                 ? selectedTileId
                 : -1;
+            // 锁定端点失效且重解析也拿不到新端点时,之前只是把 Last 写成 -1
+            // 就返回 null,已提交的路线却仍标记为有效 —— 军队于是停在 March
+            // 却既无路线也无目标。这里显式让路线失效以触发重新规划。
+            if (selected?.data == null && hadLockedEndpoint)
+                ResetStrategicMovementRuntime(pRuntime);
             return selected;
         }
 

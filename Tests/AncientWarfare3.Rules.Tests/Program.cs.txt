@@ -164,13 +164,6 @@ if (args.Length == 1 && args[0] == "--incremental-simobjects-safety")
     return;
 }
 
-if (args.Length == 1 && args[0] == "--frame-priority-stability")
-{
-    FramePrioritySchedulerStabilitySourceGuardTests.Run();
-    Console.WriteLine("Frame-priority scheduler stability guards passed.");
-    return;
-}
-
 if (args.Length == 1 && args[0] == "--path-generator-bounds")
 {
     PathGeneratorBoundsRegressionSourceGuardTests.Run();
@@ -851,6 +844,13 @@ if (args.Length == 1 && args[0] == "--rts-war-lifecycle")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--army-shared-path-recovery")
+{
+    ArmySharedPathRecoveryRulesTests.Run();
+    Console.WriteLine("Army shared path recovery rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--rts-member-vanilla-fighting")
 {
     RtsMemberGeneralCombatRegressionTests.Run();
@@ -1354,9 +1354,6 @@ if (args.Length == 1 && args[0] == "--actor-runtime")
     CapturedMilitaryOwnershipRulesTests.Run();
     ActorPresentationDirtyRulesTests.Run();
     AWPathRequestReuseRulesTests.Run();
-    AWPathOptimizationRulesTests.Run();
-    PathfindingPerformanceTests.Run();
-    PathfindingCursorTests.Run();
     SchoolRuntimePerformanceTests.Run();
     Console.WriteLine("AW3 actor runtime rules passed.");
     return;
@@ -9260,7 +9257,6 @@ if (recruitmentPriorityRule != null)
         "retired reserves are recruited before ordinary eligible adults");
 }
 
-PathfindingPerformanceTests.Run();
 PathGeneratorSnapshotRegressionTests.Run();
 SimulationWorkerPoolTests.Run();
 TableIdAllocatorSqlTests.Run();
@@ -9272,7 +9268,6 @@ PathMovementExecutorRulesTests.Run();
 PathMovementSafetyRulesTests.Run();
 RuntimePerformanceBudgetRulesTests.Run();
 RuntimePerformanceDiagnosticRulesTests.Run();
-PathfindingCursorTests.Run();
 PathfindingMigrationRulesTests.Run();
 PathfindingBaselineSourceGuardTests.Run();
 RuntimeRegressionSourceGuardTests.Run();

@@ -3,16 +3,24 @@ using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.performance;
 
 namespace AncientWarfare3.core.lineage
 {
     internal static class WarRefugeeService
     {
-        private const int CityBudgetPerMonth = 16;
-        private const int JourneyBudgetPerMonth = 32;
+        // 战争难民是趣味功能,不是主要功能,却在权威周期里排第二(626ms、
+        // 占 25.4%),单次 41.7ms 是最大的单点帧尖峰。先从根源节流:每月新建
+        // 和推进的量都砍下来,难民迁徙变成更慢的背景过程,逻辑本身不变。
+        private const int CityBudgetPerMonth = 6;
+        private const int JourneyBudgetPerMonth = 8;
+        // 砍完之后再切片,保证连这 8 条也不会挤在同一帧。每游戏月约有 21 个
+        // 权威周期,4 片足以在月内跑满配额。
+        private const int JourneyBudgetPerCycle = 4;
         private const int HouseholdLimit = 8;
         private static long _lastMonthToken = long.MinValue;
         private static int _month;
+        private static int _journeyQuotaRemaining;
         private static int _cityCursor;
         private static long _journeyCursor = -1L;
         private static readonly HashSet<long> ThreatenedCityIds = new HashSet<long>();
@@ -37,12 +45,37 @@ namespace AncientWarfare3.core.lineage
             if (pPaused || pCycleToken == _lastMonthToken) return;
             _lastMonthToken = pCycleToken;
             int currentMonth = ResolveMonthKey();
-            if (currentMonth == _month) return;
-            _month = currentMonth;
+            bool monthChanged = currentMonth != _month;
+            if (monthChanged)
+            {
+                _month = currentMonth;
+                _journeyQuotaRemaining = JourneyBudgetPerMonth;
+            }
             if (!CanMutate()) return;
-            RefreshMonthlyReservations();
-            ProcessPersistedJourneys(currentMonth, JourneyBudgetPerMonth);
-            CaptureThreatenedCities(currentMonth, CityBudgetPerMonth);
+            // 每月只在跨月那次做:两者都很便宜(0.280 / 0.229 ms/次)。
+            if (monthChanged)
+            {
+                AWAuthorityCycleService.SubStep(
+                    AWAuthorityCycleService.AuthorityStep
+                        .RefugeeMonthlyReservations,
+                    RefreshMonthlyReservations);
+                AWAuthorityCycleService.SubStep(
+                    AWAuthorityCycleService.AuthorityStep
+                        .RefugeeThreatenedCities,
+                    () => CaptureThreatenedCities(currentMonth,
+                        CityBudgetPerMonth));
+            }
+            // 行程推进改成按权威周期摊派:月配额不变(已在上面砍到 8),但一次
+            // 只走一小片。ProcessPersistedJourneys 本来就靠 _journeyCursor 续跑,
+            // 拆成小片是它原生支持的用法。月内 pMonthKey 恒定,分几次走完与
+            // 一次走完在语义上等价。
+            if (_journeyQuotaRemaining <= 0) return;
+            int slice = System.Math.Min(JourneyBudgetPerCycle,
+                _journeyQuotaRemaining);
+            _journeyQuotaRemaining -= slice;
+            AWAuthorityCycleService.SubStep(
+                AWAuthorityCycleService.AuthorityStep.RefugeePersistedJourneys,
+                () => ProcessPersistedJourneys(currentMonth, slice));
         }
 
         internal static void OnWarStarted(War pWar)
@@ -213,6 +246,7 @@ namespace AncientWarfare3.core.lineage
         {
             _lastMonthToken = long.MinValue;
             _month = 0;
+            _journeyQuotaRemaining = 0;
             _cityCursor = 0;
             _journeyCursor = -1L;
             ThreatenedCityIds.Clear();

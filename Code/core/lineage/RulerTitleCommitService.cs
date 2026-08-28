@@ -1,6 +1,7 @@
 using System;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.policy;
 using Newtonsoft.Json;
 
 namespace AncientWarfare3.core.lineage
@@ -167,6 +168,23 @@ namespace AncientWarfare3.core.lineage
 
     internal static class RulerTitleCommitService
     {
+        // 与 PosthumousTitleService 同理:flush 屏障与事务的耗时需要跨帧累计,
+        // detail 通道每帧清零,采样时读不到偶发的君主死亡。
+        private static long _flushBarrierTicks;
+        private static long _transactionTicks;
+
+        internal static string TakeCommitBreakdown()
+        {
+            long flush = System.Threading.Interlocked.Exchange(
+                ref _flushBarrierTicks, 0L);
+            long tx = System.Threading.Interlocked.Exchange(
+                ref _transactionTicks, 0L);
+            if (flush == 0L && tx == 0L) return "none";
+            double scale = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            return "flush_barrier=" + (flush * scale).ToString("0.###") +
+                   ",transaction=" + (tx * scale).ToString("0.###");
+        }
+
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
 
@@ -204,12 +222,44 @@ namespace AncientWarfare3.core.lineage
                 };
             if (HistoricalSynchronousWriteCoordinator.TryExecute(
                     TimeSpan.FromSeconds(5), historyTables,
-                    HistoricalWriteService.FlushForSynchronousFallback,
+                    (TimeSpan timeout, out string flushError) =>
+                    {
+                        long barrierScope =
+                            System.Diagnostics.Stopwatch.GetTimestamp();
+                        try
+                        {
+                            return HistoricalWriteService
+                                .FlushForSynchronousFallback(timeout,
+                                    out flushError);
+                        }
+                        finally
+                        {
+                            System.Threading.Interlocked.Add(
+                                ref _flushBarrierTicks,
+                                System.Diagnostics.Stopwatch.GetTimestamp() -
+                                barrierScope);
+                        }
+                    },
                     HistoricalWriteService.TryReserveEventId,
-                    eventIds => CommitReserved(pDecision, conferred,
-                        retrospective,
-                        eventIds.Count > 0 ? eventIds[0] : 0L,
-                        eventIds.Count > 1 ? eventIds[1] : 0L),
+                    eventIds =>
+                    {
+                        long txScope =
+                            System.Diagnostics.Stopwatch.GetTimestamp();
+                        try
+                        {
+                            return CommitReserved(pDecision, conferred,
+                                retrospective,
+                                eventIds.Count > 0 ? eventIds[0] : 0L,
+                                eventIds.Count > 1 ? eventIds[1] : 0L);
+                        }
+                        finally
+                        {
+                            System.Threading.Interlocked.Add(
+                                ref _transactionTicks,
+                                System.Diagnostics.Stopwatch.GetTimestamp() -
+                                txScope);
+                        }
+                    },
                     out RulerTitleCommitResult result, out string error))
                 return result;
             ModClass.LogWarning("Ruler title transaction failed: " + error);

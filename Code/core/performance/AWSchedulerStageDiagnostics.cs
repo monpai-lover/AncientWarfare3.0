@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Threading;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.performance
 {
@@ -59,7 +60,11 @@ namespace AncientWarfare3.core.performance
         internal static long Begin(AWSchedulerStageBucket pBucket)
         {
             _ = pBucket;
-            return Volatile.Read(ref _sampling) != 0
+            // 采样门控原本挡在这里:_sampling 只在被采样的帧为真,而最坏帧通常
+            // 不是被采样的那一帧,于是 worst_frame_buckets 里 vanilla_scheduler
+            // 恒为 0,原版调度的耗时全被算进 other。改成按诊断总开关取时间戳,
+            // 区间累计(Ticks/Calls)仍然只收采样帧,scheduler_stage_ms 语义不变。
+            return AWPerformanceSettings.EnablePerformanceDiagnostics
                 ? Stopwatch.GetTimestamp()
                 : 0L;
         }
@@ -68,6 +73,11 @@ namespace AncientWarfare3.core.performance
             long pStarted)
         {
             if (pStarted <= 0L) return;
+            // 按帧的账本每帧都收,供最坏帧归因使用。分阶段记账,否则 11 个
+            // 调度阶段揉成一团,看不出 80ms 是哪个阶段花掉的。
+            RuntimePerformanceDiagnostic.AccountSchedulerFrameCost(
+                pBucket, pStarted);
+            if (Volatile.Read(ref _sampling) == 0) return;
             int index = (int)pBucket;
             Interlocked.Add(ref Ticks[index],
                 Math.Max(0L, Stopwatch.GetTimestamp() - pStarted));

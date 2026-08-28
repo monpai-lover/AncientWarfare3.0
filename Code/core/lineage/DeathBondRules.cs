@@ -6,11 +6,5 @@ namespace AncientWarfare3.core.lineage
         {
             return pDeadIsTraceable;
         }
-
-        public static bool ShouldUseWorldScanForChildren(bool pCanUseActorChildrenList, bool pDeadIsImportant)
-        {
-            if (pCanUseActorChildrenList) return false;
-            return pDeadIsImportant;
-        }
     }
 }

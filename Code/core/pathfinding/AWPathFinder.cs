@@ -230,7 +230,11 @@ namespace AncientWarfare3.core.pathfinding
         {
             if (!_sessions.TryGetValue(pReuseKey.ActorId,
                     out PathSessionRecord record) ||
-                !CanReuse(record.Latest, pReuseKey)) return false;
+                !CanReuse(record.Latest, pReuseKey))
+            {
+                _diagnostics?.OnReuseMissed(pReuseKey);
+                return false;
+            }
             if (record.Running != null) _diagnostics?.OnReusedRunning();
             _diagnostics?.OnSubmission(record.Latest.Request.WorkClass,
                 AWPathSubmissionDisposition.Reused);
@@ -702,6 +706,8 @@ namespace AncientWarfare3.core.pathfinding
                         out PathSessionRecord record) ||
                     !ReferenceEquals(record.Latest, pTask)) return;
                 _sessions.TryRemove(pActorId, out _);
+                if (pTask.Request != null)
+                    _diagnostics?.OnSessionRetired(pTask.Request.ReuseKey);
                 record.Session.Cancel();
                 pTask.ReleaseOwner();
             }

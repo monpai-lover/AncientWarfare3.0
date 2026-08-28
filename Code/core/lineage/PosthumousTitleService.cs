@@ -2,12 +2,34 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.policy;
 using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.lineage
 {
     internal static class PosthumousTitleService
     {
+        // king_chronicle 单次 1.7~29ms 波动 17 倍,detail 通道是每帧统计、
+        // 采样时早被清掉,测不到这种偶发事件。这里独立累计,跨帧保留到下次输出。
+        private static long _buildFactsTicks;
+        private static long _commitTicks;
+        private static long _reignEvents;
+
+        internal static string TakeReignBreakdown()
+        {
+            long build = System.Threading.Interlocked.Exchange(
+                ref _buildFactsTicks, 0L);
+            long commit = System.Threading.Interlocked.Exchange(
+                ref _commitTicks, 0L);
+            long events = System.Threading.Interlocked.Exchange(
+                ref _reignEvents, 0L);
+            if (events == 0L) return "none";
+            double scale = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            return "events=" + events +
+                   ",build_facts=" + (build * scale).ToString("0.###") +
+                   ",commit=" + (commit * scale).ToString("0.###");
+        }
+
         private static string T(string pKey) => HistoryLocalizationRules.Text(pKey);
 
         private struct PosthumousKingdomContext
@@ -39,8 +61,19 @@ namespace AncientWarfare3.core.lineage
             if (!pReign.IsValid && pReign.ReignId != -1) return;
             if (HasExistingTitle(pKing.data.id, pReign.ReignId)) return;
 
-            RulerTitleFacts facts = RulerTitleFactService.BuildAtReignEnd(
-                pContext.LiveKingdom, pKing, pReign, pEndReason);
+            long stageScope = System.Diagnostics.Stopwatch.GetTimestamp();
+            RulerTitleFacts facts;
+            try
+            {
+                facts = RulerTitleFactService.BuildAtReignEnd(
+                    pContext.LiveKingdom, pKing, pReign, pEndReason);
+            }
+            finally
+            {
+                System.Threading.Interlocked.Add(ref _buildFactsTicks,
+                    System.Diagnostics.Stopwatch.GetTimestamp() - stageScope);
+                System.Threading.Interlocked.Increment(ref _reignEvents);
+            }
             if (facts.ActorId < 0 || facts.ShiId < 0) return;
             if (string.IsNullOrEmpty(facts.StateName)) facts.StateName = pContext.KingdomName ?? "";
             if (string.IsNullOrEmpty(facts.KingdomColor))
@@ -107,7 +140,14 @@ namespace AncientWarfare3.core.lineage
             decision.YearPrefix = HistoryWriter.BuildYearPrefix(now, pContext.LiveKingdom);
             decision.YearPrefixRich = HistoryWriter.BuildYearPrefixRich(now, pContext.LiveKingdom);
 
-            RulerTitleCommitResult result = RulerTitleCommitService.Commit(decision);
+            RulerTitleCommitResult result;
+            stageScope = System.Diagnostics.Stopwatch.GetTimestamp();
+            try { result = RulerTitleCommitService.Commit(decision); }
+            finally
+            {
+                System.Threading.Interlocked.Add(ref _commitTicks,
+                    System.Diagnostics.Stopwatch.GetTimestamp() - stageScope);
+            }
             if (!result.Success) return;
             RulerAppellationService.ProjectCommittedTitle(
                 pContext.LiveKingdom, pKing, result);

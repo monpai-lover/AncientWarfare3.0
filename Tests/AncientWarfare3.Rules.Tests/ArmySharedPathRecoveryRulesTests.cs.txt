@@ -63,6 +63,14 @@ internal static class ArmySharedPathRecoveryRulesTests
                 hasPreviousTile: true, transportStep: true,
                 deltaX: 255, deltaY: 0),
             "transport owns its non-local spatial transition");
+        string providerFailure = ArmySharedPathRules.
+            FormatInvalidProviderStepFailure(previousTileId: 31772,
+                currentTileId: 32100, deltaX: 8, deltaY: 1,
+                movementMethod: "Walk", routeStepCount: 4,
+                targetTileId: 76904);
+        Assert(providerFailure ==
+               "invalid_provider_step previous=31772 current=32100 dx=8 dy=1 method=Walk route_steps=4 target=76904",
+            "provider continuity failures retain enough evidence to identify the broken boundary");
         Assert(!ArmySharedPathRules.ShouldWaitForProviderRoute(
                 usesProvider: true, providerComplete: false,
                 routeStepCount: 0, routeContainsTransportStep: false,

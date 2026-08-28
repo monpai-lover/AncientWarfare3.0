@@ -24,7 +24,9 @@ $authority = Get-Content -Raw -Encoding UTF8 $authorityPath
 if ($authority -notmatch
     'if \(!CooperativeGate\.TryEnter\(pCycleToken, allowed\)\)' -and
     $authority -notmatch
-    'if \(!pGate\.TryEnter\(pCycleToken, CanRunAuthorityCycle\(pPaused\)\)\)') {
+    'if \(!pGate\.TryEnter\(pCycleToken, CanRunAuthorityCycle\(pPaused\)\)\)' -and
+    $authority -notmatch
+    'if \(!pGate\.TryEnter\(pCycleToken, allowed\)\)') {
     throw 'AW authority work must remain behind the cycle-token gate.'
 }
 

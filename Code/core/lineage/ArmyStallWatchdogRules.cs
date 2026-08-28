@@ -587,6 +587,9 @@ namespace AncientWarfare3.core.lineage
         public const int SlowSamplesBeforeRecovery = 3;
         public const int RoutePlanningSamplesBeforeRecovery = 6;
         public const int FailedRecoveryAttemptsBeforeHandoff = 3;
+        // 恢复阶梯耗尽后的重试周期。没有它,LastRecoveryStage 封顶在 4 就
+        // 再也不会触发恢复,拿不到端点的军队会永久停滞。
+        public const double StalledRecoveryRetrySeconds = 30d;
         public const int TargetCooldownWorldDays = 30;
         public const double MaximumCombatPreemptionSeconds = 10d;
 
@@ -776,6 +779,18 @@ namespace AncientWarfare3.core.lineage
                 pState.LastRecoveryStage = 1;
                 pState.CommandRecoveryIssued = true;
                 return ArmyStallRecoveryAction.ReassertCommand;
+            }
+            // 阶梯到 4 就封顶且从不复位:此后 NoProgressSeconds 继续累加也不会
+            // 再触发任何恢复,军队若始终拿不到端点就会永久停滞。这里在耗尽阶梯
+            // 后按固定周期复位,让恢复链可以重新走一遍而不是彻底放弃。
+            if (pState.LastRecoveryStage >= 4 &&
+                pState.NoProgressSeconds >= StalledRecoveryRetrySeconds)
+            {
+                pState.NoProgressSeconds = 0d;
+                pState.ConsecutiveSlowSamples = 0;
+                pState.CommandRecoveryIssued = false;
+                pState.LastRecoveryStage = 0;
+                return ArmyStallRecoveryAction.RebuildRoute;
             }
             return ArmyStallRecoveryAction.None;
         }

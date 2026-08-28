@@ -237,7 +237,13 @@ namespace AncientWarfare3.core.pathfinding
             if (_active.TryGetValue(pRequest.ArmyId,
                     out ActiveRequest current))
             {
-                if (current.Request.Equals(pRequest))
+                // 复用判定只看目标,不看起点。ArmyRouteRequest.Equals 含
+                // StartTileId,而起点就是军队当前位置 —— 军队一走动起点就变,
+                // 于是每次重规划都判定为"不同请求",取消刚提交的路线再提交新的,
+                // 形成"越移动越被取消"的自锁循环(实测 submitted==cancelled,
+                // completed 与 reused 恒为 0)。目标不变时应当继续沿用在途路线。
+                if (current.Request.ArmyId == pRequest.ArmyId &&
+                    current.Request.TargetTileId == pRequest.TargetTileId)
                 {
                     ArmyRtsBenchmark.RecordRoute(
                         ArmyRtsRouteLifecycle.Reused);

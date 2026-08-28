@@ -3,6 +3,7 @@ using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.core.policy;
 using HarmonyLib;
 
@@ -99,6 +100,10 @@ namespace AncientWarfare3.patch
                 WarNoticeService.QueueArmyChanged(__instance.kingdom, __instance.army);
                 WartimeGarrisonService.OnActorInvalidated(__instance);
                 TemporarySlaveVanguardService.OnMemberInvalidated(__instance);
+                // P0 优先级索引此前不在死亡清理里,死者要等下一轮
+                // ProcessMilitaryP0Actor 兜底才被移除,期间仍参与每帧的
+                // CopySnapshot。这里与其他军事索引一同清理。
+                ArmyMilitaryMovementPriorityIndex.Unregister(__instance.data.id);
                 SlavePopulationIndexService.Deactivate(__instance);
                 DynasticLivingSonIndexService.OnActorDying(__instance);
                 SuccessionRelationshipIndex.OnDying(__instance);
@@ -115,6 +120,25 @@ namespace AncientWarfare3.patch
                     ActorDeathPerformanceStage.MilitaryIndexes, militaryStage);
             }
             if (suppressPersonalHistory) return;
+            // 无宗族者(平民/奴隶)不产生谱系、头衔或编年史记录,中间那些阶段最终
+            // 都会被各自门槛挡掉,这里直接跳过整段判定与分配。
+            // 但已入档的 actor 仍必须写死亡状态,否则会永远停留在档案库的存活状态
+            // —— ArchiveTraceableActor 只要 IsHuman 就入档,与宗族无关。
+            // 上面的 MilitaryIndexes 是索引清理,平民同样必须执行,故门槛置于其后。
+            if (!ChronicleGate.HasShi(__instance))
+            {
+                if (!TryEvaluateDeathStage(__instance,
+                        ActorDeathPerformanceStage.LineageEligibility,
+                        "traceable archive eligibility",
+                        () => LineageService.HasTraceableArchive(__instance),
+                        out bool commonerArchived) || !commonerArchived) return;
+                TryRunDeathStage(__instance,
+                    ActorDeathPerformanceStage.LineageArchive,
+                    "traceable actor archive", () =>
+                    LineageArchiveWriter.QueueDeath(__instance,
+                        pTraceOnly: true));
+                return;
+            }
             TryRunDeathStage(__instance, ActorDeathPerformanceStage.DynasticTitle,
                 "dynastic title and feudatory succession",
                 () => DynasticTitleService.OnActorDying(__instance));

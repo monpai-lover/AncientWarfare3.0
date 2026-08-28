@@ -12,6 +12,128 @@ namespace AncientWarfare3.core.performance
 {
     internal static class AWAuthorityCycleService
     {
+        // 权威周期是实测的最大帧尖峰源:worst_frame_buckets 里 sched_aw3_authority
+        // 在 14 个已载入采样中有 8 个是最坏帧主因,单帧 45–128ms。而
+        // ProcessCooperativeStep 无条件返回 true,所以下面这一长串服务是背靠背
+        // 一次跑完的,没有预算也没有让出点。先按步分段实测是哪几项占了这个量,
+        // 再决定拆帧还是优化本体 —— 两条路的代价完全不同。
+        internal enum AuthorityStep
+        {
+            WesternCourtElection = 0,
+            AccessionIdentityDeferred,
+            ReigningRoyalLineage,
+            SuccessionDisputePersistence,
+            LocalizedNameMigration,
+            WesternLineageMigration,
+            KingdomInstitutionalXiaization,
+            DynasticMaleLineContinuity,
+            NobleHeirPregnancy,
+            RulerHouseholdPregnancy,
+            ArmyMembershipReconciliation,
+            EnclosedUnownedZoneRepair,
+            EmptyCityResettlement,
+            TemporaryMilitaryReturn,
+            WarArmyReturn,
+            ArmyRtsAssignmentReconciliation,
+            PathfindingBootstrap,
+            ArmyRtsScheduling,
+            HistoricalSchoolRuntime,
+            CivilServiceExam,
+            DiplomacyProposal,
+            DiplomaticOperation,
+            ZhuluAgeDirector,
+            WarTerminalSettlement,
+            SpecialGovernmentWarParticipation,
+            KingdomDecisionMonthly,
+            TemporaryLevyLegacyMigration,
+            CityReservePool,
+            ArmyReplenishmentOperation,
+            WarRefugee,
+            DrainAuthorityCompletions,
+            FlushPendingWarParticipantSources,
+            // 原本合成一项 DrainDeferredAuthorityWork,实测 3.559 ms/次、占权威
+            // 周期 28.9%。但它其实是三件事:两个无预算的 Bandit 服务,加上一次
+            // 队列排空 —— 而队列排空受 MaximumItemsPerAuthorityFrame=1 限制,
+            // 每次只执行一个 work item(日志里 last_drain 恒为 1)。三者各占多少
+            // 直接决定接下来该动谁,所以拆开测。
+            DeferredBanditPopulation,
+            DeferredBanditDisposal,
+            DeferredQueueDrain,
+            // WarRefugee 同理:按月闸门,202 次调用里绝大多数是廉价早退,真正
+            // 干活的那几次把整月的量压在一帧上(合计 712ms,占 28.6%)。三个
+            // 子步骤的预算都是按月而非按帧的,先测出量集中在哪一个。
+            RefugeeMonthlyReservations,
+            RefugeePersistedJourneys,
+            RefugeeThreatenedCities,
+            SlaveCaptureScan,
+        }
+
+        private static readonly long[] StepTicks =
+            new long[System.Enum.GetValues(typeof(AuthorityStep)).Length];
+        private static readonly long[] StepCalls =
+            new long[StepTicks.Length];
+
+        private static long BeginStep()
+        {
+            return System.Diagnostics.Stopwatch.GetTimestamp();
+        }
+        private static void EndStep(AuthorityStep pStep, long pStarted)
+        {
+            int index = (int)pStep;
+            if (index < 0 || index >= StepTicks.Length) return;
+            System.Threading.Interlocked.Add(ref StepTicks[index],
+                System.Diagnostics.Stopwatch.GetTimestamp() - pStarted);
+            System.Threading.Interlocked.Increment(ref StepCalls[index]);
+            RuntimePerformanceDiagnostic.EndAuthorityStage(
+                pStep.ToString(), pStarted);
+        }
+
+        private static void Step(AuthorityStep pStep, System.Action pAction)
+        {
+            long started = BeginStep();
+            try { pAction(); }
+            finally { EndStep(pStep, started); }
+        }
+
+        // 供权威周期内部那些"自己还嵌了几件事"的服务把子步骤也记进同一本账。
+        // WarRefugee 就是这种:外层一项 712ms,但真正的量集中在三个子步骤里的
+        // 哪一个,不拆开看不出来。
+        internal static void SubStep(AuthorityStep pStep, System.Action pAction)
+        {
+            Step(pStep, pAction);
+        }
+
+        private static void Step(AuthorityStep pStep, int pBenchmarkIndex,
+            System.Action pAction)
+        {
+            long started = BeginStep();
+            try { Measure(pBenchmarkIndex, pAction); }
+            finally { EndStep(pStep, started); }
+        }
+
+        internal static string TakeAuthorityBreakdown()
+        {
+            var builder = new System.Text.StringBuilder();
+            for (int index = 0; index < StepTicks.Length; index++)
+            {
+                long ticks = System.Threading.Interlocked.Exchange(
+                    ref StepTicks[index], 0L);
+                long calls = System.Threading.Interlocked.Exchange(
+                    ref StepCalls[index], 0L);
+                if (ticks <= 0L && calls <= 0L) continue;
+                if (builder.Length > 0) builder.Append(',');
+                builder.Append(((AuthorityStep)index).ToString())
+                    .Append(':')
+                    .Append((ticks * 1000.0 /
+                             System.Diagnostics.Stopwatch.Frequency)
+                        .ToString("0.###"))
+                    .Append('/')
+                    .Append(calls);
+            }
+
+            return builder.Length == 0 ? "none" : builder.ToString();
+        }
+
         private static readonly AWAuthorityCycleGate CooperativeGate =
             new AWAuthorityCycleGate();
         private static readonly AWAuthorityCycleGate NativeGate =
@@ -49,6 +171,7 @@ namespace AncientWarfare3.core.performance
             CivilServiceExamService.ClearRuntime();
             WesternCourtElectionService.Reset();
             AccessionIdentityService.ClearRuntime();
+            DynastyTitleRegistryService.ClearRuntime();
             TemporaryMilitaryReturnService.ClearRuntime();
             WarArmyReturnService.ClearRuntime();
             ArmyRtsAssignmentReconciliationService.Reset();
@@ -81,54 +204,99 @@ namespace AncientWarfare3.core.performance
                            !AWWorldInitializationGate.IsPending();
             if (!pGate.TryEnter(pCycleToken, allowed)) return;
 
-            WesternCourtElectionService.ProcessAuthorityCycle();
-            AccessionIdentityService.ProcessDeferredInstallations();
-            ReigningRoyalLineageIndex.ProcessAuthorityCycle();
-            SuccessionDisputePersistenceService.ProcessAuthorityCycle();
-            AWLocalizedNameMigrationService.ProcessAuthorityCycle();
-            WesternLineageMigrationService.ProcessAuthorityCycle();
-            KingdomInstitutionalXiaizationService.ProcessAuthorityCycle();
-            DynasticMaleLineContinuityService.ProcessAuthorityCycle();
-            NobleHeirPregnancyService.ProcessAuthorityCycle();
-            RulerHouseholdPregnancyService.ProcessAuthorityCycle();
-            ArmyMembershipReconciliationService.ProcessFrame();
-            EnclosedUnownedZoneRepairService.ProcessAuthorityCycle();
-            EmptyCityResettlementService.ProcessAuthorityCycle();
-            TemporaryMilitaryReturnService.ProcessFrame();
-            WarArmyReturnService.ProcessFrame();
-            ArmyRtsAssignmentReconciliationService.ProcessAuthorityCycle();
-            Measure(RecentFeatureBenchmarkRules.PathfindingIndex,
+            Step(AuthorityStep.WesternCourtElection,
+                WesternCourtElectionService.ProcessAuthorityCycle);
+            Step(AuthorityStep.AccessionIdentityDeferred,
+                AccessionIdentityService.ProcessDeferredInstallations);
+            Step(AuthorityStep.ReigningRoyalLineage,
+                ReigningRoyalLineageIndex.ProcessAuthorityCycle);
+            Step(AuthorityStep.SuccessionDisputePersistence,
+                SuccessionDisputePersistenceService.ProcessAuthorityCycle);
+            Step(AuthorityStep.LocalizedNameMigration,
+                AWLocalizedNameMigrationService.ProcessAuthorityCycle);
+            Step(AuthorityStep.WesternLineageMigration,
+                WesternLineageMigrationService.ProcessAuthorityCycle);
+            Step(AuthorityStep.KingdomInstitutionalXiaization,
+                KingdomInstitutionalXiaizationService.ProcessAuthorityCycle);
+            Step(AuthorityStep.DynasticMaleLineContinuity,
+                DynasticMaleLineContinuityService.ProcessAuthorityCycle);
+            Step(AuthorityStep.NobleHeirPregnancy,
+                NobleHeirPregnancyService.ProcessAuthorityCycle);
+            Step(AuthorityStep.RulerHouseholdPregnancy,
+                RulerHouseholdPregnancyService.ProcessAuthorityCycle);
+            Step(AuthorityStep.ArmyMembershipReconciliation,
+                ArmyMembershipReconciliationService.ProcessFrame);
+            Step(AuthorityStep.EnclosedUnownedZoneRepair,
+                EnclosedUnownedZoneRepairService.ProcessAuthorityCycle);
+            Step(AuthorityStep.EmptyCityResettlement,
+                EmptyCityResettlementService.ProcessAuthorityCycle);
+            Step(AuthorityStep.TemporaryMilitaryReturn,
+                TemporaryMilitaryReturnService.ProcessFrame);
+            Step(AuthorityStep.WarArmyReturn,
+                WarArmyReturnService.ProcessFrame);
+            Step(AuthorityStep.ArmyRtsAssignmentReconciliation,
+                ArmyRtsAssignmentReconciliationService.ProcessAuthorityCycle);
+            Step(AuthorityStep.PathfindingBootstrap,
+                RecentFeatureBenchmarkRules.PathfindingIndex,
                 AWPathfindingBootstrap.ProcessFrame);
-            ArmyRtsSchedulingService.ProcessAw3Authority(pCycleToken, pPaused);
-            Measure(RecentFeatureBenchmarkRules.SchoolsIndex,
+            long argStep = BeginStep();
+            try
+            {
+                ArmyRtsSchedulingService.ProcessAw3Authority(pCycleToken,
+                    pPaused);
+            }
+            finally { EndStep(AuthorityStep.ArmyRtsScheduling, argStep); }
+            Step(AuthorityStep.HistoricalSchoolRuntime,
+                RecentFeatureBenchmarkRules.SchoolsIndex,
                 HistoricalSchoolRuntime.ProcessFrame);
-            Measure(RecentFeatureBenchmarkRules.CivilServiceExamRuntimeIndex,
+            Step(AuthorityStep.CivilServiceExam,
+                RecentFeatureBenchmarkRules.CivilServiceExamRuntimeIndex,
                 CivilServiceExamService.ProcessAuthorityCycle);
-            Measure(RecentFeatureBenchmarkRules.DiplomacyIndex,
+            Step(AuthorityStep.DiplomacyProposal,
+                RecentFeatureBenchmarkRules.DiplomacyIndex,
                 DiplomacyProposalService.ProcessFrame);
-            Measure(RecentFeatureBenchmarkRules.DiplomacyIndex,
+            Step(AuthorityStep.DiplomaticOperation,
+                RecentFeatureBenchmarkRules.DiplomacyIndex,
                 DiplomaticOperationService.ProcessFrame);
-            Measure(RecentFeatureBenchmarkRules.DiplomacyIndex,
+            Step(AuthorityStep.ZhuluAgeDirector,
+                RecentFeatureBenchmarkRules.DiplomacyIndex,
                 ZhuluAgeDirectorService.ProcessAuthorityCycle);
-            Measure(RecentFeatureBenchmarkRules.DiplomacyIndex,
+            Step(AuthorityStep.WarTerminalSettlement,
+                RecentFeatureBenchmarkRules.DiplomacyIndex,
                 WarTerminalSettlementCoordinator.ProcessAuthorityCycle);
-            Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
-                SpecialGovernmentWarParticipationService.ProcessAuthorityCycle);
-            Measure(RecentFeatureBenchmarkRules.MonthKingdomPolicyIndex,
+            Step(AuthorityStep.SpecialGovernmentWarParticipation,
+                RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
+                SpecialGovernmentWarParticipationService.
+                    ProcessAuthorityCycle);
+            Step(AuthorityStep.KingdomDecisionMonthly,
+                RecentFeatureBenchmarkRules.MonthKingdomPolicyIndex,
                 KingdomDecisionMonthlyService.ProcessAuthorityCycle);
-            TemporaryLevyService.ProcessLegacyMigration();
-            Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
+            Step(AuthorityStep.TemporaryLevyLegacyMigration,
+                TemporaryLevyService.ProcessLegacyMigration);
+            Step(AuthorityStep.CityReservePool,
+                RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
                 CityReservePoolService.ProcessAuthorityCycle);
-            Measure(RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
+            Step(AuthorityStep.ArmyReplenishmentOperation,
+                RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
                 ArmyReplenishmentOperationService.ProcessAuthorityCycle);
-            WarRefugeeService.ProcessAuthorityCycle(pCycleToken, pPaused);
-            Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,
+            argStep = BeginStep();
+            try
+            {
+                WarRefugeeService.ProcessAuthorityCycle(pCycleToken, pPaused);
+            }
+            finally { EndStep(AuthorityStep.WarRefugee, argStep); }
+            Step(AuthorityStep.DrainAuthorityCompletions,
+                RecentFeatureBenchmarkRules.AsyncCommitIndex,
                 DrainAuthorityCompletions);
-            Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,
+            Step(AuthorityStep.FlushPendingWarParticipantSources,
+                RecentFeatureBenchmarkRules.AsyncCommitIndex,
                 FlushPendingWarParticipantSources);
+            // DrainDeferredAuthorityWork 内部自行分三段记账,这里不再外包一层,
+            // 否则 authority_steps 的总和会把这部分重复计入。
             Measure(RecentFeatureBenchmarkRules.DeferredWorkIndex,
                 DrainDeferredAuthorityWork);
-            Measure(RecentFeatureBenchmarkRules.CaptureScanIndex,
+            Step(AuthorityStep.SlaveCaptureScan,
+                RecentFeatureBenchmarkRules.CaptureScanIndex,
                 SlaveCaptureScanService.DrainFrame);
         }
 
@@ -143,15 +311,22 @@ namespace AncientWarfare3.core.performance
 
         private static void DrainDeferredAuthorityWork()
         {
-            PeasantRebelBanditStrongholdPopulationService.
-                ProcessAuthorityCycle();
-            BanditStrongholdCityDisposalService.ProcessAuthorityCycle();
+            Step(AuthorityStep.DeferredBanditPopulation,
+                PeasantRebelBanditStrongholdPopulationService.
+                    ProcessAuthorityCycle);
+            Step(AuthorityStep.DeferredBanditDisposal,
+                BanditStrongholdCityDisposalService.ProcessAuthorityCycle);
             int itemLimit = DeferredRuntimeWorkRules.
                 ResolveItemsPerAuthorityFrame(
                 DeferredRuntimeWorkService.PendingCount);
             if (itemLimit <= 0) return;
-            DeferredRuntimeWorkService.DrainFrame(pMilliseconds: 1.0,
-                pMaxItems: itemLimit);
+            long drainStep = BeginStep();
+            try
+            {
+                DeferredRuntimeWorkService.DrainFrame(pMilliseconds: 1.0,
+                    pMaxItems: itemLimit);
+            }
+            finally { EndStep(AuthorityStep.DeferredQueueDrain, drainStep); }
         }
 
         private static void FlushPendingWarParticipantSources()

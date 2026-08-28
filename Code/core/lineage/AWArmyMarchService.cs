@@ -515,14 +515,15 @@ namespace AncientWarfare3.core.lineage
             if (poll.Kind == ArmyRoutePollKind.StepReady)
             {
                 if (!AppendProviderStep(pArmy, state, poll.TileId,
-                        poll.MovementMethod, poll.Estimate))
+                        poll.MovementMethod, poll.Estimate,
+                        out string providerStepFailure))
                 {
                     ArmyRouteProviderService.Cancel(pArmy.id,
                         ArmyRouteCancelReason.MissionCancelled);
                     CancelInstalledActorPaths(state);
                     States.Remove(pArmy.id);
                     return new ArmyRoutePoll(ArmyRoutePollKind.Failed,
-                        failureReason: "invalid_provider_step");
+                        failureReason: providerStepFailure);
                 }
             }
             else if (poll.Kind == ArmyRoutePollKind.Completed)
@@ -559,24 +560,47 @@ namespace AncientWarfare3.core.lineage
         private static bool AppendProviderStep(Army pArmy,
             MarchState pState, int pTileId,
             AWMovementMethod pMovementMethod,
-            AWTraversalEstimate pEstimate)
+            AWTraversalEstimate pEstimate, out string pFailureReason)
         {
+            pFailureReason = null;
             WorldTile[] tiles = World.world?.tiles_list;
             if (tiles == null || pTileId < 0 || pTileId >= tiles.Length)
+            {
+                pFailureReason = ArmySharedPathRules.
+                    FormatInvalidProviderStepFailure(
+                        pState?.ProviderLastTileId ?? -1, pTileId, 0, 0,
+                        pMovementMethod.ToString(), pState?.Route.Count ?? 0,
+                        pState?.TargetTileId ?? -1);
                 return false;
+            }
             WorldTile current = tiles[pTileId];
-            if (current?.data == null) return false;
+            if (current?.data == null)
+            {
+                pFailureReason = ArmySharedPathRules.
+                    FormatInvalidProviderStepFailure(
+                        pState?.ProviderLastTileId ?? -1, pTileId, 0, 0,
+                        pMovementMethod.ToString(), pState?.Route.Count ?? 0,
+                        pState?.TargetTileId ?? -1);
+                return false;
+            }
             int previousId = pState.ProviderLastTileId;
             bool hasPrevious = previousId >= 0 &&
                                previousId < tiles.Length &&
                                tiles[previousId]?.data != null;
             WorldTile previous = hasPrevious ? tiles[previousId] : null;
+            int deltaX = hasPrevious ? current.x - previous.x : 0;
+            int deltaY = hasPrevious ? current.y - previous.y : 0;
             if (!ArmySharedPathRules.IsProviderStepSpatiallyValid(
                     hasPrevious,
                     pMovementMethod == AWMovementMethod.Transport,
-                    hasPrevious ? current.x - previous.x : 0,
-                    hasPrevious ? current.y - previous.y : 0))
+                    deltaX, deltaY))
+            {
+                pFailureReason = ArmySharedPathRules.
+                    FormatInvalidProviderStepFailure(previousId, pTileId,
+                        deltaX, deltaY, pMovementMethod.ToString(),
+                        pState.Route.Count, pState.TargetTileId);
                 return false;
+            }
             if (hasPrevious)
             {
                 pState.DirectionX = Math.Sign(current.x - previous.x);

@@ -23,6 +23,66 @@ namespace AncientWarfare3.patch
             internal bool Closed;
         }
 
+        // aw3_frame_scheduler_prefix 每帧 2.0-2.7ms 且是最慢的 AW3 项。
+        // 前缀里串了 5 段互不相关的工作,这里分别累计以定位来源。
+        internal enum PrefixSegment
+        {
+            FrameVisibility = 0,
+            DeferredPathFlush,
+            MilitaryFrontLane,
+            PresentationDrain,
+        }
+
+        private static readonly long[] PrefixTicks =
+            new long[System.Enum.GetValues(typeof(PrefixSegment)).Length];
+        private static readonly long[] PrefixCalls =
+            new long[System.Enum.GetValues(typeof(PrefixSegment)).Length];
+
+        private static void AccountPrefix(PrefixSegment pSegment,
+            long pStart)
+        {
+            if (!AWPerformanceSettings.EnablePerformanceDiagnostics) return;
+            int index = (int)pSegment;
+            if (index < 0 || index >= PrefixTicks.Length) return;
+            System.Threading.Interlocked.Add(ref PrefixTicks[index],
+                System.Diagnostics.Stopwatch.GetTimestamp() - pStart);
+            System.Threading.Interlocked.Increment(ref PrefixCalls[index]);
+            // 同一段耗时再进一次按帧的账本,供最坏帧归因使用。区间累计回答
+            // "总量花在哪",按帧账本回答"那一帧的 100ms 花在哪",两者都要。
+            RuntimePerformanceDiagnostic.AccountFrameCost(
+                pSegment == PrefixSegment.MilitaryFrontLane
+                    ? RuntimePerformanceDiagnostic.FrameCostBucket
+                        .MilitaryFrontLane
+                    : pSegment == PrefixSegment.DeferredPathFlush
+                        ? RuntimePerformanceDiagnostic.FrameCostBucket
+                            .DeferredWork
+                        : RuntimePerformanceDiagnostic.FrameCostBucket
+                            .Presentation,
+                pStart);
+        }
+
+        internal static string TakePrefixBreakdown()
+        {
+            var builder = new System.Text.StringBuilder();
+            for (int index = 0; index < PrefixTicks.Length; index++)
+            {
+                long ticks = System.Threading.Interlocked.Exchange(
+                    ref PrefixTicks[index], 0L);
+                long calls = System.Threading.Interlocked.Exchange(
+                    ref PrefixCalls[index], 0L);
+                if (ticks <= 0L && calls <= 0L) continue;
+                if (builder.Length > 0) builder.Append(',');
+                builder.Append(((PrefixSegment)index).ToString())
+                    .Append(':')
+                    .Append((ticks * 1000.0 /
+                        System.Diagnostics.Stopwatch.Frequency)
+                        .ToString("0.###"))
+                    .Append('/')
+                    .Append(calls);
+            }
+            return builder.Length == 0 ? "none" : builder.ToString();
+        }
+
         private const float SchedulerDiagnosticsIntervalSeconds = 10f;
         private static float _schedulerDiagnosticsElapsed;
         private static bool _pendingAutoSave;
@@ -86,7 +146,9 @@ namespace AncientWarfare3.patch
                     EnsureBuildingReadBoundary("mapbox.frame_begin");
                 }
 
+                long prefixScope = System.Diagnostics.Stopwatch.GetTimestamp();
                 AWCooperativeActorParallelJobRunner.RefreshFrameVisibility();
+                AccountPrefix(PrefixSegment.FrameVisibility, prefixScope);
 
                 // Actor post jobs queue validated goTo requests until the next
                 // main-thread frame boundary. Flush them before simulation
@@ -94,6 +156,7 @@ namespace AncientWarfare3.patch
                 if (Config.game_loaded && !SmoothLoader.isLoading() &&
                     !replicaSession)
                 {
+                    prefixScope = System.Diagnostics.Stopwatch.GetTimestamp();
                     try
                     {
                         AWDeferredPathRequestBatch.FlushAtFrameStart();
@@ -104,7 +167,10 @@ namespace AncientWarfare3.patch
                             "AW deferred path request flush failed: " +
                             error);
                     }
+                    AccountPrefix(PrefixSegment.DeferredPathFlush,
+                        prefixScope);
 
+                    prefixScope = System.Diagnostics.Stopwatch.GetTimestamp();
                     try
                     {
                         AWMilitaryFrontLaneScheduler.ProcessFrame();
@@ -114,9 +180,13 @@ namespace AncientWarfare3.patch
                         ModClass.LogError(
                             "AW military front lane failed: " + error);
                     }
+                    AccountPrefix(PrefixSegment.MilitaryFrontLane,
+                        prefixScope);
                 }
 
+                prefixScope = System.Diagnostics.Stopwatch.GetTimestamp();
                 AWPresentationCommandQueue.DrainMainThread();
+                AccountPrefix(PrefixSegment.PresentationDrain, prefixScope);
                 __state = new MapBoxUpdateScope();
                 ArmyRtsTransportService.ObserveFrameClock(
                     Time.realtimeSinceStartupAsDouble,

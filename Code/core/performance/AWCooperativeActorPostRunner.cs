@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using AncientWarfare3.content;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.pathfinding;
+using AncientWarfare3.core.policy;
 using AncientWarfare3.patch;
 using UnityEngine;
 using ai;
@@ -45,6 +46,96 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     private static long diagnosticEnemyCalls;
     private static long diagnosticEnemyCandidates;
     private static long diagnosticEnemyEmpty;
+
+    // MilitaryP0 单次 6.7~47.9ms 波动 7 倍,而军队数固定为 20。这里按 P0 内部
+    // 各段累计,定位成本来源。纯观测:不改任何分支、顺序或早退时机。
+    internal enum P0Segment
+    {
+        Prologue = 0,
+        Transport,
+        SelfLanding,
+        Prepare,
+        EnemyCurrent,
+        EnemySearch,
+        TaskVerifier,
+        PathMovement,
+        UpdateAi,
+        FollowerExtraAi,
+        SmoothMovement,
+        Combat,
+        // Combat 是 P0 里最大的一段(实测 402ms/643ms),但它内部串了 8 个原版
+        // job 加 3 处我们的任务切换。先前按"b3 绕过了原版 tick 跳过"去猜是错的
+        // ——原版 checkEnemyTargets 自带 _timeout_targets 冷却,调用频率高不等于
+        // 搜索次数多。所以这里改成实测每一步,别再猜。
+        CombatEntryTask,
+        CombatEnemyCurrent,
+        CombatEnemySearch,
+        CombatTaskSwitch,
+        CombatVerifierPath,
+        CombatUpdateAi,
+        CombatSecondPass,
+        CombatSmooth,
+    }
+
+    private static readonly long[] diagnosticP0Ticks =
+        new long[Enum.GetValues(typeof(P0Segment)).Length];
+    private static readonly long[] diagnosticP0Calls =
+        new long[Enum.GetValues(typeof(P0Segment)).Length];
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void AccountP0(P0Segment pSegment, long pStart)
+    {
+        int index = (int)pSegment;
+        if (index < 0 || index >= diagnosticP0Ticks.Length) return;
+        Interlocked.Add(ref diagnosticP0Ticks[index],
+            Stopwatch.GetTimestamp() - pStart);
+        Interlocked.Increment(ref diagnosticP0Calls[index]);
+    }
+
+    internal static string TakeP0Breakdown()
+    {
+        var builder = new System.Text.StringBuilder();
+        for (int index = 0; index < diagnosticP0Ticks.Length; index++)
+        {
+            long ticks = Interlocked.Exchange(ref diagnosticP0Ticks[index], 0L);
+            long calls = Interlocked.Exchange(ref diagnosticP0Calls[index], 0L);
+            if (ticks <= 0L && calls <= 0L) continue;
+            if (builder.Length > 0) builder.Append(',');
+            builder.Append(((P0Segment)index).ToString())
+                .Append(':')
+                .Append((ticks * 1000.0 / Stopwatch.Frequency).ToString("0.###"))
+                .Append('/')
+                .Append(calls);
+        }
+        return builder.Length == 0 ? "none" : builder.ToString();
+    }
+
+    // actors 阶段整体耗时远大于已插桩的分项之和(实测单帧 48-59ms,分项合计
+    // 不足 3ms)。这里按 PostStage 累计每个阶段的 Step 耗时,用于定位缺口。
+    private static readonly long[] diagnosticStageTicks =
+        new long[Enum.GetValues(typeof(PostStage)).Length];
+    private static readonly long[] diagnosticStageCalls =
+        new long[Enum.GetValues(typeof(PostStage)).Length];
+
+    internal static string TakeStageBreakdown()
+    {
+        var builder = new System.Text.StringBuilder();
+        for (int index = 0; index < diagnosticStageTicks.Length; index++)
+        {
+            long ticks = Interlocked.Exchange(
+                ref diagnosticStageTicks[index], 0L);
+            long calls = Interlocked.Exchange(
+                ref diagnosticStageCalls[index], 0L);
+            if (ticks <= 0L && calls <= 0L) continue;
+            if (builder.Length > 0) builder.Append(',');
+            builder.Append(((PostStage)index).ToString())
+                .Append(':')
+                .Append((ticks * 1000.0 / Stopwatch.Frequency).ToString("0.###"))
+                .Append('/')
+                .Append(calls);
+        }
+        return builder.Length == 0 ? "none" : builder.ToString();
+    }
 
     private static bool CaptureDiagnostics =>
         AWPerformanceSettings.EnablePerformanceDiagnostics ||
@@ -409,11 +500,14 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         try
         {
             ArmyRtsMovementDiagnostic.Log("p0", "p0_enter", actor,
-                "kind=" + kind);
+                ArmyRtsMovementDiagnostic.KindDetail(kind));
+            long transportScope = Stopwatch.GetTimestamp();
             ArmyRtsAbstractSupplyService.
                 TryConsumeHomeRationScheduled(actor);
-            if (ArmyRtsTransportService.TryDriveMemberP0(actor,
-                    cycleElapsed)) return;
+            bool droveMember = ArmyRtsTransportService.TryDriveMemberP0(
+                actor, cycleElapsed);
+            AccountP0(P0Segment.Transport, transportScope);
+            if (droveMember) return;
             if (ArmyRtsTransportService.SuppressCombatForVoyage(actor))
             {
                 if (TryRunVanillaPassengerTransportP0(actor, actorId, kind,
@@ -422,8 +516,11 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId);
                 return;
             }
-            if (TryRunSelfLandingP0(actor, actorId, kind, cycleElapsed))
-                return;
+            long landingScope = Stopwatch.GetTimestamp();
+            bool selfLanded = TryRunSelfLandingP0(actor, actorId, kind,
+                cycleElapsed);
+            AccountP0(P0Segment.SelfLanding, landingScope);
+            if (selfLanded) return;
             if (TryRunVanillaPassengerTransportP0(actor, actorId, kind,
                     cycleElapsed))
                 return;
@@ -442,22 +539,28 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                     ArmyRtsControllerService.SuppressCombatForTransit(actor);
                 ArmyRtsMovementDiagnostic.Log("p0",
                     "retreat_combat_suppressed", actor,
-                    "kind=" + kind);
+                    ArmyRtsMovementDiagnostic.KindDetail(kind));
             }
             else if (HasMilitaryCombatPriority(actor))
             {
+                long combatScope = Stopwatch.GetTimestamp();
                 RunMilitaryP0Combat(actor, actorId, kind, cycleElapsed,
                     "entry");
+                AccountP0(P0Segment.Combat, combatScope);
                 return;
             }
-            if (kind == ArmyMilitaryMovementPriorityKind.RtsMember &&
+            long prepareScope = Stopwatch.GetTimestamp();
+            bool prepareFailed = kind ==
+                    ArmyMilitaryMovementPriorityKind.RtsMember &&
                 !(returnActive
                     ? WarArmyReturnService.TryPrepareMilitaryP0Actor(actor)
                     : ArmyRtsControllerService.TryPrepareMilitaryP0Actor(
-                        actor)))
+                        actor));
+            AccountP0(P0Segment.Prepare, prepareScope);
+            if (prepareFailed)
             {
                 ArmyRtsMovementDiagnostic.Log("p0", "prepare_failed", actor,
-                    "kind=" + kind);
+                    ArmyRtsMovementDiagnostic.KindDetail(kind));
                 ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
                 return;
             }
@@ -473,16 +576,18 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             if (returnActive)
                 ArmyRtsMovementDiagnostic.Log("return",
                     "return_native_pipeline", actor,
-                    "kind=" + kind);
+                    ArmyRtsMovementDiagnostic.KindDetail(kind));
             if (ArmyRtsControllerService.
                     HasMilitaryTransportOwnership(actor))
             {
                 if (returnActive)
                     ArmyRtsMovementDiagnostic.Log("return",
                         "return_transport_yield", actor,
-                        "boundary=prepare kind=" + kind);
+                        "boundary=prepare " +
+                    ArmyRtsMovementDiagnostic.KindDetail(kind));
                 ArmyRtsMovementDiagnostic.Log("p0", "transport_yield", actor,
-                    "boundary=prepare kind=" + kind);
+                    "boundary=prepare " +
+                    ArmyRtsMovementDiagnostic.KindDetail(kind));
                 ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
                 return;
             }
@@ -490,16 +595,20 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             if (!suppressCombatPreemption)
             {
                 ArmyRtsMovementDiagnostic.Log("p0", "native_enemy_check",
-                    actor, "kind=" + kind);
+                    actor, ArmyRtsMovementDiagnostic.KindDetail(kind));
+                long p0Scope = Stopwatch.GetTimestamp();
                 actor.b2_checkCurrentEnemyTarget(cycleElapsed);
+                AccountP0(P0Segment.EnemyCurrent, p0Scope);
                 if (YieldMilitaryP0Ownership(actor, actorId, kind,
                         cycleElapsed, "current_enemy",
                         refreshTransport: false)) return;
 
                 ArmyRtsMovementDiagnostic.Log("p0", "native_enemy_search",
-                    actor, "kind=" + kind);
+                    actor, ArmyRtsMovementDiagnostic.KindDetail(kind));
                 bool hadAttackTargetBeforeSearch = actor.has_attack_target;
+                p0Scope = Stopwatch.GetTimestamp();
                 actor.b3_findEnemyTarget(cycleElapsed);
+                AccountP0(P0Segment.EnemySearch, p0Scope);
                 if (YieldMilitaryP0Ownership(actor, actorId, kind,
                         cycleElapsed, "enemy_search",
                         refreshTransport: false,
@@ -512,26 +621,32 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             }
 
             ArmyRtsMovementDiagnostic.Log("p0", "native_task_verifier", actor,
-                "kind=" + kind);
+                ArmyRtsMovementDiagnostic.KindDetail(kind));
+            long verifierScope = Stopwatch.GetTimestamp();
             actor.b4_checkTaskVerifier(cycleElapsed);
+            AccountP0(P0Segment.TaskVerifier, verifierScope);
             if (YieldMilitaryP0Ownership(actor, actorId, kind,
                     cycleElapsed, "task_verifier",
                     refreshTransport: false)) return;
 
             ArmyRtsMovementDiagnostic.Log("p0", "native_path", actor,
-                "kind=" + kind);
+                ArmyRtsMovementDiagnostic.KindDetail(kind));
+            long pathScope = Stopwatch.GetTimestamp();
             actor.b5_checkPathMovement(cycleElapsed);
+            AccountP0(P0Segment.PathMovement, pathScope);
             if (returnActive)
                 ArmyRtsMovementDiagnostic.Log("return",
                     "return_after_path", actor,
-                    "kind=" + kind);
+                    ArmyRtsMovementDiagnostic.KindDetail(kind));
             if (YieldMilitaryP0Ownership(actor, actorId, kind,
                     cycleElapsed, "path", refreshTransport: false)) return;
 
             ArmyRtsMovementDiagnostic.Log("p0", "native_ai", actor,
-                "kind=" + kind);
+                ArmyRtsMovementDiagnostic.KindDetail(kind));
             int actionIndexBeforeAi = actor.ai?.action_index ?? -1;
+            long aiScope = Stopwatch.GetTimestamp();
             actor.b6_updateAI(cycleElapsed);
+            AccountP0(P0Segment.UpdateAi, aiScope);
             int actionIndexAfterAi = actor.ai?.action_index ?? -1;
             bool followerTaskAfterAi = kind ==
                                            ArmyMilitaryMovementPriorityKind.
@@ -545,11 +660,13 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                         actor.beh_tile_target?.data != null,
                         actor._beh_skip, actor.is_moving))
             {
+                long followerScope = Stopwatch.GetTimestamp();
                 actor.b6_updateAI(cycleElapsed);
                 actor.b5_checkPathMovement(cycleElapsed);
+                AccountP0(P0Segment.FollowerExtraAi, followerScope);
                 ArmyRtsMovementDiagnostic.Log("p0",
                     "follower_after_move_command", actor,
-                    "kind=" + kind);
+                    ArmyRtsMovementDiagnostic.KindDetail(kind));
             }
             if (followerTaskAfterAi)
             {
@@ -558,18 +675,20 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                     actor.tile_target?.data == null;
                 ArmyRtsMovementDiagnostic.Log("p0", followerStalled
                         ? "follower_stalled" : "follower_after_ai", actor,
-                    "kind=" + kind + " result=" + (!followerStalled));
+                    ArmyRtsMovementDiagnostic.KindDetail(kind) + " result=" + (!followerStalled));
             }
             if (returnActive)
                 ArmyRtsMovementDiagnostic.Log("return",
                     "return_after_ai", actor,
-                    "kind=" + kind);
+                    ArmyRtsMovementDiagnostic.KindDetail(kind));
             if (YieldMilitaryP0Ownership(actor, actorId, kind,
                     cycleElapsed, "ai", refreshTransport: true)) return;
 
             ArmyRtsMovementDiagnostic.Log("p0", "native_smooth", actor,
-                "kind=" + kind);
+                ArmyRtsMovementDiagnostic.KindDetail(kind));
+            long smoothScope = Stopwatch.GetTimestamp();
             actor.u10_checkSmoothMovement(cycleElapsed);
+            AccountP0(P0Segment.SmoothMovement, smoothScope);
             actor.skipBehaviour();
             ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId);
         }
@@ -612,7 +731,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 actor.setTask(selfLandingTask, pClean: true,
                     pCleanJob: false, pForceAction: false);
             ArmyRtsMovementDiagnostic.Log("p0", "self_landing_enter",
-                actor, "kind=" + kind);
+                actor, ArmyRtsMovementDiagnostic.KindDetail(kind));
             actor.b4_checkTaskVerifier(cycleElapsed);
             actor.b5_checkPathMovement(cycleElapsed);
             int actionIndexBeforeAi = actor.ai?.action_index ?? -1;
@@ -629,7 +748,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 actor.b5_checkPathMovement(cycleElapsed);
                 ArmyRtsMovementDiagnostic.Log("p0",
                     "self_landing_move_command", actor,
-                    "kind=" + kind);
+                    ArmyRtsMovementDiagnostic.KindDetail(kind));
             }
             actor.u10_checkSmoothMovement(cycleElapsed);
             actor.skipBehaviour();
@@ -639,7 +758,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         {
             ArmyRtsMovementDiagnostic.Log("p0",
                 "self_landing_exception", actor,
-                "kind=" + kind + " error=" +
+                ArmyRtsMovementDiagnostic.KindDetail(kind) + " error=" +
                 error.GetType().Name + ":" + error.Message);
             ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
         }
@@ -666,7 +785,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         if (!shouldDrive)
         {
             ArmyRtsMovementDiagnostic.Log("p0", "passenger_boat_yield",
-                actor, "kind=" + kind + " task=" + taskId);
+                actor, ArmyRtsMovementDiagnostic.KindDetail(kind) + " task=" + taskId);
             ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
             return true;
         }
@@ -674,7 +793,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         try
         {
             ArmyRtsMovementDiagnostic.Log("p0", "passenger_task_enter",
-                actor, "kind=" + kind + " task=" + taskId);
+                actor, ArmyRtsMovementDiagnostic.KindDetail(kind) + " task=" + taskId);
             actor.b4_checkTaskVerifier(cycleElapsed);
             actor.b5_checkPathMovement(cycleElapsed);
             bool hadBehaviourTileTarget =
@@ -690,7 +809,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 actor.b5_checkPathMovement(cycleElapsed);
                 ArmyRtsMovementDiagnostic.Log("p0",
                     "passenger_move_command", actor,
-                    "kind=" + kind + " task=" + taskId);
+                    ArmyRtsMovementDiagnostic.KindDetail(kind) + " task=" + taskId);
             }
             actor.u10_checkSmoothMovement(cycleElapsed);
             actor.skipBehaviour();
@@ -700,7 +819,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         {
             ArmyRtsMovementDiagnostic.Log("p0",
                 "passenger_task_exception", actor,
-                "kind=" + kind + " task=" + taskId + " error=" +
+                ArmyRtsMovementDiagnostic.KindDetail(kind) + " task=" + taskId + " error=" +
                 error.GetType().Name + ":" + error.Message);
             ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
         }
@@ -713,28 +832,40 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     {
         if (resumeNativeCombatAfterEnemyAcquisition)
             actor._beh_skip = false;
+        long combatScope = Stopwatch.GetTimestamp();
         if (kind == ArmyMilitaryMovementPriorityKind.RtsMember)
             ArmyRtsControllerService.TrySetMemberCombatTask(actor);
+        AccountP0(P0Segment.CombatEntryTask, combatScope);
         ArmyRtsMovementDiagnostic.Log("p0", "combat_p0", actor,
-            "boundary=" + boundary + " kind=" + kind);
+            "boundary=" + boundary + " " + ArmyRtsMovementDiagnostic.KindDetail(kind));
+        combatScope = Stopwatch.GetTimestamp();
         actor.b2_checkCurrentEnemyTarget(cycleElapsed);
+        AccountP0(P0Segment.CombatEnemyCurrent, combatScope);
+        combatScope = Stopwatch.GetTimestamp();
         actor.b3_findEnemyTarget(cycleElapsed);
+        AccountP0(P0Segment.CombatEnemySearch, combatScope);
+        combatScope = Stopwatch.GetTimestamp();
         if (kind == ArmyMilitaryMovementPriorityKind.RtsMember)
         {
             ArmyRtsControllerService.TryEnterFieldCombatFromP0(actor);
             ArmyRtsControllerService.TrySetCaptainTacticalTask(actor);
             ArmyRtsControllerService.TrySetMemberCombatTask(actor);
         }
+        AccountP0(P0Segment.CombatTaskSwitch, combatScope);
+        combatScope = Stopwatch.GetTimestamp();
         actor.b4_checkTaskVerifier(cycleElapsed);
         actor.b5_checkPathMovement(cycleElapsed);
+        AccountP0(P0Segment.CombatVerifierPath, combatScope);
         int actionIndexBeforeAi = actor.ai?.action_index ?? -1;
         bool fightingTask = actor.isTask("fighting");
         bool memberCombatTask = actor.isTask(
             ArmyRtsContent.MemberCombatTaskId) || actor.isTask(
             ArmyRtsContent.SiegeCombatTaskId);
+        combatScope = Stopwatch.GetTimestamp();
         actor.b6_updateAI(cycleElapsed);
+        AccountP0(P0Segment.CombatUpdateAi, combatScope);
         ArmyRtsMovementDiagnostic.Log("p0", "combat_after_ai", actor,
-            "boundary=" + boundary + " kind=" + kind);
+            "boundary=" + boundary + " " + ArmyRtsMovementDiagnostic.KindDetail(kind));
         int actionIndexAfterAi = actor.ai?.action_index ?? -1;
         if (ArmyMilitaryMovementPriorityRules.
                 ShouldAdvanceNewFightTaskInSameP0(
@@ -747,14 +878,18 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                     actionIndexBeforeAi, actionIndexAfterAi,
                     actor._beh_skip, actor.is_moving))
         {
+            combatScope = Stopwatch.GetTimestamp();
             actor.b6_updateAI(cycleElapsed);
             actor.b5_checkPathMovement(cycleElapsed);
+            AccountP0(P0Segment.CombatSecondPass, combatScope);
             ArmyRtsMovementDiagnostic.Log("p0",
                 "combat_after_move_command", actor,
-                "boundary=" + boundary + " kind=" + kind);
+                "boundary=" + boundary + " " + ArmyRtsMovementDiagnostic.KindDetail(kind));
         }
+        combatScope = Stopwatch.GetTimestamp();
         actor.u10_checkSmoothMovement(cycleElapsed);
         actor.skipBehaviour();
+        AccountP0(P0Segment.CombatSmooth, combatScope);
         ArmyMilitaryMovementPriorityIndex.MarkProcessed(actorId);
     }
 
@@ -790,7 +925,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         if (!transportOwned)
             return false;
         ArmyRtsMovementDiagnostic.Log("p0", "transport_yield", actor,
-            "boundary=" + boundary + " kind=" + kind);
+            "boundary=" + boundary + " " + ArmyRtsMovementDiagnostic.KindDetail(kind));
         ArmyMilitaryMovementPriorityIndex.Unregister(actorId);
         return true;
     }
@@ -1083,8 +1218,38 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
     public bool Step()
     {
+        return StepCore();
+    }
+
+    // Step 是带 continue 的状态机:一次调用可能连续走过多个 PostStage。
+    // 按入口 stage 记账会把后续阶段的耗时全算到入口头上,所以在每次
+    // stage 切换处结算,谁执行谁记账。
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void AccountStage(PostStage pStage, long pStart)
+    {
+        int index = (int)pStage;
+        if (index < 0 || index >= diagnosticStageTicks.Length) return;
+        Interlocked.Add(ref diagnosticStageTicks[index],
+            Stopwatch.GetTimestamp() - pStart);
+        Interlocked.Increment(ref diagnosticStageCalls[index]);
+        // 同一段耗时再进一次按帧的账本,供最坏帧归因使用。P0 单独成桶,其余
+        // 阶段合并成 actor_post —— 最坏帧只需要知道落在哪条道上。
+        RuntimePerformanceDiagnostic.AccountFrameCost(
+            pStage == PostStage.MilitaryP0
+                ? RuntimePerformanceDiagnostic.FrameCostBucket.MilitaryP0
+                : RuntimePerformanceDiagnostic.FrameCostBucket.ActorPost,
+            pStart);
+    }
+
+    private bool StepCore()
+    {
+        bool capture = CaptureDiagnostics;
         while (true)
         {
+            PostStage executing = stage;
+            long stageStart = capture ? Stopwatch.GetTimestamp() : 0L;
+            try
+            {
             switch (stage)
             {
                 case PostStage.Idle:
@@ -1469,6 +1634,11 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                     return true;
                 default:
                     throw new ArgumentOutOfRangeException();
+            }
+            }
+            finally
+            {
+                if (capture) AccountStage(executing, stageStart);
             }
         }
     }

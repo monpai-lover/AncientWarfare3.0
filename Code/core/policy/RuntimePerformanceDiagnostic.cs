@@ -57,6 +57,91 @@ namespace AncientWarfare3.core.policy
         private static long _worstFrameStageTicks;
         private static string _worstFrameAnnualStageId = "none";
         private static long _worstFrameAnnualStageTicks;
+
+        // 帧尖峰归因。worst_frame_ms 长期是平均帧的 4–9 倍,但既有的
+        // worst_frame_stage 通道只有 AW_ChroniclePatch 一个写入方,所以每次采样
+        // 都报 none。这里按帧累一份粗粒度分桶,谁成为本区间最坏帧就把它当帧的
+        // 账本连同 GC 次数一起快照下来 —— 尖峰要么落在某个桶里,要么落在
+        // worst_frame_other(我们代码之外),两种结论都能直接指向下一步。
+        public enum FrameCostBucket
+        {
+            MilitaryP0 = 0,
+            MilitaryFrontLane,
+            ActorPost,
+            Presentation,
+            DeferredWork,
+            // 以下 11 项必须与 AWSchedulerStageBucket 的声明顺序逐一对应,
+            // AccountSchedulerFrameCost 靠偏移量做映射。
+            SchedulerMaintenance,
+            SchedulerWorld,
+            SchedulerMap,
+            SchedulerCities,
+            SchedulerActors,
+            SchedulerBuildings,
+            SchedulerArmies,
+            SchedulerKingdoms,
+            SchedulerStatuses,
+            SchedulerOtherVanilla,
+            SchedulerAw3Authority,
+        }
+
+        private static readonly string[] FrameCostBucketNames =
+        {
+            "military_p0",
+            "military_front_lane",
+            "actor_post",
+            "presentation",
+            "deferred_work",
+            "sched_maintenance",
+            "sched_world",
+            "sched_map",
+            "sched_cities",
+            "sched_actors",
+            "sched_buildings",
+            "sched_armies",
+            "sched_kingdoms",
+            "sched_statuses",
+            "sched_other_vanilla",
+            "sched_aw3_authority",
+        };
+
+        // military_p0 与 actor_post 跑在调度器的 Actors 阶段内部,和
+        // sched_actors 是包含关系。它们照常打印(要知道 Actors 阶段里我们占了
+        // 多少),但不能计入 accounted,否则 other 会被重复扣减到 0。
+        private static bool IsNestedFrameBucket(int pIndex)
+        {
+            return pIndex == (int)FrameCostBucket.MilitaryP0 ||
+                   pIndex == (int)FrameCostBucket.ActorPost;
+        }
+
+        private static readonly long[] FrameBucketTicks =
+            new long[FrameCostBucketNames.Length];
+        private static readonly long[] WorstFrameBucketTicks =
+            new long[FrameCostBucketNames.Length];
+        private static int _frameGcStarted;
+        private static int _worstFrameGcCount;
+
+        public static void AccountFrameCost(FrameCostBucket pBucket,
+            long pStarted)
+        {
+            if (pStarted == 0L) return;
+            int index = (int)pBucket;
+            if (index < 0 || index >= FrameBucketTicks.Length) return;
+            long elapsed = Stopwatch.GetTimestamp() - pStarted;
+            if (elapsed <= 0L) return;
+            Interlocked.Add(ref FrameBucketTicks[index], elapsed);
+        }
+
+        public static void AccountSchedulerFrameCost(
+            AWSchedulerStageBucket pBucket, long pStarted)
+        {
+            int offset = (int)pBucket;
+            if (offset < 0 ||
+                offset >= (int)AWSchedulerStageBucket.Count) return;
+            AccountFrameCost(
+                (FrameCostBucket)((int)FrameCostBucket.SchedulerMaintenance +
+                                  offset), pStarted);
+        }
         private const int ActorDetailBudgetPerFrame =
             ActorDiagnosticSamplingRules.MaximumDetailSamplesPerFrame;
         private static long _sampleFrameStarted;
@@ -161,6 +246,8 @@ namespace AncientWarfare3.core.policy
             _frameContinuousStageTicks = 0L;
             _frameAnnualStageId = "none";
             _frameAnnualStageTicks = 0L;
+            Array.Clear(FrameBucketTicks, 0, FrameBucketTicks.Length);
+            _frameGcStarted = GC.CollectionCount(0);
             _slowestAuthorityStageId = "none";
             _slowestAuthorityStageTicks = 0L;
             _sampling = RuntimePerformanceDiagnosticRules.ShouldSample(
@@ -651,11 +738,28 @@ namespace AncientWarfare3.core.policy
                 _worstFrameAnnualStageId +
                 " worst_frame_annual_stage_ms=" +
                 Milliseconds(_worstFrameAnnualStageTicks) +
+                " worst_frame_buckets=" + BuildWorstFrameBreakdown() +
+                " worst_frame_gc=" + _worstFrameGcCount +
                 " actor_ms=" + Milliseconds(_actorWallTicks) +
                 " actor_post_worker_ms=" +
                 Milliseconds(actorPostDiagnostics.WorkerTicks) +
                 " actor_post_commit_ms=" +
                 Milliseconds(actorPostDiagnostics.CommitTicks) +
+                " actor_post_stages=" +
+                AWCooperativeActorPostRunner.TakeStageBreakdown() +
+                " p0_segments=" +
+                AWCooperativeActorPostRunner.TakeP0Breakdown() +
+                " p0_index=" +
+                ArmyMilitaryMovementPriorityIndex.Diagnostics() +
+                " prefix_segments=" +
+                AncientWarfare3.patch.AW_FramePrioritySchedulerPatch
+                    .TakePrefixBreakdown() +
+                " reign_end=" +
+                AncientWarfare3.core.lineage.PosthumousTitleService
+                    .TakeReignBreakdown() +
+                " reign_commit=" +
+                AncientWarfare3.core.lineage.RulerTitleCommitService
+                    .TakeCommitBreakdown() +
                 " enemy_search_calls=" + actorPostDiagnostics.Calls +
                 " enemy_search_candidates=" +
                 actorPostDiagnostics.Candidates +
@@ -756,6 +860,13 @@ namespace AncientWarfare3.core.policy
                 " path_reused=" + pathDiagnostics.Reused +
                 " path_reused_running=" +
                 pathDiagnostics.ReusedRunning +
+                " path_reuse_probe=recorded=" +
+                pathDiagnostics.ReuseProbeRecorded +
+                ",probes=" + pathDiagnostics.ReuseProbeProbes +
+                ",loose=" + pathDiagnostics.ReuseProbeLooseHits +
+                ",strict=" + pathDiagnostics.ReuseProbeStrictHits +
+                ",tracked=" + pathDiagnostics.ReuseProbeTracked +
+                ",evictions=" + pathDiagnostics.ReuseProbeEvictions +
                 " path_straight_segments=" +
                 pathDiagnostics.StraightSegments +
                 " path_cancelled=" + pathDiagnostics.Cancelled +
@@ -837,6 +948,10 @@ namespace AncientWarfare3.core.policy
                 " authority_stage=" + _slowestAuthorityStageId +
                 " authority_stage_ms=" +
                 Milliseconds(_slowestAuthorityStageTicks) +
+                " authority_steps=" +
+                AWAuthorityCycleService.TakeAuthorityBreakdown() +
+                " deferred_prefix_ms=" +
+                DeferredRuntimeWorkService.TakePrefixCostDiagnostics() +
                 " gc0_collections=" + gc0Collections +
                 " gc1_collections=" + gc1Collections +
                 " gc2_collections=" + gc2Collections +
@@ -1040,6 +1155,39 @@ namespace AncientWarfare3.core.policy
             _worstFrameStageTicks = _frameContinuousStageTicks;
             _worstFrameAnnualStageId = _frameAnnualStageId;
             _worstFrameAnnualStageTicks = _frameAnnualStageTicks;
+            Array.Copy(FrameBucketTicks, WorstFrameBucketTicks,
+                FrameBucketTicks.Length);
+            _worstFrameGcCount = Math.Max(0,
+                GC.CollectionCount(0) - _frameGcStarted);
+        }
+
+        // 最坏帧里各桶的耗时,外加落在所有桶之外的余量。余量大就说明尖峰不在
+        // 我们的代码里(原版模拟、渲染、或者被 GC 停了)。
+        private static string BuildWorstFrameBreakdown()
+        {
+            var builder = new StringBuilder();
+            long accounted = 0L;
+            for (int i = 0; i < WorstFrameBucketTicks.Length; i++)
+            {
+                long ticks = WorstFrameBucketTicks[i];
+                if (!IsNestedFrameBucket(i)) accounted += ticks;
+                if (ticks <= 0L) continue;
+                if (builder.Length > 0) builder.Append(',');
+                builder.Append(FrameCostBucketNames[i]).Append(':')
+                    .Append(Milliseconds(ticks));
+            }
+
+            long other = Math.Max(0L, _worstFrameTicks - accounted);
+            if (builder.Length > 0) builder.Append(',');
+            builder.Append("other:").Append(Milliseconds(other));
+            return builder.ToString();
+        }
+
+        private static void ResetWorstFrameBuckets()
+        {
+            Array.Clear(WorstFrameBucketTicks, 0,
+                WorstFrameBucketTicks.Length);
+            _worstFrameGcCount = 0;
         }
 
         private static void ResetWorstFrameInterval()
@@ -1050,6 +1198,7 @@ namespace AncientWarfare3.core.policy
             _worstFrameStageTicks = 0L;
             _worstFrameAnnualStageId = "none";
             _worstFrameAnnualStageTicks = 0L;
+            ResetWorstFrameBuckets();
         }
 
         private static bool DeathDiagnosticsEnabled()

@@ -1171,9 +1171,9 @@ namespace AncientWarfare3.core.pathfinding
                 !AWDockTransportRules.CanCreatePhysicalRoute(
                     pActor.current_tile.data.tile_id, pTarget.data.tile_id,
                     pActor.current_tile.isSameIsland(pTarget),
-                    pActor.is_inside_boat) ||
-                !AWDockTransportService.TryResolveRoute(pActor.current_tile,
-                    pTarget, out _)) return false;
+                    pActor.is_inside_boat)) return false;
+            if (!AWDockTransportService.TryResolveRoute(pActor.current_tile,
+                    pTarget, out AWDockRouteCandidate route)) return false;
             if (!RetryContexts.TryGetValue(pActor.data.id, out RetryContext retry)) return false;
             TaxiManager.newRequest(pActor, pTarget);
             if (TaxiManager.getRequestForActor(pActor) == null) return false;
@@ -1181,8 +1181,6 @@ namespace AncientWarfare3.core.pathfinding
 
             double now = Time.realtimeSinceStartupAsDouble;
             long actorId = pActor.data.id;
-            AWDockTransportService.TryResolveRoute(pActor.current_tile, pTarget,
-                out AWDockRouteCandidate route);
             TransportContexts[actorId] = new TransportContext(pActor, pTarget.data.tile_id,
                 retry.Options, now, pObservedInsideBoat: false,
                 pNextPollAt: now, pEntryDockId: route.Entry.Id,

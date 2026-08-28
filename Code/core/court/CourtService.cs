@@ -760,7 +760,7 @@ namespace AncientWarfare3.core.court
 
             List<Actor> indexedFormalCandidates =
                 CivilServiceQualificationService.HasExaminationSystem(pKingdom)
-                    ? BuildIndexedFormalCandidateRoster(pKingdom)
+                    ? BuildIndexedFormalCandidateRoster(pKingdom, pRoster)
                     : null;
             var candidateCache = new CandidateSelectionCache();
 
@@ -1077,7 +1077,7 @@ namespace AncientWarfare3.core.court
         }
 
         private static List<Actor> BuildIndexedFormalCandidateRoster(
-            Kingdom pKingdom)
+            Kingdom pKingdom, List<Actor> pSourceRoster)
         {
             var result = new List<Actor>();
             SQLiteConnection db = CourtDB;
@@ -1103,7 +1103,7 @@ namespace AncientWarfare3.core.court
                 result.Clear();
             }
             CivilServiceLegacyTransitionService.AppendEligibleCandidates(
-                pKingdom, result);
+                pKingdom, pSourceRoster, result);
             return result;
         }
 

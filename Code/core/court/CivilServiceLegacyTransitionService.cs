@@ -95,20 +95,17 @@ namespace AncientWarfare3.core.court
         }
 
         internal static void AppendEligibleCandidates(Kingdom pKingdom,
-            List<Actor> pRoster)
+            List<Actor> pSourceRoster, List<Actor> pRoster)
         {
-            if (pKingdom?.data == null || pRoster == null) return;
+            if (pKingdom?.data == null || pSourceRoster == null ||
+                pRoster == null) return;
             var knownActorIds = new HashSet<long>();
             foreach (Actor actor in pRoster)
                 if (actor?.data != null) knownActorIds.Add(actor.data.id);
 
-            try
-            {
-                foreach (Actor actor in pKingdom.getUnits())
-                    TryAppendEligibleCandidate(actor, pKingdom, pRoster,
-                        knownActorIds);
-            }
-            catch { }
+            foreach (Actor actor in pSourceRoster)
+                TryAppendEligibleCandidate(actor, pKingdom, pRoster,
+                    knownActorIds);
         }
 
         private static void TryAppendEligibleCandidate(Actor pActor,

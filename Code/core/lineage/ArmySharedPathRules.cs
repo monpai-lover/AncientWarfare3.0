@@ -284,6 +284,17 @@ namespace AncientWarfare3.core.lineage
                    AreRouteTilesAdjacent(deltaX, deltaY);
         }
 
+        public static string FormatInvalidProviderStepFailure(
+            int previousTileId, int currentTileId, int deltaX, int deltaY,
+            string movementMethod, int routeStepCount, int targetTileId)
+        {
+            return "invalid_provider_step previous=" + previousTileId +
+                   " current=" + currentTileId + " dx=" + deltaX +
+                   " dy=" + deltaY + " method=" +
+                   (movementMethod ?? "unknown") + " route_steps=" +
+                   Math.Max(0, routeStepCount) + " target=" + targetTileId;
+        }
+
         public static bool ShouldAppendAdjacentProviderStep(
             bool providerStepIsAdjacent, bool providerStepValidated)
         {

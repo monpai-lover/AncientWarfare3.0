@@ -17,12 +17,7 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool TryConsumeHomeRationScheduled(Actor pActor)
         {
-            bool actorAlive = pActor?.data != null && pActor.isAlive() &&
-                              !pActor.isRekt();
             long actorId = pActor?.data?.id ?? -1L;
-            bool activeMilitaryOwner = actorAlive &&
-                (ArmyRtsControllerService.HasActiveMilitaryP0Owner(pActor) ||
-                 RoyalGuardService.IsRoyalGuard(pActor));
             double now;
             try { now = Time.realtimeSinceStartupAsDouble; }
             catch { now = 0d; }
@@ -31,16 +26,37 @@ namespace AncientWarfare3.core.lineage
                                      out double next)
                 ? next
                 : 0d;
+            // ShouldRunScheduledCheck 是纯 AND,先判哪一项都等价。这里被 P0
+            // 每帧按 actor 调用(约 6000 次/采样区间),而绝大多数调用都处在
+            // 冷却窗口里。把最便宜的时间闸门提到最前,冷却中的调用就不必再付
+            // HasActiveMilitaryP0Owner / IsRoyalGuard / needsFood / isHungry
+            // 这几项原版查询的代价。
+            if (now < nextAllowed) return false;
+            bool actorAlive = pActor?.data != null && pActor.isAlive() &&
+                              !pActor.isRekt();
+            bool activeMilitaryOwner = actorAlive &&
+                (ArmyRtsControllerService.HasActiveMilitaryP0Owner(pActor) ||
+                 RoyalGuardService.IsRoyalGuard(pActor));
             bool hungry = false;
-            try { hungry = actorAlive && pActor.needsFood() && pActor.isHungry(); }
+            try { hungry = actorAlive && activeMilitaryOwner &&
+                           pActor.needsFood() && pActor.isHungry(); }
             catch { }
-            if (!ArmyRtsAbstractSupplyRules.ShouldRunScheduledCheck(
-                    actorAlive, activeMilitaryOwner, hungry, now,
-                    nextAllowed)) return false;
-            if (NextScheduledCheck.Count >= MaximumTrackedActors)
-                NextScheduledCheck.Clear();
-            NextScheduledCheck[actorId] = now +
-                                          ScheduledCheckIntervalSeconds;
+            bool shouldRun = ArmyRtsAbstractSupplyRules.
+                ShouldRunScheduledCheck(actorAlive, activeMilitaryOwner,
+                    hungry, now, nextAllowed);
+            // 冷却戳原本只在 shouldRun 为真时才写,而 shouldRun 要求 hungry。
+            // 于是不饿的 actor(绝大多数)永远拿不到戳,nextAllowed 恒为 0,
+            // 上面那道时间闸门对它们永远不成立 —— 每帧照付四项原版查询。
+            // 改成"评估过就盖戳":代价是刚变饿的 actor 最多多等一个冷却周期,
+            // 而这本来就是 ScheduledCheckIntervalSeconds 定义的粒度。
+            if (actorId >= 0L)
+            {
+                if (NextScheduledCheck.Count >= MaximumTrackedActors)
+                    NextScheduledCheck.Clear();
+                NextScheduledCheck[actorId] = now +
+                                              ScheduledCheckIntervalSeconds;
+            }
+            if (!shouldRun) return false;
             return TryConsumeHomeRation(pActor);
         }
 

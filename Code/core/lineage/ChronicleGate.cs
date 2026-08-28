@@ -6,6 +6,18 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     internal static class ChronicleGate
     {
+        /// <summary>
+        ///     是否有宗族(SHI_ID≥0)。死亡后处理的总门槛:无宗族的平民/奴隶
+        ///     不产生任何谱系、头衔、编年史记录,整条链可直接跳过。
+        ///     只读一次 actor data,不触发王国级判定。
+        /// </summary>
+        public static bool HasShi(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            return shiId >= 0;
+        }
+
         /// <summary>是否入谱贵族:Xia 且已建谱系(LINEAGE_ID≥0)。人物事件的默认门槛。</summary>
         public static bool IsNobleActor(Actor pActor)
         {
