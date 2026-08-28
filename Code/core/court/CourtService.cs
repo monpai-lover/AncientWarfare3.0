@@ -220,15 +220,44 @@ namespace AncientWarfare3.core.court
         {
             var result = new HashSet<long>();
             if (pKingdom?.data == null || pKingdom.isRekt()) return result;
-            foreach (CourtOfficerView officer in GetActiveOfficers(pKingdom,
-                         int.MaxValue))
+            // 这里原本借道 GetActiveOfficers(kingdom, int.MaxValue):9 列、每列
+            // GetValue().ToString()/Convert 装箱,外加 ORDER BY INFLUENCE DESC ——
+            // INFLUENCE 不在 idx_CourtOfficer_kingdom_active 里,等于每次都要
+            // 排序整张结果集。而这个函数只需要三列,且结果是 HashSet、与顺序无关。
+            // court-vacancy 是实测最贵的延迟工作项(13.573 ms/项、占 70.9%),
+            // 每次 CourtCandidateSession 构造都要走一遍这里。
+            var db = CourtDB;
+            if (db == null) return result;
+            try
             {
-                if (officer == null || officer.actor_id < 0L) continue;
-                Actor actor = World.world?.units?.get(officer.actor_id);
-                if (IsValidActiveOfficeActor(actor, pKingdom,
-                        officer.layer, officer.office_id))
-                    result.Add(officer.actor_id);
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    "SELECT ACTOR_ID, LAYER, OFFICE_ID FROM " +
+                    CourtOfficerTableItem.GetTableName() +
+                    " WHERE KINGDOM_ID = @kid AND ACTIVE = 1";
+                cmd.Parameters.AddWithValue("@kid", pKingdom.id);
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    if (reader.IsDBNull(0)) continue;
+                    long actorId = reader.GetInt64(0);
+                    if (actorId < 0L) continue;
+                    string layer = reader.IsDBNull(1)
+                        ? "" : reader.GetString(1);
+                    string officeId = reader.IsDBNull(2)
+                        ? "" : reader.GetString(2);
+                    Actor actor = World.world?.units?.get(actorId);
+                    if (IsValidActiveOfficeActor(actor, pKingdom, layer,
+                            officeId))
+                        result.Add(actorId);
+                }
             }
+            catch (Exception e)
+            {
+                AncientWarfare3.ModClass.LogWarning(
+                    "CourtOfficer active-set read failed: " + e.Message);
+            }
+
             return result;
         }
 
@@ -1504,6 +1533,14 @@ namespace AncientWarfare3.core.court
                     actor, persistAppointment)
                 : persistAppointment();
             if (!committed)
+                return CourtManualAppointmentResult.PersistenceFailed;
+            // A committed transaction is not sufficient for a local county
+            // seat: legacy saves can contain a stale actor projection or a
+            // duplicate active row that is subsequently reconciled away. Do
+            // not report success until the exact county seat is readable.
+            if (pLayer == CourtOfficeLayer.County &&
+                !HasCommittedCountyMagistrate(kingdom, city, pCountyId,
+                    actor.data.id))
                 return CourtManualAppointmentResult.PersistenceFailed;
             CourtAristocraticGroupService.Refresh(kingdom, GetActiveOfficers(kingdom, 96));
             return CourtManualAppointmentResult.Success;
@@ -2884,17 +2921,109 @@ namespace AncientWarfare3.core.court
                 return null;
             CourtOfficerView officer = pLayer == CourtOfficeLayer.Central
                 ? ReadActiveCentralOffice(pKingdom, pOfficeId)
-                : GetActiveOfficers(pKingdom, 512).FirstOrDefault(row =>
-                    row != null && row.layer == pLayer &&
-                    row.city_id == pCityId && row.office_id == pOfficeId &&
-                    (pLayer != CourtOfficeLayer.County ||
-                        row.county_id == pCountyId));
+                : ReadActiveScopedOffice(pKingdom, pLayer, pOfficeId,
+                    pCityId, pCountyId);
             if (officer == null) return null;
             Actor persistedActor = World.world?.units?.get(officer.actor_id);
             return IsValidActiveOfficeActor(persistedActor, pKingdom,
                 officer.layer, officer.office_id)
                 ? persistedActor
                 : null;
+        }
+
+        private static CourtOfficerView ReadActiveScopedOffice(
+            Kingdom pKingdom, string pLayer, string pOfficeId,
+            long pCityId, long pCountyId)
+        {
+            SQLiteConnection db = CourtDB;
+            if (db == null || pKingdom?.data == null ||
+                string.IsNullOrEmpty(pLayer) || string.IsNullOrEmpty(pOfficeId) ||
+                pCityId < 0L) return null;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText = "SELECT ACTOR_NAME,OFFICE_ID,SCHOOL_ID,LAYER," +
+                    "CITY_ID,IFNULL(COUNTY_ID,-1),INFLUENCE,ACTOR_ID,APPOINTED_YEAR " +
+                    "FROM " + CourtOfficerTableItem.GetTableName() +
+                    " WHERE KINGDOM_ID=@kingdom AND ACTIVE=1 AND LAYER=@layer " +
+                    "AND OFFICE_ID=@office AND CITY_ID=@city" +
+                    (pLayer == CourtOfficeLayer.County ?
+                        " AND IFNULL(COUNTY_ID,-1)=@county" : "") +
+                    " ORDER BY OFFICER_ID DESC";
+                cmd.Parameters.AddWithValue("@kingdom", pKingdom.id);
+                cmd.Parameters.AddWithValue("@layer", pLayer);
+                cmd.Parameters.AddWithValue("@office", pOfficeId);
+                cmd.Parameters.AddWithValue("@city", pCityId);
+                if (pLayer == CourtOfficeLayer.County)
+                    cmd.Parameters.AddWithValue("@county", pCountyId);
+                using SQLiteDataReader reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    var row = new CourtOfficerView
+                    {
+                        actor_name = reader.IsDBNull(0) ? "" :
+                            reader.GetValue(0)?.ToString() ?? "",
+                        office_id = reader.IsDBNull(1) ? "" :
+                            reader.GetValue(1)?.ToString() ?? "",
+                        school_id = reader.IsDBNull(2) ? "" :
+                            reader.GetValue(2)?.ToString() ?? "",
+                        layer = reader.IsDBNull(3) ? "" :
+                            reader.GetValue(3)?.ToString() ?? "",
+                        city_id = reader.IsDBNull(4) ? -1L :
+                            Convert.ToInt64(reader.GetValue(4)),
+                        county_id = reader.IsDBNull(5) ? -1L :
+                            Convert.ToInt64(reader.GetValue(5)),
+                        influence = reader.IsDBNull(6) ? 0f :
+                            Convert.ToSingle(reader.GetValue(6)),
+                        actor_id = reader.IsDBNull(7) ? -1L :
+                            Convert.ToInt64(reader.GetValue(7)),
+                        appointed_year = reader.IsDBNull(8) ? -1 :
+                            Convert.ToInt32(reader.GetValue(8))
+                    };
+                    Actor actor = World.world?.units?.get(row.actor_id);
+                    if (IsValidActiveOfficeActor(actor, pKingdom,
+                            row.layer, row.office_id)) return row;
+                }
+                return null;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Scoped court office read failed: " +
+                    error.Message);
+                return null;
+            }
+        }
+
+        private static bool HasCommittedCountyMagistrate(Kingdom pKingdom,
+            City pCity, long pCountyId, long pActorId)
+        {
+            if (pKingdom?.data == null || pCity?.data == null ||
+                pCountyId < 0L || pActorId < 0L) return false;
+            SQLiteConnection db = CourtDB;
+            if (db == null) return false;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText = "SELECT COUNT(1) FROM " +
+                    CourtOfficerTableItem.GetTableName() +
+                    " WHERE KINGDOM_ID=@kingdom AND CITY_ID=@city " +
+                    "AND IFNULL(COUNTY_ID,-1)=@county AND LAYER=@layer " +
+                    "AND OFFICE_ID=@office AND ACTOR_ID=@actor AND ACTIVE=1";
+                cmd.Parameters.AddWithValue("@kingdom", pKingdom.id);
+                cmd.Parameters.AddWithValue("@city", pCity.data.id);
+                cmd.Parameters.AddWithValue("@county", pCountyId);
+                cmd.Parameters.AddWithValue("@layer", CourtOfficeLayer.County);
+                cmd.Parameters.AddWithValue("@office",
+                    CourtOfficeId.CountyMagistrate);
+                cmd.Parameters.AddWithValue("@actor", pActorId);
+                return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("County appointment readback failed: " +
+                    error.Message);
+                return false;
+            }
         }
 
         private static CourtOfficerView ReadActiveCentralOffice(Kingdom pKingdom,

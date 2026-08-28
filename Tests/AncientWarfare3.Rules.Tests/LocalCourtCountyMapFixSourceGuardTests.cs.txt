@@ -38,6 +38,14 @@ internal static class LocalCourtCountyMapFixSourceGuardTests
             "                                pLayer == CourtOfficeLayer.City ||\n" +
             "                                pLayer == CourtOfficeLayer.County",
             "county magistrate eligibility must receive the low-office qualification bypass");
+        string localAppointment = Read(
+            "Code/core/court/LocalCourtAppointmentService.cs");
+        Contains(localAppointment, "CanUseLayerCandidate",
+            "automatic county appointments must reuse city-leader exclusion");
+        Contains(courtService, "HasCommittedCountyMagistrate",
+            "county appointment must verify the exact persisted county seat before reporting success");
+        Contains(courtService, "HasCommittedCountyMagistrate(kingdom, city, pCountyId",
+            "manual county appointment must reject a success result when the county row is missing");
         string partition = Read("Code/core/county/CountyZonePartitionRules.cs");
         Contains(partition, "MaximumCountiesPerCity = 3",
             "a city must cap its county count at three");

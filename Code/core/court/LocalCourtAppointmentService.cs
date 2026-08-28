@@ -40,6 +40,9 @@ namespace AncientWarfare3.core.court
                 Actor countyCandidate = pSession.Actors
                     .Where(actor => pSession.IsAvailable(actor, pVacancy))
                     .Where(actor => actor?.data != null &&
+                        CourtManualAppointmentRules.CanUseLayerCandidate(
+                            CourtOfficeLayer.County,
+                            actor.isCityLeader()) &&
                         CanUseCandidateFacts(actor, pKingdom))
                     .Where(actor => CivilServiceQualificationService.
                         CanReceiveFormalCivilAppointment(actor, pKingdom,
