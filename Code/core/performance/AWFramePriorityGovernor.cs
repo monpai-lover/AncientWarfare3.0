@@ -16,6 +16,7 @@ namespace AncientWarfare3.core.performance
     {
         private const int BaselineWindowSize = 120;
         private const double BootstrapBaselineMilliseconds = 6d;
+        private const double MaximumOverrunRepaymentRatio = 0.5d;
 
         private static readonly double[] BaselineSamples =
             new double[BaselineWindowSize];
@@ -309,11 +310,19 @@ namespace AncientWarfare3.core.performance
             double rawBudget = targetMilliseconds -
                                AWPerformanceSettings.RenderReserveMilliseconds -
                                _baselineP90;
-            double previousFrameOverrun = Math.Min(
+            // 上一帧超时要还,但原本是一次性全额扣除。实测单个阶段能跑到
+            // 45–90ms(worst_frame_buckets),那样算出来的 overrun 会把下一帧的
+            // 模拟预算直接扣成 0 —— 一次尖峰因此至少多吃掉一整帧,而一个逻辑
+            // tick 每多花一帧就要多付一次渲染开销,倍速是按完成的 tick 率等比
+            // 掉的。改成按比例摊还:仍然会因为持续超时而收紧,但任何单帧都还
+            // 留得下一半预算,不会出现"零预算帧"。
+            double repayable = Math.Min(
                 _lastFrameSimulationMilliseconds,
                 Math.Max(0d,
                     _lastFrameDeltaMilliseconds - targetMilliseconds - 1d));
-            rawBudget -= previousFrameOverrun;
+            double maximumRepayment =
+                Math.Max(0d, rawBudget) * MaximumOverrunRepaymentRatio;
+            rawBudget -= Math.Min(repayable, maximumRepayment);
             _frameBudgetMilliseconds = Math.Max(0d,
                 Math.Min(AWPerformanceSettings
                     .MaxSimulationMillisecondsPerFrame, rawBudget));
