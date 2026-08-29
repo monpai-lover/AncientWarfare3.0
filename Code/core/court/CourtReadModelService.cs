@@ -221,7 +221,7 @@ namespace AncientWarfare3.core.court
                         row.city_id == pCity.data.id).ToList();
             AddLocalNodes(model, pKingdom, pCity, seats, officers,
                 localTemplate, pCareerStates);
-            AddCountyNodes(model, pKingdom, pCity, officers, pCareerStates);
+            AddCountyNodes(model, pKingdom, pCity, pOfficers, pCareerStates);
             AddRegionalSuperiorNode(model, pKingdom, pCity);
             // The regional superior is part of the local court graph and must
             // participate in the same layout pass as the city officials.

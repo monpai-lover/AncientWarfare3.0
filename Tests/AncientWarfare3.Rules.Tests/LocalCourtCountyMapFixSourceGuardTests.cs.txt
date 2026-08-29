@@ -11,6 +11,9 @@ internal static class LocalCourtCountyMapFixSourceGuardTests
         string readModel = Read("Code/core/court/CourtReadModelService.cs");
         Contains(readModel, "CourtService.GetActiveOfficers(\n                    pKingdom, int.MaxValue)",
             "local court read models must not truncate county officers");
+        Contains(readModel,
+            "AddCountyNodes(model, pKingdom, pCity, pOfficers, pCareerStates)",
+            "county nodes must receive the full city and county officer snapshot");
         string runtime = Read("Code/core/court/CustomCourtRuntime.cs");
         Contains(runtime, "bool effectiveManual = manual;",
             "capital local courts must allow explicit template bindings");
