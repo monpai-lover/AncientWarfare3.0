@@ -224,6 +224,13 @@ if (args.Length == 1 && args[0] == "--mandate-capital-transfer")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--mandate-capital-building-textures")
+{
+    MandateCapitalBuildingTextureRulesTests.Run();
+    Console.WriteLine("Mandate capital building texture rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--war-type-ownership-matrix")
 {
     WarTypeOwnershipMatrixTests.Run();

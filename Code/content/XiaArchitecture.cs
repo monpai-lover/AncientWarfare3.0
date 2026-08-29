@@ -1,5 +1,4 @@
 using AncientWarfare3.content.schools;
-using UnityEngine;
 
 namespace AncientWarfare3.content
 {
@@ -165,13 +164,6 @@ namespace AncientWarfare3.content
                     case "order_windmill_0":
                         b.fundament = new BuildingFundament(2, 2, 2, 0);
                         if (b.shadow) b.setShadow(0.4f, 0.38f, 0.47f);
-                        break;
-                    case "order_market":
-                        // market_Xia 贴图升到 160×160(更精细),单独缩小 scale_base 保持游戏内视觉大小不变。
-                        // 算法:原视觉高 = 原图 30px × 默认 scale 0.25 = 7.5 世界单位;
-                        //       新图 160px × 0.046875 = 7.5(一致)。x/y 同比,z 保持 0.25(深度排序,不影响视觉)。
-                        // 前提:main_0 / construction_0 / ruin_0 都做成 160×160 画布(底部中心 pivot),否则未升的帧会变超小。
-                        b.scale_base = new Vector3(0.046875f, 0.046875f, 0.25f);
                         break;
                 }
 

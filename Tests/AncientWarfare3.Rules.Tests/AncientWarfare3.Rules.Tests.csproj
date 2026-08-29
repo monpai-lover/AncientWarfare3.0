@@ -9,6 +9,8 @@
     <WorldBoxManaged Condition="'$(WorldBoxManaged)' == ''">D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed</WorldBoxManaged>
   </PropertyGroup>
 	<ItemGroup>
+		<Compile Include="MandateCapitalBuildingTextureRulesTests.cs.txt" />
+		<Compile Include="..\..\Code\core\presentation\MandateCapitalBuildingTextureRules.cs" Link="Production\MandateCapitalBuildingTextureRules.cs" />
 		<Compile Include="CountyRenameRulesTests.cs.txt" />
 		<Compile Include="CountyRenameSourceGuardTests.cs.txt" />
 		<Compile Include="..\..\Code\core\county\CountyRenameRules.cs" Link="Production\CountyRenameRules.cs" />
@@ -1204,6 +1206,7 @@
   </Target>
   <Target Name="XiaItemDynamicAtlasSourceGuard"
       BeforeTargets="Build">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\MandateCapitalBuildingTextureSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\XiaItemDynamicAtlasSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\ClassicCivLifespanSourceGuard.ps1&quot;" />
   </Target>

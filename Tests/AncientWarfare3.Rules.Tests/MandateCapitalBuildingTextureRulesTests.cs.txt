@@ -1,0 +1,44 @@
+using AncientWarfare3.core.presentation;
+
+internal static class MandateCapitalBuildingTextureRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, MandateCapitalBuildingTextureRules.ShouldUseCapitalTexture(
+                pIsXiaBuilding: true, pIsMandateKingdom: true,
+                pIsKingdomCapital: true),
+            "Xia buildings in the mandate capital use capital textures");
+        Equal(false, MandateCapitalBuildingTextureRules.ShouldUseCapitalTexture(
+                pIsXiaBuilding: true, pIsMandateKingdom: false,
+                pIsKingdomCapital: true),
+            "a former mandate capital restores ordinary textures");
+        Equal(false, MandateCapitalBuildingTextureRules.ShouldUseCapitalTexture(
+                pIsXiaBuilding: true, pIsMandateKingdom: true,
+                pIsKingdomCapital: false),
+            "the old capital restores ordinary textures after relocation");
+        Equal(false, MandateCapitalBuildingTextureRules.ShouldUseCapitalTexture(
+                pIsXiaBuilding: false, pIsMandateKingdom: true,
+                pIsKingdomCapital: true),
+            "non-Xia buildings are never replaced");
+
+        Equal(3, MandateCapitalBuildingTextureRules.ResolveVariantIndex(
+                new[] { 0, 2, 3 }, 3),
+            "matching capital variant is retained");
+        Equal(0, MandateCapitalBuildingTextureRules.ResolveVariantIndex(
+                new[] { 0, 2, 3 }, 1),
+            "missing capital variant falls back to zero");
+        Equal(2, MandateCapitalBuildingTextureRules.ResolveVariantIndex(
+                new[] { 2, 3, 4, 5 }, 0),
+            "sparse capital variants fall back to their first available index");
+        Equal(-1, MandateCapitalBuildingTextureRules.ResolveVariantIndex(
+                Array.Empty<int>(), 0),
+            "an empty catalog reports no replacement");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}
