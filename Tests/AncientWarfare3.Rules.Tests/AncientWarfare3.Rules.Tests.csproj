@@ -215,6 +215,7 @@
     <Compile Include="PeasantRebelStateNameRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelStateNameRules.cs" Link="Production\PeasantRebelStateNameRules.cs" />
     <Compile Include="ActorVisualRoleRulesTests.cs.txt" />
+    <Compile Include="XiaActorTextureRulesTests.cs.txt" />
     <Compile Include="XiaBanditHeadRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\presentation\XiaBanditHeadRules.cs" Link="Production\XiaBanditHeadRules.cs" />
     <Compile Include="MilitaryGovernorateCourtRulesTests.cs.txt" />

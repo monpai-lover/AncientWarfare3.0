@@ -4,6 +4,7 @@ using System.Data.SQLite;
 using System.Linq;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.presentation;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
@@ -1894,8 +1895,14 @@ namespace AncientWarfare3.core.court
             long pNativeCityId, long pPreviousCityId, int pWaitingSinceYear,
             int pLocalGrade, int pLocalGradeReviewYear)
         {
-            pActor.data.set(LineageKeys.OFFICER_RANK,
-                OfficialCareerRankRules.ClampRank(pRank));
+            pActor.data.get(LineageKeys.OFFICER_RANK,
+                out int previousRank, OfficialCareerRankRules.Unranked);
+            int nextRank = OfficialCareerRankRules.ClampRank(pRank);
+            bool appearanceTierChanged = LineageService.IsXia(pActor) &&
+                XiaActorTextureRules.ResolveOfficialTier(previousRank) !=
+                XiaActorTextureRules.ResolveOfficialTier(nextRank);
+
+            pActor.data.set(LineageKeys.OFFICER_RANK, nextRank);
             pActor.data.set(LineageKeys.OFFICER_TRACK, pTrack);
             pActor.data.set(LineageKeys.OFFICER_MERIT, pMerit);
             pActor.data.set(LineageKeys.OFFICER_MERIT_CAP, pMeritCap);
@@ -1911,6 +1918,13 @@ namespace AncientWarfare3.core.court
                 NineRankRules.ClampGrade(pLocalGrade));
             pActor.data.set(LineageKeys.OFFICER_LOCAL_GRADE_REVIEW_YEAR,
                 pLocalGradeReviewYear);
+            if (!appearanceTierChanged) return;
+            try
+            {
+                pActor.dirty_sprite_head = true;
+                pActor.clearGraphicsFully();
+            }
+            catch { }
         }
 
         internal static void FreezeNativeCityFast(Actor pActor)

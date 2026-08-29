@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AncientWarfare3.core.presentation;
 using UnityEngine;
 
 namespace AncientWarfare3.content
@@ -51,17 +52,15 @@ namespace AncientWarfare3.content
 
             tex.texture_path_warrior = pBasePath + "warrior_1";
             tex.texture_path_king = pBasePath + "king";
-            tex.texture_path_leader = pBasePath + "leader";
+            tex.texture_path_leader = pBasePath + "leader_1";
             tex.texture_path_baby = pBasePath + "child";
 
             // 头型:夏人有完整头型贴图,保留。
             tex.texture_heads_male = pBasePath + "heads_male";
             tex.texture_heads_female = pBasePath + "heads_female";
-            tex.texture_head_warrior = pBasePath + "heads_special/head_warrior";
-            tex.texture_head_king = pBasePath + "heads_special/head_king";
-            tex.texture_heads_old_male = pBasePath + "heads_special/head_old_male";
-            tex.texture_heads_old_female = pBasePath + "heads_special/head_old_female";
-            tex.has_old_heads = true;
+            tex.texture_head_warrior = pBasePath + "heads_warrior/head_0";
+            tex.texture_head_king = pBasePath + "heads_king/head_0";
+            tex.has_old_heads = false;
 
             tex.prevent_unconscious_rotation = pAsset.prevent_unconscious_rotation;
             tex.render_heads_for_children = false;
@@ -91,8 +90,8 @@ namespace AncientWarfare3.content
             string[] warriorDirs = ScanSkins(root, "warrior_");
 
             // 三者等长截齐(同一 skin_id 索引三数组)。任一为空则全部回退单皮肤。
-            int count = Math.Min(maleDirs.Length, Math.Min(femaleDirs.Length, warriorDirs.Length));
-            if (count <= 0)
+            if (maleDirs.Length == 0 || femaleDirs.Length == 0 ||
+                warriorDirs.Length == 0)
             {
                 pAsset.skin_citizen_male = new[] { "male_1" };
                 pAsset.skin_citizen_female = new[] { "female_1" };
@@ -101,9 +100,14 @@ namespace AncientWarfare3.content
                 return;
             }
 
-            pAsset.skin_citizen_male = TakeSkinNames(maleDirs, count);
-            pAsset.skin_citizen_female = TakeSkinNames(femaleDirs, count);
-            pAsset.skin_warrior = TakeSkinNames(warriorDirs, count);
+            int count = Math.Max(maleDirs.Length,
+                Math.Max(femaleDirs.Length, warriorDirs.Length));
+            pAsset.skin_citizen_male =
+                XiaActorTextureRules.ExpandSkins(maleDirs, count);
+            pAsset.skin_citizen_female =
+                XiaActorTextureRules.ExpandSkins(femaleDirs, count);
+            pAsset.skin_warrior =
+                XiaActorTextureRules.ExpandSkins(warriorDirs, count);
         }
 
         /// <summary>扫给定根目录下以 pPrefix 开头的子目录名(仅目录名,不含路径),按编号自然排序。</summary>
@@ -115,11 +119,6 @@ namespace AncientWarfare3.content
                 .Where(n => n.StartsWith(pPrefix, StringComparison.Ordinal))
                 .OrderBy(n => ParseTrailingNumber(n, pPrefix))
                 .ToArray();
-        }
-
-        private static string[] TakeSkinNames(string[] pSkinDirs, int pCount)
-        {
-            return pSkinDirs.Take(pCount).ToArray();
         }
 
         /// <summary>取目录名末尾编号(male_10→10),用于自然排序(避免 _10 排到 _2 前)。</summary>

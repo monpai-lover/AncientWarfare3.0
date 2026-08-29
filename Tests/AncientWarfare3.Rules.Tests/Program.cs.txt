@@ -231,6 +231,13 @@ if (args.Length == 1 && args[0] == "--mandate-capital-building-textures")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--xia-actor-textures")
+{
+    XiaActorTextureRulesTests.Run();
+    Console.WriteLine("Xia actor texture rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--war-type-ownership-matrix")
 {
     WarTypeOwnershipMatrixTests.Run();

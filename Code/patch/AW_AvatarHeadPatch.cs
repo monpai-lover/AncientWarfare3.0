@@ -1,4 +1,5 @@
 using HarmonyLib;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.presentation;
 using UnityEngine;
@@ -58,6 +59,45 @@ namespace AncientWarfare3.patch
             }
 
             if (pKing || pWarrior) return;
+
+            if (actor?.data != null)
+            {
+                actor.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
+                bool activePrince = false;
+                try { activePrince = FeudatoryService.IsActivePrince(actor); }
+                catch { }
+                if (isHeir || activePrince)
+                {
+                    Sprite heir = ActorAnimationLoader.getHeadSpecial(
+                        tex.texture_path_base + "heads_heir/head_0");
+                    if (heir != null) __result = heir;
+                    return;
+                }
+            }
+
+            if (actor?.data != null)
+            {
+                actor.data.get(LineageKeys.OFFICER_RANK, out int rank,
+                    OfficialCareerRankRules.Unranked);
+                string officialHead =
+                    XiaActorTextureRules.ResolveOfficialHeadPath(rank);
+                if (!string.IsNullOrEmpty(officialHead))
+                {
+                    Sprite official = ActorAnimationLoader.getHeadSpecial(
+                        tex.texture_path_base + officialHead);
+                    if (official != null) __result = official;
+                    return;
+                }
+                if (actor.isCityLeader())
+                {
+                    Sprite leader = ActorAnimationLoader.getHeadSpecial(
+                        tex.texture_path_base +
+                        XiaActorTextureRules.ResolveOfficialHeadPath(
+                            OfficialCareerRankRules.MinimumRank));
+                    if (leader != null) __result = leader;
+                    return;
+                }
+            }
 
             if (AW_AgePatch.ShouldUseXiaOldHead(pActorId))
             {
