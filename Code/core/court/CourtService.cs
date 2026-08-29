@@ -492,6 +492,87 @@ namespace AncientWarfare3.core.court
             return result;
         }
 
+        /// <summary>
+        /// 某王国某层级上已被占用的不同官职数。
+        ///
+        /// 调用方只要一个整数,但原本都是借道 GetActiveOfficers(kingdom, 96) 再
+        /// LINQ Where/Select/Distinct/Count:9 列全部 GetValue().ToString()/
+        /// Convert 装箱、最多 96 行,还带一个 ORDER BY INFLUENCE DESC ——
+        /// INFLUENCE 不在 idx_CourtOfficer_kingdom_active 里,等于每次都排序整张
+        /// 结果集。而该索引是 (KINGDOM_ID, ACTIVE, LAYER, OFFICE_ID),对下面这条
+        /// 查询是覆盖索引,连表都不用碰。
+        ///
+        /// HistoricalSchoolTravelService 每个旅行候选城市都要问一次(单次
+        /// travel_frame 最多 16 次),所以值得换。
+        ///
+        /// 与旧写法的差别:不再截断到前 96 行。截断本来就会让「官职是否满员」在
+        /// 大朝廷上答错,去掉之后答案更准。
+        /// </summary>
+        internal static int CountOccupiedOfficesForLayer(Kingdom pKingdom,
+            string pLayer)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
+                string.IsNullOrEmpty(pLayer)) return 0;
+            SQLiteConnection db = CourtDB;
+            if (db == null) return 0;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    "SELECT COUNT(DISTINCT OFFICE_ID) FROM " +
+                    CourtOfficerTableItem.GetTableName() +
+                    " WHERE KINGDOM_ID = @kid AND ACTIVE = 1" +
+                    " AND LAYER = @layer";
+                cmd.Parameters.AddWithValue("@kid", pKingdom.id);
+                cmd.Parameters.AddWithValue("@layer", pLayer);
+                object value = cmd.ExecuteScalar();
+                return value == null || value == DBNull.Value
+                    ? 0
+                    : Convert.ToInt32(value);
+            }
+            catch (Exception e)
+            {
+                AncientWarfare3.ModClass.LogWarning(
+                    "CourtOfficer layer count failed: " + e.Message);
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// 某个具体官职当前是否有人在任。同上,把「读回最多 96 行再 Any」换成
+        /// 一次索引定位:idx_CourtOfficer_kingdom_active 前四列正好是这里的四个
+        /// 条件,central 层还另有一个 partial unique 索引
+        /// (idx_CourtOfficer_central_host_office_unique)。
+        /// </summary>
+        internal static bool IsOfficeOccupied(Kingdom pKingdom, string pLayer,
+            string pOfficeId)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
+                string.IsNullOrEmpty(pLayer) ||
+                string.IsNullOrEmpty(pOfficeId)) return false;
+            SQLiteConnection db = CourtDB;
+            if (db == null) return false;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    "SELECT 1 FROM " + CourtOfficerTableItem.GetTableName() +
+                    " WHERE KINGDOM_ID = @kid AND ACTIVE = 1" +
+                    " AND LAYER = @layer AND OFFICE_ID = @office LIMIT 1";
+                cmd.Parameters.AddWithValue("@kid", pKingdom.id);
+                cmd.Parameters.AddWithValue("@layer", pLayer);
+                cmd.Parameters.AddWithValue("@office", pOfficeId);
+                object value = cmd.ExecuteScalar();
+                return value != null && value != DBNull.Value;
+            }
+            catch (Exception e)
+            {
+                AncientWarfare3.ModClass.LogWarning(
+                    "CourtOfficer office probe failed: " + e.Message);
+                return false;
+            }
+        }
+
         public static void OnKingdomDestroying(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;

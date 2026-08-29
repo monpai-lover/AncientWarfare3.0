@@ -240,9 +240,8 @@ namespace AncientWarfare3.core.schools
             if (pHost?.data == null || pHost.isRekt() ||
                 string.IsNullOrEmpty(pOfficeId) || pSession == null)
                 return CourtVacancyOutcome.Invalid;
-            if (CourtService.GetActiveOfficers(pHost, 96).Any(row =>
-                    row != null && row.layer == CourtOfficeLayer.Central &&
-                    row.office_id == pOfficeId) ||
+            if (CourtService.IsOfficeOccupied(pHost, CourtOfficeLayer.Central,
+                    pOfficeId) ||
                 IsOfficeReserved(pHost.id, pOfficeId))
                 return CourtVacancyOutcome.Invalid;
 

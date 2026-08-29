@@ -39,8 +39,17 @@ namespace AncientWarfare3.core.schools
         // 存在(缓冲最快也要下一帧才提交),这里只是从 1 帧放宽到至多 8 帧;
         // 期间重复入队由各操作自己的 pending 集合挡住(如
         // SchoolMembershipService.PendingMembershipActors)。
+        //
+        // 帧上限从 8 抬到 24:实测合批后是 3~5 条/事务,也就是「攒够 8 条」几乎
+        // 从没生效过,每次都是帧上限先到就把三五条冲出去。按这个到达率
+        // (约 0.4~0.6 条/帧)把上限放到 24,条数阈值才会成为真正的约束 ——
+        // 每事务稳定 8 条,摊到每条的事务固定开销从约 0.21ms 降到约 0.10ms。
+        //
+        // 注意上限抬高不等于延迟按比例变长:到达率不变的话,攒满 8 条要 14~20
+        // 帧(约 0.6~0.75 秒),而不是 24 帧。学派事件本来就是十年尺度的,这个
+        // 窗口无所谓;存档路径由 Buffer.FlushForSave 绕过闸门,不受影响。
         private const int CoalesceMinimumCount = 8;
-        private const int CoalesceMaxHeldFrames = 8;
+        private const int CoalesceMaxHeldFrames = 24;
         private static long _firstHeldFrame;
         private static readonly Dictionary<string,
             AsyncEntry> PendingAsync =

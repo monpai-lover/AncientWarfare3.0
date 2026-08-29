@@ -299,13 +299,18 @@ namespace AncientWarfare3.core.schools
                 HistoricalSchoolDescentService.DefinitionFor(pActor);
             int probeCount = HistoricalSchoolSchedulerRules.
                 DestinationTileProbeCount(pCities.Count);
-            IEnumerable<City> probeCities = pCities
+            // 三段分开记账。原本 probeCities 是延迟序列,筛城的成本会全部记到
+            // 探场地那一段里 —— 这里物化一次,让三个桶各自代表自己。
+            long stamp = HistoricalSchoolRuntime.Mark();
+            List<City> probeCities = pCities
                 .Where(city => IsLivingCity(city) &&
                     HistoricalSchoolXiaAccessService.CanReceiveSchoolTravel(city) &&
                     city.data.id != pState.ResidenceCityId)
                 .OrderBy(city => HistoricalSchoolRules.StableTravelCandidateOrder(
                     pActor.data.id, city.data.id))
-                .Take(probeCount);
+                .Take(probeCount)
+                .ToList();
+            stamp = HistoricalSchoolRuntime.Account("travel:filter", stamp);
             var cheapCandidates = new List<TravelCityTarget>(probeCount);
             foreach (City city in probeCities)
             {
@@ -313,11 +318,13 @@ namespace AncientWarfare3.core.schools
                 if (target == null) continue;
                 cheapCandidates.Add(new TravelCityTarget(city, target));
             }
+            stamp = HistoricalSchoolRuntime.Account("travel:venue_probe", stamp);
             HistoricalSchoolTravelCandidate[] candidates =
                 HistoricalSchoolRules.BuildStableTravelCandidateWindow(
                     pActor.data.id, cheapCandidates, candidate => candidate.City.data.id,
                     candidate => BuildTravelCandidate(candidate, school, master,
                         residence, origin), MaxDestinationCandidates);
+            HistoricalSchoolRuntime.Account("travel:score", stamp);
             var context = new HistoricalSchoolTravelContext(pActor.data.id,
                 pState.ResidenceCityId, pState.PreviousResidenceCityId,
                 pState.LastTravelYear, pYear, pState.ServiceKingdomId >= 0);
@@ -948,11 +955,8 @@ namespace AncientWarfare3.core.schools
                 string[] expected =
                     CourtService.CentralOfficeIdsForCurrentProfile(pKingdom);
                 if (expected.Length == 0) return false;
-                int occupied = CourtService.GetActiveOfficers(pKingdom, 96)
-                    .Where(p => p.layer == CourtOfficeLayer.Central)
-                    .Select(p => p.office_id)
-                    .Distinct(StringComparer.Ordinal).Count();
-                return occupied < expected.Length;
+                return CourtService.CountOccupiedOfficesForLayer(pKingdom,
+                    CourtOfficeLayer.Central) < expected.Length;
             }
             catch { return false; }
         }

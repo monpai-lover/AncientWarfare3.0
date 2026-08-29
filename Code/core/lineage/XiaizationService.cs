@@ -28,6 +28,22 @@ namespace AncientWarfare3.core.lineage
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
         private static bool _persistedCultureIntegrationsRestored;
 
+        // XIA_PROGRESS >= 100 是每城一个 bool,原本每次问都发一条 SELECT。
+        // HistoricalSchoolXiaAccessService 的三个谓词全都读它,而
+        // HistoricalSchoolTravelService.TryChooseDestination 会对全部 64 个索引
+        // 城市各调一次 CanReceiveSchoolTravel —— 按实测无事务 SELECT 约 58.6us,
+        // 单次 travel_frame 就是约 3.7ms。学派侧共 20 多个调用点走这条路。
+        //
+        // 缓存是闭合的:全项目只有下面 UpsertCityState 一处写这张表,而且进度值
+        // 就在它的参数里,所以命中后能直接按写入值更新,不需要回读。
+        // 跨档/跨局用 (RuntimeDatabaseEpoch, World.world) 判废 —— 和
+        // CourtMeritRewardService / GeneralService 里那套游标复位同一个写法,
+        // 不依赖任何外部清理调用,读档顺序再变也不会留下脏值。
+        private static readonly Dictionary<long, bool> FullyXiaizedCities =
+            new Dictionary<long, bool>();
+        private static long _fullyXiaizedEpoch = -1L;
+        private static object _fullyXiaizedWorld;
+
         public static void OnKingdomYear(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral()) return;
@@ -707,9 +723,15 @@ namespace AncientWarfare3.core.lineage
                     insert.AddRange(values);
                     DB.Insert(table, insert.ToArray());
                 }
+
+                // 写入值就是权威值,缓存直接跟着走,不回读。
+                ResetFullyXiaizedCacheIfNeeded();
+                FullyXiaizedCities[pCity.id] = pXiaProgress >= 100.0;
             }
             catch (Exception e)
             {
+                // 写失败时不知道库里现在是什么,丢掉这一条让下次回读。
+                FullyXiaizedCities.Remove(pCity.id);
                 ModClass.LogWarning("CityXiaizationState upsert failed: " + e.Message);
             }
         }
@@ -823,6 +845,28 @@ namespace AncientWarfare3.core.lineage
         internal static bool IsFullyXiaizedCity(City pCity)
         {
             if (!Ready || pCity?.data == null) return false;
+            ResetFullyXiaizedCacheIfNeeded();
+            long cityId = pCity.id;
+            if (FullyXiaizedCities.TryGetValue(cityId, out bool cached))
+                return cached;
+            bool fully = ReadFullyXiaizedCity(pCity);
+            FullyXiaizedCities[cityId] = fully;
+            return fully;
+        }
+
+        private static void ResetFullyXiaizedCacheIfNeeded()
+        {
+            long databaseEpoch = LineageArchiveManager.RuntimeDatabaseEpoch;
+            object world = World.world;
+            if (_fullyXiaizedEpoch == databaseEpoch &&
+                ReferenceEquals(_fullyXiaizedWorld, world)) return;
+            FullyXiaizedCities.Clear();
+            _fullyXiaizedEpoch = databaseEpoch;
+            _fullyXiaizedWorld = world;
+        }
+
+        private static bool ReadFullyXiaizedCity(City pCity)
+        {
             try
             {
                 using var cmd = new SQLiteCommand(DB);

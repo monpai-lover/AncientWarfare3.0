@@ -45,6 +45,40 @@ namespace AncientWarfare3.core.schools
             }
         }
 
+        /// <summary>
+        /// 子步骤接力计时:记下 pId 这一段,返回新的起点给下一段。
+        /// Step() 只能包住一个完整调用,而 TryChooseDestination 那种「筛城 →
+        /// 探场地 → 打分」是一条直线,需要在中间插桩。
+        ///
+        /// 关闭诊断时返回 0,配合 pStarted &lt;= 0 的判断整条链自动失效。
+        /// </summary>
+        internal static long Account(string pId, long pStarted)
+        {
+            if (!AncientWarfare3.core.performance.AWDiagnosticsGate.Enabled)
+                return 0L;
+            long now = Stopwatch.GetTimestamp();
+            if (pStarted <= 0L) return now;
+            long elapsed = now - pStarted;
+            if (elapsed < 0L) return now;
+            if (!StepCost.TryGetValue(pId, out long[] entry))
+            {
+                entry = new long[2];
+                StepCost[pId] = entry;
+            }
+
+            entry[0] += elapsed;
+            entry[1]++;
+            return now;
+        }
+
+        /// <summary>接力计时的起点。关闭诊断时返回 0。</summary>
+        internal static long Mark()
+        {
+            return AncientWarfare3.core.performance.AWDiagnosticsGate.Enabled
+                ? Stopwatch.GetTimestamp()
+                : 0L;
+        }
+
         internal static string TakeStepDiagnostics()
         {
             if (StepCost.Count == 0) return "none";
@@ -57,7 +91,7 @@ namespace AncientWarfare3.core.schools
                     ? byTicks
                     : string.CompareOrdinal(left.Key, right.Key);
             });
-            int limit = Math.Min(14, ranked.Count);
+            int limit = Math.Min(18, ranked.Count);
             var parts = new string[limit];
             for (int i = 0; i < limit; i++)
                 parts[i] = ranked[i].Key + ":" +
