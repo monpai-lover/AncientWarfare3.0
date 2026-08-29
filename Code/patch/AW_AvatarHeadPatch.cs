@@ -68,7 +68,7 @@ namespace AncientWarfare3.patch
                 catch { }
                 if (isHeir || activePrince)
                 {
-                    Sprite heir = ActorAnimationLoader.getHeadSpecial(
+                    Sprite heir = SpriteTextureLoader.getSprite(
                         tex.texture_path_base + "heads_heir/head_0");
                     if (heir != null) __result = heir;
                     return;
@@ -83,14 +83,14 @@ namespace AncientWarfare3.patch
                     XiaActorTextureRules.ResolveOfficialHeadPath(rank);
                 if (!string.IsNullOrEmpty(officialHead))
                 {
-                    Sprite official = ActorAnimationLoader.getHeadSpecial(
+                    Sprite official = SpriteTextureLoader.getSprite(
                         tex.texture_path_base + officialHead);
                     if (official != null) __result = official;
                     return;
                 }
                 if (actor.isCityLeader())
                 {
-                    Sprite leader = ActorAnimationLoader.getHeadSpecial(
+                    Sprite leader = SpriteTextureLoader.getSprite(
                         tex.texture_path_base +
                         XiaActorTextureRules.ResolveOfficialHeadPath(
                             OfficialCareerRankRules.MinimumRank));

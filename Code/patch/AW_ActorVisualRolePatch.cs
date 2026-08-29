@@ -360,8 +360,10 @@ namespace AncientWarfare3.patch
             ActorTextureSubAsset textureAsset = pActor.getTextureAsset();
             if (textureAsset == null) return true;
 
-            pActor.cached_sprite_head = ActorAnimationLoader.getHeadSpecial(
+            Sprite head = SpriteTextureLoader.getSprite(
                 textureAsset.texture_path_base + headPath);
+            if (head == null) return false;
+            pActor.cached_sprite_head = head;
             return true;
         }
 

@@ -31,10 +31,12 @@ $requiredFragments = @{
     VisualPatch = @(
         'TryApplyXiaSpecialHead(__instance)',
         'XiaActorTextureRules.ResolveOfficialHeadPath(rank)',
+        'SpriteTextureLoader.getSprite(',
         'heads_king/head_0', 'heads_heir/head_0',
         'heads_warrior/head_')
     AvatarHead = @(
         'XiaActorTextureRules.ResolveOfficialHeadPath(rank)',
+        'SpriteTextureLoader.getSprite(',
         'heads_heir/head_0', 'actor.isCityLeader()')
     Career = @(
         'XiaActorTextureRules.ResolveOfficialTier(previousRank) !=',
@@ -49,6 +51,15 @@ foreach ($entry in $requiredFragments.GetEnumerator()) {
             $failures.Add("$($entry.Key) is missing: $fragment")
         }
     }
+}
+
+$rules = [IO.File]::ReadAllText(
+    (Join-Path $root 'Code\core\presentation\XiaActorTextureRules.cs'))
+if (-not $rules.Contains('"heads_leader/head_"')) {
+    $failures.Add('Official heads must use the heads_leader directory')
+}
+if ($rules.Contains('heads_leaders/')) {
+    $failures.Add('The invalid plural heads_leaders path must not be used')
 }
 
 if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) {
@@ -81,6 +92,26 @@ foreach ($preserved in @(
     'heads_special\head_old_male\head_old_male.png')) {
     if (-not (Test-Path -LiteralPath (Join-Path $xiaRoot $preserved))) {
         $failures.Add("Existing Xia actor resource was deleted: $preserved")
+    }
+}
+
+# ActorAnimationLoader.getHeadSpecial treats its final path segment as a
+# directory. Keep compatibility copies for heads still loaded by vanilla code.
+foreach ($specialHead in @(
+    'heads_king\head_0',
+    'heads_warrior\head_0',
+    'heads_warrior\head_1')) {
+    $flat = Join-Path $xiaRoot ($specialHead + '.png')
+    $nested = Join-Path $xiaRoot (Join-Path $specialHead `
+        ((Split-Path $specialHead -Leaf) + '.png'))
+    if (-not (Test-Path -LiteralPath $flat -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $nested -PathType Leaf)) {
+        $failures.Add("Missing special-head compatibility copy: $specialHead")
+        continue
+    }
+    if ((Get-FileHash -LiteralPath $flat -Algorithm SHA256).Hash -ne
+        (Get-FileHash -LiteralPath $nested -Algorithm SHA256).Hash) {
+        $failures.Add("Special-head compatibility copy differs: $specialHead")
     }
 }
 
