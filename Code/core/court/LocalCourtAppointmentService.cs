@@ -32,18 +32,37 @@ namespace AncientWarfare3.core.court
             int year = Date.getCurrentYear();
             if (pVacancy.Layer == CourtOfficeLayer.County)
             {
-                if (pVacancy.OfficeId != CourtOfficeId.CountyMagistrate ||
-                    pVacancy.CountyId < 0L ||
-                    LoadCountyOfficerIds(pKingdom.id, pCity.data.id)
+                CountyFillDiagnostics.Count("attempt");
+                if (pVacancy.OfficeId != CourtOfficeId.CountyMagistrate)
+                    return CountyFillDiagnostics.Report("bad_office",
+                        CourtVacancyOutcome.Invalid);
+                if (pVacancy.CountyId < 0L)
+                    return CountyFillDiagnostics.Report("bad_county_id",
+                        CourtVacancyOutcome.Invalid);
+                if (LoadCountyOfficerIds(pKingdom.id, pCity.data.id)
                         .Contains(pVacancy.CountyId))
-                    return CourtVacancyOutcome.Invalid;
-                Actor countyCandidate = pSession.Actors
+                    return CountyFillDiagnostics.Report("already_held",
+                        CourtVacancyOutcome.Invalid);
+
+                // 逐级记账,而不是把三个 Where 串起来:候选被清零时必须知道是
+                // 哪一级清零的。旧存档里县令一直显示空缺却永不自动补人,而这条
+                // 链路的每一环单独看都没有针对县的硬阻断,所以只能按级观测。
+                CountyFillDiagnostics.Count("pool",
+                    pSession.Actors.Count);
+                var available = pSession.Actors
                     .Where(actor => pSession.IsAvailable(actor, pVacancy))
+                    .ToList();
+                CountyFillDiagnostics.Count("after_available",
+                    available.Count);
+                var facts = available
                     .Where(actor => actor?.data != null &&
                         CourtManualAppointmentRules.CanUseLayerCandidate(
                             CourtOfficeLayer.County,
                             actor.isCityLeader()) &&
                         CanUseCandidateFacts(actor, pKingdom))
+                    .ToList();
+                CountyFillDiagnostics.Count("after_facts", facts.Count);
+                Actor countyCandidate = facts
                     .Where(actor => CivilServiceQualificationService.
                         CanReceiveFormalCivilAppointment(actor, pKingdom,
                             CourtOfficeLayer.County,
@@ -54,11 +73,14 @@ namespace AncientWarfare3.core.court
                     .ThenBy(actor => actor.data.id)
                     .FirstOrDefault();
                 if (countyCandidate == null)
-                    return CourtVacancyOutcome.NoCandidate;
+                    return CountyFillDiagnostics.Report("no_qualified",
+                        CourtVacancyOutcome.NoCandidate);
                 return CourtService.TryAssignCountyMagistrate(countyCandidate,
                         pKingdom, pCity, pVacancy.CountyId, true)
-                    ? CourtVacancyOutcome.Filled
-                    : CourtVacancyOutcome.TechnicalFailure;
+                    ? CountyFillDiagnostics.Report("filled",
+                        CourtVacancyOutcome.Filled)
+                    : CountyFillDiagnostics.Report("assign_failed",
+                        CourtVacancyOutcome.TechnicalFailure);
             }
 
             if (pVacancy.Layer != CourtOfficeLayer.City ||
@@ -123,6 +145,21 @@ namespace AncientWarfare3.core.court
                     pIsLocalChief: officeId == CourtService.ResolveCityOffice(
                         pKingdom, pCity)));
             }
+            result.AddRange(DiscoverCountyVacancies(pKingdom, pCity));
+            return result;
+        }
+
+        /// <summary>
+        /// 只找县级空缺。抽出来是为了让轮转扫描能单独调用 —— 它不需要城内席位
+        /// 那一段(那段要额外一次 TryLoadActive 查询和容量计算,而城内席位本来
+        /// 就有多条发现路径)。
+        /// </summary>
+        internal static IReadOnlyList<CourtVacancyKey> DiscoverCountyVacancies(
+            Kingdom pKingdom, City pCity)
+        {
+            var result = new List<CourtVacancyKey>();
+            if (pKingdom?.data == null || pCity?.data == null ||
+                pCity.isRekt() || pCity.kingdom != pKingdom) return result;
             HashSet<long> occupiedCounties = LoadCountyOfficerIds(
                 pKingdom.id, pCity.data.id);
             foreach (CountyRecord county in CountyAdministrationService.
@@ -155,8 +192,13 @@ namespace AncientWarfare3.core.court
                 command.Parameters.AddWithValue("@office",
                     CourtOfficeId.CountyMagistrate);
                 using SQLiteDataReader reader = command.ExecuteReader();
-                while (reader.Read() && !reader.IsDBNull(0))
+                // IsDBNull 原本写在循环条件里:遇到一行 COUNTY_ID 为 NULL 就整
+                // 个中断,后面的行全被静默丢掉,已占用的县会被误判成空缺。
+                while (reader.Read())
+                {
+                    if (reader.IsDBNull(0)) continue;
                     result.Add(Convert.ToInt64(reader.GetValue(0)));
+                }
             }
             catch { }
             return result;

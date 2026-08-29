@@ -225,6 +225,12 @@ namespace AncientWarfare3.core.multiplayer
                     CityReservePoolService.EndWorldLoadRestore();
                     DeJureRegionStore.RepairAfterWorldLoaded();
                     CountyAdministrationStore.RepairAfterWorldLoaded();
+                    // 必须紧跟在县级重建之后:restore 管线里的
+                    // court_vacancies 阶段跑在县被重建出来之前,那一遍
+                    // 发现不到靠 zone 推导出来的县。之后不再扫描,
+                    // 席位空出来由 RegisterVacancy 事件驱动补缺。
+                    CourtVacancyReconciliationService
+                        .InitializeCountyVacancies();
                     SocialIdentityMigrationService.RepairAfterWorldLoaded();
                     return;
                 }
@@ -239,6 +245,12 @@ namespace AncientWarfare3.core.multiplayer
                             CityReservePoolService.EndWorldLoadRestore();
                             DeJureRegionStore.RepairAfterWorldLoaded();
                             CountyAdministrationStore.RepairAfterWorldLoaded();
+                            // 必须紧跟在县级重建之后:restore 管线里的
+                            // court_vacancies 阶段跑在县被重建出来之前,那一遍
+                            // 发现不到靠 zone 推导出来的县。之后不再扫描,
+                            // 席位空出来由 RegisterVacancy 事件驱动补缺。
+                            CourtVacancyReconciliationService
+                                .InitializeCountyVacancies();
                             SocialIdentityMigrationService.RepairAfterWorldLoaded();
                             return;
                         }
@@ -259,6 +271,12 @@ namespace AncientWarfare3.core.multiplayer
                 CityReservePoolService.EndWorldLoadRestore();
                 DeJureRegionStore.RepairAfterWorldLoaded();
                 CountyAdministrationStore.RepairAfterWorldLoaded();
+                // 必须紧跟在县级重建之后:restore 管线里的
+                // court_vacancies 阶段跑在县被重建出来之前,那一遍
+                // 发现不到靠 zone 推导出来的县。之后不再扫描,
+                // 席位空出来由 RegisterVacancy 事件驱动补缺。
+                CourtVacancyReconciliationService
+                    .InitializeCountyVacancies();
                 SocialIdentityMigrationService.RepairAfterWorldLoaded();
                 return;
             }
@@ -273,6 +291,12 @@ namespace AncientWarfare3.core.multiplayer
                 CityReservePoolService.EndWorldLoadRestore();
                 DeJureRegionStore.RepairAfterWorldLoaded();
                 CountyAdministrationStore.RepairAfterWorldLoaded();
+                // 必须紧跟在县级重建之后:restore 管线里的
+                // court_vacancies 阶段跑在县被重建出来之前,那一遍
+                // 发现不到靠 zone 推导出来的县。之后不再扫描,
+                // 席位空出来由 RegisterVacancy 事件驱动补缺。
+                CourtVacancyReconciliationService
+                    .InitializeCountyVacancies();
                 SocialIdentityMigrationService.RepairAfterWorldLoaded();
                 return;
             }
@@ -300,6 +324,12 @@ namespace AncientWarfare3.core.multiplayer
             CityReservePoolService.EndWorldLoadRestore();
             DeJureRegionStore.RepairAfterWorldLoaded();
             CountyAdministrationStore.RepairAfterWorldLoaded();
+            // 必须紧跟在县级重建之后:restore 管线里的
+            // court_vacancies 阶段跑在县被重建出来之前,那一遍
+            // 发现不到靠 zone 推导出来的县。之后不再扫描,
+            // 席位空出来由 RegisterVacancy 事件驱动补缺。
+            CourtVacancyReconciliationService
+                .InitializeCountyVacancies();
             SocialIdentityMigrationService.RepairAfterWorldLoaded();
         }
 

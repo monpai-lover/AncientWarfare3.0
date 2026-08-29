@@ -16,6 +16,47 @@ namespace AncientWarfare3.core.court
 
         private static readonly Dictionary<long, RetryTicket> RetryTickets =
             new Dictionary<long, RetryTicket>();
+        /// <summary>
+        /// 载入存档后的县令空缺初始化:走一遍所有城市,把缺人的县令席位标记为
+        /// 空缺并请求补缺。之后不再扫描 —— 席位空出来由事件驱动(officer 离任
+        /// 与死亡都会走 RegisterVacancy(OfficialCareerPrior),该重载已处理
+        /// county 层),空一个补一个。
+        ///
+        /// 必须在 CountyAdministrationStore.RepairAfterWorldLoaded 之后调用。
+        /// 原来的问题正是顺序:AW3RuntimeRestorePipeline 的 court_vacancies 阶段
+        /// 跑在管线内部,而县级重建在管线之后,于是「发现县令空缺」发生在「县被
+        /// 重建出来」之前 —— 存档里已有的县能被找到,靠 zone 重新推导出来的县
+        /// 则永远登记不上。
+        /// </summary>
+        internal static void InitializeCountyVacancies()
+        {
+            List<City> cities;
+            try { cities = World.world?.cities?.ToList(); }
+            catch { return; }
+            if (cities == null || cities.Count == 0) return;
+
+            var touched = new HashSet<long>();
+            for (int index = 0; index < cities.Count; index++)
+            {
+                City city = cities[index];
+                Kingdom kingdom = city?.kingdom;
+                if (city?.data == null || city.isRekt() ||
+                    kingdom?.data == null || kingdom.isRekt() ||
+                    kingdom.isNeutral()) continue;
+                IReadOnlyList<CourtVacancyKey> vacancies =
+                    LocalCourtAppointmentService.DiscoverCountyVacancies(
+                        kingdom, city);
+                if (vacancies.Count == 0) continue;
+                for (int i = 0; i < vacancies.Count; i++)
+                    CourtVacancyRegistry.Register(vacancies[i]);
+                touched.Add(kingdom.id);
+            }
+
+            // 每个王国只请求一次:Request 是按王国合并的,循环里逐城请求只会
+            // 白跑一堆入队。
+            foreach (long kingdomId in touched)
+                Request(FindKingdom(kingdomId));
+        }
 
         internal static void RegisterVacancy(CourtVacancyKey pKey,
             int pMissingSeats = 1)

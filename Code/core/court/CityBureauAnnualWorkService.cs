@@ -139,6 +139,13 @@ namespace AncientWarfare3.core.court
                     Enqueue(pKingdomId);
                     return;
                 }
+                // hasVacancy 原本被 out 出来就丢掉了:年度扫描把空缺登记进
+                // CourtVacancyRegistry,却从不请求补缺,于是这些条目只能等
+                // 别的事件(载入重建、模板改动、officer 离任)顺带触发。县令
+                // 尤其吃亏 —— 它只在这条年度路径和少数事件里被发现。
+                // Request 是合并入队的延迟工作,重复调用不额外花钱。
+                if (hasVacancy)
+                    CourtVacancyReconciliationService.Request(kingdom);
                 work.CompletedCityIds.Add(city.data.id);
             }
             Enqueue(pKingdomId);

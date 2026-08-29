@@ -66,7 +66,18 @@ internal static class CourtVacancySourceGuardTests
         Contains(coordinator, "NotBeforeFrame",
             "technical retries must be delayed to a later frame");
         Contains(authority, "DrainDueRetryTickets",
-            "authority cycle must drain court retry tickets");
+             "authority cycle must drain court retry tickets");
+        // 县令空缺按「载入时一次性初始化 + 之后纯事件驱动」发现,不做周期扫描。
+        // 之前挂在权威周期上的轮转扫描已撤除:它属于扫描维护,和这套设计相冲。
+        Contains(coordinator, "InitializeCountyVacancies",
+             "county magistrate vacancies must be initialized once per load");
+        False(authority.Contains("SweepCountyVacancies",
+                StringComparison.Ordinal),
+             "county vacancies cannot be rediscovered by periodic scanning");
+        Contains(local, "DiscoverCountyVacancies",
+             "local court must expose a county-only vacancy discovery path");
+        Contains(cityBureau, "CourtVacancyReconciliationService.Request(kingdom)",
+             "annual city bureau must wake vacancy reconciliation after discovery");
         Contains(court, "if (cleanupPrior != null)",
             "reassignment must publish the released office after commit");
         Contains(court, "RegisterVacancy(cleanupPrior)",
