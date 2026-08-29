@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using AncientWarfare3.core.asyncwork;
 
 namespace AncientWarfare3.core.pathfinding
@@ -28,6 +29,9 @@ namespace AncientWarfare3.core.pathfinding
         private long _topologySourceRevision;
         private bool _topologyBuildScheduled;
         private bool _topologyDirty;
+        // 无异步 traversal worker 时,全图拓扑重建改在这上面跑,由
+        // PollBackgroundTopologyBuild 在主线程收口。见 ScheduleTopologyBuild。
+        private Task<AWTraversalBuildResult> _topologyBuildTask;
 
         public int GenerationId => _current?.Id ?? -1;
         public long SourceRevision => _sourceRevision;
@@ -247,9 +251,36 @@ namespace AncientWarfare3.core.pathfinding
         public void ProcessPendingBuild()
         {
             AssertMainThread();
+            if (PollBackgroundTopologyBuild()) return;
             if (!_topologyDirty || _topologyBuildScheduled ||
                 _dirtyTiles.Count > 0) return;
             ScheduleTopologyBuild();
+        }
+
+        /// <summary>
+        /// 后台拓扑重建的主线程收口。返回 true 表示还在算,本帧不要再排一个。
+        ///
+        /// 实测这条路径造成过单帧 211.78ms(其中 sched_aw3_authority 占
+        /// 207.796ms),对应 async_traversal_sync_fallback 从 0 变 1 —— 一次全图
+        /// 拓扑重建同步跑在了权威帧上。
+        /// </summary>
+        private bool PollBackgroundTopologyBuild()
+        {
+            Task<AWTraversalBuildResult> task = _topologyBuildTask;
+            if (task == null) return false;
+            if (!task.IsCompleted) return true;
+            _topologyBuildTask = null;
+            if (task.IsFaulted || task.IsCanceled)
+            {
+                HandleTopologyBuildFault(task.Exception);
+                return false;
+            }
+
+            // PublishTopologyBuild 会核对 WorldGeneration / BaseGenerationId /
+            // SourceRevision,期间地形若又变过就按 stale 丢弃并复位
+            // _topologyBuildScheduled,下一帧自然重排。
+            PublishTopologyBuild(task.Result);
+            return false;
         }
 
         private int ProcessDirtyTiles(int pTileBudget)
@@ -406,6 +437,9 @@ namespace AncientWarfare3.core.pathfinding
             _topologySourceRevision = 0L;
             _topologyBuildScheduled = false;
             _topologyDirty = false;
+            // 只丢引用不等待:那个任务只读自己那份脱离的快照副本,算完没人接
+            // 就自然消失;世代号也已经作废,即便被收口也会按 stale 丢掉。
+            _topologyBuildTask = null;
         }
 
         private AWTraversalBuildResult BuildInitialSnapshot()
@@ -502,15 +536,38 @@ namespace AncientWarfare3.core.pathfinding
                 _topologyBuildScheduled = true;
                 return;
             }
-            execution.Dispose();
             if (!AWAsyncRuntime.TraversalEnabled)
             {
+                // 这里原本是就地 Execute —— 全图海洋连通性 + 区域拓扑,实测一次
+                // 205ms,直接把权威帧撑爆。改成后台算、主线程发布。
+                //
+                // 可以安全离线程:构造函数已经把全图 chunk 快照复制成一份脱离
+                // 实时状态的数组,而 AWOceanConnectivityRules.Apply 与
+                // AWRegionTopologySnapshot.Build 只读这份数组(不碰 World /
+                // Unity / 缓存自身状态)。发布仍然只在主线程做,且过期校验原样
+                // 保留,所以最坏情况只是白算一次。
+                //
+                // 复用上面那个 execution,不再 Dispose 掉重建一个:它的构造函数
+                // 要把全图每个 chunk 的快照整份复制一遍,实测单次 26~28MB。
+                // TrySchedule 在没有 compute worker 时必然失败,所以原来那对
+                // 「Dispose + 重新 new」等于每次拓扑重建都白分配一份全图副本再
+                // 扔掉。调度失败时 request 里的闭包永远不会被调用,execution 也
+                // 没被 Execute 过(Execute 才会把 _chunks 取空),所以此处完好可用。
                 _diagnostics?.OnTraversalSyncFallback();
-                var synchronous = new AWTraversalTopologyBuildExecution(
-                    _current, worldGeneration, _current.Id, revision);
-                PublishTopologyBuild((AWTraversalBuildResult)
-                    synchronous.Execute(CancellationToken.None));
+                _topologyBuildScheduled = true;
+                _topologyBuildTask = Task.Run(() =>
+                {
+                    try
+                    {
+                        return (AWTraversalBuildResult)execution.Execute(
+                            CancellationToken.None);
+                    }
+                    finally { execution.Dispose(); }
+                });
+                return;
             }
+
+            execution.Dispose();
         }
 
         private void HandleTopologyBuildFault(Exception pError)
