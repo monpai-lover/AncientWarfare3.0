@@ -39,11 +39,13 @@ namespace AncientWarfare3.core.atlas
             IEnumerable<KingdomAtlasVassalRelationSnapshot> pRelations,
             long pKingdomId)
         {
+            HashSet<long> scope = BuildAtlasScopeKingdomIds(pRelations,
+                pKingdomId);
             var descriptors = new List<KingdomAtlasNodeDescriptor>();
             foreach (KingdomAtlasHistoryEvent row in OrderAndDeduplicate(pEvents))
             {
-                if (row.OldKingdomId != pKingdomId &&
-                    row.NewKingdomId != pKingdomId) continue;
+                if (!scope.Contains(row.OldKingdomId) &&
+                    !scope.Contains(row.NewKingdomId)) continue;
                 descriptors.Add(new KingdomAtlasNodeDescriptor
                 {
                     NodeKind = KingdomAtlasNodeKind.City,
@@ -61,8 +63,9 @@ namespace AncientWarfare3.core.atlas
                      pRelations ?? Enumerable.Empty<KingdomAtlasVassalRelationSnapshot>())
             {
                 if (!IsValidRelationRecord(relation) ||
-                    relation.VassalId != pKingdomId &&
-                    relation.SuzerainId != pKingdomId) continue;
+                    (relation.VassalId != pKingdomId &&
+                     relation.SuzerainId != pKingdomId &&
+                     !scope.Contains(relation.SuzerainId))) continue;
                 AddRelationDescriptor(descriptors, relationKeys, relation,
                     KingdomAtlasNodeKind.VassalStart, relation.StartTime);
                 if (relation.EndTime >= relation.StartTime)
@@ -73,6 +76,28 @@ namespace AncientWarfare3.core.atlas
             return descriptors.OrderBy(pDescriptor => pDescriptor.WorldTime)
                 .ThenBy(pDescriptor => (int)pDescriptor.NodeKind)
                 .ThenBy(pDescriptor => pDescriptor.SourceId).ToList();
+        }
+
+        private static HashSet<long> BuildAtlasScopeKingdomIds(
+            IEnumerable<KingdomAtlasVassalRelationSnapshot> pRelations,
+            long pKingdomId)
+        {
+            var result = new HashSet<long>();
+            if (pKingdomId < 0L) return result;
+            result.Add(pKingdomId);
+            bool changed;
+            do
+            {
+                changed = false;
+                foreach (KingdomAtlasVassalRelationSnapshot relation in
+                         pRelations ?? Enumerable.Empty<KingdomAtlasVassalRelationSnapshot>())
+                {
+                    if (!IsValidRelationRecord(relation) ||
+                        !result.Contains(relation.SuzerainId)) continue;
+                    if (result.Add(relation.VassalId)) changed = true;
+                }
+            } while (changed);
+            return result;
         }
 
         internal static IReadOnlyList<KingdomAtlasVassalRelationSnapshot>
@@ -437,10 +462,20 @@ namespace AncientWarfare3.core.atlas
             IReadOnlyList<KingdomAtlasVassalRelationSnapshot> pRelations,
             double pWorldTime)
         {
+            return BuildVisibleOwnerIds(pParticipants, pRelations,
+                pWorldTime, -1L);
+        }
+
+        internal static HashSet<long> BuildVisibleOwnerIds(
+            IEnumerable<long> pParticipants,
+            IReadOnlyList<KingdomAtlasVassalRelationSnapshot> pRelations,
+            double pWorldTime, long pScopeKingdomId)
+        {
             var result = new HashSet<long>();
             if (pParticipants != null)
                 foreach (long participant in pParticipants)
                     if (participant >= 0L) result.Add(participant);
+            if (pScopeKingdomId >= 0L) result.Add(pScopeKingdomId);
             bool changed;
             do
             {

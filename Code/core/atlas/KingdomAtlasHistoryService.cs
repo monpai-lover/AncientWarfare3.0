@@ -63,6 +63,7 @@ namespace AncientWarfare3.core.atlas
                     pPair => pPair.Key, pPair => pPair.Value.Color);
                 var node = new KingdomAtlasNode
                 {
+                    KingdomId = pKingdomId,
                     NodeKind = descriptor.NodeKind,
                     SourceId = descriptor.SourceId,
                     StableKey = descriptor.StableKey,

@@ -14,6 +14,7 @@ internal static class KingdomAtlasRulesTests
     {
         AtlasNodeDescriptorsHaveStableIdentityAndOrdering();
         AtlasRelationDescriptorsFilterAndSnapshotPersistedRelations();
+        NestedVassalRelationsAreIncludedInRootAtlasScope();
         SameTimeRelationsUseDeterministicOrderAndSnapshots();
         LaterActiveRelationSuppliesHistoricalIdentity();
         ChronicleDisplayReplacesPunctuationWithSpaces();
@@ -319,6 +320,45 @@ internal static class KingdomAtlasRulesTests
             KingdomAtlasRules.BuildNodeEvent(descriptors[2], 13, "十三年");
         Equal("vassal_end", endEvent.EventType,
             "relation end event type");
+    }
+
+    private static void NestedVassalRelationsAreIncludedInRootAtlasScope()
+    {
+        var direct = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 21, VassalId = 20, SuzerainId = 10,
+            StartTime = 2d, EndTime = -1d
+        };
+        var nested = new KingdomAtlasVassalRelationSnapshot
+        {
+            RelationId = 22, VassalId = 30, SuzerainId = 20,
+            StartTime = 4d, EndTime = -1d
+        };
+        var nestedCity = new KingdomAtlasHistoryEvent
+        {
+            EventId = 23, WorldTime = 5d, CityId = 301,
+            EventType = "city_found", NewKingdomId = 30
+        };
+
+        List<KingdomAtlasNodeDescriptor> descriptors =
+            KingdomAtlasRules.BuildNodeDescriptors(
+                new[] { nestedCity }, new[] { direct, nested }, 10L);
+
+        True(descriptors.Any(pDescriptor =>
+                pDescriptor.StableKey == "vassal_start:21"),
+            "root atlas includes direct vassal relation");
+        True(descriptors.Any(pDescriptor =>
+                pDescriptor.StableKey == "vassal_start:22"),
+            "root atlas includes nested vassal relation");
+        True(descriptors.Any(pDescriptor =>
+                pDescriptor.StableKey == "city:23"),
+            "root atlas includes nested vassal city event");
+
+        HashSet<long> visible = KingdomAtlasRules.BuildVisibleOwnerIds(
+            new[] { 30L }, new[] { direct, nested }, 5d, 10L);
+        True(visible.Contains(10L) && visible.Contains(20L) &&
+                visible.Contains(30L),
+            "nested vassal node keeps the selected root territory scope");
     }
 
     private static void SameTimeRelationsUseDeterministicOrderAndSnapshots()

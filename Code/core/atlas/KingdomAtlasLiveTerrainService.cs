@@ -160,7 +160,8 @@ namespace AncientWarfare3.core.atlas
             return KingdomAtlasRules.BuildVisibleOwnerIds(
                 new[] { pNode?.Event?.OldKingdomId ?? -1L,
                         pNode?.Event?.NewKingdomId ?? -1L },
-                pNode?.VassalRelations, pNode?.Event?.WorldTime ?? 0d);
+                pNode?.VassalRelations, pNode?.Event?.WorldTime ?? 0d,
+                pNode?.KingdomId ?? -1L);
         }
 
         private static bool TryGetVisibleHistoricalOwner(KingdomAtlasNode pNode,

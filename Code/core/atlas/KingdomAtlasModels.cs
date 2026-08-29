@@ -131,6 +131,7 @@ namespace AncientWarfare3.core.atlas
 
     internal sealed class KingdomAtlasNode
     {
+        public long KingdomId { get; set; } = -1L;
         public KingdomAtlasNodeKind NodeKind { get; set; }
         public long SourceId { get; set; } = -1L;
         public string StableKey { get; set; } = "";
