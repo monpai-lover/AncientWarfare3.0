@@ -14,10 +14,42 @@ namespace AncientWarfare3.patch
         private const string CAPITAL_PATH =
             "buildings/civ_main/Xia_MandateCapital/";
 
-        private static readonly Dictionary<string, CapitalSpriteCatalog>
-            Catalogs = new Dictionary<string, CapitalSpriteCatalog>();
-        private static readonly HashSet<string> MissingCatalogs =
-            new HashSet<string>();
+        /// <summary>
+        ///     已发布的图集快照。**只读**,发布后永不修改 —— 换目录时整份替换。
+        ///
+        ///     vanilla 的 <c>BuildingManager.precalculateRenderDataParallel</c> 在
+        ///     <c>Parallel.For</c> 里调 <c>Building.calculateMainSprite</c>,所以我们的
+        ///     Postfix 跑在**工作线程**上。原来这里是一个普通 Dictionary,多个工作
+        ///     线程同时 miss 就会并发写它,把内部桶数组撕开,报成
+        ///     <c>Dictionary.TryInsert</c> 里的 NullReferenceException。
+        ///
+        ///     值为 null 表示「查过,没有这套贴图」,与「没查过」区分开,免得每帧
+        ///     重新排队。
+        /// </summary>
+        private static volatile Dictionary<string, CapitalSpriteCatalog>
+            _published = new Dictionary<string, CapitalSpriteCatalog>(
+                StringComparer.Ordinal);
+
+        private static readonly object PendingGate = new object();
+        private static readonly HashSet<string> Pending =
+            new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>
+        ///     在主线程上把排队的图集建出来并发布。
+        ///
+        ///     必须在主线程:图集构造要调 <c>SpriteTextureLoader.getSpriteList</c>
+        ///     (内部是 <c>Resources.LoadAll</c>,还写它自己的无锁静态缓存)和
+        ///     <c>DynamicSpriteCreator.createBuildingShadow</c>(造纹理并写进共享
+        ///     图集)—— 这两个都是 Unity 主线程专用,在工作线程上调是未定义行为。
+        ///     挂在并行渲染预计算之前,让工作线程这一帧就能读到。
+        /// </summary>
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(BuildingManager),
+            "precalculateRenderDataParallel")]
+        public static void PrecalculateRenderDataParallel_Prefix()
+        {
+            DrainPendingCatalogs();
+        }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Building), nameof(Building.calculateMainSprite))]
@@ -45,31 +77,83 @@ namespace AncientWarfare3.patch
                 __result = capitalSprite;
         }
 
+        /// <summary>
+        ///     只读查表。可能跑在工作线程上,所以这里不加载、不建图集、不写任何
+        ///     共享状态 —— 没命中就排队,这一帧照原样渲染,下一帧生效。
+        /// </summary>
         private static bool TryGetCatalog(BuildingAsset pAsset,
             out CapitalSpriteCatalog pCatalog)
         {
+            pCatalog = null;
             string id = pAsset.id;
-            if (Catalogs.TryGetValue(id, out pCatalog)) return true;
-            if (MissingCatalogs.Contains(id)) return false;
+            if (string.IsNullOrEmpty(id)) return false;
 
-            Sprite[] sprites = SpriteTextureLoader.getSpriteList(
-                CAPITAL_PATH + id, true);
-            if (sprites == null || sprites.Length == 0)
+            Dictionary<string, CapitalSpriteCatalog> published = _published;
+            if (published.TryGetValue(id, out pCatalog)) return pCatalog != null;
+
+            lock (PendingGate) Pending.Add(id);
+            return false;
+        }
+
+        private static void DrainPendingCatalogs()
+        {
+            string[] requested;
+            lock (PendingGate)
             {
-                MissingCatalogs.Add(id);
-                pCatalog = null;
-                return false;
+                if (Pending.Count == 0) return;
+                requested = new string[Pending.Count];
+                Pending.CopyTo(requested);
+                Pending.Clear();
             }
 
-            pCatalog = new CapitalSpriteCatalog(pAsset, sprites);
-            if (pCatalog.IsEmpty)
+            Dictionary<string, CapitalSpriteCatalog> published = _published;
+            var next = new Dictionary<string, CapitalSpriteCatalog>(published,
+                StringComparer.Ordinal);
+            bool changed = false;
+            for (int index = 0; index < requested.Length; index++)
             {
-                MissingCatalogs.Add(id);
-                pCatalog = null;
-                return false;
+                string id = requested[index];
+                if (string.IsNullOrEmpty(id) || next.ContainsKey(id)) continue;
+                next[id] = BuildCatalog(id);
+                changed = true;
             }
-            Catalogs[id] = pCatalog;
-            return true;
+            // 整份替换。读者要么看到旧表要么看到新表,两份都是构造完整的,
+            // 不会读到半建好的桶数组。
+            if (changed) _published = next;
+        }
+
+        private static CapitalSpriteCatalog BuildCatalog(string pId)
+        {
+            BuildingAsset asset;
+            try { asset = AssetManager.buildings.get(pId); }
+            catch { asset = null; }
+            if (asset == null) return null;
+
+            Sprite[] sprites;
+            try
+            {
+                sprites = SpriteTextureLoader.getSpriteList(
+                    CAPITAL_PATH + pId, true);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Mandate capital sprites failed for " +
+                                    pId + ": " + error.Message);
+                return null;
+            }
+            if (sprites == null || sprites.Length == 0) return null;
+
+            try
+            {
+                var catalog = new CapitalSpriteCatalog(asset, sprites);
+                return catalog.IsEmpty ? null : catalog;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Mandate capital catalog failed for " +
+                                    pId + ": " + error.Message);
+                return null;
+            }
         }
 
         private sealed class CapitalSpriteCatalog

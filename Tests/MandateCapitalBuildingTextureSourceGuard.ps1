@@ -31,6 +31,40 @@ if ($source.Contains('asset.main_path =')) {
     throw 'Mandate capital textures must not mutate the shared BuildingAsset path.'
 }
 
+# Threading contract. Vanilla BuildingManager.precalculateRenderDataParallel
+# calls Building.calculateMainSprite inside Parallel.For, so this Postfix runs
+# on worker threads. It used to write a plain static Dictionary from there
+# (observed tearing into a NullReferenceException inside Dictionary.TryInsert,
+# which stopped the scheduler and paused the game) and it also called
+# Resources.LoadAll and texture creation off the main thread.
+$threadRequired = @(
+    'private static volatile Dictionary<string, CapitalSpriteCatalog>',
+    'HarmonyPatch(typeof(BuildingManager),',
+    '"precalculateRenderDataParallel"'
+)
+foreach ($fragment in $threadRequired) {
+    if (-not $source.Contains($fragment)) {
+        throw "Mandate capital sprite patch lost its threading contract: $fragment"
+    }
+}
+
+$lookupStart = $source.IndexOf('private static bool TryGetCatalog(')
+$lookupEnd = $source.IndexOf('private static void DrainPendingCatalogs(',
+    $lookupStart)
+if ($lookupStart -lt 0 -or $lookupEnd -le $lookupStart) {
+    throw 'Mandate capital catalog lookup boundary cannot be located.'
+}
+$lookup = $source.Substring($lookupStart, $lookupEnd - $lookupStart)
+foreach ($forbidden in @(
+    'SpriteTextureLoader.getSpriteList',
+    'new CapitalSpriteCatalog(',
+    'DynamicSpriteCreator.'
+)) {
+    if ($lookup.Contains($forbidden)) {
+        throw "Worker-thread catalog lookup must not call $forbidden; it is main-thread only."
+    }
+}
+
 $expectedDocksMainSprites = @(
     'main_0.png', 'main_0_0.png', 'main_0_1.png', 'main_0_2.png',
     'main_0_3.png', 'main_0_4.png', 'main_0_5.png', 'main_0_6.png',
