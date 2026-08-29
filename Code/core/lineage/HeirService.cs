@@ -949,6 +949,14 @@ namespace AncientWarfare3.core.lineage
             double collateralBirth = 0;
             bool collateralAdult = false;
 
+            // 国王的父系祖先表在整个循环里是不变的,建一次重复用。原来是对每个
+            // 候选人都调一次 NearestCommonAgnaticAncestor,而那个方法内部会新建
+            // 一个 Dictionary 并把国王整条父系链重走一遍 —— 同一张表被重建了
+            // N 遍。实测 succession:reconcile_heir 单次 60.9ms,占
+            // annual_succession 的 99.8%,而该阶段又是权威周期里最大的单项。
+            var kingAncestry =
+                new SuccessionRelationshipIndex.AgnaticAncestorDepths();
+            kingAncestry.Reset(kingId);
             foreach (Actor cand in CollectSuccessionCandidatePool(pKingdom,
                          king, kingId))
             {
@@ -958,8 +966,7 @@ namespace AncientWarfare3.core.lineage
 
                 // 同源判定:与国王的最近共同父系祖先(纯 parent 记录,不看 LINEAGE_ID)。
                 // 姓氏合流后姓辨识失效,故按"同源"而非"同姓"判亲缘;无共同父系祖先 = 非同源 → 排除。
-                long anc = SuccessionRelationshipIndex.
-                    NearestCommonAgnaticAncestor(kingId, candId,
+                long anc = kingAncestry.NearestCommon(candId,
                     out int kingDepth, out int candDepth);
                 if (anc < 0) continue;                 // 非同源 → 严禁入选(不会抓不相干的人)
 

@@ -71,6 +71,73 @@ namespace AncientWarfare3.core.lineage
                 out long fatherId) ? fatherId : -1L;
         }
 
+        /// <summary>
+        /// 某个基准 actor 的父系祖先深度表(本人 = 0)。
+        ///
+        /// 一个基准要和一整池候选人逐个比亲缘时,这张表是不变的。原来
+        /// NearestCommonAgnaticAncestor 每次调用都要新建一个 Dictionary 并把
+        /// 基准的整条父系链(最多 96 层)重走一遍 —— HeirService.FindHeir 对候选池
+        /// 里每个人都调一次、kingId 始终相同,等于把同一张表重建了 N 遍。实测
+        /// succession:reconcile_heir 单次 60.9ms、占 annual_succession 的 99.8%。
+        ///
+        /// 由调用方持有、串行使用,所以第二段游走的去重集合也挂在这里复用,
+        /// 不再每次分配。不是共享全局状态。
+        /// </summary>
+        internal sealed class AgnaticAncestorDepths
+        {
+            private readonly Dictionary<long, int> _depths =
+                new Dictionary<long, int>();
+            private readonly HashSet<long> _scratch = new HashSet<long>();
+
+            internal long RootId { get; private set; } = -1L;
+            internal bool IsUsable => RootId >= 0L;
+
+            internal void Reset(long pRootId)
+            {
+                _depths.Clear();
+                RootId = -1L;
+                if (!State.IsReady || pRootId < 0L) return;
+                RootId = pRootId;
+                long current = pRootId;
+                for (int depth = 0; depth <= 96 && current >= 0L; depth++)
+                {
+                    if (_depths.ContainsKey(current)) break;
+                    _depths.Add(current, depth);
+                    long father = GetFatherId(current);
+                    if (father < 0L || father == current) break;
+                    current = father;
+                }
+            }
+
+            internal long NearestCommon(long pSecondId, out int pRootDepth,
+                out int pSecondDepth)
+            {
+                pRootDepth = -1;
+                pSecondDepth = -1;
+                if (!IsUsable || pSecondId < 0L) return -1L;
+                _scratch.Clear();
+                long current = pSecondId;
+                for (int depth = 0; depth <= 96 && current >= 0L; depth++)
+                {
+                    if (_depths.TryGetValue(current, out int rootDepth))
+                    {
+                        pRootDepth = rootDepth;
+                        pSecondDepth = depth;
+                        return current;
+                    }
+                    if (!_scratch.Add(current)) break;
+                    long father = GetFatherId(current);
+                    if (father < 0L || father == current) break;
+                    current = father;
+                }
+                return -1L;
+            }
+        }
+
+        /// <summary>
+        /// 单次比较。基准侧的祖先表用完就丢 —— 循环里请改用
+        /// <see cref="AgnaticAncestorDepths"/>,把基准表提到循环外面。
+        /// </summary>
         internal static long NearestCommonAgnaticAncestor(long pFirstId,
             long pSecondId, out int pFirstDepth, out int pSecondDepth)
         {
@@ -78,33 +145,10 @@ namespace AncientWarfare3.core.lineage
             pSecondDepth = -1;
             if (!State.IsReady || pFirstId < 0L || pSecondId < 0L)
                 return -1L;
-            var firstDepths = new Dictionary<long, int>();
-            long current = pFirstId;
-            for (int depth = 0; depth <= 96 && current >= 0L; depth++)
-            {
-                if (firstDepths.ContainsKey(current)) break;
-                firstDepths.Add(current, depth);
-                long father = GetFatherId(current);
-                if (father < 0L || father == current) break;
-                current = father;
-            }
-
-            var visited = new HashSet<long>();
-            current = pSecondId;
-            for (int depth = 0; depth <= 96 && current >= 0L; depth++)
-            {
-                if (firstDepths.TryGetValue(current, out int firstDepth))
-                {
-                    pFirstDepth = firstDepth;
-                    pSecondDepth = depth;
-                    return current;
-                }
-                if (!visited.Add(current)) break;
-                long father = GetFatherId(current);
-                if (father < 0L || father == current) break;
-                current = father;
-            }
-            return -1L;
+            var depths = new AgnaticAncestorDepths();
+            depths.Reset(pFirstId);
+            return depths.NearestCommon(pSecondId, out pFirstDepth,
+                out pSecondDepth);
         }
 
         internal static bool IsAgnaticDescendant(long pActorId,
