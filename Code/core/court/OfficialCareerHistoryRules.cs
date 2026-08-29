@@ -67,7 +67,7 @@ namespace AncientWarfare3.core.court
                     Math.Min(newer.StartYear, older.StartYear), newer.EndYear,
                     newer.IsCurrent, newer.EndReason, newer.AppointedTime,
                     newer.KingdomName, newer.CityName, newer.RankId,
-                    newer.Grade);
+                    newer.Grade, newer.CountyId);
             }
             return result;
         }
@@ -79,6 +79,7 @@ namespace AncientWarfare3.core.court
                 pNewer.KingdomId != pOlder.KingdomId ||
                 pNewer.ActorId != pOlder.ActorId ||
                 pNewer.CityId != pOlder.CityId ||
+                pNewer.CountyId != pOlder.CountyId ||
                 pNewer.Layer != pOlder.Layer ||
                 pNewer.OfficeId != pOlder.OfficeId)
                 return false;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui.components;
@@ -21,6 +22,7 @@ namespace AncientWarfare3.ui.windows
 
         private static long _kingdomId = -1L;
         private static long _cityId = -1L;
+        private static long _countyId = -1L;
         private static string _officeLayer = "";
         private static string _officeId = "";
 
@@ -36,12 +38,13 @@ namespace AncientWarfare3.ui.windows
         private RectTransform _historyContent;
 
         internal static void Open(long pKingdomId, long pCityId,
-            string pOfficeLayer, string pOfficeId)
+            string pOfficeLayer, string pOfficeId, long pCountyId = -1L)
         {
             if (pKingdomId < 0L || string.IsNullOrWhiteSpace(pOfficeLayer) ||
                 string.IsNullOrWhiteSpace(pOfficeId)) return;
             _kingdomId = pKingdomId;
             _cityId = pCityId;
+            _countyId = pCountyId;
             _officeLayer = pOfficeLayer;
             _officeId = pOfficeId;
             if (Instance == null)
@@ -119,13 +122,17 @@ namespace AncientWarfare3.ui.windows
                 ? _officeId
                 : CourtInstitutionService.OfficeName(kingdom, _officeId);
             string cityName = ResolveCityName(kingdom, _cityId);
+            string countyName = ResolveCountyName(_countyId);
+            string placeName = string.IsNullOrWhiteSpace(countyName)
+                ? cityName
+                : countyName;
             _header.text = officeName +
-                           (string.IsNullOrWhiteSpace(cityName)
+                           (string.IsNullOrWhiteSpace(placeName)
                                ? ""
-                               : "  |  " + cityName);
+                               : "  |  " + placeName);
 
             var scope = new OfficialCareerHistoryScope(_kingdomId, _cityId,
-                _officeLayer, _officeId);
+                _officeLayer, _officeId, _countyId);
             IReadOnlyList<OfficialCareerHistoryRow> rows =
                 OfficialCareerHistoryReadService.Read(scope, 96);
             for (int i = 0; i < rows.Count; i++)
@@ -142,7 +149,7 @@ namespace AncientWarfare3.ui.windows
                         row.EndReason);
                 _rowPool[i].Bind(row, officeName,
                     string.IsNullOrWhiteSpace(row.CityName)
-                        ? cityName
+                        ? placeName
                         : row.CityName,
                     range, reason);
             }
@@ -273,6 +280,14 @@ namespace AncientWarfare3.ui.windows
             }
             catch { }
             return "";
+        }
+
+        private static string ResolveCountyName(long pCountyId)
+        {
+            if (pCountyId < 0L) return "";
+            CountyRecord county = CountyAdministrationStore.FindById(
+                pCountyId);
+            return county?.Name ?? "";
         }
 
         private static Text CreateText(Transform pParent, string pName,

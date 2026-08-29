@@ -21,16 +21,21 @@ namespace AncientWarfare3.core.court
             string cityPredicate = pScope.HasCity
                 ? " AND (CITY_ID=@city OR CITY_ID<0)"
                 : "";
+            string countyPredicate = pScope.HasCounty
+                ? " AND IFNULL(COUNTY_ID,-1)=@county"
+                : "";
             using var command = new SQLiteCommand(
                 "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID,CITY_ID," +
-                "IFNULL(LAYER,''),IFNULL(OFFICE_ID,'')," +
+                "IFNULL(COUNTY_ID,-1),IFNULL(LAYER,'')," +
+                "IFNULL(OFFICE_ID,'')," +
                 "IFNULL(ACTOR_NAME,''),APPOINTED_YEAR,ENDED_YEAR,ACTIVE," +
                 "IFNULL(END_REASON,''),APPOINTED_TIME," +
                 "IFNULL(RANK_AT_APPOINTMENT,0)," +
                 "IFNULL(LOCAL_GRADE_AT_APPOINTMENT,0) FROM " +
                 CourtOfficerTableItem.GetTableName() + " WHERE " +
                 "KINGDOM_ID=@kingdom AND LAYER=@layer AND " +
-                "OFFICE_ID=@office" + cityPredicate + " ORDER BY " +
+                "OFFICE_ID=@office" + cityPredicate + countyPredicate +
+                " ORDER BY " +
                 "APPOINTED_YEAR DESC,APPOINTED_TIME DESC," +
                 "OFFICER_ID DESC LIMIT @limit", pDb);
             command.Parameters.AddWithValue("@kingdom", pScope.KingdomId);
@@ -38,6 +43,8 @@ namespace AncientWarfare3.core.court
             command.Parameters.AddWithValue("@office", pScope.OfficeId);
             if (pScope.HasCity)
                 command.Parameters.AddWithValue("@city", pScope.CityId);
+            if (pScope.HasCounty)
+                command.Parameters.AddWithValue("@county", pScope.CountyId);
             command.Parameters.AddWithValue("@limit", boundedLimit);
 
             using SQLiteDataReader reader = command.ExecuteReader();
@@ -48,16 +55,17 @@ namespace AncientWarfare3.core.court
                     officerId: ReadLong(reader, 0),
                     actorId: ReadLong(reader, 2),
                     cityId: ReadLong(reader, 3),
-                    layer: ReadString(reader, 4),
-                    officeId: ReadString(reader, 5),
-                    actorName: ReadString(reader, 6),
-                    startYear: ReadInt(reader, 7, -1),
-                    endYear: ReadInt(reader, 8, -1),
-                    isCurrent: ReadInt(reader, 9, 0) == 1,
-                    endReason: ReadString(reader, 10),
-                    appointedTime: ReadDouble(reader, 11, -1d),
-                    rankId: ReadInt(reader, 12, 0).ToString(),
-                    grade: ReadInt(reader, 13, 0)));
+                    layer: ReadString(reader, 5),
+                    officeId: ReadString(reader, 6),
+                    actorName: ReadString(reader, 7),
+                    startYear: ReadInt(reader, 8, -1),
+                    endYear: ReadInt(reader, 9, -1),
+                    isCurrent: ReadInt(reader, 10, 0) == 1,
+                    endReason: ReadString(reader, 11),
+                    appointedTime: ReadDouble(reader, 12, -1d),
+                    rankId: ReadInt(reader, 13, 0).ToString(),
+                    grade: ReadInt(reader, 14, 0),
+                    countyId: ReadLong(reader, 4)));
             }
             return rows;
         }

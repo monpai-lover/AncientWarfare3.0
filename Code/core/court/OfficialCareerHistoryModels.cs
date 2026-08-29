@@ -5,19 +5,22 @@ namespace AncientWarfare3.core.court
     public readonly struct OfficialCareerHistoryScope
     {
         public OfficialCareerHistoryScope(long kingdomId, long cityId,
-            string layer, string officeId)
+            string layer, string officeId, long countyId = -1L)
         {
             KingdomId = kingdomId;
             CityId = cityId;
+            CountyId = countyId;
             Layer = layer ?? "";
             OfficeId = officeId ?? "";
         }
 
         public long KingdomId { get; }
         public long CityId { get; }
+        public long CountyId { get; }
         public string Layer { get; }
         public string OfficeId { get; }
         public bool HasCity => CityId >= 0L;
+        public bool HasCounty => CountyId >= 0L;
         public bool IsValid => KingdomId >= 0L &&
                                !string.IsNullOrWhiteSpace(Layer) &&
                                !string.IsNullOrWhiteSpace(OfficeId);
@@ -30,12 +33,13 @@ namespace AncientWarfare3.core.court
             string actorName, int startYear, int endYear, bool isCurrent,
             string endReason, double appointedTime = -1d,
             string kingdomName = "", string cityName = "",
-            string rankId = "", int grade = -1)
+            string rankId = "", int grade = -1, long countyId = -1L)
         {
             KingdomId = kingdomId;
             OfficerId = officerId;
             ActorId = actorId;
             CityId = cityId;
+            CountyId = countyId;
             Layer = layer ?? "";
             OfficeId = officeId ?? "";
             ActorName = actorName ?? "";
@@ -54,6 +58,7 @@ namespace AncientWarfare3.core.court
         public long OfficerId { get; }
         public long ActorId { get; }
         public long CityId { get; }
+        public long CountyId { get; }
         public string Layer { get; }
         public string OfficeId { get; }
         public string ActorName { get; }
@@ -73,7 +78,7 @@ namespace AncientWarfare3.core.court
             return new OfficialCareerHistoryRow(KingdomId, OfficerId,
                 ActorId, CityId, Layer, OfficeId, ActorName, StartYear,
                 pEndYear, isCurrent: false, pEndReason, AppointedTime,
-                KingdomName, CityName, RankId, Grade);
+                KingdomName, CityName, RankId, Grade, CountyId);
         }
     }
 }

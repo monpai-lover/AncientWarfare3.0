@@ -11,7 +11,7 @@ internal static class OfficialCareerHistorySqlTests
         using (var create = new SQLiteCommand(
             "CREATE TABLE CourtOfficer (OFFICER_ID INTEGER PRIMARY KEY," +
             "KINGDOM_ID INTEGER,ACTOR_ID INTEGER,ACTOR_NAME TEXT," +
-            "CITY_ID INTEGER,LAYER TEXT,OFFICE_ID TEXT," +
+            "CITY_ID INTEGER,COUNTY_ID INTEGER,LAYER TEXT,OFFICE_ID TEXT," +
             "APPOINTED_YEAR INTEGER,APPOINTED_TIME REAL," +
             "ENDED_YEAR INTEGER,ACTIVE INTEGER,END_REASON TEXT," +
             "RANK_AT_APPOINTMENT INTEGER," +
@@ -21,7 +21,10 @@ internal static class OfficialCareerHistorySqlTests
         Insert(db, 1, "前任", 110, 0, 118, "term_expired");
         Insert(db, 2, "张三", 130, 1, -1, "");
         using (var unrelated = new SQLiteCommand(
-            "INSERT INTO CourtOfficer VALUES " +
+            "INSERT INTO CourtOfficer (OFFICER_ID,KINGDOM_ID,ACTOR_ID," +
+            "ACTOR_NAME,CITY_ID,LAYER,OFFICE_ID,APPOINTED_YEAR," +
+            "APPOINTED_TIME,ENDED_YEAR,ACTIVE,END_REASON," +
+            "RANK_AT_APPOINTMENT,LOCAL_GRADE_AT_APPOINTMENT) VALUES " +
             "(3,7,99,'无关',3,'city','constable',131,7860,-1,1,'',6,5)",
             db))
             unrelated.ExecuteNonQuery();
@@ -33,6 +36,19 @@ internal static class OfficialCareerHistorySqlTests
         Equal(2, rows.Count, "office history scope");
         Equal("张三", rows[0].ActorName, "stored actor name");
         True(rows[0].IsCurrent, "active history row");
+
+        InsertCounty(db, 4, "county-a", 41);
+        InsertCounty(db, 5, "county-b", 42);
+        IReadOnlyList<OfficialCareerHistoryRow> countyRows =
+            OfficialCareerHistoryQuery.Read(db,
+                new OfficialCareerHistoryScope(7, 3, "county",
+                    "county_magistrate", 41), 32);
+        Equal(1, countyRows.Count,
+            "county office history excludes sibling county seats");
+        Equal("county-a", countyRows[0].ActorName,
+            "county history keeps the selected incumbent");
+        Equal(41L, countyRows[0].CountyId,
+            "county history row preserves county identity");
 
         var polluted = new[]
         {
@@ -69,7 +85,10 @@ internal static class OfficialCareerHistorySqlTests
         string pReason)
     {
         using var command = new SQLiteCommand(
-            "INSERT INTO CourtOfficer VALUES " +
+            "INSERT INTO CourtOfficer (OFFICER_ID,KINGDOM_ID,ACTOR_ID," +
+            "ACTOR_NAME,CITY_ID,LAYER,OFFICE_ID,APPOINTED_YEAR," +
+            "APPOINTED_TIME,ENDED_YEAR,ACTIVE,END_REASON," +
+            "RANK_AT_APPOINTMENT,LOCAL_GRADE_AT_APPOINTMENT) VALUES " +
             "(@id,7,@id,@name,3,'city','granary_officer',@year," +
             "@time,@end,@active,@reason,6,5)", pDb);
         command.Parameters.AddWithValue("@id", pId);
@@ -79,6 +98,22 @@ internal static class OfficialCareerHistorySqlTests
         command.Parameters.AddWithValue("@end", pEndYear);
         command.Parameters.AddWithValue("@active", pActive);
         command.Parameters.AddWithValue("@reason", pReason);
+        command.ExecuteNonQuery();
+    }
+
+    private static void InsertCounty(SQLiteConnection pDb, long pId,
+        string pName, long pCountyId)
+    {
+        using var command = new SQLiteCommand(
+            "INSERT INTO CourtOfficer (OFFICER_ID,KINGDOM_ID,ACTOR_ID," +
+            "ACTOR_NAME,CITY_ID,COUNTY_ID,LAYER,OFFICE_ID," +
+            "APPOINTED_YEAR,APPOINTED_TIME,ENDED_YEAR,ACTIVE,END_REASON," +
+            "RANK_AT_APPOINTMENT,LOCAL_GRADE_AT_APPOINTMENT) VALUES " +
+            "(@id,7,@id,@name,3,@county,'county','county_magistrate'," +
+            "131,7860,-1,1,'',6,5)", pDb);
+        command.Parameters.AddWithValue("@id", pId);
+        command.Parameters.AddWithValue("@name", pName);
+        command.Parameters.AddWithValue("@county", pCountyId);
         command.ExecuteNonQuery();
     }
 

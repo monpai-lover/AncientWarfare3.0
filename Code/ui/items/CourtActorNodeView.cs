@@ -174,11 +174,12 @@ namespace AncientWarfare3.ui.items
             {
                 long kingdomId = pKingdom.id;
                 long cityId = historyCityId;
+                long countyId = pNode.CountyId;
                 string officeLayer = historyOfficeLayer;
                 string officeId = historyOfficeId;
                 _historyButton.onClick.AddListener(() =>
                     CourtOfficeHistoryWindow.Open(kingdomId, cityId,
-                        officeLayer, officeId));
+                        officeLayer, officeId, countyId));
                 _historyTip.enabled = true;
                 _historyTip.type = AW_RawTooltip.TYPE;
                 _historyTip.hoverAction = () => Tooltip.show(
