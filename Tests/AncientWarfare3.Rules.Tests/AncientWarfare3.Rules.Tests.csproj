@@ -215,6 +215,7 @@
     <Compile Include="PeasantRebelStateNameRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\PeasantRebelStateNameRules.cs" Link="Production\PeasantRebelStateNameRules.cs" />
     <Compile Include="ActorVisualRoleRulesTests.cs.txt" />
+    <Compile Include="XiaActorTextureRulesTests.cs.txt" />
     <Compile Include="XiaBanditHeadRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\presentation\XiaBanditHeadRules.cs" Link="Production\XiaBanditHeadRules.cs" />
     <Compile Include="MilitaryGovernorateCourtRulesTests.cs.txt" />
@@ -222,6 +223,7 @@
     <Compile Include="TestActorVisualRoleStubs.cs.txt" />
     <Compile Include="..\..\Code\core\presentation\ActorVisualRoleRules.cs" Link="Production\ActorVisualRoleRules.cs" />
     <Compile Include="..\..\Code\core\presentation\ActorVisualRoleResolver.cs" Link="Production\ActorVisualRoleResolver.cs" />
+    <Compile Include="..\..\Code\core\presentation\XiaActorTextureRules.cs" Link="Production\XiaActorTextureRules.cs" />
     <Compile Include="ActorManualNameRulesTests.cs.txt" />
     <Compile Include="ActorManualRenameRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\naming\ActorManualNameRules.cs" Link="Production\ActorManualNameRules.cs" />

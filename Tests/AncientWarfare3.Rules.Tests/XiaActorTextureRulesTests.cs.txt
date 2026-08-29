@@ -1,0 +1,84 @@
+using System;
+using AncientWarfare3.core.presentation;
+
+internal static class XiaActorTextureRulesTests
+{
+    public static void Run()
+    {
+        Equal(0, XiaActorTextureRules.ResolveOfficialTier(0),
+            "unranked actors have no official texture tier");
+        Equal(1, XiaActorTextureRules.ResolveOfficialTier(1),
+            "rank one starts the low tier");
+        Equal(1, XiaActorTextureRules.ResolveOfficialTier(6),
+            "rank six ends the low tier");
+        Equal(2, XiaActorTextureRules.ResolveOfficialTier(7),
+            "rank seven starts the middle tier");
+        Equal(2, XiaActorTextureRules.ResolveOfficialTier(12),
+            "rank twelve ends the middle tier");
+        Equal(3, XiaActorTextureRules.ResolveOfficialTier(13),
+            "rank thirteen starts the high tier");
+        Equal(3, XiaActorTextureRules.ResolveOfficialTier(18),
+            "rank eighteen ends the high tier");
+        Equal(3, XiaActorTextureRules.ResolveOfficialTier(99),
+            "ranks above the career maximum clamp to the high tier");
+
+        Equal(null, XiaActorTextureRules.ResolveOfficialBodyDirectory(0),
+            "unranked actors do not request an official body");
+        Equal("leader_1",
+            XiaActorTextureRules.ResolveOfficialBodyDirectory(6),
+            "low officials use the green body");
+        Equal("leader_2",
+            XiaActorTextureRules.ResolveOfficialBodyDirectory(12),
+            "middle officials use the middle body");
+        Equal("leader_3",
+            XiaActorTextureRules.ResolveOfficialBodyDirectory(18),
+            "high officials use the purple body");
+        Equal("heads_leader/head_0",
+            XiaActorTextureRules.ResolveOfficialHeadPath(1),
+            "low officials use the first leader head");
+        Equal("heads_leader/head_2",
+            XiaActorTextureRules.ResolveOfficialHeadPath(18),
+            "high officials use the third leader head");
+
+        int first = XiaActorTextureRules.StableVariantIndex(-71L, 2);
+        int second = XiaActorTextureRules.StableVariantIndex(-71L, 2);
+        Equal(first, second, "head variant selection is stable");
+        Equal(true, first >= 0 && first < 2,
+            "head variant selection stays in range for negative actor ids");
+        Equal(0, XiaActorTextureRules.StableVariantIndex(71L, 0),
+            "empty variant sets resolve to index zero");
+
+        SequenceEqual(new[] { "female_1", "female_2", "female_1" },
+            XiaActorTextureRules.ExpandSkins(
+                new[] { "female_1", "female_2" }, 3),
+            "short skin lists cycle to the shared slot count");
+        SequenceEqual(Array.Empty<string>(),
+            XiaActorTextureRules.ExpandSkins(Array.Empty<string>(), 3),
+            "missing skin lists remain empty for caller fallback");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void SequenceEqual(string[] pExpected, string[] pActual,
+        string pMessage)
+    {
+        if (pExpected.Length != pActual.Length)
+            throw new InvalidOperationException(
+                $"{pMessage}: expected length {pExpected.Length}, " +
+                $"got {pActual.Length}");
+        for (int i = 0; i < pExpected.Length; i++)
+        {
+            if (string.Equals(pExpected[i], pActual[i],
+                    StringComparison.Ordinal))
+                continue;
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected[i]} at {i}, " +
+                $"got {pActual[i]}");
+        }
+    }
+}

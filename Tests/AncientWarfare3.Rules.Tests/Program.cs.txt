@@ -10,6 +10,13 @@ using AncientWarfare3.core.performance;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 
+if (args.Length == 1 && args[0] == "--xia-actor-textures")
+{
+    XiaActorTextureRulesTests.Run();
+    Console.WriteLine("Xia actor texture rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--legacy-deferred-work-removal")
 {
     LegacyDeferredWorkRemovalSourceGuardTests.Run();
@@ -736,6 +743,7 @@ if (args.Length == 1 && args[0] == "--kingdom-founder-safety")
 HistoricalWriteModeRulesTests.Run();
 AWThirdPartySchedulerFaultRulesTests.Run();
 ActorVisualRoleRulesTests.Run();
+XiaActorTextureRulesTests.Run();
 MilitaryGovernorateCourtRulesTests.Run();
 if (args.Length == 1 &&
     args[0] == "--diplomatic-war-treaty-gate")
