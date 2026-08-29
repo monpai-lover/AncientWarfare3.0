@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using AncientWarfare3.content;
-using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.presentation;
 using HarmonyLib;
@@ -40,7 +39,7 @@ namespace AncientWarfare3.patch
                 return ApplyBanditHead(__instance);
             ActorVisualRole role = ActorVisualRoleResolver.Resolve(__instance);
             if (role == ActorVisualRole.Default)
-                return !TryApplyXiaSpecialHead(__instance);
+                return true;
             if (__instance?.data == null || !__instance.dirty_sprite_head)
                 return false;
 
@@ -308,66 +307,6 @@ namespace AncientWarfare3.patch
                 textureAsset.texture_path_base +
                 "heads_special/head_bandit_general");
             return false;
-        }
-
-        private static bool TryApplyXiaSpecialHead(Actor pActor)
-        {
-            if (pActor?.data == null || pActor.asset == null ||
-                !string.Equals(pActor.asset.id, XiaRace.ID,
-                    System.StringComparison.Ordinal))
-                return false;
-
-            string headPath = ResolveXiaSpecialHeadPath(pActor);
-            if (string.IsNullOrEmpty(headPath)) return false;
-            if (!pActor.dirty_sprite_head) return true;
-
-            pActor.dirty_sprite_head = false;
-            AnimationContainerUnit container = pActor.animation_container;
-            if (pActor.frame_data == null || !pActor.frame_data.show_head ||
-                container == null || container.heads == null ||
-                container.heads.Length == 0 || pActor.isEgg() ||
-                (pActor.isBaby() && !container.render_heads_for_children))
-                return true;
-            ActorTextureSubAsset textureAsset = pActor.getTextureAsset();
-            if (textureAsset == null) return true;
-
-            pActor.cached_sprite_head = ActorAnimationLoader.getHeadSpecial(
-                textureAsset.texture_path_base + headPath);
-            return true;
-        }
-
-        private static string ResolveXiaSpecialHeadPath(Actor pActor)
-        {
-            if (pActor.isKing()) return "heads_king/head_0";
-            if (IsXiaHeir(pActor)) return "heads_heir/head_0";
-
-            pActor.data.get(LineageKeys.OFFICER_RANK, out int rank,
-                OfficialCareerRankRules.Unranked);
-            string officialHead =
-                XiaActorTextureRules.ResolveOfficialHeadPath(rank);
-            if (!string.IsNullOrEmpty(officialHead)) return officialHead;
-            if (pActor.isCityLeader())
-                return XiaActorTextureRules.ResolveOfficialHeadPath(
-                    OfficialCareerRankRules.MinimumRank);
-            if (!pActor.isWarrior()) return null;
-
-            int variant = XiaActorTextureRules.StableVariantIndex(
-                pActor.data.id, 2);
-            return "heads_warrior/head_" + variant;
-        }
-
-        private static bool IsXiaHeir(Actor pActor)
-        {
-            pActor.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
-            if (isHeir) return true;
-            try
-            {
-                return FeudatoryService.IsActivePrince(pActor);
-            }
-            catch
-            {
-                return false;
-            }
         }
 
         private static bool ShouldUseBanditKingHead(Actor pActor)
