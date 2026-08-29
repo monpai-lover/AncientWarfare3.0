@@ -25,6 +25,23 @@ namespace AncientWarfare3.core.schools
         // 所以单批变慢时不会把帧撑爆。
         private const int MaxBatchesPerFrame = 4;
         private const double BatchBudgetMilliseconds = 3d;
+        // 一个含写入的 SQLite 事务有约 830us 的固定开销(实测:空事务 15.3us,
+        // 共用事务里每条 153.3us,每条独占事务 987us),与事务里装几条无关。
+        // 晋升那条路径已经在生产端合批解决,但 membership-join / journey_arrival
+        // / guest-start / lineage-successor 都是事件驱动的,来一条是一条:实测
+        // 34 条 membership-join 摊到 37 个事务,等于每条都自付一次固定开销。
+        //
+        // 所以攒一下再排空:够 CoalesceMinimumCount 条就走,不够就最多等
+        // CoalesceMaxHeldFrames 个权威周期(约 0.3 秒)。上限是硬的,队列不会
+        // 因为来得慢就无限期挂着。
+        //
+        // 代价是「写入落库 + AfterCommit 投影」比原来晚几帧。这个窗口本来就
+        // 存在(缓冲最快也要下一帧才提交),这里只是从 1 帧放宽到至多 8 帧;
+        // 期间重复入队由各操作自己的 pending 集合挡住(如
+        // SchoolMembershipService.PendingMembershipActors)。
+        private const int CoalesceMinimumCount = 8;
+        private const int CoalesceMaxHeldFrames = 8;
+        private static long _firstHeldFrame;
         private static readonly Dictionary<string,
             AsyncEntry> PendingAsync =
             new Dictionary<string, AsyncEntry>(
@@ -89,7 +106,13 @@ namespace AncientWarfare3.core.schools
             if (Buffer.Count == 0 && ProjectionRetries.Count == 0) return false;
             if (_frame < long.MaxValue) _frame++;
             if (ProcessProjectionRetry(pIgnoreBackoff: false)) return true;
-            if (Buffer.Count == 0) return false;
+            if (Buffer.Count == 0)
+            {
+                _firstHeldFrame = 0L;
+                return false;
+            }
+            if (!ShouldDrain(Buffer.Count)) return false;
+            _firstHeldFrame = 0L;
             SQLiteConnection db = LineageArchiveManager.Instance?.OperatingDB;
             // 积压时一帧一批排不完(512 容量 ÷ 32 批 = 16 帧),队列越堆越高、
             // 每批越装越满。给一个小预算允许多提交几批,没积压时第一批就把队列
@@ -98,6 +121,21 @@ namespace AncientWarfare3.core.schools
                 new HistoricalSchoolSqlWriteBatchExecutor(db),
                 pMaxBatches: MaxBatchesPerFrame,
                 pBudgetMilliseconds: BatchBudgetMilliseconds);
+        }
+
+        /// <summary>
+        /// 攒够条数或等够帧数才排空,让事件驱动的写入也能共用一个事务。
+        /// </summary>
+        private static bool ShouldDrain(int pPending)
+        {
+            if (pPending >= CoalesceMinimumCount) return true;
+            if (_firstHeldFrame == 0L)
+            {
+                _firstHeldFrame = _frame;
+                return false;
+            }
+
+            return _frame - _firstHeldFrame >= CoalesceMaxHeldFrames;
         }
 
         public static bool FlushForSave()
@@ -147,6 +185,7 @@ namespace AncientWarfare3.core.schools
             PendingAsync.Clear();
             ProjectionRetries.Clear();
             _frame = 0L;
+            _firstHeldFrame = 0L;
         }
 
         private static void ResolveAsync(string pOperationKey,

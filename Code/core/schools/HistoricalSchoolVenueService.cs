@@ -107,22 +107,64 @@ namespace AncientWarfare3.core.schools
         {
             pPrimary = null;
             pSecondary = null;
-            List<WorldTile> candidates = CandidatesForCity(pCity);
-            if (candidates.Count == 0) return false;
             OccupiedByCity.TryGetValue(pCity.data.id, out HashSet<long> occupied);
-            int start = PositiveModulo(StableHash(pActor, pSchoolId, pKind), candidates.Count);
-            for (int offset = 0; offset < candidates.Count; offset++)
+            // 先用缓存扫一遍。没扫到时只有一种情况需要重建:扫描过程中真的
+            // 撞见了失效 tile —— 说明 zone 内部发生了 stamp 盖不住的变化
+            // (stamp 只覆盖城市身份/领主/zone 数/中心坐标)。若候选全都有效、
+            // 只是被占用或不合该用途,缓存是新鲜的,重建纯属白做。
+            List<WorldTile> candidates = CandidatesForCity(pCity);
+            pPrimary = ScanForVenue(candidates, pCity, pActor, pSchoolId,
+                pKind, occupied, out bool sawStaleTile);
+            if (pPrimary == null && sawStaleTile)
             {
-                WorldTile candidate = candidates[(start + offset) % candidates.Count];
-                if (!IsVenueCandidate(candidate, pCity, pActor, pKind) ||
-                    occupied?.Contains(TileKey(candidate)) == true) continue;
-                pPrimary = candidate;
-                break;
+                List<WorldTile> rebuilt = CandidatesForCity(pCity,
+                    pForceRebuild: true);
+                if (!ReferenceEquals(rebuilt, candidates))
+                {
+                    candidates = rebuilt;
+                    pPrimary = ScanForVenue(candidates, pCity, pActor,
+                        pSchoolId, pKind, occupied, out _);
+                }
             }
             if (pPrimary == null) return false;
             if (pKind != HistoricalSchoolVenueKind.Debate) return true;
             pSecondary = FindSecondary(candidates, pCity, pPrimary, occupied);
             return pSecondary != null;
+        }
+
+        /// <summary>
+        /// 按稳定起点环形扫描候选,返回第一个可用的。扫描顺序与判定谓词都与
+        /// 原实现一致 —— 抽出来只是为了让「缓存未命中就重建重扫」不必复制一遍。
+        /// </summary>
+        /// <param name="pSawStaleTile">
+        /// 扫描中是否撞见过已不再是合法公共候选的 tile。区分「缓存过期」和
+        /// 「候选都有效但都不可用」——只有前者才值得重建。
+        /// </param>
+        private static WorldTile ScanForVenue(List<WorldTile> pCandidates,
+            City pCity, Actor pActor, string pSchoolId,
+            HistoricalSchoolVenueKind pKind, HashSet<long> pOccupied,
+            out bool pSawStaleTile)
+        {
+            pSawStaleTile = false;
+            if (pCandidates == null || pCandidates.Count == 0) return null;
+            int start = PositiveModulo(StableHash(pActor, pSchoolId, pKind),
+                pCandidates.Count);
+            for (int offset = 0; offset < pCandidates.Count; offset++)
+            {
+                WorldTile candidate =
+                    pCandidates[(start + offset) % pCandidates.Count];
+                if (!IsPublicCandidate(candidate, pCity))
+                {
+                    pSawStaleTile = true;
+                    continue;
+                }
+
+                if (!IsVenueCandidate(candidate, pCity, pActor, pKind) ||
+                    pOccupied?.Contains(TileKey(candidate)) == true) continue;
+                return candidate;
+            }
+
+            return null;
         }
 
         internal static bool TryFindLocalVenue(
@@ -215,13 +257,29 @@ namespace AncientWarfare3.core.schools
             return true;
         }
 
-        private static List<WorldTile> CandidatesForCity(City pCity)
+        /// <summary>
+        /// 取城市的公共场地候选 tile。
+        ///
+        /// 原本缓存命中时还要对全部(最多 48 个)缓存
+        /// tile 逐个调 IsPublicCandidate。而一个学派旅行帧要探 24 座城、每城最多
+        /// 走 3 个 venue source,于是单帧上千次 IsPublicCandidate —— 实测
+        /// travel_frame 单次 0.39~0.61ms、累计 148.6ms,是学派第二大项。
+        ///
+        /// 那个前置全扫对结果正确性是多余的:TryFindPublicVenue 扫描时对每个
+        /// 候选已经调了 IsVenueCandidate(内含 IsPublicCandidate),失效 tile 本来
+        /// 就会被跳过。它唯一的作用是决定要不要重建。所以改成 stamp 匹配即直接
+        /// 复用,由调用方在「一个可用候选都没扫到」时用 pForceRebuild 重建一次
+        /// —— 扫描顺序与判定谓词一字未改,选出的场地不变。
+        /// </summary>
+        private static List<WorldTile> CandidatesForCity(City pCity,
+            bool pForceRebuild = false)
         {
             if (pCity?.data == null || pCity.isRekt()) return EmptyCandidates();
             HistoricalSchoolCityCacheStamp stamp = StampFor(pCity);
-            if (CandidateTilesByCity.TryGet(pCity.data.id, out CityVenueCacheEntry cached) &&
-                ReferenceEquals(cached.City, pCity) && StampMatches(cached.Stamp, pCity) &&
-                AllCandidatesValid(cached.Tiles, pCity)) return cached.Tiles;
+            if (!pForceRebuild &&
+                CandidateTilesByCity.TryGet(pCity.data.id, out CityVenueCacheEntry cached) &&
+                ReferenceEquals(cached.City, pCity) && StampMatches(cached.Stamp, pCity))
+                return cached.Tiles;
             List<WorldTile> rebuilt = BuildCandidates(pCity);
             CandidateTilesByCity.Set(pCity.data.id, new CityVenueCacheEntry
             {
@@ -273,13 +331,6 @@ namespace AncientWarfare3.core.schools
             return result;
         }
 
-        private static bool AllCandidatesValid(List<WorldTile> pCandidates, City pCity)
-        {
-            if (pCandidates == null || pCandidates.Count == 0) return false;
-            for (int i = 0; i < pCandidates.Count; i++)
-                if (!IsPublicCandidate(pCandidates[i], pCity)) return false;
-            return true;
-        }
 
         private static bool IsVenueCandidate(WorldTile pTile, City pCity, Actor pActor,
             HistoricalSchoolVenueKind pKind, Building pAcademy = null)
