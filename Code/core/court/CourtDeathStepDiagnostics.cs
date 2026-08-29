@@ -35,12 +35,13 @@ namespace AncientWarfare3.core.court
             {
                 if (!StepCost.TryGetValue(pId, out long[] entry))
                 {
-                    entry = new long[2];
+                    entry = new long[3];
                     StepCost[pId] = entry;
                 }
 
                 entry[0] += elapsed;
                 entry[1]++;
+                if (elapsed > entry[2]) entry[2] = elapsed;
             }
 
             return now;
@@ -60,14 +61,24 @@ namespace AncientWarfare3.core.court
                         ? byTicks
                         : string.CompareOrdinal(left.Key, right.Key);
                 });
+                // 形如 id:总计/次数/单次最大。只有总计和次数的话,3 个样本的
+                // 均值会被误读成单次成本 —— career_close 实测 77.787/3,到底是
+                // 「每次 26ms」还是「一次 75ms + 两次 1.4ms」,这两者要查的东西
+                // 完全不同。加上最大值才分得开。
                 var parts = new string[ranked.Count];
                 for (int i = 0; i < ranked.Count; i++)
                     parts[i] = ranked[i].Key + ":" +
-                        (ranked[i].Value[0] * 1000.0 / Stopwatch.Frequency)
-                            .ToString("0.###", CultureInfo.InvariantCulture) +
-                        "/" + ranked[i].Value[1];
+                        Milliseconds(ranked[i].Value[0]) +
+                        "/" + ranked[i].Value[1] +
+                        "/" + Milliseconds(ranked[i].Value[2]);
                 return string.Join(",", parts);
             }
+        }
+
+        private static string Milliseconds(long pTicks)
+        {
+            return (pTicks * 1000.0 / Stopwatch.Frequency)
+                .ToString("0.###", CultureInfo.InvariantCulture);
         }
     }
 }

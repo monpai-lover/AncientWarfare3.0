@@ -36,12 +36,13 @@ namespace AncientWarfare3.core.schools
                 long elapsed = Stopwatch.GetTimestamp() - started;
                 if (!StepCost.TryGetValue(pId, out long[] entry))
                 {
-                    entry = new long[2];
+                    entry = new long[3];
                     StepCost[pId] = entry;
                 }
 
                 entry[0] += elapsed;
                 entry[1]++;
+                if (elapsed > entry[2]) entry[2] = elapsed;
             }
         }
 
@@ -62,13 +63,21 @@ namespace AncientWarfare3.core.schools
             if (elapsed < 0L) return now;
             if (!StepCost.TryGetValue(pId, out long[] entry))
             {
-                entry = new long[2];
+                entry = new long[3];
                 StepCost[pId] = entry;
             }
 
             entry[0] += elapsed;
             entry[1]++;
+            if (elapsed > entry[2]) entry[2] = elapsed;
             return now;
+        }
+
+        private static string Milliseconds(long pTicks)
+        {
+            return (pTicks * 1000.0 / Stopwatch.Frequency)
+                .ToString("0.###",
+                    System.Globalization.CultureInfo.InvariantCulture);
         }
 
         /// <summary>接力计时的起点。关闭诊断时返回 0。</summary>
@@ -91,14 +100,16 @@ namespace AncientWarfare3.core.schools
                     ? byTicks
                     : string.CompareOrdinal(left.Key, right.Key);
             });
+            // 形如 id:总计/次数/单次最大。travel_frame 实测 57.855/34,均值
+            // 1.70ms —— 但同区间的子步骤只占 4.99ms,余下的到底是均摊在 34 次
+            // 上还是集中在一两次上,只有最大值分得开。
             int limit = Math.Min(18, ranked.Count);
             var parts = new string[limit];
             for (int i = 0; i < limit; i++)
                 parts[i] = ranked[i].Key + ":" +
-                    (ranked[i].Value[0] * 1000.0 / Stopwatch.Frequency)
-                        .ToString("0.###",
-                            System.Globalization.CultureInfo.InvariantCulture) +
-                    "/" + ranked[i].Value[1];
+                    Milliseconds(ranked[i].Value[0]) +
+                    "/" + ranked[i].Value[1] +
+                    "/" + Milliseconds(ranked[i].Value[2]);
             return string.Join(",", parts);
         }
 

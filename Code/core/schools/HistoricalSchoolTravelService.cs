@@ -86,7 +86,13 @@ namespace AncientWarfare3.core.schools
 
         public static bool ProcessFrame()
         {
-            if (ProcessPendingArrivalRetry()) return true;
+            // travel_frame 实测 57.855/34,而已插桩的 TryChooseDestination 三段
+            // 只占 4.99ms —— 91% 的成本在下面这几条分支里,此前从未测过。
+            long stamp = HistoricalSchoolRuntime.Mark();
+            bool retried = ProcessPendingArrivalRetry();
+            stamp = HistoricalSchoolRuntime.Account("travel:arrival_retry",
+                stamp);
+            if (retried) return true;
             QuarterWork work = _pendingQuarter;
             if (work?.ActorIds == null || work.Processed >= work.Count)
             {
@@ -109,13 +115,20 @@ namespace AncientWarfare3.core.schools
                 if (state.LifecycleState == HistoricalSchoolLifecycleState.Voyage)
                 {
                     CompleteDueVoyage(state, work.Year);
+                    HistoricalSchoolRuntime.Account("travel:voyage_complete",
+                        stamp);
                     return true;
                 }
                 DestinationPreparation prepared = PrepareDestination(state,
                     work.Year);
+                stamp = HistoricalSchoolRuntime.Account("travel:prepare",
+                    stamp);
                 if (prepared == null) return true;
+                IReadOnlyList<City> indexed = IndexedCities(work.Year);
+                HistoricalSchoolRuntime.Account("travel:city_index", stamp);
+                // TryChooseDestination 内部自带 filter/venue_probe/score 三段。
                 TryChooseDestination(prepared.Actor, prepared.State,
-                    IndexedCities(work.Year), work.Year);
+                    indexed, work.Year);
                 return true;
             }
             catch (Exception error)

@@ -21,6 +21,7 @@ namespace AncientWarfare3.core.schools
             new Dictionary<string, long[]>(StringComparer.Ordinal);
         private static long _commitTicks;
         private static long _commitCount;
+        private static long _commitMaxTicks;
 
         internal static void AccountOperation(string pKey, long pStarted)
         {
@@ -34,12 +35,13 @@ namespace AncientWarfare3.core.schools
             {
                 if (!OperationCost.TryGetValue(prefix, out long[] entry))
                 {
-                    entry = new long[2];
+                    entry = new long[3];
                     OperationCost[prefix] = entry;
                 }
 
                 entry[0] += elapsed;
                 entry[1]++;
+                if (elapsed > entry[2]) entry[2] = elapsed;
             }
         }
 
@@ -54,6 +56,7 @@ namespace AncientWarfare3.core.schools
             {
                 _commitTicks += elapsed;
                 _commitCount++;
+                if (elapsed > _commitMaxTicks) _commitMaxTicks = elapsed;
             }
         }
 
@@ -72,8 +75,10 @@ namespace AncientWarfare3.core.schools
             {
                 long commitTicks = _commitTicks;
                 long commitCount = _commitCount;
+                long commitMaxTicks = _commitMaxTicks;
                 _commitTicks = 0L;
                 _commitCount = 0L;
+                _commitMaxTicks = 0L;
                 if (OperationCost.Count == 0 && commitCount == 0)
                     return "none";
 
@@ -88,15 +93,20 @@ namespace AncientWarfare3.core.schools
                         : string.CompareOrdinal(left.Key, right.Key);
                 });
 
+                // 形如 前缀:总计/次数/单次最大。guest-end 实测 42.547/6,均值
+                // 7.09ms/op —— 但读代码只能解释约 0.9ms。是「每次都慢」还是
+                // 「一次极慢拉高了均值」,只有最大值能回答。
                 var text = new System.Text.StringBuilder();
                 text.Append("commit:").Append(Format(commitTicks))
-                    .Append('/').Append(commitCount);
+                    .Append('/').Append(commitCount)
+                    .Append('/').Append(Format(commitMaxTicks));
                 int limit = Math.Min(12, ranked.Count);
                 for (int i = 0; i < limit; i++)
                 {
                     text.Append(',').Append(ranked[i].Key).Append(':')
                         .Append(Format(ranked[i].Value[0]))
-                        .Append('/').Append(ranked[i].Value[1]);
+                        .Append('/').Append(ranked[i].Value[1])
+                        .Append('/').Append(Format(ranked[i].Value[2]));
                 }
 
                 return text.ToString();
