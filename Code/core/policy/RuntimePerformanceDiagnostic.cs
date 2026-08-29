@@ -963,6 +963,8 @@ namespace AncientWarfare3.core.policy
                 Milliseconds(_slowestAuthorityStageTicks) +
                 " authority_steps=" +
                 AWAuthorityCycleService.TakeAuthorityBreakdown() +
+                " annual_steps=" +
+                KingdomAnnualStepDiagnostics.TakeDiagnostics() +
                 " school_steps=" +
                 HistoricalSchoolRuntime.TakeStepDiagnostics() +
                 " school_writes=" +

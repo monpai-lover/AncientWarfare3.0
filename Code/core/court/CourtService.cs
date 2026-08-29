@@ -539,6 +539,44 @@ namespace AncientWarfare3.core.court
         }
 
         /// <summary>
+        /// 某王国在任官员的行数,上限 pLimit(与 GetActiveOfficers(k, pLimit).Count
+        /// 完全等价,包括截断行为)。
+        ///
+        /// 同上:调用方只要一个整数,却读回最多 96 行 x 9 列并按 INFLUENCE 排序。
+        /// InheritanceLawService.Evaluate 就是这样 —— officers 变量全程只用到
+        /// .Count 两次。而 Evaluate 落在 annual_succession 阶段里,实测该阶段单次
+        /// 88.22ms,是权威周期里最大的单一可归因成本。
+        ///
+        /// 子查询带 LIMIT 让 SQLite 数够就停,不必扫完整个王国。
+        /// </summary>
+        internal static int CountActiveOfficers(Kingdom pKingdom, int pLimit)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return 0;
+            SQLiteConnection db = CourtDB;
+            if (db == null) return 0;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    "SELECT COUNT(*) FROM (SELECT 1 FROM " +
+                    CourtOfficerTableItem.GetTableName() +
+                    " WHERE KINGDOM_ID = @kid AND ACTIVE = 1 LIMIT @lim)";
+                cmd.Parameters.AddWithValue("@kid", pKingdom.id);
+                cmd.Parameters.AddWithValue("@lim", pLimit <= 0 ? 32 : pLimit);
+                object value = cmd.ExecuteScalar();
+                return value == null || value == DBNull.Value
+                    ? 0
+                    : Convert.ToInt32(value);
+            }
+            catch (Exception e)
+            {
+                AncientWarfare3.ModClass.LogWarning(
+                    "CourtOfficer active count failed: " + e.Message);
+                return 0;
+            }
+        }
+
+        /// <summary>
         /// 某个具体官职当前是否有人在任。同上,把「读回最多 96 行再 Any」换成
         /// 一次索引定位:idx_CourtOfficer_kingdom_active 前四列正好是这里的四个
         /// 条件,central 层还另有一个 partial unique 索引

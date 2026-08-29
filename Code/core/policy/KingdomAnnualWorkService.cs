@@ -85,12 +85,18 @@ namespace AncientWarfare3.core.policy
             long annualDiagnostic = RuntimePerformanceDiagnostic.
                 BeginContinuousScope();
             long sampledDiagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            // annual_stage 只报最慢的那一个阶段,看不到 16 个阶段各自的分布;
+            // RecentFeatureBenchmark 又有采样门控,漏掉了实测那次 88.22ms 的
+            // annual_succession。这里按阶段跨帧累计。
+            long stepStamp = KingdomAnnualStepDiagnostics.Mark();
             try
             {
                 RunStage(kingdom, pending.ActiveYear, pending.Stage);
             }
             finally
             {
+                KingdomAnnualStepDiagnostics.Account(
+                    StageDetailId(pending.Stage), stepStamp);
                 RuntimePerformanceDiagnostic.EndAnnualStage(
                     StageDetailId(pending.Stage), annualDiagnostic);
                 RuntimePerformanceDiagnostic.EndDetail(
@@ -213,7 +219,14 @@ namespace AncientWarfare3.core.policy
 
         private static void RunSuccession(Kingdom pKingdom)
         {
+            // 实测单次 88.22ms,是整个权威周期里最大的单一可归因成本。四个子部分
+            // 各自计时:RetryPendingDeathSuccessionOne 自带一个写事务,
+            // HeirService.OnKingdomYear 里还有继承法/继承人核对/继位纠纷三段
+            // (那三段本来有 RecentFeatureBenchmark,但它受采样门控,抓不到)。
+            long stamp = KingdomAnnualStepDiagnostics.Mark();
             NobleRankService.RetryPendingDeathSuccessionOne();
+            KingdomAnnualStepDiagnostics.Account("succession:pending_death",
+                stamp);
             MeasureRecent(RecentFeatureBenchmarkRules.KingdomHeirIndex,
                 () => HeirService.OnKingdomYear(pKingdom));
         }

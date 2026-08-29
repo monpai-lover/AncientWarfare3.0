@@ -185,6 +185,10 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomYear(Kingdom pKingdom)
         {
+            // 这三段本来只有 RecentFeatureBenchmark,而它受 _sampling 门控 ——
+            // 实测 annual_succession 单次 88.22ms 的那一帧不是采样帧,同区间
+            // aw3_total_ms 只有 2.484,等于完全漏掉。这里补一层跨帧累计。
+            long stamp = KingdomAnnualStepDiagnostics.Mark();
             long benchmark = RecentFeatureBenchmark.Begin();
             bool lawChanged;
             try
@@ -196,6 +200,8 @@ namespace AncientWarfare3.core.lineage
                 RecentFeatureBenchmark.End(
                     RecentFeatureBenchmarkRules.KingdomInheritanceLawIndex,
                     benchmark);
+                stamp = KingdomAnnualStepDiagnostics.Account(
+                    "succession:inheritance_law", stamp);
             }
 
             benchmark = RecentFeatureBenchmark.Begin();
@@ -205,6 +211,8 @@ namespace AncientWarfare3.core.lineage
                 RecentFeatureBenchmark.End(
                     RecentFeatureBenchmarkRules.KingdomHeirReconcileIndex,
                     benchmark);
+                stamp = KingdomAnnualStepDiagnostics.Account(
+                    "succession:reconcile_heir", stamp);
             }
 
             benchmark = RecentFeatureBenchmark.Begin();
@@ -214,6 +222,8 @@ namespace AncientWarfare3.core.lineage
                 RecentFeatureBenchmark.End(
                     RecentFeatureBenchmarkRules.KingdomSuccessionDisputeIndex,
                     benchmark);
+                KingdomAnnualStepDiagnostics.Account("succession:dispute",
+                    stamp);
             }
         }
 

@@ -72,7 +72,11 @@ namespace AncientWarfare3.core.lineage
             int generals = GeneralService.GetActiveGeneralsForReadModel(
                 pKingdom, pAllowUnitFallback: false).Count;
             int armies = CountActiveArmyBodies(pKingdom);
-            List<CourtOfficerView> officers = CourtService.GetActiveOfficers(
+            // 这里原本 GetActiveOfficers 读回最多 96 行 x 9 列(每列装箱)并按
+            // INFLUENCE DESC 排序 —— 而 INFLUENCE 不在
+            // idx_CourtOfficer_kingdom_active 里,等于每次都排序整张结果集。
+            // 但这个变量全程只用到 .Count 两次,所以换成一条计数查询。
+            int officerCount = CourtService.CountActiveOfficers(
                 pKingdom, InheritanceCandidateRules.MaximumOfficerSupporters);
             bool militaryUnlocked = InheritanceLawRules.CanUseMilitary(
                 adultRoyals, generals, armies);
@@ -80,7 +84,7 @@ namespace AncientWarfare3.core.lineage
                 adultRoyals, CourtService.HasOfficialCourt(pKingdom),
                 CourtService.HasThreeDepartments(pKingdom),
                 CourtAuxiliaryLawService.GetTermLaw(pKingdom) !=
-                CourtTermLaw.Lifetime, officers.Count);
+                CourtTermLaw.Lifetime, officerCount);
 
             CourtSnapshot court = CourtService.GetSnapshot(pKingdom);
             int rawRulerCourtInfluence = king?.data == null
@@ -100,7 +104,7 @@ namespace AncientWarfare3.core.lineage
                     ? MandatePhaseService.CurrentPhase
                     : MandatePhase.Golden,
                 HasLivingDirectChild(pKingdom, king), StableDynasty(pKingdom, king),
-                SafeAtWar(pKingdom), armies, generals, officers.Count,
+                SafeAtWar(pKingdom), armies, generals, officerCount,
                 CourtInstitutionRules.Rank(
                     CourtInstitutionService.GetInstitution(pKingdom)),
                 ToDirectionScore((court.war + court.aggression) * 0.5f),
