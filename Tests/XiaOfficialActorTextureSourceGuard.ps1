@@ -25,6 +25,10 @@ $requiredFragments = @{
         'XiaRace.TEXTURE_PATH + officialBody')
     TextureBinding = @(
         'tex.texture_path_leader = pBasePath + "leader_1";',
+        'tex.texture_heads_old_male =',
+        'heads_special/head_old_male',
+        'tex.texture_heads_old_female =',
+        'heads_special/head_old_female',
         'XiaActorTextureRules.ExpandSkins(maleDirs, count)',
         'XiaActorTextureRules.ExpandSkins(femaleDirs, count)',
         'XiaActorTextureRules.ExpandSkins(warriorDirs, count)')
