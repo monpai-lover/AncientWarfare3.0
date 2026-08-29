@@ -785,12 +785,28 @@ namespace AncientWarfare3.core.lineage
             bool canTransferIdentity = HereditaryTitleSuccessionRules
                 .CanTransfer(maleLineIdentity, pHolder.isSexMale(),
                     maleLineIdentity);
-            Actor successor = canTransferIdentity
-                ? HereditaryTitleSuccessionService.FindSuccessor(
-                    pHolder, FindKingdom(held.KingdomId) ?? pHolder.kingdom)
-                : null;
-            Kingdom context = FindKingdom(held.KingdomId) ??
-                              pHolder.kingdom ?? successor?.kingdom;
+            // 继承人由 DynasticMaleLineContinuityService 在持有者还活着的时候
+            // 事件驱动算好并写在他身上,这里只做一次廉价校验。原来是在死亡这一刻
+            // 同步跑全量旁系扫描 —— 实测那条搜索单次可达 60.9ms。
+            // 预定失效(漏事件、刚读档尚未补齐等)才退回搜索一次,绝不因此让头衔
+            // 白白绝嗣。
+            Kingdom titleKingdom = FindKingdom(held.KingdomId) ??
+                                   pHolder.kingdom;
+            Actor successor = null;
+            if (canTransferIdentity)
+            {
+                long designatedId = DynasticMaleLineContinuityService
+                    .ReadDesignatedSuccessorId(pHolder);
+                bool designated = designatedId != pHolder.data.id &&
+                    TitleSuccessionDesignation.TryResolve(designatedId,
+                        titleKingdom, out successor);
+                if (!designated)
+                    successor = HereditaryTitleSuccessionService.FindSuccessor(
+                        pHolder, titleKingdom);
+                TitleSuccessionDesignation.Account("noble_title", designated);
+            }
+
+            Kingdom context = titleKingdom ?? successor?.kingdom;
             bool canInherit = successor?.data != null && context?.data != null;
             NobleTitleSnapshot successorCurrent = canInherit
                 ? ReadHot(successor)

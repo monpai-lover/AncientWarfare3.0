@@ -82,6 +82,8 @@ namespace AncientWarfare3.core.lineage
                 return;
             FeudatoryService.OnActorAdult(pActor);
             if (!pActor.isAdult()) return;
+            // 新成年人可能正好补上某个爵位头衔的空缺(旁系候选要求成年)。
+            DynasticMaleLineContinuityService.OnActorAdult(pActor);
             pActor.data.get(LineageKeys.ROYAL_CHILD,
                 out bool royalChild, false);
             pActor.data.get(LineageKeys.ROYAL_ADULT_TITLE_PROCESSED,

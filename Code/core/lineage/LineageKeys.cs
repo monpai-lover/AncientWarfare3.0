@@ -29,6 +29,16 @@ namespace AncientWarfare3.core.lineage
         public const string NOBLE_TITLE_NAME = "aw_noble_title_name";
         public const string NOBLE_RANK_KINGDOM_ID = "aw_noble_rank_kingdom_id";
         public const string NOBLE_GRANT_ID = "aw_noble_grant_id";
+        // 预定继承人:由 DynasticMaleLineContinuityService 事件驱动算好并写在
+        // 持有者身上,NobleRankService.OnActorDying 直接读它,不再在死亡那一刻
+        // 跑全量旁系扫描。和 KINGDOM_HEIR_ID 是同一套做法。
+        public const string NOBLE_TITLE_SUCCESSOR_ID =
+            "aw_noble_title_successor_id";
+        // 该 actor 是否持有可继承的虚衔。只为了让 DynasticMaleLineContinuity
+        // 的 IsHereditaryHolder 能 O(1) 判断 —— 它跑在读档的每个 actor 上,
+        // 不能在那里查库。由虚衔变动时(Invalidate)刷新。
+        public const string VIRTUAL_HEREDITARY_TITLE_HELD =
+            "aw_virtual_hereditary_title_held";
         public const string NOBLE_GREAT_GRANT_RULER_ID = "aw_noble_great_grant_ruler_id";
         public const string NOBLE_GREAT_GRANT_CHECK_RULER_ID =
             "aw_noble_great_grant_check_ruler_id";

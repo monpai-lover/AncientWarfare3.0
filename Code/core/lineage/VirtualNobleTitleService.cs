@@ -135,6 +135,7 @@ namespace AncientWarfare3.core.lineage
                             pRemoveOpposites: true);
                 }
                 Invalidate(pKingdom.id, pTarget.data.id);
+                RefreshHereditaryFlag(pTarget);
                 pSnapshot = new VirtualNobleTitleSnapshot(titleId,
                     pKingdom.id, pTarget.data.id, title, -1L, "active", year,
                     pHereditary);
@@ -335,6 +336,7 @@ namespace AncientWarfare3.core.lineage
                     return VirtualNobleTitleEditResult.NotFound;
                 Invalidate(pKingdomId, actorId);
                 Actor actor = World.world?.units?.get(actorId);
+                RefreshHereditaryFlag(actor);
                 if (actor?.data != null && !actor.isRekt())
                 {
                     ChronicleEvents.OnNobleTitleDeleted(
@@ -368,6 +370,15 @@ namespace AncientWarfare3.core.lineage
             List<VirtualNobleTitleSnapshot> titles =
                 new List<VirtualNobleTitleSnapshot>(GetActiveForActor(
                     pHolder.data.id));
+            if (titles.Count == 0) return;
+            // 继承人只取决于 (持有者, 王国),与具体头衔无关 —— 原来在循环里对每个
+            // 头衔各跑一次全量旁系扫描,一个持有三个虚衔的人就是三次。这里按王国
+            // 解析一次并在组内复用;而且先用持有者身上事件驱动算好的预定继承人,
+            // 失效才搜一次。
+            long designatedId = DynasticMaleLineContinuityService
+                .ReadDesignatedSuccessorId(pHolder);
+            Dictionary<long, Actor> successorByKingdom =
+                new Dictionary<long, Actor>();
             for (int i = 0; i < titles.Count; i++)
             {
                 VirtualNobleTitleSnapshot title = titles[i];
@@ -380,8 +391,9 @@ namespace AncientWarfare3.core.lineage
                     Invalidate(title.KingdomId, pHolder.data.id);
                     continue;
                 }
-                Actor successor = HereditaryTitleSuccessionService.FindSuccessor(
-                    pHolder, ResolveKingdom(title.KingdomId));
+                Actor successor = ResolveVirtualTitleSuccessor(
+                    title.KingdomId, pHolder, designatedId,
+                    successorByKingdom);
                 if (successor == null)
                 {
                     Close(title.TitleId, "extinct");
@@ -398,6 +410,36 @@ namespace AncientWarfare3.core.lineage
                     ResolveKingdom(title.KingdomId), pHolder, successor,
                     title.Text);
             }
+
+            // 头衔集合变动的收尾:持有者已全部失去,继承人各自新得。每人只刷一次,
+            // 不在循环里做 —— 那会变成每个头衔一次必定 miss 的查询。
+            RefreshHereditaryFlag(pHolder);
+            foreach (Actor successor in successorByKingdom.Values)
+                if (successor?.data != null) RefreshHereditaryFlag(successor);
+        }
+
+        /// <summary>
+        /// 某王国内该持有者的虚衔继承人。同一 (持有者, 王国) 只解析一次:先用
+        /// 预定继承人,失效才退回搜索一次。null 也会被记住,避免同一王国里多个
+        /// 头衔各搜一遍。
+        /// </summary>
+        private static Actor ResolveVirtualTitleSuccessor(long pKingdomId,
+            Actor pHolder, long pDesignatedId,
+            Dictionary<long, Actor> pCache)
+        {
+            if (pCache.TryGetValue(pKingdomId, out Actor cached))
+                return cached;
+            Kingdom kingdom = ResolveKingdom(pKingdomId);
+            Actor successor = null;
+            bool designated = pDesignatedId != pHolder.data.id &&
+                TitleSuccessionDesignation.TryResolve(pDesignatedId, kingdom,
+                    out successor);
+            if (!designated)
+                successor = HereditaryTitleSuccessionService.FindSuccessor(
+                    pHolder, kingdom);
+            TitleSuccessionDesignation.Account("virtual_title", designated);
+            pCache[pKingdomId] = successor;
+            return successor;
         }
 
         internal static void OnKingdomDestroying(Kingdom pKingdom)
@@ -502,9 +544,48 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdomId >= 0) KingdomCache.Remove(pKingdomId);
             if (pActorId >= 0) ActorCache.Remove(pActorId);
-            if (pActorId >= 0)
-                CityShiInfluenceSnapshotService.MarkActorDirty(
-                    World.world?.units?.get(pActorId));
+            if (pActorId < 0) return;
+            Actor actor = World.world?.units?.get(pActorId);
+            CityShiInfluenceSnapshotService.MarkActorDirty(actor);
+            // 只入队(字典+队列的 push,可忽略),让预定在权威周期上重算。
+            // 可继承标记不在这里刷新:Invalidate 会先清掉 ActorCache,紧接着读一次
+            // 就是必定 miss 的查询,而 OnActorDying 里每个头衔要调它两次。标记改在
+            // 真正的头衔集合变动点刷新,见 RefreshHereditaryFlag 的调用处。
+            DynasticMaleLineContinuityService.RequestContinuation(actor);
+        }
+
+        /// <summary>
+        /// 刷新 VIRTUAL_HEREDITARY_TITLE_HELD。调用方必须已经让 ActorCache 失效,
+        /// 这里读到的才是最新状态。每次调用可能查一次库,所以只在头衔集合真的变了
+        /// 的地方调,且每个 actor 每次变动只调一次。
+        /// </summary>
+        private static void RefreshHereditaryFlag(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            bool held = false;
+            IReadOnlyList<VirtualNobleTitleSnapshot> titles =
+                GetActiveForActor(pActor.data.id);
+            for (int i = 0; i < titles.Count; i++)
+            {
+                if (!titles[i].Hereditary || !titles[i].IsActive) continue;
+                held = true;
+                break;
+            }
+
+            pActor.data.set(LineageKeys.VIRTUAL_HEREDITARY_TITLE_HELD, held);
+        }
+
+        /// <summary>
+        /// O(1):是否持有可继承虚衔。给 IsHereditaryHolder 用,它跑在读档的每个
+        /// actor 上,不能查库。老存档没这个标记时返回 false —— 退化成死亡时搜索
+        /// 一次,与改动前行为一致,并在下一次虚衔变动后自动修正。
+        /// </summary>
+        internal static bool HoldsHereditaryTitleFast(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            pActor.data.get(LineageKeys.VIRTUAL_HEREDITARY_TITLE_HELD,
+                out bool held, false);
+            return held;
         }
 
         private static void Add(SQLiteCommand pCommand, string pName,

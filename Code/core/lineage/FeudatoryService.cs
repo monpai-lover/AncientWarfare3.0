@@ -1384,8 +1384,21 @@ namespace AncientWarfare3.core.lineage
         {
             if (pSnapshot == null) return false;
             Actor oldPrince = pDyingPrince ?? FindActor(pSnapshot.PrinceActorId);
-            Actor successor = FindFeudatorySuccessor(oldPrince,
-                pSnapshot.ShiBranchId, pSnapshot.FeudatoryId, pEmpire);
+            // 预定继承人一直是持久化的(snapshot.SuccessorActorId,建国时定下、
+            // OnChildBorn / OnActorAdult / OnActorDying 各自 RefreshSuccessor),
+            // 但这里以前无条件重新跑一遍全量搜索。先用预定,失效才搜。
+            // 死亡中的 actor 在 OnActorDying 期间仍可能报 isAlive,所以显式排除
+            // 正在离任的这一位 —— 否则封国会被转交给他自己。
+            long excludedId = pDyingPrince?.data?.id ??
+                              oldPrince?.data?.id ?? -1L;
+            Actor successor = null;
+            bool designated = pSnapshot.SuccessorActorId != excludedId &&
+                TitleSuccessionDesignation.TryResolve(
+                    pSnapshot.SuccessorActorId, pEmpire, out successor);
+            if (!designated)
+                successor = FindFeudatorySuccessor(oldPrince,
+                    pSnapshot.ShiBranchId, pSnapshot.FeudatoryId, pEmpire);
+            TitleSuccessionDesignation.Account("feudatory", designated);
             if (successor?.data != null)
                 return TransferPrince(pSnapshot, oldPrince, successor,
                     pEmpire, pReason, pDyingPrince != null);

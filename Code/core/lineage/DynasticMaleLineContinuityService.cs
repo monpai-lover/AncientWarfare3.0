@@ -14,6 +14,11 @@ namespace AncientWarfare3.core.lineage
             new HashSet<long>();
         private static readonly Dictionary<long, long> SuccessorByHolder =
             new Dictionary<long, long>();
+        // SuccessorByHolder 的反向映射。缺了它,一个「旁系」预定继承人死亡时
+        // 持有者永远不会被重算 —— OnActorDying 原本只重新入队死者的父母,而旁系
+        // 继承人的父母通常不是持有者,于是预定就此过期。
+        private static readonly Dictionary<long, long> HolderBySuccessor =
+            new Dictionary<long, long>();
         private static readonly Queue<long> DirtyHolders =
             new Queue<long>();
         private static readonly HashSet<long> EnqueuedHolders =
@@ -97,6 +102,17 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null) return;
             long actorId = pActor.data.id;
+            // 死者是某个持有者的预定继承人时,必须把那个持有者重新入队重算 ——
+            // 原来只入队死者的父母,而旁系继承人的父母通常不是持有者。
+            if (HolderBySuccessor.TryGetValue(actorId, out long holderId))
+            {
+                HolderBySuccessor.Remove(actorId);
+                if (SuccessorByHolder.TryGetValue(holderId,
+                        out long designatedId) && designatedId == actorId)
+                    SuccessorByHolder.Remove(holderId);
+                if (holderId != actorId) EnqueueHolder(holderId);
+            }
+
             ActiveMaleTitleHolders.Remove(actorId);
             ExpectedMaleTitleSuccessors.Remove(actorId);
             RemoveHolderSuccessor(actorId);
@@ -104,6 +120,24 @@ namespace AncientWarfare3.core.lineage
             QueueParentHolder(pActor.data.parent_id_1);
             if (pActor.data.parent_id_2 != pActor.data.parent_id_1)
                 QueueParentHolder(pActor.data.parent_id_2);
+        }
+
+        /// <summary>
+        /// 成年会新增旁系候选资格(HereditaryTitleSuccessionService
+        /// .AddCollateralCandidate 要求 SafeAdult),所以一个新成年人可能正好补上
+        /// 某个空缺。原来没有这个钩子。
+        ///
+        /// 只重新入队「当前缺继承人」的持有者:成年只会增加资格、不会让已有预定
+        /// 失效,所以其余持有者无需重算。这个集合本身就很小,而 EnqueueHolder 又
+        /// 按 id 去重,所以多个人同时成年也不会放大成本。
+        /// </summary>
+        public static void OnActorAdult(Actor pActor)
+        {
+            if (pActor?.data == null || !pActor.isSexMale() ||
+                !SafeIsAdult(pActor) || !SafeIsAlive(pActor)) return;
+            if (HoldersNeedingSuccessor.Count == 0) return;
+            foreach (long holderId in HoldersNeedingSuccessor)
+                EnqueueHolder(holderId);
         }
 
         public static void OnActorLoaded(Actor pActor)
@@ -138,6 +172,7 @@ namespace AncientWarfare3.core.lineage
             HoldersNeedingSuccessor.Clear();
             ExpectedMaleTitleSuccessors.Clear();
             SuccessorByHolder.Clear();
+            HolderBySuccessor.Clear();
             DirtyHolders.Clear();
             EnqueuedHolders.Clear();
         }
@@ -151,6 +186,7 @@ namespace AncientWarfare3.core.lineage
                 ActiveMaleTitleHolders.Remove(pHolderId);
                 RemoveHolderSuccessor(pHolderId);
                 HoldersNeedingSuccessor.Remove(pHolderId);
+                StoreDesignation(holder, -1L);
                 return;
             }
 
@@ -170,9 +206,30 @@ namespace AncientWarfare3.core.lineage
                 HoldersNeedingSuccessor.Remove(pHolderId);
                 NobleHeirPregnancyService.CancelPendingForHolder(holder);
             }
+            // 预定写在持有者身上并随存档持久化,死亡路径直接读它。
+            StoreDesignation(holder, successorId);
             if (successorId < 0L) return;
             SuccessorByHolder[pHolderId] = successorId;
+            HolderBySuccessor[successorId] = pHolderId;
             ExpectedMaleTitleSuccessors.Add(successorId);
+        }
+
+        private static void StoreDesignation(Actor pHolder, long pSuccessorId)
+        {
+            if (pHolder?.data == null) return;
+            pHolder.data.set(LineageKeys.NOBLE_TITLE_SUCCESSOR_ID,
+                pSuccessorId);
+        }
+
+        /// <summary>
+        /// 持有者身上记下的预定继承人。死亡路径用它,失效由调用方退回搜索。
+        /// </summary>
+        internal static long ReadDesignatedSuccessorId(Actor pHolder)
+        {
+            if (pHolder?.data == null) return -1L;
+            pHolder.data.get(LineageKeys.NOBLE_TITLE_SUCCESSOR_ID,
+                out long successorId, -1L);
+            return successorId;
         }
 
         private static long SelectExpectedSuccessorId(Actor pHolder)
@@ -207,6 +264,10 @@ namespace AncientWarfare3.core.lineage
                     out long successorId))
                 return;
             SuccessorByHolder.Remove(pHolderId);
+            if (HolderBySuccessor.TryGetValue(successorId,
+                    out long mappedHolderId) &&
+                mappedHolderId == pHolderId)
+                HolderBySuccessor.Remove(successorId);
             ExpectedMaleTitleSuccessors.Remove(successorId);
         }
 
@@ -226,7 +287,11 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null || !pActor.isSexMale()) return false;
             return SafeIsKing(pActor) || SafeIsRegisteredHeir(pActor) ||
                    SafeIsFeudatoryPrince(pActor) ||
-                   HasActiveMaleTitle(pActor);
+                   HasActiveMaleTitle(pActor) ||
+                   // 只持有可继承虚衔的人也要预定,否则他们永远走死亡时兜底搜索。
+                   // 这一项是纯 actor data 读取,不查库 —— 本方法跑在读档的每个
+                   // actor 上。
+                   VirtualNobleTitleService.HoldsHereditaryTitleFast(pActor);
         }
 
         private static bool SafeIsKing(Actor pActor)

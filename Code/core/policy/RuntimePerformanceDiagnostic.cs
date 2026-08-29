@@ -965,6 +965,11 @@ namespace AncientWarfare3.core.policy
                 AWAuthorityCycleService.TakeAuthorityBreakdown() +
                 " annual_steps=" +
                 KingdomAnnualStepDiagnostics.TakeDiagnostics() +
+                // 路径:预定命中/退回搜索。兜底占比就是「预定 + 定死」这套设计
+                // 是否真的生效的直接证据。
+                " title_succession=" +
+                AncientWarfare3.core.lineage.TitleSuccessionDesignation
+                    .TakeDiagnostics() +
                 " school_steps=" +
                 HistoricalSchoolRuntime.TakeStepDiagnostics() +
                 " school_writes=" +
