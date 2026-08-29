@@ -104,7 +104,12 @@ namespace AncientWarfare3.core.lineage
                 "lineage birth archive insert");
         }
 
-        private static bool UpsertParentEdge(SQLiteConnection pDb,
+        /// <summary>
+        ///     写一条亲子边(parentId &lt; 0 则删除该槽位的边,幂等)。
+        ///     internal 是为了让历史人物的史载双亲(HistoricalAncestorPersistence)
+        ///     复用**同一套** EDGE_ID 键,避免两处各算一遍边键而分叉。
+        /// </summary>
+        internal static bool UpsertParentEdge(SQLiteConnection pDb,
             SQLiteTransaction pTransaction, long pChildId, long pParentId,
             int pParentSlot, long pChildLineageId, double pCreatedTime)
         {

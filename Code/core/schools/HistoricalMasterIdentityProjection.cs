@@ -36,6 +36,21 @@ namespace AncientWarfare3.core.schools
                 catch { return false; }
             }
 
+            // 双亲:清掉引擎随机双亲,写入史载真实双亲(合成祖先档案)。
+            // 放在档案镜像之前 —— ReplaceHistoricalMasterIdentity 内部的 Upsert
+            // 会经 CaptureRelationshipSnapshot 一并把合成双亲 id 写进档案。
+            // 诸子家世绝大多数不可考,内容表查不到就只清双亲、不建祖先。
+            try
+            {
+                HistoricalAncestorService.EnsureMasterParentage(pActor,
+                    pMaster.RegistryIndex, pMaster.CanonicalName);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Historical master parentage failed: " +
+                    error.Message);
+            }
+
             bool archiveProjected =
                 LineageArchiveWriter.ReplaceHistoricalMasterIdentity(pActor, pIdentity);
             if (!archiveProjected)

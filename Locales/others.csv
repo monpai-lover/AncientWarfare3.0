@@ -82,6 +82,8 @@ aw_identity,身份,Identity,身份
 aw_social_title_label,身份:,Title:,身份:
 aw_family_name,姓,Surname,姓
 aw_clan_name,氏,Clan,氏
+aw_historical_father,父,Father,父
+aw_historical_mother,母,Mother,母
 aw_family_tree_entry,家族树,Family Tree,家族樹
 aw_view_family_tree,查看该人的家族树,View this person's family tree,查看該人的家族樹
 aw_year_name,年号,Era Name,年號

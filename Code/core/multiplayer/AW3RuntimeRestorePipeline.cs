@@ -186,6 +186,10 @@ namespace AncientWarfare3.core.multiplayer
                         throw new InvalidOperationException(
                             reset.FailedStage + ": " + reset.Detail);
                 }),
+                // 旧存档修档:历史人物的引擎双亲清除 + 史载合成双亲。幂等,
+                // 已经就位的人物零写入。必须在档案迁移与缓存重置之后。
+                new AW3RestoreStage("historical_ancestors",
+                    HistoricalAncestorRepairService.Run),
                 new AW3RestoreStage("war_refugees",
                     WarRefugeeService.RebuildRuntime),
                 new AW3RestoreStage("western_court_office_migration", () =>
@@ -328,6 +332,10 @@ namespace AncientWarfare3.core.multiplayer
                         throw new InvalidOperationException(
                             reset.FailedStage + ": " + reset.Detail);
                 }),
+                // 旧存档修档:历史人物的引擎双亲清除 + 史载合成双亲。幂等,
+                // 已经就位的人物零写入。必须在档案迁移与缓存重置之后。
+                new AW3RestoreStage("historical_ancestors",
+                    HistoricalAncestorRepairService.Run),
                 new AW3RestoreStage("war_refugees",
                     WarRefugeeService.RebuildRuntime),
                 new AW3RestoreStage("western_court_office_migration", () =>

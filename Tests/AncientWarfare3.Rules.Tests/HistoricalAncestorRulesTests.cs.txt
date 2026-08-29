@@ -1,0 +1,236 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using AncientWarfare3.content.figures;
+using AncientWarfare3.content.schools;
+using AncientWarfare3.core.lineage;
+
+internal static class HistoricalAncestorRulesTests
+{
+    public static void Run()
+    {
+        SyntheticIdsAreDeterministicAndDisjoint();
+        UnattestedParentageCreatesNothing();
+        ArchiveParentIdPrefersHistoricalKeys();
+        IdempotenceGate();
+        ContentIsWellFormed();
+        SourceInvariants();
+    }
+
+    private static void SyntheticIdsAreDeterministicAndDisjoint()
+    {
+        long father = HistoricalAncestorRules.FigureAncestorId(0,
+            HistoricalAncestorRules.FatherSlot);
+        long mother = HistoricalAncestorRules.FigureAncestorId(0,
+            HistoricalAncestorRules.MotherSlot);
+        Equal(HistoricalAncestorRules.SyntheticBase, father,
+            "the first figure father anchors the synthetic band");
+        Equal(HistoricalAncestorRules.SyntheticBase + 1L, mother,
+            "father and mother occupy adjacent synthetic ids");
+        Equal(father, HistoricalAncestorRules.FigureAncestorId(0,
+                HistoricalAncestorRules.FatherSlot),
+            "synthetic ids are deterministic across calls");
+
+        True(HistoricalAncestorRules.IsSynthetic(father),
+            "synthetic ids are recognised by id band alone");
+        True(!HistoricalAncestorRules.IsSynthetic(0L),
+            "a real actor id is never mistaken for a synthetic ancestor");
+        True(!HistoricalAncestorRules.IsSynthetic(
+                HistoricalAncestorRules.SyntheticBase - 1L),
+            "the band boundary excludes real actor ids");
+
+        // 君主段与宗师段不能重叠 —— 重叠会让一个人物的父亲变成另一个人物的母亲。
+        var seen = new HashSet<long>();
+        for (int index = 0; index < HistoricalFigureDef.Count; index++)
+        {
+            True(seen.Add(HistoricalAncestorRules.FigureAncestorId(index,
+                    HistoricalAncestorRules.FatherSlot)),
+                "figure father ids are unique");
+            True(seen.Add(HistoricalAncestorRules.FigureAncestorId(index,
+                    HistoricalAncestorRules.MotherSlot)),
+                "figure mother ids are unique");
+        }
+        for (int index = 0; index < 200; index++)
+        {
+            True(seen.Add(HistoricalAncestorRules.MasterAncestorId(index,
+                    HistoricalAncestorRules.FatherSlot)),
+                "master father ids never collide with the figure band");
+            True(seen.Add(HistoricalAncestorRules.MasterAncestorId(index,
+                    HistoricalAncestorRules.MotherSlot)),
+                "master mother ids never collide with the figure band");
+        }
+
+        Equal(-1L, HistoricalAncestorRules.FigureAncestorId(-1,
+                HistoricalAncestorRules.FatherSlot),
+            "a negative registry index allocates no ancestor");
+        Equal(-1L, HistoricalAncestorRules.FigureAncestorId(0, 7),
+            "only the two FamilyEdge parent slots allocate ancestors");
+        Equal(-1L, HistoricalAncestorRules.FigureAncestorId(
+                HistoricalAncestorRules.MaxPerBand,
+                HistoricalAncestorRules.FatherSlot),
+            "a registry index past the band capacity allocates no ancestor");
+    }
+
+    private static void UnattestedParentageCreatesNothing()
+    {
+        long slot = HistoricalAncestorRules.FigureAncestorId(3,
+            HistoricalAncestorRules.FatherSlot);
+        True(!HistoricalAncestorRules.ShouldCreateAncestor(slot, ""),
+            "an unrecorded parent builds no synthetic ancestor");
+        True(!HistoricalAncestorRules.ShouldCreateAncestor(slot, "   "),
+            "whitespace is not an attestation");
+        True(!HistoricalAncestorRules.ShouldCreateAncestor(-1L, "姬昌"),
+            "a failed id allocation blocks the ancestor even when attested");
+        True(HistoricalAncestorRules.ShouldCreateAncestor(slot, "姬昌"),
+            "an attested parent builds a synthetic ancestor");
+
+        var empty = new HistoricalAncestorParentage("", "", "", "");
+        True(empty.IsEmpty, "an empty parentage record reports itself empty");
+        var fatherOnly = new HistoricalAncestorParentage("刘煓", "煓", "", "");
+        True(fatherOnly.HasFather && !fatherOnly.HasMother,
+            "father-only records are supported (mothers are usually unrecorded)");
+    }
+
+    private static void ArchiveParentIdPrefersHistoricalKeys()
+    {
+        long synthetic = HistoricalAncestorRules.FigureAncestorId(0,
+            HistoricalAncestorRules.FatherSlot);
+        // 这是全套设计的关键不变量:历史人物的 live 槽位是 -1,若档案照抄 live,
+        // 第一次重新入档就会把合成祖先抹掉。
+        Equal(synthetic, HistoricalAncestorRules.ResolveArchiveParentId(
+                synthetic, -1L),
+            "the historical ancestor survives an archive rewrite from a cleared slot");
+        Equal(4321L, HistoricalAncestorRules.ResolveArchiveParentId(-1L, 4321L),
+            "ordinary actors keep archiving their live engine parents");
+        Equal(-1L, HistoricalAncestorRules.ResolveArchiveParentId(-1L, -1L),
+            "no parent anywhere stays no parent");
+    }
+
+    private static void IdempotenceGate()
+    {
+        long father = HistoricalAncestorRules.FigureAncestorId(0,
+            HistoricalAncestorRules.FatherSlot);
+        long mother = HistoricalAncestorRules.FigureAncestorId(0,
+            HistoricalAncestorRules.MotherSlot);
+        True(HistoricalAncestorRules.IsAlreadyApplied(-1L, -1L, father,
+                mother, father, mother),
+            "a fully applied historical figure needs no further writes");
+        True(!HistoricalAncestorRules.IsAlreadyApplied(88L, -1L, father,
+                mother, father, mother),
+            "a surviving engine parent still needs detaching");
+        True(!HistoricalAncestorRules.IsAlreadyApplied(-1L, -1L, -1L, -1L,
+                father, mother),
+            "missing synthetic ancestors still need creating");
+        True(HistoricalAncestorRules.IsAlreadyApplied(-1L, -1L, -1L, -1L,
+                -1L, -1L),
+            "an unrecorded figure with no engine parents is already correct");
+    }
+
+    private static void ContentIsWellFormed()
+    {
+        // 只检查结构与「不可考不填」这条纪律,不断言具体人数 —— 内容还会增补。
+        int attested = 0;
+        for (int index = 0; index < HistoricalFigureDef.Count; index++)
+        {
+            HistoricalFigureDef definition = HistoricalFigureDef.Get(index);
+            True(definition != null, "every registry slot resolves a figure");
+            if (!HistoricalFigureParentage.TryGet(definition.Id,
+                    out HistoricalAncestorParentage parentage)) continue;
+            attested++;
+            True(!parentage.IsEmpty,
+                "a parentage entry must record at least one parent: " +
+                definition.Id);
+        }
+        True(attested > 40,
+            "the figure parentage table covers the well-attested founders");
+        True(attested <= HistoricalFigureDef.Count,
+            "the figure parentage table cannot exceed the registry");
+
+        True(!HistoricalFigureParentage.TryGet("aw_figure_huang_chao", out _),
+            "Huang Chao's parentage is unrecorded and stays absent");
+        True(HistoricalFigureParentage.TryGet("aw_figure_ji_fa",
+                out HistoricalAncestorParentage jiFa),
+            "Ji Fa's parentage is recorded");
+        Equal("姬昌", jiFa.FatherName, "Ji Fa's father is King Wen");
+        Equal("太姒", jiFa.MotherName, "Ji Fa's mother is Tai Si");
+
+        True(HistoricalMasterParentage.TryGet("孔丘",
+                out HistoricalAncestorParentage kongQiu),
+            "Confucius' parentage is recorded");
+        Equal("叔梁纥", kongQiu.FatherName, "Confucius' father is Shuliang He");
+        // 司马谈本身也在宗师名册里,给司马迁造合成父亲会与真人重影。
+        True(!HistoricalMasterParentage.TryGet("司马迁", out _),
+            "Sima Qian is excluded because his father is himself a master");
+        True(HistoricalMasterParentage.Count > 0 &&
+             HistoricalMasterParentage.Count < 30,
+            "master parentage stays sparse: most pre-Qin家世 are unrecorded");
+    }
+
+    private static void SourceInvariants()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string writer = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "LineageArchiveWriter.cs"));
+        string service = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "HistoricalAncestorService.cs"));
+        string persistence = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "HistoricalAncestorPersistence.cs"));
+        string figure = File.ReadAllText(Path.Combine(root, "Code", "content",
+            "figures", "HistoricalFigureService.cs"));
+
+        Contains(writer,
+            "HistoricalAncestorRules.ResolveArchiveParentId(",
+            "archive writes must not clobber historical ancestors with live -1 slots");
+        Contains(service, "lineage_id = -1L",
+            "synthetic ancestors stay outside every surname-scoped query");
+        Contains(service, "shi_id = -1L",
+            "synthetic ancestors stay outside the branch tree so the figure remains founder");
+        Contains(service, "is_alive = 0",
+            "synthetic ancestors are archived as deceased");
+        Contains(service, "given_name = string.Empty",
+            "an empty given name keeps the attested display name verbatim");
+        Contains(service, "SuccessionRelationshipIndex.Refresh(",
+            "detaching parents must evict the succession index entry");
+        Contains(persistence,
+            "LineageBirthArchivePersistence.UpsertParentEdge(",
+            "historical parentage reuses the birth-path EDGE_ID scheme");
+        Contains(persistence, "UPDATE ",
+            "the child's archived parent columns are rewritten with the edges");
+        Ordered(figure, "EnsurePersonalClan(pActor);",
+            "LineageService.OnActorPromoted(pActor, NobleTrigger.Figure)",
+            "the figure founds his own clan before promotion projects his identity");
+        Ordered(figure, "EnsureFigureParentage(",
+            "LineageService.OnActorPromoted(pActor, NobleTrigger.Figure)",
+            "parentage is applied before the promotion archive write");
+        Contains(figure, "World.world?.clans?.newClan(pActor",
+            "historical figures establish their own vanilla clan");
+    }
+
+    private static void Ordered(string source, string first, string second,
+        string name)
+    {
+        int firstIndex = source.IndexOf(first, StringComparison.Ordinal);
+        int secondIndex = source.IndexOf(second, StringComparison.Ordinal);
+        if (firstIndex < 0 || secondIndex <= firstIndex)
+            throw new InvalidOperationException(name + ": expected " + first +
+                                                " before " + second);
+    }
+
+    private static void Contains(string source, string token, string name)
+    {
+        if (!source.Contains(token, StringComparison.Ordinal))
+            throw new InvalidOperationException(name + ": missing " + token);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                                                expected + ", got " + actual);
+    }
+
+    private static void True(bool expected, string name)
+    {
+        if (!expected) throw new InvalidOperationException(name);
+    }
+}

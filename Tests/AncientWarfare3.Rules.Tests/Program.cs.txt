@@ -1394,6 +1394,13 @@ if (args.Length == 1 && args[0] == "--historical-figure-catalog")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--historical-ancestors")
+{
+    HistoricalAncestorRulesTests.Run();
+    Console.WriteLine("Historical ancestor rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--global-dejure-map")
 {
     GlobalDeJureMapModeSourceGuardTests.Run();
@@ -9362,6 +9369,7 @@ WarTerminalSettlementSourceTests.Run();
 WarPeaceCessionPriorityRulesTests.Run();
 SpecialGovernmentWarParticipationRulesTests.Run();
 HistoricalFigureSpawnRulesTests.Run();
+HistoricalAncestorRulesTests.Run();
 Regression20260721Tests.Run();
 ArmyMapInformationRulesTests.Run();
 RoyalGuardCaptainHandoffRulesTests.Run();

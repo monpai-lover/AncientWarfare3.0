@@ -1051,6 +1051,7 @@ namespace AncientWarfare3.core.lineage
             // Shared biography and chronicle prose
             new Entry("aw_hist_person_born", " 出生", " was born", " 出生"),
             new Entry("aw_hist_figure_arrived", " 降临世间", " entered the world", " 降臨世間"),
+            new Entry("aw_hist_figure_father", "，父{0}", ", child of {0}", "，父{0}"),
             new Entry("aw_hist_person_died", " 逝世", " died", " 逝世"),
             new Entry("aw_hist_death_cause_prefix", "（死因：", " (cause: ", "（死因："),
             new Entry("aw_hist_death_cause_suffix", "）", ")", "）"),

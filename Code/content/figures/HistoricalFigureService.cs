@@ -299,6 +299,26 @@ namespace AncientWarfare3.content.figures
                 return;
             }
 
+            // 自建宗族:开国君主此前一直没有原版 Clan —— OnKingFoundBranch 的
+            // shouldFound 带 !IsHistoricalFigure 守卫,那条路径底部的 newClan 对他
+            // 永远不执行,要等称王后才由 AccessionIdentityService 补。这里照学派宗师
+            // (HistoricalMasterIdentityProjection.EnsurePersonalClan)提前建好,
+            // 以他为族长、族名按氏,免得他先加入当地某个平民宗族。
+            EnsurePersonalClan(pActor);
+
+            // 双亲:清掉引擎随机双亲,写入史载真实双亲(合成祖先档案)。
+            // 必须在 OnActorPromoted 之前 —— 后者会入档,那时才能带上合成双亲 id。
+            try
+            {
+                core.lineage.HistoricalAncestorService.EnsureFigureParentage(
+                    pActor, pIndex, pDef.Id);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Historical figure parentage failed: " +
+                    error.Message);
+            }
+
             try
             {
                 LineageService.OnActorPromoted(pActor, NobleTrigger.Figure);
@@ -317,10 +337,18 @@ namespace AncientWarfare3.content.figures
             // 编年史:历史人物降临 = 一次"出生"事件(预设姓名已就绪)。
             try
             {
+                core.lineage.HistoryText arrival =
+                    core.lineage.HistoryText.Actor(pActor) +
+                    core.lineage.HistoryLocalizationRules.H("aw_hist_figure_arrived");
+                pActor.data.get(core.lineage.LineageKeys.HISTORICAL_FATHER_NAME,
+                    out string fatherName, "");
+                if (!string.IsNullOrWhiteSpace(fatherName))
+                    arrival += core.lineage.HistoryText.PlainText(
+                        string.Format(core.lineage.HistoryLocalizationRules.Text(
+                            "aw_hist_figure_father"), fatherName));
                 core.lineage.HistoryWriter.RecordPerson(
                     pActor.data.id, pActor.kingdom, pActor.getName(), "birth",
-                    core.lineage.HistoryText.Actor(pActor) +
-                    core.lineage.HistoryLocalizationRules.H("aw_hist_figure_arrived"));
+                    arrival);
             }
             catch (Exception error)
             {
@@ -329,6 +357,39 @@ namespace AncientWarfare3.content.figures
             }
 
             ModClass.LogInfo($"历史人物降临:{pDef.Key}(序号 {pIndex},国名预留 {pDef.KingdomName})");
+        }
+
+        /// <summary>
+        ///     让历史人物成为自己宗族(原版 Clan)的创立者兼族长,族名按其氏。
+        ///     幂等:已经是自己创立的 clan 就直接返回。
+        ///     与 AccessionIdentityService.EnsureRoyalClanAfterNativeAccession 不冲突 ——
+        ///     那里有 `clan == null` 守卫,提前建族只是让它变成 no-op。
+        /// </summary>
+        private static void EnsurePersonalClan(Actor pActor)
+        {
+            try
+            {
+                Clan current = pActor.clan;
+                bool ownClan = current?.data != null &&
+                    current.data.founder_actor_id == pActor.data.id;
+                if (!ownClan)
+                {
+                    current = World.world?.clans?.newClan(pActor,
+                        pAddDefaultTraits: true);
+                    if (current?.data == null ||
+                        !ReferenceEquals(pActor.clan, current)) return;
+                }
+
+                if (current.data.chief_id != pActor.data.id)
+                    current.setChief(pActor);
+                LineageService.RenameClanByLeader(current, pActor);
+            }
+            catch (Exception error)
+            {
+                // 建族失败不该让已经提交的历史人物作废。
+                ModClass.LogWarning("Historical figure clan creation failed: " +
+                    error.Message);
+            }
         }
 
         private static void ApplyCombatPackage(Actor pActor,

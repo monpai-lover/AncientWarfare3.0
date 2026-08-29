@@ -244,6 +244,17 @@ namespace AncientWarfare3.core.lineage
             double deathTime = pAlive
                 ? pPrevious?.death_time ?? -1d
                 : LineageService.CurTime();
+            // 历史人物的引擎双亲槽被刻意清成 -1,真实双亲记在 data 键上并落成合成
+            // 祖先档案行。这里必须让史载 id 优先,否则每一次重新入档(晋升/死亡/
+            // 改氏)都会用 live 的 -1 把合成祖先抹掉。见 HistoricalAncestorRules。
+            pActor.data.get(LineageKeys.HISTORICAL_FATHER_ACTOR_ID,
+                out long historicalFatherId, -1L);
+            pActor.data.get(LineageKeys.HISTORICAL_MOTHER_ACTOR_ID,
+                out long historicalMotherId, -1L);
+            long parentSlot1 = HistoricalAncestorRules.ResolveArchiveParentId(
+                historicalFatherId, pActor.data.parent_id_1);
+            long parentSlot2 = HistoricalAncestorRules.ResolveArchiveParentId(
+                historicalMotherId, pActor.data.parent_id_2);
 
             return new ActorArchiveTableItem
             {
@@ -292,8 +303,8 @@ namespace AncientWarfare3.core.lineage
                 clan_banner_background_id = currentClan
                     ? pActor.clan.data.banner_background_id
                     : pPrevious?.clan_banner_background_id ?? -1,
-                parent_id_1 = pActor.data.parent_id_1,
-                parent_id_2 = pActor.data.parent_id_2,
+                parent_id_1 = parentSlot1,
+                parent_id_2 = parentSlot2,
                 generation = pActor.data.generation,
                 birth_time = pPrevious?.birth_time ?? pActor.data.created_time,
                 death_time = deathTime,

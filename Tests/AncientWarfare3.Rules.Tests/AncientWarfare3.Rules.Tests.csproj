@@ -588,6 +588,11 @@
     <Compile Include="..\..\Code\core\multiplayer\commands\AW3DiplomacyCommandErrorRules.cs" Link="Production\AW3DiplomacyCommandErrorRules.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureDef.cs" Link="Production\HistoricalFigureDef.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureSpawnRules.cs" Link="Production\HistoricalFigureSpawnRules.cs" />
+    <Compile Include="HistoricalAncestorRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\HistoricalAncestorRules.cs" Link="Production\HistoricalAncestorRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HistoricalAncestorParentage.cs" Link="Production\HistoricalAncestorParentage.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureParentage.cs" Link="Production\HistoricalFigureParentage.cs" />
+    <Compile Include="..\..\Code\content\schools\HistoricalMasterParentage.cs" Link="Production\HistoricalMasterParentage.cs" />
     <Compile Include="..\..\Code\core\lineage\CityArmyReinforcementRules.cs" Link="Production\CityArmyReinforcementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyEstablishmentRules.cs" Link="Production\ArmyEstablishmentRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyMobilizationRules.cs" Link="Production\ArmyMobilizationRules.cs" />

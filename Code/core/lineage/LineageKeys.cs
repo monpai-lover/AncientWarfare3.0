@@ -60,6 +60,19 @@ namespace AncientWarfare3.core.lineage
         public const string KINGDOM_INTEGRATED = "aw_name_integrated";
         public const string CHRONICLE_LAST_KING_ID = "aw_chronicle_last_king";
         public const string FOUNDED_BRANCH_SHI_ID = "aw_founded_branch_shi";
+
+        // 历史人物(开国君主/学派宗师)的史载真实双亲。引擎双亲槽被清成 -1,
+        // 真实双亲改由这几个键承载,并在档案里落成「合成祖先」行。
+        // 见 HistoricalAncestorRules / HistoricalAncestorService。
+        public const string HISTORICAL_FATHER_ACTOR_ID =
+            "aw_historical_father_actor_id";
+        public const string HISTORICAL_MOTHER_ACTOR_ID =
+            "aw_historical_mother_actor_id";
+        public const string HISTORICAL_FATHER_NAME =
+            "aw_historical_father_name";
+        public const string HISTORICAL_MOTHER_NAME =
+            "aw_historical_mother_name";
+
         public const string MATRILOCAL_IN_LAW = "aw_matrilocal_in_law";
         public const string MATRILOCAL_WIFE_ID = "aw_matrilocal_wife_id";
         public const string VASSAL_SUZERAIN_ID = "aw_vassal_suzerain_id";

@@ -71,6 +71,10 @@ namespace AncientWarfare3.patch
 
             ShowRawRow(__instance, "aw_identity", IdentityText(status));
 
+            // 史载真实双亲。放在宗师分支之前 —— 那个分支末尾直接 return,
+            // 开国君主与学派宗师都要显示这两行。
+            ShowHistoricalParentRows(__instance, actor, shiId);
+
             if (HistoricalSchoolDescentService.IsCanonicalMaster(actor))
             {
                 HistoricalSchoolMasterDefinition master =
@@ -126,6 +130,42 @@ namespace AncientWarfare3.patch
                     long s = shiId;
                     kvf.on_click_value = () => FamilyTreeWindow.OpenBigTree(s);
                 }
+            }
+        }
+
+        /// <summary>
+        ///     历史人物(开国君主/学派宗师)的史载双亲。只显示确有记载的 —— 诸子与
+        ///     多数割据君主的家世不可考,那种情况不占行。点击跳该人物的家族树,
+        ///     合成祖先节点就在他上方。
+        /// </summary>
+        private static void ShowHistoricalParentRows(UnitWindow pWindow,
+            Actor pActor, long pShiId)
+        {
+            if (pWindow == null || pActor?.data == null) return;
+            pActor.data.get(LineageKeys.HISTORICAL_FATHER_NAME,
+                out string father, "");
+            pActor.data.get(LineageKeys.HISTORICAL_MOTHER_NAME,
+                out string mother, "");
+            if (string.IsNullOrWhiteSpace(father) &&
+                string.IsNullOrWhiteSpace(mother)) return;
+
+            long centerId = pActor.data.id;
+            long backShiId = pShiId;
+            if (!string.IsNullOrWhiteSpace(father))
+            {
+                KeyValueField row = ShowRawRow(pWindow,
+                    "aw_historical_father", father);
+                if (row != null)
+                    row.on_click_value = () =>
+                        FamilyTreeWindow.OpenFamilyTree(centerId, backShiId);
+            }
+            if (!string.IsNullOrWhiteSpace(mother))
+            {
+                KeyValueField row = ShowRawRow(pWindow,
+                    "aw_historical_mother", mother);
+                if (row != null)
+                    row.on_click_value = () =>
+                        FamilyTreeWindow.OpenFamilyTree(centerId, backShiId);
             }
         }
 
