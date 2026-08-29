@@ -1096,12 +1096,14 @@ namespace AncientWarfare3.core.performance
         {
             AWSchedulerStageBucket bucket = GetDiagnosticBucket(_stage);
             long started = AWSchedulerStageDiagnostics.Begin(bucket);
+            long allocated = AWSchedulerStageDiagnostics.BeginAllocation();
             try
             {
                 ExecuteCurrentStageCoreUnmeasured();
             }
             finally
             {
+                AWSchedulerStageDiagnostics.EndAllocation(bucket, allocated);
                 AWSchedulerStageDiagnostics.End(bucket, started);
             }
         }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.court;
@@ -874,19 +875,37 @@ namespace AncientWarfare3.core.schools
                 System.Data.SQLite.SQLiteConnection pDb,
                 System.Data.SQLite.SQLiteTransaction pTransaction)
             {
+                // guest-end 实测 12.9~21.4 ms/op,是合批之后学派唯一的大头。
+                // 但它牵到的三张表都很小(SchoolAffiliation 990 /
+                // CourtOfficer 268 / OfficialCareerState 215),EXPLAIN QUERY
+                // PLAN 显示全部走主键或索引,而一个含写入的事务固定开销只有
+                // 约 0.83ms —— 也就是说读代码解释不了这个量级。分两段计时,
+                // 让下一份日志直接说出是准备阶段还是落库阶段。
                 _request = _pending.EndRequest;
                 if (_request == null)
                 {
+                    long preparing = AncientWarfare3.core.performance
+                        .AWDiagnosticsGate.Enabled
+                        ? Stopwatch.GetTimestamp()
+                        : 0L;
                     _preparation = GuestOfficeEndPersistence.
                         PrepareEndAttemptInTransaction(pDb,
                         pTransaction, _expectedAffiliation, _endReason,
                         _endedYear, _endedTime, _officeId, _schoolId);
+                    HistoricalSchoolWriteDiagnostics.AccountOperation(
+                        "guest-end.prepare", preparing);
                     _request = _preparation.Request;
                 }
                 if (_request == null)
                     return GuestEndPreparationOutcome(_preparation);
+                long ending = AncientWarfare3.core.performance
+                    .AWDiagnosticsGate.Enabled
+                    ? Stopwatch.GetTimestamp()
+                    : 0L;
                 _result = GuestOfficeEndPersistence.EndInTransaction(pDb,
                     pTransaction, _request);
+                HistoricalSchoolWriteDiagnostics.AccountOperation(
+                    "guest-end.commit_stage", ending);
                 return WriteOutcome(_result?.Persistence.Outcome ??
                     GuestOfficePersistenceOutcome.Unknown,
                     _result?.RecoveredExisting ?? false);

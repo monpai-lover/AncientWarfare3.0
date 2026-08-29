@@ -76,8 +76,13 @@ internal static class HistoricalSchoolXiaAccessSourceGuardTests
         Contains(patch,
             "HistoricalSchoolRuntime.EnqueueWorldYear();",
             "world-time patch must enqueue the school year");
-        Contains(runtime,
-            "EnqueueWorldYear();\n            HistoricalSchoolAcademyConstructionService.ProcessPendingRebuilds();",
+        // ProcessFrameCore 的每一步现在都套了 Step("<id>", ...) 计时探针,
+        // 原来那条「两行字面相邻」的断言因此匹配不到。它真正要守的是次序 ——
+        // 年份入队必须发生在书院重建之前 —— 所以改成按位置比较,探针包装与否
+        // 都不影响。
+        OrderedWithin(runtime, "private static void ProcessFrameCore()",
+            "EnqueueWorldYear",
+            "HistoricalSchoolAcademyConstructionService",
             "school frame must enqueue years on the cooperative simulation path");
         Contains(runtime,
             "if (HistoricalSchoolScheduler.EnqueueYear(Date.getCurrentYear()))",
@@ -95,6 +100,22 @@ internal static class HistoricalSchoolXiaAccessSourceGuardTests
         return File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
                 pRelative.Replace('/', Path.DirectorySeparatorChar)))
             .Replace("\r\n", "\n");
+    }
+
+    /// <summary>
+    /// 在 pScope 起始的那段源码里断言 pFirst 出现在 pSecond 之前。必须限定
+    /// 作用域:HistoricalSchoolAcademyConstructionService 在 LoadState /
+    /// ClearRuntime 里也出现,整文件比较会撞上那些更早的引用。
+    /// </summary>
+    private static void OrderedWithin(string pText, string pScope,
+        string pFirst, string pSecond, string pMessage)
+    {
+        int scope = pText.IndexOf(pScope, StringComparison.Ordinal);
+        if (scope < 0) throw new InvalidOperationException(pMessage);
+        int first = pText.IndexOf(pFirst, scope, StringComparison.Ordinal);
+        if (first < 0) throw new InvalidOperationException(pMessage);
+        int second = pText.IndexOf(pSecond, first, StringComparison.Ordinal);
+        if (second < 0) throw new InvalidOperationException(pMessage);
     }
 
     private static void Contains(string pText, string pNeedle,

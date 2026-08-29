@@ -23,6 +23,12 @@ namespace AncientWarfare3.core.schools
 
         private static void Step(string pId, Action pAction)
         {
+            if (!AncientWarfare3.core.performance.AWDiagnosticsGate.Enabled)
+            {
+                pAction();
+                return;
+            }
+
             long started = Stopwatch.GetTimestamp();
             try { pAction(); }
             finally

@@ -1,5 +1,6 @@
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.asyncwork;
+using AncientWarfare3.core.county;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
@@ -31,6 +32,8 @@ namespace AncientWarfare3.core.performance
             RulerHouseholdPregnancy,
             ArmyMembershipReconciliation,
             EnclosedUnownedZoneRepair,
+            CountyAdministrationRepair,
+            CourtVacancyRetryDrain,
             EmptyCityResettlement,
             TemporaryMilitaryReturn,
             WarArmyReturn,
@@ -68,15 +71,31 @@ namespace AncientWarfare3.core.performance
             SlaveCaptureScan,
         }
 
+        // 每个权威周期最多处理几张重试票据。一张票据触发一次整王国的
+        // Reconcile,不设上限时积压的票据会在一帧里全部展开。
+        private const int CourtVacancyRetryTicketsPerCycle = 2;
+
         private static readonly long[] StepTicks =
             new long[System.Enum.GetValues(typeof(AuthorityStep)).Length];
         private static readonly long[] StepCalls =
+            new long[StepTicks.Length];
+
+        // 托管堆 28 秒内从 558MB 涨到 857MB,而且每次回收都是
+        // gc0=gc1=gc2(次次全代)。已经直接观测到一帧里 GC 跑过、整帧 88.4ms、
+        // 其中 86.1ms 记在 aw3_authority 头上 —— 也就是说不少"某某步骤偶发
+        // 几十毫秒"其实是停顿落点,不是那段代码本身慢。
+        //
+        // 所以按步骤记分配量:耗时会被停顿污染,分配量不会。取样走
+        // AWAllocationProbe —— 直接调 GC.GetAllocatedBytesForCurrentThread 在
+        // Unity 的 Mono 上是空桩,上一轮整局日志全是 0。
+        private static readonly long[] StepBytes =
             new long[StepTicks.Length];
 
         private static long BeginStep()
         {
             return System.Diagnostics.Stopwatch.GetTimestamp();
         }
+
         private static void EndStep(AuthorityStep pStep, long pStarted)
         {
             int index = (int)pStep;
@@ -91,8 +110,56 @@ namespace AncientWarfare3.core.performance
         private static void Step(AuthorityStep pStep, System.Action pAction)
         {
             long started = BeginStep();
+            long allocated = AWDiagnosticsGate.Enabled
+                ? AWAllocationProbe.Sample()
+                : 0L;
             try { pAction(); }
-            finally { EndStep(pStep, started); }
+            finally
+            {
+                AccountStepBytes(pStep, allocated);
+                EndStep(pStep, started);
+            }
+        }
+
+        private static void AccountStepBytes(AuthorityStep pStep,
+            long pAllocatedAtEntry)
+        {
+            if (pAllocatedAtEntry == 0L) return;
+            int index = (int)pStep;
+            if (index < 0 || index >= StepBytes.Length) return;
+            long delta = AWAllocationProbe.Sample() - pAllocatedAtEntry;
+            // 净堆来源在回收后会给出负增量,毛分配量来源不会。两种都丢弃非正
+            // 值:净堆来源因此是下界(GC 之后那一段少算),但不会算多。
+            if (delta <= 0L) return;
+            System.Threading.Interlocked.Add(ref StepBytes[index], delta);
+        }
+
+        /// <summary>取走并清空按步骤累计的分配量(KB)。</summary>
+        internal static string TakeAuthorityAllocation()
+        {
+            var ranked = new System.Collections.Generic.List<
+                System.Collections.Generic.KeyValuePair<string, long>>();
+            for (int index = 0; index < StepBytes.Length; index++)
+            {
+                long bytes = System.Threading.Interlocked.Exchange(
+                    ref StepBytes[index], 0L);
+                if (bytes <= 0L) continue;
+                ranked.Add(new System.Collections.Generic.KeyValuePair<
+                    string, long>(((AuthorityStep)index).ToString(), bytes));
+            }
+
+            if (ranked.Count == 0) return "none";
+            ranked.Sort((left, right) => right.Value.CompareTo(left.Value));
+            var builder = new System.Text.StringBuilder();
+            int limit = System.Math.Min(12, ranked.Count);
+            for (int i = 0; i < limit; i++)
+            {
+                if (builder.Length > 0) builder.Append(',');
+                builder.Append(ranked[i].Key).Append(':')
+                    .Append((ranked[i].Value / 1024.0).ToString("0.#"));
+            }
+
+            return builder.ToString();
         }
 
         // 供权威周期内部那些"自己还嵌了几件事"的服务把子步骤也记进同一本账。
@@ -107,8 +174,15 @@ namespace AncientWarfare3.core.performance
             System.Action pAction)
         {
             long started = BeginStep();
+            long allocated = AWDiagnosticsGate.Enabled
+                ? AWAllocationProbe.Sample()
+                : 0L;
             try { Measure(pBenchmarkIndex, pAction); }
-            finally { EndStep(pStep, started); }
+            finally
+            {
+                AccountStepBytes(pStep, allocated);
+                EndStep(pStep, started);
+            }
         }
 
         internal static string TakeAuthorityBreakdown()
@@ -228,6 +302,23 @@ namespace AncientWarfare3.core.performance
                 ArmyMembershipReconciliationService.ProcessFrame);
             Step(AuthorityStep.EnclosedUnownedZoneRepair,
                 EnclosedUnownedZoneRepairService.ProcessAuthorityCycle);
+            // 县级重建原本只在世界载入时跑一次(AW3WorldLoadCoordinator 调
+            // RepairAfterWorldLoaded),而 RepairDirtyCities 全仓库没有调用者。
+            // City.addZone 与 City.newCityEvent 会 MarkCityDirty —— 正好是「该
+            // 产生新县」的两种情况 —— 但那个集合只进不出。于是游戏中新建或扩张
+            // 的城市永远没有县,CountiesForCity 返回空,DiscoverVacancies 也就
+            // 永远登记不出县令空缺,AI 自然不会任命县令。
+            Step(AuthorityStep.CountyAdministrationRepair,
+                () => CountyAdministrationStore.RepairDirtyCities());
+            // 同一类问题:CourtVacancyReconciliationService 在 TechnicalFailure
+            // 时会写 RetryTickets,Request 也会写,但 DrainDueRetryTickets 在
+            // 文件外没有任何调用者 —— 于是那些重试永远不会发生。
+            // CourtVacancySourceGuardTests 明确断言「权威周期必须排空法庭重试
+            // 票据」,说明这条接线是原本设计好后丢掉的。给一个每周期的票据上限,
+            // 免得一次排空太多把帧撑爆。
+            Step(AuthorityStep.CourtVacancyRetryDrain,
+                () => CourtVacancyReconciliationService
+                    .DrainDueRetryTickets(CourtVacancyRetryTicketsPerCycle));
             Step(AuthorityStep.EmptyCityResettlement,
                 EmptyCityResettlementService.ProcessAuthorityCycle);
             Step(AuthorityStep.TemporaryMilitaryReturn,

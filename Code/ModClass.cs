@@ -51,6 +51,10 @@ namespace AncientWarfare3
             LogInfo("AW3 Army RTS scheduler: " +
                     ArmyRtsSchedulingMode.Current.ToString().ToLowerInvariant() +
                     " (AW3_USE_AW3_ARMY_RTS_SCHEDULER setting; restart required)." );
+            AWAllocationProbe.Initialize();
+            LogInfo("AW3 allocation probe: " + AWAllocationProbe.SourceName +
+                    " (net_heap_source=" +
+                    (AWAllocationProbe.IsNetHeapSource ? "yes" : "no") + ").");
             AWAsyncRuntime.Initialize();
             LogInfo("AW3 async features: db=" +
                     (AWAsyncRuntime.DatabaseEnabled ? "on" : "off") +

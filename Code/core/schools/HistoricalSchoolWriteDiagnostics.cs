@@ -24,6 +24,8 @@ namespace AncientWarfare3.core.schools
 
         internal static void AccountOperation(string pKey, long pStarted)
         {
+            if (!AncientWarfare3.core.performance.AWDiagnosticsGate.Enabled)
+                return;
             if (pStarted == 0L) return;
             long elapsed = Stopwatch.GetTimestamp() - pStarted;
             if (elapsed < 0L) return;
@@ -43,6 +45,8 @@ namespace AncientWarfare3.core.schools
 
         internal static void AccountCommit(long pStarted)
         {
+            if (!AncientWarfare3.core.performance.AWDiagnosticsGate.Enabled)
+                return;
             if (pStarted == 0L) return;
             long elapsed = Stopwatch.GetTimestamp() - pStarted;
             if (elapsed < 0L) return;

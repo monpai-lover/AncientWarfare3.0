@@ -598,6 +598,14 @@ namespace AncientWarfare3.core.policy
             int intervalGc1 = Math.Max(0, currentGc1 - _intervalGc1Started);
             int intervalGc2 = Math.Max(0, currentGc2 - _intervalGc2Started);
             long managedHeapBytes = GC.GetTotalMemory(false);
+            // 主线程本区间的分配总量。上面两个 *_alloc_kb 是分项,没有这个分母
+            // 就不知道它们合起来占了多少 —— 剩下的说明分配在别的线程或别的
+            // 路径上(渲染、原版 Update 之外的地方)。
+            long allocatedNow = AWAllocationProbe.Sample();
+            long allocatedDelta = _lastAllocatedBytes < 0L
+                ? 0L
+                : Math.Max(0L, allocatedNow - _lastAllocatedBytes);
+            _lastAllocatedBytes = allocatedNow;
             ReadLiveWorldCounts(out int livePopulation,
                 out int totalActorObjects, out int dyingActorObjects,
                 out int actorDestroyQueue, out int schoolPendingDeaths,
@@ -961,6 +969,25 @@ namespace AncientWarfare3.core.policy
                 HistoricalSchoolWriteDiagnostics.TakeDiagnostics() +
                 " deferred_prefix_ms=" +
                 DeferredRuntimeWorkService.TakePrefixCostDiagnostics() +
+                " court_death_steps=" +
+                AncientWarfare3.core.court.CourtDeathStepDiagnostics
+                    .TakeDiagnostics() +
+                " county_fill=" +
+                AncientWarfare3.core.court.CountyFillDiagnostics
+                    .TakeDiagnostics() +
+                // 分配量归因(KB/区间)。耗时会被 GC 停顿污染,分配量不会 ——
+                // 找 10MB/s 净增长的来源要看这两行,不是上面那些 ms。
+                // 探针来源要发出来:上一轮 alloc_total_kb 全是 0,就是因为
+                // 选中的 API 在 Unity Mono 上没有实现。带上来源,这些数字能
+                // 自证有效,而不用再猜。
+                " alloc_src=" + AWAllocationProbe.SourceName +
+                " alloc_total_kb=" +
+                (allocatedDelta / 1024.0).ToString("0.#",
+                    CultureInfo.InvariantCulture) +
+                " sched_alloc_kb=" +
+                AWSchedulerStageDiagnostics.TakeIntervalAllocation() +
+                " authority_alloc_kb=" +
+                AWAuthorityCycleService.TakeAuthorityAllocation() +
                 " gc0_collections=" + gc0Collections +
                 " gc1_collections=" + gc1Collections +
                 " gc2_collections=" + gc2Collections +
@@ -1173,6 +1200,7 @@ namespace AncientWarfare3.core.policy
         // 最坏帧里各桶的耗时,外加落在所有桶之外的余量。余量大就说明尖峰不在
         // 我们的代码里(原版模拟、渲染、或者被 GC 停了)。
         private static long _lastLogicalTicksCompleted = -1L;
+        private static long _lastAllocatedBytes = -1L;
 
         /// <summary>
         /// 玩家看到的倍速 = 请求倍速 × 实际完成的逻辑 tick 率 ÷ 50。

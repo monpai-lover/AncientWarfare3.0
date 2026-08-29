@@ -37,6 +37,11 @@ namespace AncientWarfare3.core.performance
             new long[(int)AWSchedulerStageBucket.Count];
         private static readonly long[] IntervalCalls =
             new long[(int)AWSchedulerStageBucket.Count];
+        // 按阶段的分配量。托管堆 28 秒涨 300MB、次次全代回收,而耗时会被停顿
+        // 污染、分配量不会 —— 要找 10MB/s 的来源只能看后者。这里能分出原版
+        // 调度和 AW3 权威各自分配了多少。
+        private static readonly long[] IntervalBytes =
+            new long[(int)AWSchedulerStageBucket.Count];
         private static int _sampling;
         private static long _schedulerTicks;
 
@@ -103,6 +108,49 @@ namespace AncientWarfare3.core.performance
             if (Volatile.Read(ref _sampling) == 0) return;
             Interlocked.Add(ref Ticks[index], elapsed);
             Interlocked.Increment(ref Calls[index]);
+        }
+
+        /// <summary>
+        /// 记一段的分配量。和 Begin/End 分开,因为耗时那对要保留采样门控语义,
+        /// 分配量则必须每次都收 —— 分配是累积效应,漏采就失真。
+        /// </summary>
+        internal static long BeginAllocation()
+        {
+#if AW3_RULES_TESTS
+            return AWAllocationProbe.Sample();
+#else
+            return AWDiagnosticsGate.Enabled
+                ? AWAllocationProbe.Sample()
+                : 0L;
+#endif
+        }
+
+        internal static void EndAllocation(AWSchedulerStageBucket pBucket,
+            long pAllocatedAtEntry)
+        {
+            if (pAllocatedAtEntry == 0L) return;
+            long delta = AWAllocationProbe.Sample() - pAllocatedAtEntry;
+            if (delta <= 0L) return;
+            Interlocked.Add(ref IntervalBytes[(int)pBucket], delta);
+        }
+
+        /// <summary>取走并清空跨帧累计的分阶段分配量(KB)。</summary>
+        internal static string TakeIntervalAllocation()
+        {
+            var text = new StringBuilder();
+            for (int i = 0; i < IntervalBytes.Length; i++)
+            {
+                long bytes = Interlocked.Exchange(ref IntervalBytes[i], 0L);
+                if (bytes <= 0L) continue;
+                if (text.Length > 0) text.Append(',');
+                text.Append(AWSchedulerStageDiagnosticSnapshot.BucketId(
+                    (AWSchedulerStageBucket)i));
+                text.Append(':');
+                text.Append((bytes / 1024.0).ToString("0.#",
+                    CultureInfo.InvariantCulture));
+            }
+
+            return text.Length == 0 ? "none" : text.ToString();
         }
 
         /// <summary>取走并清空跨帧累计的分阶段成本。</summary>

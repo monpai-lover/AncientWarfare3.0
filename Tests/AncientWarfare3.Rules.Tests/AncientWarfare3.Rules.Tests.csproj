@@ -272,6 +272,8 @@
     <Compile Include="PathGeneratorBoundsRegressionSourceGuardTests.cs.txt" />
     <Compile Include="PathGeneratorSnapshotRegressionTests.cs.txt" />
     <Compile Include="..\..\Code\core\performance\AWSchedulerStageDiagnostics.cs" Link="Production\AWSchedulerStageDiagnostics.cs" />
+    <Compile Include="..\..\Code\core\performance\AWAllocationProbe.cs" Link="Production\AWAllocationProbe.cs" />
+    <Compile Include="..\..\Code\core\performance\AWDiagnosticsGate.cs" Link="Production\AWDiagnosticsGate.cs" />
     <Compile Include="SimulationWorkerPoolTests.cs.txt" />
     <Compile Include="..\..\Code\core\performance\AWSimulationWorkerDispatchGate.cs" Link="Production\AWSimulationWorkerDispatchGate.cs" />
     <Compile Include="..\..\Code\core\performance\AWSimulationWorkerPool.cs" Link="Production\AWSimulationWorkerPool.cs" />
