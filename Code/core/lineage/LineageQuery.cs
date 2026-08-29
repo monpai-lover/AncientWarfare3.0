@@ -745,6 +745,88 @@ namespace AncientWarfare3.core.lineage
             return -1L;
         }
 
+        /// <summary>
+        ///     某个基准 actor 的父系祖先深度表(本人 = 0,父亲 = 1,……上限 96 代)。
+        ///
+        ///     上面那三个函数(NearestCommonAgnaticAncestor / IsAgnaticDescendantOf /
+        ///     GetAgnaticDepth)每次调用都要重走一整条父系链并新建集合,而头衔继承的
+        ///     候选人循环里基准是固定的、或者同一条链要被问两遍。走一次建表,之后
+        ///     全是字典查询。
+        ///
+        ///     这里的 GetFatherId 每步还要 GetParentIds + 逐个 GetActorSex,所以省掉
+        ///     的不只是分配。
+        ///
+        ///     由调用方持有、串行使用(Reset 后复用),不是共享全局状态。深度上限取
+        ///     96,与 NearestCommonAgnaticAncestor / GetAgnaticDepth 一致;
+        ///     IsAgnaticDescendantOf 原本能多走一步(97),实际父系链远不及此。
+        /// </summary>
+        public sealed class AgnaticAncestorDepths
+        {
+            private readonly Dictionary<long, int> _depths =
+                new Dictionary<long, int>();
+            private readonly HashSet<long> _scratch = new HashSet<long>();
+
+            public long RootId { get; private set; } = -1L;
+            public bool IsUsable => RootId >= 0L;
+
+            public void Reset(long pRootId)
+            {
+                _depths.Clear();
+                RootId = -1L;
+                if (pRootId < 0L) return;
+                RootId = pRootId;
+                long current = pRootId;
+                for (int depth = 0; depth <= 96; depth++)
+                {
+                    if (!_depths.ContainsKey(current)) _depths[current] = depth;
+                    long father = GetFatherId(current);
+                    if (father < 0L || father == current ||
+                        _depths.ContainsKey(father)) break;
+                    current = father;
+                }
+            }
+
+            /// <summary>基准到 pAncestorId 的父系步数;不在链上返回 -1,基准本人为 0。</summary>
+            public int DepthOf(long pAncestorId)
+            {
+                if (!IsUsable || pAncestorId < 0L) return -1;
+                return _depths.TryGetValue(pAncestorId, out int depth)
+                    ? depth
+                    : -1;
+            }
+
+            /// <summary>基准是否 pAncestorId 的男系直系后裔(本人不算)。</summary>
+            public bool IsStrictDescendantOf(long pAncestorId)
+            {
+                return DepthOf(pAncestorId) > 0;
+            }
+
+            /// <summary>基准与 pOtherId 的最近共同父系祖先。语义同静态版。</summary>
+            public long NearestCommon(long pOtherId, out int pRootDepth,
+                out int pOtherDepth)
+            {
+                pRootDepth = -1;
+                pOtherDepth = -1;
+                if (!IsUsable || pOtherId < 0L) return -1L;
+                _scratch.Clear();
+                long current = pOtherId;
+                for (int depth = 0; depth <= 96; depth++)
+                {
+                    if (_depths.TryGetValue(current, out int rootDepth))
+                    {
+                        pRootDepth = rootDepth;
+                        pOtherDepth = depth;
+                        return current;
+                    }
+                    if (!_scratch.Add(current)) break;
+                    long father = GetFatherId(current);
+                    if (father < 0L || father == current) break;
+                    current = father;
+                }
+                return -1L;
+            }
+        }
+
         /// <summary>沿父系从 actor 到某祖先/始祖的步数(辈分深度);走不到返回 -1,祖先本人为 0。</summary>
         public static int GetAgnaticDepth(long pActorId, long pFounderId)
         {

@@ -53,6 +53,14 @@ namespace AncientWarfare3.core.lineage
             {
                 try
                 {
+                    // 持有者的父系祖先表在整个候选人循环里不变,建一次重复用。
+                    // 原来每个候选人都调一次 NearestCommonAgnaticAncestor,而那个
+                    // 方法内部会把持有者整条父系链重走一遍并新建集合 —— 同一张表
+                    // 被重建了 N 遍。与 HeirService.FindHeir 是同一个问题,那边实测
+                    // 单次 60.9ms。
+                    var holderAncestry =
+                        new LineageQuery.AgnaticAncestorDepths();
+                    holderAncestry.Reset(pHolder.data.id);
                     foreach (long actorId in
                              LineageQuery.GetLivingLineageMemberIds(
                                  lineageId, MaximumCollateralMembers))
@@ -61,7 +69,7 @@ namespace AncientWarfare3.core.lineage
                             pHolder.data.id) continue;
                         Actor candidate = ResolveActor(actorId);
                         AddCollateralCandidate(candidates, seen, directIds,
-                            candidate, pHolder, kingdom);
+                            candidate, pHolder, kingdom, holderAncestry);
                     }
                 }
                 catch { }
@@ -93,18 +101,21 @@ namespace AncientWarfare3.core.lineage
         private static void AddCollateralCandidate(
             List<HereditaryTitleSuccessionCandidate> pCandidates,
             HashSet<long> pSeen, HashSet<long> pDirectIds, Actor pCandidate,
-            Actor pHolder, Kingdom pKingdom)
+            Actor pHolder, Kingdom pKingdom,
+            LineageQuery.AgnaticAncestorDepths pHolderAncestry)
         {
             if (pCandidate?.data == null || pCandidate == pHolder ||
                 pDirectIds.Contains(pCandidate.data.id) ||
                 !pSeen.Add(pCandidate.data.id) ||
                 !IsBaseEligible(pCandidate, pKingdom) ||
                 !pCandidate.isSexMale() || !SafeAdult(pCandidate)) return;
-            if (LineageQuery.IsAgnaticDescendantOf(pCandidate.data.id,
-                    pHolder.data.id)) return;
-            LineageQuery.NearestCommonAgnaticAncestor(pHolder.data.id,
-                pCandidate.data.id, out int holderDepth,
-                out int candidateDepth);
+            pHolderAncestry.NearestCommon(pCandidate.data.id,
+                out int holderDepth, out int candidateDepth);
+            // 原来这里先单独调一次 IsAgnaticDescendantOf(候选, 持有者) 排除直系
+            // 后裔,那是把候选那条链再走一遍。共同祖先就是持有者本人
+            // (holderDepth == 0) 等价于「候选是持有者的男系直系后裔」——
+            // pCandidate != pHolder 上面已排除,所以两者严格等价,少走一条链。
+            if (holderDepth == 0) return;
             if (holderDepth < 0 || candidateDepth < 0 ||
                 holderDepth > MaximumAncestryDepth ||
                 candidateDepth > MaximumAncestryDepth) return;

@@ -1567,6 +1567,10 @@ namespace AncientWarfare3.core.lineage
             IReadOnlyDictionary<long, LocalCitySupport> pSupport,
             long pShiId, Actor pClaimant, Actor pSuccessor)
         {
+            // 每个成员原本要把自己那条父系链走两遍(一次找 claimant、一次找
+            // successor),每遍还新建一个集合。走一次建表,两次查询都是字典命中;
+            // 表对象跨成员 Reset 复用。最多 256 个成员,省下 512 次游走与分配。
+            var memberAncestry = new LineageQuery.AgnaticAncestorDepths();
             foreach (long actorId in LineageQuery.GetLivingShiMemberIds(
                          pShiId, 256))
             {
@@ -1574,12 +1578,11 @@ namespace AncientWarfare3.core.lineage
                 if (member?.data == null || member.city?.data == null ||
                     !pSupport.TryGetValue(member.city.id,
                         out LocalCitySupport row)) continue;
+                memberAncestry.Reset(actorId);
                 bool claimantLine = actorId == pClaimant.data.id ||
-                    LineageQuery.IsAgnaticDescendantOf(actorId,
-                        pClaimant.data.id);
+                    memberAncestry.IsStrictDescendantOf(pClaimant.data.id);
                 bool successorLine = actorId == pSuccessor.data.id ||
-                    LineageQuery.IsAgnaticDescendantOf(actorId,
-                        pSuccessor.data.id);
+                    memberAncestry.IsStrictDescendantOf(pSuccessor.data.id);
                 long target = SuccessionDisputeRules
                     .SelectAgnaticBranchSupportTarget(claimantLine,
                         successorLine, pClaimant.data.id,

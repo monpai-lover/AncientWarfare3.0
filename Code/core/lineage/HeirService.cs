@@ -1221,6 +1221,42 @@ namespace AncientWarfare3.core.lineage
             return IsSuitableRegisteredHeir(current, pKingdom, pKing) ? current : null;
         }
 
+        /// <summary>
+        /// 旁系入继筛选的一次性备忘。同一个候选池要按不同条件跑最多 6 遍,而两笔
+        /// 重活只取决于候选 id(宗系/氏在一次筛选内是常量),所以算一次存下来。
+        /// 由 FindCollateralRestorationHeir 持有,随方法返回即弃。
+        /// </summary>
+        private sealed class CollateralScanMemo
+        {
+            private readonly Dictionary<long, bool> _agnatic =
+                new Dictionary<long, bool>();
+            private readonly Dictionary<long, bool> _restorable =
+                new Dictionary<long, bool>();
+
+            internal bool IsAgnaticDescendant(long pActorId, long pLineageId)
+            {
+                if (_agnatic.TryGetValue(pActorId, out bool cached))
+                    return cached;
+                bool value = SuccessionRelationshipIndex.IsAgnaticDescendant(
+                    pActorId, pLineageId);
+                _agnatic[pActorId] = value;
+                return value;
+            }
+
+            internal bool CanRestoreToLegitimateShi(Actor pActor,
+                long pLineageId, long pShiId)
+            {
+                long actorId = pActor?.data?.id ?? -1L;
+                if (actorId < 0L) return false;
+                if (_restorable.TryGetValue(actorId, out bool cached))
+                    return cached;
+                bool value = CollateralRestorationTraceService
+                    .CanRestoreToLegitimateShi(pActor, pLineageId, pShiId);
+                _restorable[actorId] = value;
+                return value;
+            }
+        }
+
         private static Actor FindCollateralRestorationHeir(Kingdom pKingdom, Actor pKing)
         {
             if (pKingdom?.data == null) return null;
@@ -1229,30 +1265,39 @@ namespace AncientWarfare3.core.lineage
             if (legitimateLineage < 0) return null;
 
             List<Actor> pool = CollectSuccessionCandidatePool(pKingdom);
+            // 下面对同一个池最多跑 6 遍,而 legitimateLineage / legitimateShi 在
+            // 整个方法里是常量 —— 于是每个候选人身上两笔纯函数式的重活被重复算
+            // 了好几遍:
+            //   IsAgnaticDescendant  每次新建集合并重走候选那条父系链(6 遍)
+            //   CanRestoreToLegitimateShi  含 DB 读、链walk,还有一个对整个父母
+            //     DAG 的 BFS(双亲、深度上限 96、每次新建 Queue + HashSet)。只在
+            //     非男系的 4 遍里跑。
+            // 按候选 id 备忘一次即可。
+            var memo = new CollateralScanMemo();
 
             // 男系(同姓父系)优先:氏/分支可不同,但父系必须一路同姓。先成年,再未成年。
-            Actor agnaticAdult = PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
+            Actor agnaticAdult = PickCollateralCandidate(pool, memo, pKingdom, pKing, legitimateLineage, legitimateShi,
                 pRequireLegitimateShi: false, pRequireAdult: true, pRequireAgnatic: true);
             if (agnaticAdult != null) return agnaticAdult;
 
-            Actor agnaticUnderage = PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
+            Actor agnaticUnderage = PickCollateralCandidate(pool, memo, pKingdom, pKing, legitimateLineage, legitimateShi,
                 pRequireLegitimateShi: false, pRequireAdult: false, pRequireAgnatic: true);
             if (agnaticUnderage != null) return agnaticUnderage;
 
             // 无男系同姓后裔 → 回退(非男系,后续 ApplyCollateralRestoration 会标记为异姓入继)。
-            Actor exactAdult = PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
+            Actor exactAdult = PickCollateralCandidate(pool, memo, pKingdom, pKing, legitimateLineage, legitimateShi,
                 pRequireLegitimateShi: true, pRequireAdult: true, pRequireAgnatic: false);
             if (exactAdult != null) return exactAdult;
 
-            Actor traceableBranchAdult = PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
+            Actor traceableBranchAdult = PickCollateralCandidate(pool, memo, pKingdom, pKing, legitimateLineage, legitimateShi,
                 pRequireLegitimateShi: false, pRequireAdult: true, pRequireAgnatic: false);
             if (traceableBranchAdult != null) return traceableBranchAdult;
 
-            Actor exactUnderage = PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
+            Actor exactUnderage = PickCollateralCandidate(pool, memo, pKingdom, pKing, legitimateLineage, legitimateShi,
                 pRequireLegitimateShi: true, pRequireAdult: false, pRequireAgnatic: false);
             if (exactUnderage != null) return exactUnderage;
 
-            return PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
+            return PickCollateralCandidate(pool, memo, pKingdom, pKing, legitimateLineage, legitimateShi,
                 pRequireLegitimateShi: false, pRequireAdult: false, pRequireAgnatic: false);
         }
 
@@ -1264,7 +1309,8 @@ namespace AncientWarfare3.core.lineage
                 pReferenceKingId);
         }
 
-        private static Actor PickCollateralCandidate(List<Actor> pCandidates, Kingdom pKingdom, Actor pKing,
+        private static Actor PickCollateralCandidate(List<Actor> pCandidates,
+            CollateralScanMemo pMemo, Kingdom pKingdom, Actor pKing,
             long pLegitimateLineage, long pLegitimateShi, bool pRequireLegitimateShi, bool pRequireAdult,
             bool pRequireAgnatic)
         {
@@ -1272,7 +1318,7 @@ namespace AncientWarfare3.core.lineage
             int bestScore = int.MaxValue;
             foreach (Actor candidate in pCandidates)
             {
-                if (!IsCollateralCandidate(candidate, pKingdom, pKing, pLegitimateLineage, pLegitimateShi,
+                if (!IsCollateralCandidate(candidate, pMemo, pKingdom, pKing, pLegitimateLineage, pLegitimateShi,
                         pRequireLegitimateShi, pRequireAdult, pRequireAgnatic))
                     continue;
 
@@ -1284,7 +1330,8 @@ namespace AncientWarfare3.core.lineage
             return best;
         }
 
-        private static bool IsCollateralCandidate(Actor pActor, Kingdom pKingdom, Actor pKing,
+        private static bool IsCollateralCandidate(Actor pActor,
+            CollateralScanMemo pMemo, Kingdom pKingdom, Actor pKing,
             long pLegitimateLineage, long pLegitimateShi, bool pRequireLegitimateShi, bool pRequireAdult,
             bool pRequireAgnatic)
         {
@@ -1304,8 +1351,9 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.SHI_ID, out long shi, -1L);
             if (lineage != pLegitimateLineage) return false;
 
-            bool agnatic = SuccessionRelationshipIndex.IsAgnaticDescendant(
-                pActor.data.id, pLegitimateLineage);
+            // 多遍筛选共用一份答案,见 CollateralScanMemo。
+            bool agnatic = pMemo.IsAgnaticDescendant(pActor.data.id,
+                pLegitimateLineage);
             if (pRequireAgnatic)
                 // 男系同姓即合格,氏(分支)可不同。成年/未成年已由上面的 pRequireAdult 分档,这里传 isAdult:true。
                 return MandateSuccessionRules.IsValidCollateralRestorationCandidate(
@@ -1313,7 +1361,7 @@ namespace AncientWarfare3.core.lineage
                     hasMadness: false, sameLineage: true, belongsToLegitimateShi: true,
                     canTraceToLegitimateBranch: true, requireAgnatic: true, isAgnaticLineDescendant: agnatic);
 
-            bool canRestore = CollateralRestorationTraceService.CanRestoreToLegitimateShi(
+            bool canRestore = pMemo.CanRestoreToLegitimateShi(
                 pActor, pLegitimateLineage, pLegitimateShi);
             if (pRequireLegitimateShi)
             {

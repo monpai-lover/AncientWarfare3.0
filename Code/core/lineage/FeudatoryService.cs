@@ -1951,13 +1951,19 @@ namespace AncientWarfare3.core.lineage
                                   pPrince?.data?.id ?? -1L;
             var candidates = new List<FeudatorySuccessionCandidate>();
             var seen = new HashSet<long>();
+            // 每个候选人原本要把自己那条父系链走两遍:一次
+            // IsAgnaticDescendantOf(候选, 始祖) 判是否直系,再一次
+            // GetAgnaticDepth(候选, 始祖) 取辈分 —— 同一条链、同一个基准。
+            // 建一次深度表就同时得到两个答案,这个对象跨候选人 Reset 复用,
+            // 也不再每次新建集合。
+            var candidateAncestry = new LineageQuery.AgnaticAncestorDepths();
             if (pPrince?.data != null)
             {
                 foreach (Actor child in pPrince.getChildren(false))
                     AddSuccessionCandidate(candidates, seen, child, pPrince,
                         pEmpire, pShiBranchId, pFeudatoryId,
                         founderActorId, pExcludedActorId,
-                        directSon: true);
+                        directSon: true, candidateAncestry);
             }
             foreach (long actorId in LineageQuery.GetLivingShiMemberIds(
                          pShiBranchId, MaximumSuccessionKinNodes))
@@ -1965,7 +1971,7 @@ namespace AncientWarfare3.core.lineage
                 AddSuccessionCandidate(candidates, seen,
                     FindActor(actorId), pPrince, pEmpire, pShiBranchId,
                     pFeudatoryId, founderActorId, pExcludedActorId,
-                    directSon: false);
+                    directSon: false, candidateAncestry);
             }
 
             return FindActor(FeudatorySuccessionRules.SelectSuccessor(candidates));
@@ -1975,7 +1981,8 @@ namespace AncientWarfare3.core.lineage
             List<FeudatorySuccessionCandidate> pCandidates,
             HashSet<long> pSeen, Actor pCandidate, Actor pPrince,
             Kingdom pEmpire, long pShiBranchId, long pFeudatoryId,
-            long pFounderActorId, long pExcludedActorId, bool directSon)
+            long pFounderActorId, long pExcludedActorId, bool directSon,
+            LineageQuery.AgnaticAncestorDepths pCandidateAncestry)
         {
             if (pCandidate?.data == null || !pSeen.Add(pCandidate.data.id))
                 return;
@@ -2005,12 +2012,15 @@ namespace AncientWarfare3.core.lineage
                 !SlaveService.IsSlave(pCandidate);
             bool sameShi = LineageQuery.GetActorShiId(pCandidate.data.id) ==
                            pShiBranchId;
-            bool directTreeDescendant = pFounderActorId >= 0 &&
-                LineageQuery.IsAgnaticDescendantOf(pCandidate.data.id,
-                    pFounderActorId);
+            // 一次建表,两个答案:深度 > 0 即男系直系后裔(本人为 0,与
+            // IsAgnaticDescendantOf 不把自己算作后裔一致),深度本身就是辈分。
+            pCandidateAncestry.Reset(pCandidate.data.id);
+            int founderDepth = pFounderActorId >= 0
+                ? pCandidateAncestry.DepthOf(pFounderActorId)
+                : -1;
+            bool directTreeDescendant = founderDepth > 0;
             int kinDistance = directTreeDescendant
-                ? LineageQuery.GetAgnaticDepth(pCandidate.data.id,
-                    pFounderActorId)
+                ? founderDepth
                 : MaximumSuccessionKinDistance + 1;
             pCandidate.data.get(LineageKeys.BIRTH_LEGITIMACY,
                 out bool legitimateBirth, true);
