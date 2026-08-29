@@ -148,6 +148,14 @@ namespace AncientWarfare3.ui
                     Amount = "",
                     Date = "",
                     Description = "提供了一些建筑和人物贴图"
+                },
+                new SupporterLeaderboardEntry
+                {
+                    Rank = 20,
+                    Name = "vader",
+                    Amount = "",
+                    Date = "",
+                    Description = "提供了很多的人物和建筑贴图"
                 }
             };
 
