@@ -99,6 +99,12 @@ internal static class WesternMayorTermRulesTests
         string localization = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
             "HistoryLocalizationRules.cs"));
+        string appointmentWindow = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ui", "windows",
+            "CourtAppointmentWindow.cs"));
+        string appointmentRules = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "court",
+            "CourtManualAppointmentRules.cs"));
 
         Contains(keys, "OFFICIAL_TRANSFERRED = \"official_transferred\"",
             "official transfer has a dedicated person event");
@@ -116,6 +122,14 @@ internal static class WesternMayorTermRulesTests
             "official transfer has an event label");
         Contains(localization, "aw_hist_official_transfer_from",
             "official transfer has localized movement text");
+        Contains(appointmentRules, "ShouldRebaseVacancyTarget(",
+            "manual appointment rules support stale vacancy rebasing");
+        Contains(appointmentWindow,
+            "ReadManualAppointmentIncumbentActorId(",
+            "appointment window reads the current incumbent before scanning");
+        Contains(appointmentWindow,
+            "ShouldRebaseVacancyTarget(_expectedIncumbentActorId",
+            "appointment window rebases a stale vacancy into replacement mode");
 
         int processStart = service.IndexOf(
             "private static void ProcessDueGovernorRotations",

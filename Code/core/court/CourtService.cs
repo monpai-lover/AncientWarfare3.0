@@ -1409,6 +1409,16 @@ namespace AncientWarfare3.core.court
             return CourtManualAppointmentResult.Success;
         }
 
+        internal static long ReadManualAppointmentIncumbentActorId(
+            Kingdom pKingdom, string pOfficeId, string pLayer,
+            long pCityId, long pCountyId)
+        {
+            Actor incumbent = FindActiveOfficeActor(pKingdom, pOfficeId,
+                string.IsNullOrEmpty(pLayer) ? CourtOfficeLayer.Central : pLayer,
+                pCityId, pCountyId);
+            return incumbent?.data?.id ?? -1L;
+        }
+
         internal static bool TryProjectManualAppointmentCandidate(
             CourtAppointmentCandidateScan pScan, int pActorIndex,
             out CourtAppointmentCandidateView pCandidate)
@@ -1937,11 +1947,17 @@ namespace AncientWarfare3.core.court
             OfficialCareerPrior pPrior)
         {
             if (pActorId < 0L || pPrior == null || CourtDB == null) return;
+            // 实测 court-officer-death 是延迟队列里最贵的一项:44.913ms / 5 项
+            // = 9.0ms 每项。静态数下来这条路径只开了两个独立写事务(Close 一个、
+            // ClearCurrentOffice 一个),按实测的每事务约 0.83ms 固定开销只能
+            // 解释约 2ms,剩下 7ms 看代码看不出来。按阶段计时问日志要答案。
             var request = new OfficialCareerCloseRequest(pActorId,
                 pPrior.KingdomId, pPrior.Layer, pPrior.OfficeId,
                 Date.getCurrentYear(), LineageService.CurTime(), "death");
+            long stage = System.Diagnostics.Stopwatch.GetTimestamp();
             OfficialCareerCloseResult closed = OfficialCareerPersistence.Close(
                 CourtDB, request);
+            stage = CourtDeathStepDiagnostics.Account("career_close", stage);
             if (!closed.IsCommitted) return;
 
             Actor actor = null;
@@ -1960,11 +1976,16 @@ namespace AncientWarfare3.core.court
                     runtimeOfficeId == pPrior.OfficeId)
                     ClearOfficer(actor, "death", pRecordHistory: false,
                         pArchive: false, pPersistCareer: false);
+                stage = CourtDeathStepDiagnostics.Account("clear_officer",
+                    stage);
                 OfficialCareerStateService.ClearCurrentOffice(actor,
                     pPrior.KingdomId, pPrior.OfficeId);
+                stage = CourtDeathStepDiagnostics.Account("clear_state",
+                    stage);
             }
             CourtVacancyReconciliationService.RegisterVacancy(
                 closed.Prior ?? pPrior);
+            CourtDeathStepDiagnostics.Account("register_vacancy", stage);
         }
 
         private static bool SetOfficer(Actor pActor, Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId, City pCity,

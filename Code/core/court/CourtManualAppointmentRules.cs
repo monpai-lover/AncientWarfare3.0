@@ -174,6 +174,13 @@ namespace AncientWarfare3.core.court
             return CourtManualAppointmentResult.OfficeChanged;
         }
 
+        public static bool ShouldRebaseVacancyTarget(
+            long expectedIncumbentActorId, long actualIncumbentActorId)
+        {
+            return expectedIncumbentActorId < 0L &&
+                   actualIncumbentActorId >= 0L;
+        }
+
         public static bool CanChooseCandidate(long candidateActorId,
             long incumbentActorId)
         {

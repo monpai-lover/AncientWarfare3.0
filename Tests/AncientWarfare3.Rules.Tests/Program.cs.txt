@@ -5905,6 +5905,10 @@ Equal(CourtManualAppointmentResult.Success,
 Equal(CourtManualAppointmentResult.OfficeOccupied,
     CourtManualAppointmentRules.ValidateTarget(true, -1, 42),
     "a stale vacant-card click cannot overwrite a newly filled office");
+Equal(true, CourtManualAppointmentRules.ShouldRebaseVacancyTarget(-1, 42),
+    "a stale vacant-card flow can rebind to the newly filled incumbent");
+Equal(false, CourtManualAppointmentRules.ShouldRebaseVacancyTarget(41, 42),
+    "an existing replacement target is never silently rebased");
 Equal(CourtManualAppointmentResult.Success,
     CourtManualAppointmentRules.ValidateTarget(true, 42, 42),
     "the exact incumbent may be atomically replaced");

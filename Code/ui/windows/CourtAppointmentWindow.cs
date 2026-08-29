@@ -119,6 +119,13 @@ namespace AncientWarfare3.ui.windows
                 return;
             }
 
+            if (result.DetailCode == (int)CourtManualAppointmentResult.OfficeOccupied &&
+                TryRebaseToCurrentIncumbent())
+            {
+                Instance?.Refresh();
+                return;
+            }
+
             _feedback = Enum.IsDefined(typeof(CourtManualAppointmentResult),
                     result.DetailCode)
                 ? (CourtManualAppointmentResult)result.DetailCode
@@ -129,10 +136,6 @@ namespace AncientWarfare3.ui.windows
         public void Refresh()
         {
             ResetCandidateWork();
-            _candidateQueryKey = _queryState.Begin(_kingdomId,
-                _officeLayer + ":" + _cityId + ":" + _officeId + ":" +
-                _expectedIncumbentActorId + ":" + _countyId,
-                KingdomStrategyRevisionService.Current(_kingdomId));
             ClearList();
             ApplyTitle();
             Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
@@ -142,6 +145,13 @@ namespace AncientWarfare3.ui.windows
                     pError: true);
                 return;
             }
+
+            TryRebaseToCurrentIncumbent(kingdom);
+            _candidateQueryKey = _queryState.Begin(_kingdomId,
+                _officeLayer + ":" + _cityId + ":" + _officeId + ":" +
+                _expectedIncumbentActorId + ":" + _countyId,
+                KingdomStrategyRevisionService.Current(_kingdomId));
+            ApplyTitle();
 
             string officeName = OfficeName(kingdom, _officeId);
             _contextTitle = kingdom.name + " - " + officeName;
@@ -171,6 +181,27 @@ namespace AncientWarfare3.ui.windows
                     "Reviewing {0} subjects..."),
                 _candidateScan.actor_ids.Count), "");
             if (_candidateScan.actor_ids.Count == 0) CompleteCandidateScan();
+        }
+
+        private static bool TryRebaseToCurrentIncumbent()
+        {
+            Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+            return TryRebaseToCurrentIncumbent(kingdom);
+        }
+
+        private static bool TryRebaseToCurrentIncumbent(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || _expectedIncumbentActorId >= 0L)
+                return false;
+            long actualIncumbentActorId =
+                CourtService.ReadManualAppointmentIncumbentActorId(
+                    pKingdom, _officeId, _officeLayer, _cityId, _countyId);
+            if (!CourtManualAppointmentRules.ShouldRebaseVacancyTarget(
+                    _expectedIncumbentActorId, actualIncumbentActorId))
+                return false;
+            _expectedIncumbentActorId = actualIncumbentActorId;
+            _feedback = null;
+            return true;
         }
 
         private void Update()
