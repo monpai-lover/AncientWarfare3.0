@@ -13,6 +13,7 @@ internal static class HistoricalAncestorRulesTests
         UnattestedParentageCreatesNothing();
         ArchiveParentIdPrefersHistoricalKeys();
         IdempotenceGate();
+        HistoricalParentageIsAuthoritative();
         ContentIsWellFormed();
         SourceInvariants();
     }
@@ -89,6 +90,15 @@ internal static class HistoricalAncestorRulesTests
         var fatherOnly = new HistoricalAncestorParentage("刘煓", "煓", "", "");
         True(fatherOnly.HasFather && !fatherOnly.HasMother,
             "father-only records are supported (mothers are usually unrecorded)");
+
+        var displayOnly = new HistoricalAncestorParentage("司马谈", "谈", "",
+            "", pFatherDisplayOnly: true);
+        True(displayOnly.HasFather,
+            "a display-only father is still an attested father");
+        True(!displayOnly.BuildsFatherAncestor,
+            "a display-only father builds no synthetic ancestor");
+        True(fatherOnly.BuildsFatherAncestor,
+            "an ordinary attested father does build a synthetic ancestor");
     }
 
     private static void ArchiveParentIdPrefersHistoricalKeys()
@@ -112,18 +122,44 @@ internal static class HistoricalAncestorRulesTests
             HistoricalAncestorRules.FatherSlot);
         long mother = HistoricalAncestorRules.FigureAncestorId(0,
             HistoricalAncestorRules.MotherSlot);
-        True(HistoricalAncestorRules.IsAlreadyApplied(-1L, -1L, father,
-                mother, father, mother),
+        var applied = new HistoricalParentageState(father, mother, "姬昌",
+            "太姒");
+        var blank = new HistoricalParentageState(-1L, -1L, "", "");
+
+        True(HistoricalAncestorRules.IsAlreadyApplied(-1L, -1L, applied,
+                applied),
             "a fully applied historical figure needs no further writes");
-        True(!HistoricalAncestorRules.IsAlreadyApplied(88L, -1L, father,
-                mother, father, mother),
+        True(!HistoricalAncestorRules.IsAlreadyApplied(88L, -1L, applied,
+                applied),
             "a surviving engine parent still needs detaching");
-        True(!HistoricalAncestorRules.IsAlreadyApplied(-1L, -1L, -1L, -1L,
-                father, mother),
+        True(!HistoricalAncestorRules.IsAlreadyApplied(-1L, -1L, blank,
+                applied),
             "missing synthetic ancestors still need creating");
-        True(HistoricalAncestorRules.IsAlreadyApplied(-1L, -1L, -1L, -1L,
-                -1L, -1L),
+        True(HistoricalAncestorRules.IsAlreadyApplied(-1L, -1L, blank, blank),
             "an unrecorded figure with no engine parents is already correct");
+
+        // 仅显示的父亲两个 id 都是 -1,只比 id 会误判「已就位」,名字就永远写不进去。
+        var displayOnly = new HistoricalParentageState(-1L, -1L, "司马谈", "");
+        True(!HistoricalAncestorRules.IsAlreadyApplied(-1L, -1L, blank,
+                displayOnly),
+            "a display-only father is not yet applied while its name is unwritten");
+        True(HistoricalAncestorRules.IsAlreadyApplied(-1L, -1L, displayOnly,
+                displayOnly),
+            "a display-only father needs no rewrite once its name is stored");
+    }
+
+    private static void HistoricalParentageIsAuthoritative()
+    {
+        long father = HistoricalAncestorRules.FigureAncestorId(0,
+            HistoricalAncestorRules.FatherSlot);
+        True(HistoricalAncestorRules.HasHistoricalParentage(father, -1L),
+            "a synthetic father marks the actor's parentage as fixed");
+        True(HistoricalAncestorRules.HasHistoricalParentage(-1L, father + 1L),
+            "a synthetic mother alone also fixes the parentage");
+        True(!HistoricalAncestorRules.HasHistoricalParentage(-1L, -1L),
+            "an ordinary actor has no historical parentage");
+        True(!HistoricalAncestorRules.HasHistoricalParentage(12L, 34L),
+            "real engine parents are not historical parentage");
     }
 
     private static void ContentIsWellFormed()
@@ -154,13 +190,34 @@ internal static class HistoricalAncestorRulesTests
         Equal("姬昌", jiFa.FatherName, "Ji Fa's father is King Wen");
         Equal("太姒", jiFa.MotherName, "Ji Fa's mother is Tai Si");
 
+        True(HistoricalFigureParentage.TryGet("aw_figure_wang_shichong",
+                out HistoricalAncestorParentage wangShichong),
+            "Wang Shichong's father is recorded despite the surname change");
+        Equal("王收", wangShichong.FatherName,
+            "Wang Shichong's father is Wang Shou, not his grandfather Zhi Tuinou");
+        True(HistoricalFigureParentage.TryGet("aw_figure_liu_bang",
+                out HistoricalAncestorParentage liuBang),
+            "Liu Bang's parentage is recorded");
+        Equal("刘媪", liuBang.MotherName,
+            "Liu Bang's mother is recorded only by appellation");
+        Equal("", liuBang.MotherFamilyName,
+            "an appellation-only mother carries no surname");
+
         True(HistoricalMasterParentage.TryGet("孔丘",
                 out HistoricalAncestorParentage kongQiu),
             "Confucius' parentage is recorded");
         Equal("叔梁纥", kongQiu.FatherName, "Confucius' father is Shuliang He");
-        // 司马谈本身也在宗师名册里,给司马迁造合成父亲会与真人重影。
-        True(!HistoricalMasterParentage.TryGet("司马迁", out _),
-            "Sima Qian is excluded because his father is himself a master");
+        True(HistoricalMasterParentage.TryGet("司马谈",
+                out HistoricalAncestorParentage simaTan),
+            "Sima Tan's father is recorded in the Shiji postface");
+        Equal("司马喜", simaTan.FatherName, "Sima Tan's father is Sima Xi");
+        // 司马谈本身也在宗师名册里:名字照实显示,但不建合成祖先。
+        True(HistoricalMasterParentage.TryGet("司马迁",
+                out HistoricalAncestorParentage simaQian),
+            "Sima Qian's father is recorded");
+        Equal("司马谈", simaQian.FatherName, "Sima Qian's father is Sima Tan");
+        True(!simaQian.BuildsFatherAncestor,
+            "Sima Qian's father is display-only: he is himself a roster master");
         True(HistoricalMasterParentage.Count > 0 &&
              HistoricalMasterParentage.Count < 30,
             "master parentage stays sparse: most pre-Qin家世 are unrecorded");
@@ -177,6 +234,8 @@ internal static class HistoricalAncestorRulesTests
             "core", "lineage", "HistoricalAncestorPersistence.cs"));
         string figure = File.ReadAllText(Path.Combine(root, "Code", "content",
             "figures", "HistoricalFigureService.cs"));
+        string birth = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "LineageBirthArchiveService.cs"));
 
         Contains(writer,
             "HistoricalAncestorRules.ResolveArchiveParentId(",
@@ -204,6 +263,14 @@ internal static class HistoricalAncestorRulesTests
             "parentage is applied before the promotion archive write");
         Contains(figure, "World.world?.clans?.newClan(pActor",
             "historical figures establish their own vanilla clan");
+        // MergeParentSlots 会用 fallback 回填不完整的槽位并写回 data,对双亲被
+        // 刻意清空的历史人物等于把随机双亲装回去。
+        Contains(birth,
+            "HistoricalAncestorRules.HasHistoricalParentage(",
+            "birth archiving must not merge engine parents back onto historical figures");
+        Ordered(birth, "HasHistoricalParentage(",
+            "FamilyTreeRelationRules.MergeParentSlots(",
+            "the historical-parentage guard runs before any slot merge");
     }
 
     private static void Ordered(string source, string first, string second,

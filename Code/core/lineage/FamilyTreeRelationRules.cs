@@ -119,6 +119,17 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
+        /// <summary>
+        ///     合并双亲槽位。
+        ///
+        ///     ⚠ 两点调用方必须知道的语义:
+        ///     1. **槽位顺序不保证** —— 当前两槽不完整时按 fallback 优先重建,父母
+        ///        可能换位。别写「slot1 就是父」这种假设:父亲一律由**性别**判定
+        ///        (LineageQuery.GetFatherId / SuccessionRelationshipIndex.ResolveFather)。
+        ///     2. **两槽不完整会用 fallback 回填** —— 所以对「双亲被刻意清空」的
+        ///        actor(历史人物,见 HistoricalAncestorRules.HasHistoricalParentage)
+        ///        不能走这里,否则等于把清掉的双亲装回去。
+        /// </summary>
         public static (long slot1, long slot2) MergeParentSlots(
             long currentSlot1, long currentSlot2,
             long fallbackSlot1, long fallbackSlot2)

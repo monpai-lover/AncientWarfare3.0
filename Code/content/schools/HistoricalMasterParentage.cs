@@ -10,9 +10,6 @@ namespace AncientWarfare3.content.schools
     ///
     ///     诸子的家世绝大多数不可考(注册表里 50 位连姓都是 Unknown),所以本表极稀疏,
     ///     只收正史/本人自叙里明确记载的。宁缺毋滥。
-    ///
-    ///     刻意不收司马迁:其父司马谈**本身也在宗师名册里**,给他造一个合成的司马谈
-    ///     会和世上可能同时存在的真司马谈重影。
     /// </summary>
     internal static class HistoricalMasterParentage
     {
@@ -49,6 +46,11 @@ namespace AncientWarfare3.content.schools
             P(table, "葛洪", "葛悌", "悌");
             // 荀悦:荀淑之孙,父荀俭。
             P(table, "荀悦", "荀俭", "俭");
+            // 《史记·太史公自序》「喜生谈,谈为太史公」—— 司马谈之父司马喜。
+            P(table, "司马谈", "司马喜", "喜");
+            // 司马迁之父即司马谈,而司马谈**本身也在名册里**。名字照实显示,但
+            // 标为仅显示、不建合成祖先,否则家族树上会出现真假两个司马谈。
+            P(table, "司马迁", "司马谈", "谈", pFatherDisplayOnly: true);
 
             return table;
         }
@@ -57,11 +59,11 @@ namespace AncientWarfare3.content.schools
             Dictionary<string, HistoricalAncestorParentage> pTable,
             string pCanonicalName, string pFatherName,
             string pFatherGivenName = "", string pMotherName = "",
-            string pMotherFamilyName = "")
+            string pMotherFamilyName = "", bool pFatherDisplayOnly = false)
         {
             pTable[pCanonicalName] = new HistoricalAncestorParentage(
                 pFatherName, pFatherGivenName, pMotherName,
-                pMotherFamilyName);
+                pMotherFamilyName, pFatherDisplayOnly);
         }
     }
 }

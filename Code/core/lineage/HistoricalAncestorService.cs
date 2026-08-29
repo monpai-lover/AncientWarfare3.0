@@ -54,8 +54,12 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null) return false;
 
-            long fatherId = HistoricalAncestorRules.ShouldCreateAncestor(
-                pFatherSlotId, pParentage.FatherName) ? pFatherSlotId : -1L;
+            // FatherDisplayOnly:父亲本人也在名册里(司马迁之父司马谈),名字照实
+            // 显示,但不建合成祖先 —— 否则家族树上会同时出现真假两个司马谈。
+            long fatherId = pParentage.FatherDisplayOnly
+                ? -1L
+                : HistoricalAncestorRules.ShouldCreateAncestor(pFatherSlotId,
+                    pParentage.FatherName) ? pFatherSlotId : -1L;
             long motherId = HistoricalAncestorRules.ShouldCreateAncestor(
                 pMotherSlotId, pParentage.MotherName) ? pMotherSlotId : -1L;
 
@@ -63,9 +67,22 @@ namespace AncientWarfare3.core.lineage
                 out long storedFatherId, -1L);
             pActor.data.get(LineageKeys.HISTORICAL_MOTHER_ACTOR_ID,
                 out long storedMotherId, -1L);
+            pActor.data.get(LineageKeys.HISTORICAL_FATHER_NAME,
+                out string storedFatherName, "");
+            pActor.data.get(LineageKeys.HISTORICAL_MOTHER_NAME,
+                out string storedMotherName, "");
+            string expectedFatherName = pParentage.HasFather
+                ? pParentage.FatherName
+                : string.Empty;
+            string expectedMotherName = pParentage.HasMother
+                ? pParentage.MotherName
+                : string.Empty;
             if (HistoricalAncestorRules.IsAlreadyApplied(
                     pActor.data.parent_id_1, pActor.data.parent_id_2,
-                    storedFatherId, storedMotherId, fatherId, motherId))
+                    new HistoricalParentageState(storedFatherId,
+                        storedMotherId, storedFatherName, storedMotherName),
+                    new HistoricalParentageState(fatherId, motherId,
+                        expectedFatherName, expectedMotherName)))
                 return false;
 
             SQLiteConnection db = LineageArchiveManager.Instance?.OperatingDB;
@@ -126,10 +143,11 @@ namespace AncientWarfare3.core.lineage
             DetachEngineParents(pActor, previousParent1, previousParent2);
             pActor.data.set(LineageKeys.HISTORICAL_FATHER_ACTOR_ID, fatherId);
             pActor.data.set(LineageKeys.HISTORICAL_MOTHER_ACTOR_ID, motherId);
+            // 名字按「是否可考」写,不按「是否建了祖先」—— 仅显示的父亲也要显示。
             pActor.data.set(LineageKeys.HISTORICAL_FATHER_NAME,
-                fatherId >= 0L ? pParentage.FatherName : string.Empty);
+                expectedFatherName);
             pActor.data.set(LineageKeys.HISTORICAL_MOTHER_NAME,
-                motherId >= 0L ? pParentage.MotherName : string.Empty);
+                expectedMotherName);
 
             ActorArchivePresenceIndex.Mark(pActor.data.id);
             SuccessionRelationshipIndex.Refresh(pActor);

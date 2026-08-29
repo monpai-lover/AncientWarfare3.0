@@ -23,13 +23,30 @@ namespace AncientWarfare3.core.lineage
 
             try
             {
-                var parents = FamilyTreeRelationRules.MergeParentSlots(
-                    pChild.data.parent_id_1, pChild.data.parent_id_2,
-                    parent1Id, parent2Id);
-                parent1Id = parents.slot1;
-                parent2Id = parents.slot2;
-                pChild.data.parent_id_1 = parent1Id;
-                pChild.data.parent_id_2 = parent2Id;
+                // 历史人物的双亲由史载合成祖先固定,引擎槽位被刻意清成 -1。
+                // MergeParentSlots 见「两槽不完整」就会拿 fallback 回填并写回
+                // data —— 那正好会把刚清掉的随机双亲装回去,还让档案与合成祖先
+                // 打架。这条路径对他们必须整体跳过。
+                pChild.data.get(LineageKeys.HISTORICAL_FATHER_ACTOR_ID,
+                    out long historicalFatherId, -1L);
+                pChild.data.get(LineageKeys.HISTORICAL_MOTHER_ACTOR_ID,
+                    out long historicalMotherId, -1L);
+                if (HistoricalAncestorRules.HasHistoricalParentage(
+                        historicalFatherId, historicalMotherId))
+                {
+                    parent1Id = historicalFatherId;
+                    parent2Id = historicalMotherId;
+                }
+                else
+                {
+                    var parents = FamilyTreeRelationRules.MergeParentSlots(
+                        pChild.data.parent_id_1, pChild.data.parent_id_2,
+                        parent1Id, parent2Id);
+                    parent1Id = parents.slot1;
+                    parent2Id = parents.slot2;
+                    pChild.data.parent_id_1 = parent1Id;
+                    pChild.data.parent_id_2 = parent2Id;
+                }
 
                 if (LineageArchiveManager.Instance.OperatingDB == null ||
                     !LineageArchiveManager.Instance.InitializeSuccessful)

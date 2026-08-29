@@ -88,16 +88,59 @@ namespace AncientWarfare3.core.lineage
         }
 
         /// <summary>
-        ///     三源(live data / FamilyEdge / ActorArchive)是否已经就是目标状态。
-        ///     为真则整个写入可以跳过,一条 SQL 都不发。
+        ///     该 actor 的双亲是否由史载合成祖先固定。为真时,任何按引擎槽位推断
+        ///     双亲的路径都必须让位 —— 他的 `data.parent_id_*` 是刻意清空的,不是
+        ///     「缺数据待补」。
+        /// </summary>
+        internal static bool HasHistoricalParentage(long pFatherId,
+            long pMotherId)
+        {
+            return IsSynthetic(pFatherId) || IsSynthetic(pMotherId);
+        }
+
+        /// <summary>
+        ///     是否已经就是目标状态。为真则整个写入可以跳过,一条 SQL 都不发。
+        ///
+        ///     必须连**名字**一起比,不能只比合成祖先 id:仅显示的父亲
+        ///     (FatherDisplayOnly,如司马迁之父司马谈)两个 id 都是 -1,只比 id 会
+        ///     误判「已就位」,名字就永远写不进去。
         /// </summary>
         internal static bool IsAlreadyApplied(long pLiveParent1,
-            long pLiveParent2, long pStoredFatherId, long pStoredMotherId,
-            long pExpectedFatherId, long pExpectedMotherId)
+            long pLiveParent2, HistoricalParentageState pStored,
+            HistoricalParentageState pExpected)
         {
             return pLiveParent1 < 0L && pLiveParent2 < 0L &&
-                   pStoredFatherId == pExpectedFatherId &&
-                   pStoredMotherId == pExpectedMotherId;
+                   pStored.Matches(pExpected);
+        }
+    }
+
+    /// <summary>
+    ///     actor 身上已记录 / 内容表期望的史载双亲状态。用于幂等比较。
+    /// </summary>
+    internal readonly struct HistoricalParentageState
+    {
+        internal HistoricalParentageState(long pFatherId, long pMotherId,
+            string pFatherName, string pMotherName)
+        {
+            FatherId = pFatherId;
+            MotherId = pMotherId;
+            FatherName = pFatherName ?? string.Empty;
+            MotherName = pMotherName ?? string.Empty;
+        }
+
+        internal long FatherId { get; }
+        internal long MotherId { get; }
+        internal string FatherName { get; }
+        internal string MotherName { get; }
+
+        internal bool Matches(HistoricalParentageState pOther)
+        {
+            return FatherId == pOther.FatherId &&
+                   MotherId == pOther.MotherId &&
+                   string.Equals(FatherName, pOther.FatherName,
+                       System.StringComparison.Ordinal) &&
+                   string.Equals(MotherName, pOther.MotherName,
+                       System.StringComparison.Ordinal);
         }
     }
 }

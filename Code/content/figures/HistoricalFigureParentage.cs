@@ -34,7 +34,8 @@ namespace AncientWarfare3.content.figures
             // ── 先秦 / 秦汉 ──
             P(table, "aw_figure_ji_fa", "姬昌", "昌", "太姒", "姒");
             P(table, "aw_figure_ying_zheng", "嬴异人", "异人", "赵姬", "赵");
-            P(table, "aw_figure_liu_bang", "刘煓", "煓");
+            // 《史记·高祖本纪》「父曰太公,母曰刘媪」—— 母只留下称谓,没有名。
+            P(table, "aw_figure_liu_bang", "刘煓", "煓", "刘媪", "");
             P(table, "aw_figure_wang_mang", "王曼", "曼", "渠氏", "渠");
             P(table, "aw_figure_gongsun_shu", "公孙仁", "仁");
             P(table, "aw_figure_liu_xiu", "刘钦", "钦", "樊娴都", "樊");
@@ -91,6 +92,9 @@ namespace AncientWarfare3.content.figures
             P(table, "aw_figure_yuwen_huaji", "宇文述", "述");
             P(table, "aw_figure_li_yuan", "李昞", "昞", "独孤氏", "独孤");
             P(table, "aw_figure_shen_faxing", "沈恪", "恪");
+            // 《旧唐书》「本姓支…父收,随母嫁霸城王氏,因以为姓」—— 支颓耨是他
+            // 祖父,不是父。父即王收(本姓支)。
+            P(table, "aw_figure_wang_shichong", "王收", "收");
             P(table, "aw_figure_wu_zhao", "武士彟", "士彟", "杨氏", "杨");
             P(table, "aw_figure_da_zuorong", "乞乞仲象", "仲象");
             P(table, "aw_figure_pi_luoge", "盛逻皮", "逻皮");
