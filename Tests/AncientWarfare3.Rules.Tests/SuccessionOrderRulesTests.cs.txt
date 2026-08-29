@@ -1,0 +1,260 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.core.lineage;
+
+internal static class SuccessionOrderRulesTests
+{
+    public static void Run()
+    {
+        PoolEntryRules();
+        BloodlineOrdering();
+        AbilityOrdering();
+        InsertionMatchesFullSort();
+        HereditaryTitleUsesTheSharedOrder();
+        CoreFabricationScanLatch();
+        Console.WriteLine("SuccessionOrderRulesTests passed.");
+    }
+
+    /// <summary>
+    /// 全国都已核心化之后必须彻底停扫,只有信号变了才重新开扫。
+    /// </summary>
+    private static void CoreFabricationScanLatch()
+    {
+        // 没扫过 -> 要扫。
+        True(AncientWarfare3.core.policy.CoreFabricationSlotRules
+                .ShouldScanForTargets(false, 0, 0, 0, 0),
+            "the first pass must scan");
+        // 扫过且信号未变 -> 停。这是成熟帝国的常态。
+        False(AncientWarfare3.core.policy.CoreFabricationSlotRules
+                .ShouldScanForTargets(true, 7, 12, 7, 12),
+            "an unchanged realm must not rescan");
+        // 代际号变了(得到城/核心落成/项目变动) -> 重新开扫。
+        True(AncientWarfare3.core.policy.CoreFabricationSlotRules
+                .ShouldScanForTargets(true, 7, 12, 8, 12),
+            "a territory change must re-arm the scan");
+        // 城市数变了 -> 兜底信号,同样开扫。
+        True(AncientWarfare3.core.policy.CoreFabricationSlotRules
+                .ShouldScanForTargets(true, 7, 12, 7, 13),
+            "a new city must re-arm the scan even if the revision missed it");
+        // 正在造的时候根本不扫。
+        False(AncientWarfare3.core.policy.CoreFabricationSlotRules
+                .ShouldScanForNextTarget(5L),
+            "an occupied fabrication slot must not scan");
+        True(AncientWarfare3.core.policy.CoreFabricationSlotRules
+                .ShouldScanForNextTarget(-1L),
+            "a free slot may look for the next target");
+    }
+
+    /// <summary>
+    /// 世袭爵位/分封走的是同一条顺位规则,只是把「亲等」折进支系键。
+    /// </summary>
+    private static void HereditaryTitleUsesTheSharedOrder()
+    {
+        // 直系压旁支:哪怕旁支年长、亲等最近。
+        Equal(7L, Pick(
+                Direct(7L, legitimate: false, birth: 900.0),
+                Collateral(1L, legitimate: true, birth: 100.0, kin: 0)),
+            "a direct son outranks any collateral");
+        // 直系内部嫡压长。
+        Equal(7L, Pick(
+                Direct(7L, legitimate: true, birth: 900.0),
+                Direct(1L, legitimate: false, birth: 100.0)),
+            "a younger legitimate son outranks an older bastard");
+        // 同嫡庶才比长幼。
+        Equal(1L, Pick(
+                Direct(7L, legitimate: true, birth: 900.0),
+                Direct(1L, legitimate: true, birth: 100.0)),
+            "among equals the elder inherits");
+        // 旁支之间亲等近的在前。
+        Equal(5L, Pick(
+                Collateral(5L, legitimate: true, birth: 900.0, kin: 1),
+                Collateral(9L, legitimate: true, birth: 100.0, kin: 3)),
+            "the nearer collateral branch inherits first");
+        // 旁支必须成年 —— 这是入池条件,不是排序。
+        Equal(9L, Pick(
+                new HereditaryTitleSuccessionCandidate(5L, true, false, true,
+                    false, true, 0, 100.0),
+                Collateral(9L, legitimate: true, birth: 900.0, kin: 3)),
+            "an underage collateral cannot inherit");
+        // 同亲等的旁支之间,嫡压庶(统一后新增的一致性)。
+        Equal(5L, Pick(
+                Collateral(5L, legitimate: true, birth: 900.0, kin: 2),
+                Collateral(9L, legitimate: false, birth: 100.0, kin: 2)),
+            "legitimacy also orders the collateral tail");
+        // 没有合格者时返回 -1。
+        Equal(-1L, Pick(
+                new HereditaryTitleSuccessionCandidate(5L, false, true, true,
+                    true, true, 0, 100.0)),
+            "an empty pool yields no successor");
+    }
+
+    private static HereditaryTitleSuccessionCandidate Direct(long pId,
+        bool legitimate, double birth)
+    {
+        return new HereditaryTitleSuccessionCandidate(pId, true, true,
+            legitimate, true, true, 0, birth);
+    }
+
+    private static HereditaryTitleSuccessionCandidate Collateral(long pId,
+        bool legitimate, double birth, int kin)
+    {
+        return new HereditaryTitleSuccessionCandidate(pId, true, false,
+            legitimate, true, true, kin, birth);
+    }
+
+    private static long Pick(
+        params HereditaryTitleSuccessionCandidate[] pCandidates)
+    {
+        return HereditaryTitleSuccessionRules.SelectSuccessor(pCandidates);
+    }
+
+    private static void Equal(long pExpected, long pActual, string pMessage)
+    {
+        if (pExpected != pActual)
+            throw new Exception("Expected " + pExpected + " but got " +
+                pActual + ": " + pMessage);
+    }
+
+    private static void PoolEntryRules()
+    {
+        // 女性由专门的继承法控制。
+        False(SuccessionOrderRules.CanEnterPool(pAlive: true, pMale: false,
+                pFemaleSuccessionAllowed: false, pSlave: false,
+                pMadness: false, pCurrentRuler: false, pSameRealm: true),
+            "a daughter stays out while the law forbids female succession");
+        True(SuccessionOrderRules.CanEnterPool(pAlive: true, pMale: false,
+                pFemaleSuccessionAllowed: true, pSlave: false,
+                pMadness: false, pCurrentRuler: false, pSameRealm: true),
+            "a daughter enters once the law permits female succession");
+        // 男性不受该法影响。
+        True(SuccessionOrderRules.CanEnterPool(pAlive: true, pMale: true,
+                pFemaleSuccessionAllowed: false, pSlave: false,
+                pMadness: false, pCurrentRuler: false, pSameRealm: true),
+            "a son is unaffected by the female succession law");
+        foreach ((string label, bool alive, bool slave, bool madness,
+                     bool ruler, bool realm) in new[]
+                 {
+                     ("the dead", false, false, false, false, true),
+                     ("a slave", true, true, false, false, true),
+                     ("the mad", true, false, true, false, true),
+                     ("the ruler", true, false, false, true, true),
+                     ("a foreigner", true, false, false, false, false)
+                 })
+            False(SuccessionOrderRules.CanEnterPool(alive, true, true, slave,
+                    madness, ruler, realm),
+                label + " cannot enter the succession pool");
+    }
+
+    private static void BloodlineOrdering()
+    {
+        // 旁支是兜底,排在末尾 —— 哪怕它是嫡出且年长。
+        True(Before(
+                SuccessionOrderRules.DirectLine, false, 900.0, 0, 7L,
+                SuccessionOrderRules.CollateralLine, true, 100.0, 0, 1L),
+            "a direct junior bastard still outranks a collateral elder");
+        // 嫡庶压过长幼:嫡幼在庶长之前。
+        True(Before(
+                SuccessionOrderRules.DirectLine, true, 900.0, 0, 7L,
+                SuccessionOrderRules.DirectLine, false, 100.0, 0, 1L),
+            "a younger legitimate son outranks an older illegitimate one");
+        // 同支同档才比长幼。
+        True(Before(
+                SuccessionOrderRules.DirectLine, true, 100.0, 0, 9L,
+                SuccessionOrderRules.DirectLine, true, 900.0, 0, 1L),
+            "among equals the elder comes first");
+        // 全序收尾。
+        True(Before(
+                SuccessionOrderRules.DirectLine, true, 100.0, 0, 1L,
+                SuccessionOrderRules.DirectLine, true, 100.0, 0, 2L),
+            "identical siblings are ordered by id");
+        False(Before(
+                SuccessionOrderRules.DirectLine, true, 100.0, 0, 2L,
+                SuccessionOrderRules.DirectLine, true, 100.0, 0, 1L),
+            "the id tie-break is antisymmetric");
+    }
+
+    private static void AbilityOrdering()
+    {
+        // 学派看能力,血缘键完全不参与。
+        True(SuccessionOrderRules.SortsBefore(SuccessionOrderBasis.Ability,
+                SuccessionOrderRules.CollateralLine, false, 900.0, 50, 9L,
+                SuccessionOrderRules.DirectLine, true, 100.0, 10, 1L),
+            "a stronger disciple succeeds regardless of birth");
+        True(SuccessionOrderRules.SortsBefore(SuccessionOrderBasis.Ability,
+                SuccessionOrderRules.DirectLine, true, 100.0, 10, 1L,
+                SuccessionOrderRules.DirectLine, true, 100.0, 10, 2L),
+            "equal ability falls back to id");
+    }
+
+    private static void InsertionMatchesFullSort()
+    {
+        // 新生子嗣必须插到「同支同档的兄姊之后」,而不是追加到池尾。
+        // 用随机对拍证明:插入位置 == 全量排序后它所在的下标。
+        var random = new Random(20260830);
+        foreach (SuccessionOrderBasis basis in new[]
+                 {
+                     SuccessionOrderBasis.Bloodline,
+                     SuccessionOrderBasis.Ability
+                 })
+        for (int trial = 0; trial < 2000; trial++)
+        {
+            int count = random.Next(0, 12);
+            var pool = new List<(int Branch, bool Legitimate, double Birth,
+                int Ability, long Id)>();
+            for (int index = 0; index < count; index++)
+                pool.Add((random.Next(0, 2), random.Next(0, 2) == 0,
+                    random.Next(0, 4), random.Next(0, 3), index));
+            pool.Sort((left, right) =>
+                SuccessionOrderRules.SortsBefore(basis, left.Branch,
+                    left.Legitimate, left.Birth, left.Ability, left.Id,
+                    right.Branch, right.Legitimate, right.Birth,
+                    right.Ability, right.Id)
+                    ? -1
+                    : 1);
+
+            var newborn = (Branch: random.Next(0, 2),
+                Legitimate: random.Next(0, 2) == 0,
+                Birth: (double)random.Next(0, 4),
+                Ability: random.Next(0, 3), Id: 1000L);
+            int position = SuccessionOrderRules.FindInsertPosition(basis,
+                pool.Count, index => pool[index], newborn.Branch,
+                newborn.Legitimate, newborn.Birth, newborn.Ability,
+                newborn.Id);
+
+            var inserted = new List<(int Branch, bool Legitimate, double Birth,
+                int Ability, long Id)>(pool);
+            inserted.Insert(position, newborn);
+            var expected = new List<(int Branch, bool Legitimate, double Birth,
+                int Ability, long Id)>(pool) { newborn };
+            expected.Sort((left, right) =>
+                SuccessionOrderRules.SortsBefore(basis, left.Branch,
+                    left.Legitimate, left.Birth, left.Ability, left.Id,
+                    right.Branch, right.Legitimate, right.Birth,
+                    right.Ability, right.Id)
+                    ? -1
+                    : 1);
+            True(inserted.SequenceEqual(expected),
+                "insertion must land where a full sort would put the newborn");
+        }
+    }
+
+    private static bool Before(int pBranchA, bool pLegitimateA, double pBirthA,
+        int pAbilityA, long pIdA, int pBranchB, bool pLegitimateB,
+        double pBirthB, int pAbilityB, long pIdB)
+    {
+        return SuccessionOrderRules.SortsBefore(SuccessionOrderBasis.Bloodline,
+            pBranchA, pLegitimateA, pBirthA, pAbilityA, pIdA,
+            pBranchB, pLegitimateB, pBirthB, pAbilityB, pIdB);
+    }
+
+    private static void True(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new Exception("Expected true: " + pMessage);
+    }
+
+    private static void False(bool pCondition, string pMessage)
+    {
+        if (pCondition) throw new Exception("Expected false: " + pMessage);
+    }
+}

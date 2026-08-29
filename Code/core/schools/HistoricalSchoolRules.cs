@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.content.schools;
+using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.schools
 {
@@ -473,14 +474,43 @@ namespace AncientWarfare3.core.schools
                    pDirectDiscipleCount < pDirectDiscipleCap;
         }
 
+        /// <summary>
+        ///     道统传人。学派的「嫡长」看的是学问声望而不是血缘,所以走
+        ///     <see cref="SuccessionOrderBasis.Ability"/> —— 和王位/宗族共用同一个
+        ///     顺位工具,只是换了排序依据。传人就是顺位池第一席。
+        /// </summary>
         public static SchoolLineageCandidate SelectLineageSuccessor(
             IEnumerable<SchoolLineageCandidate> pCandidates)
         {
-            return (pCandidates ?? Array.Empty<SchoolLineageCandidate>())
-                .Where(p => p != null && p.Alive && p.DirectDisciple && p.ActorId >= 0)
-                .OrderByDescending(LineageSuccessorScore)
-                .ThenBy(p => p.ActorId)
-                .FirstOrDefault();
+            SchoolLineageCandidate best = null;
+            foreach (SchoolLineageCandidate candidate in
+                     pCandidates ?? Array.Empty<SchoolLineageCandidate>())
+            {
+                if (candidate == null || !candidate.Alive ||
+                    !candidate.DirectDisciple || candidate.ActorId < 0)
+                    continue;
+                if (best != null && !SuccessionOrderRules.SortsBefore(
+                        SuccessionOrderBasis.Ability,
+                        SuccessionOrderRules.DirectLine, true, 0.0,
+                        AbilityScore(candidate), candidate.ActorId,
+                        SuccessionOrderRules.DirectLine, true, 0.0,
+                        AbilityScore(best), best.ActorId)) continue;
+                best = candidate;
+            }
+
+            return best;
+        }
+
+        /// <summary>
+        ///     顺位工具的能力键是整数,而道统评分是浮点。四舍五入到整数会把
+        ///     相近的分数压成并列,再由 id 决定 —— 所以放大后取整,保留区分度。
+        /// </summary>
+        private static int AbilityScore(SchoolLineageCandidate pCandidate)
+        {
+            double scaled = LineageSuccessorScore(pCandidate) * 1000.0;
+            if (scaled >= int.MaxValue) return int.MaxValue;
+            if (scaled <= int.MinValue) return int.MinValue;
+            return (int)scaled;
         }
 
         public static bool CanExplicitlyConvert(bool pHistoricalMaster,

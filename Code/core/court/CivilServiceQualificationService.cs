@@ -9,6 +9,27 @@ using AncientWarfare3.core.schools;
 
 namespace AncientWarfare3.core.court
 {
+    /// <summary>
+    ///     一名候选的任职资历,两级一次读出。
+    ///
+    ///     <see cref="CivilServiceQualificationService.HasRequiredServiceHistory"/>
+    ///     的 SQL **根本没用到 requiredOfficeGrade** —— 它取该 actor 的任职历史,
+    ///     再在 C# 里按级筛。严格通道每名候选要问 grade 30 和 grade 20 两次,
+    ///     等于把同一条查询发两遍。
+    /// </summary>
+    internal readonly struct CourtServiceHistory
+    {
+        internal CourtServiceHistory(bool pHasLowerService,
+            bool pHasMiddleService)
+        {
+            HasLowerService = pHasLowerService;
+            HasMiddleService = pHasMiddleService;
+        }
+
+        internal bool HasLowerService { get; }
+        internal bool HasMiddleService { get; }
+    }
+
     internal static class CivilServiceQualificationService
     {
         internal const string TechnologyId =
@@ -88,7 +109,8 @@ namespace AncientWarfare3.core.court
             CivilServiceQualificationRecord pQualification = null,
             bool pQualificationsCaptured = false,
             bool pAllowLocalLowerQualification = false,
-            City pCity = null)
+            City pCity = null,
+            CourtCandidateSession pServiceHistorySession = null)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
             bool examinationSystem = HasExaminationSystem(pKingdom);
@@ -115,18 +137,32 @@ namespace AncientWarfare3.core.court
                     localLayer, officeGrade,
                     pAllowVacancyPromotion &&
                     pAllowLocalLowerQualification);
+            // 补缺时,这三个分支任意一个成立就已经让 appointmentQualificationEligible
+            // 为真,而函数末尾在 pAllowVacancyPromotion 为真时返回的正是
+            // ShouldUseVacancyFallback(officeVacant, false, eligible) —— 即 true。
+            // 也就是说下面那些查询一个都改不了结果。县令补缺(officeGrade 30 +
+            // 空缺晋升)全程走 allowUnqualifiedLocalFallback,这条提前返回把它
+            // 每名候选约 5 次 SQLite 查询直接降到 0。
+            if (pAllowVacancyPromotion &&
+                (hasCareerRank || allowUnqualifiedLocalFallback ||
+                 localLeaderQualificationBypass)) return true;
             CivilServiceQualificationRecord qualification = examinationSystem
                 ? pQualificationsCaptured
                     ? pQualification
                     : LoadOrRepair(pActor, pKingdom)
                 : null;
-            bool higherStageFailure = pAllowLocalLowerQualification &&
+            // 没有科举制时 hasFormalQualification 恒为真,
+            // AcceptsAppointmentQualification 根本不会被调用 —— 这个 JOIN 查询
+            // 的结果无人使用,不能为每名候选白付一次。
+            bool higherStageFailure = examinationSystem &&
+                pAllowLocalLowerQualification &&
                 HasFailedHigherStage(pActor, pKingdom);
             bool hasFormalQualification = !examinationSystem ||
                 LocalOfficialCandidateRules.AcceptsAppointmentQualification(
                     qualification?.Qualification ?? "none",
                     higherStageFailure, pAllowLocalLowerQualification);
-            bool hasLegacyCredential = examinationSystem &&
+            bool hasLegacyCredential = !hasFormalQualification &&
+                examinationSystem &&
                 CivilServiceLegacyTransitionService.HasUsableCredential(
                     pActor, pKingdom, pLayer, pOfficeId);
             bool appointmentQualificationEligible = hasFormalQualification ||
@@ -134,6 +170,10 @@ namespace AncientWarfare3.core.court
                 allowUnqualifiedLocalFallback || localLeaderQualificationBypass;
             if (!appointmentQualificationEligible)
                 return false;
+            // 同上:末尾是 strictEligible || (pAllowVacancyPromotion && eligible)。
+            // 后半已经成立时,strictEligible 的取值无关紧要,而算它要两次
+            // HasRequiredServiceHistory(每次一条最多 64 行的查询)。
+            if (pAllowVacancyPromotion) return true;
 
             if (currentRank <= OfficialCareerRankRules.Unranked)
                 currentRank = localLayer
@@ -145,10 +185,19 @@ namespace AncientWarfare3.core.court
                         OfficialCareerRankRules.Unranked, officeGrade,
                         hasNineRankSystem: true, hasFormalQualification: true,
                         qualification?.EntryBonus ?? 0);
-            bool hasLowerService = HasRequiredServiceHistory(pActor,
-                pKingdom, requiredOfficeGrade: 30);
-            bool hasMiddleService = HasRequiredServiceHistory(pActor,
-                pKingdom, requiredOfficeGrade: 20);
+            // 严格通道现在真的会跑(局部层补回了 strict-first),所以这两问必须
+            // 能由调用方按轮记忆喂进来 —— 否则每名候选两条 SQL。
+            //
+            // 收的是 session 而不是**算好的值**:上面 146 / 176 两处提前返回在
+            // pAllowVacancyPromotion 为真时必定命中,这一行根本到不了。参数在
+            // C# 里是**先算后传**的,所以传 pSession.ServiceHistory(actor, ...)
+            // 等于给兜底通道的每名候选白发一条 SQL —— 而兜底池是两三千人。
+            // 改前的兜底通道一条都不发,这是净新增的开销。
+            CourtServiceHistory serviceHistory =
+                pServiceHistorySession?.ServiceHistory(pActor, pKingdom) ??
+                LoadServiceHistory(pActor, pKingdom);
+            bool hasLowerService = serviceHistory.HasLowerService;
+            bool hasMiddleService = serviceHistory.HasMiddleService;
             pActor.data.get(LineageKeys.OFFICER_LAST_KAOKE,
                 out int evaluation, -1);
             bool passingEvaluation = evaluation >= 0 && evaluation <= 2;
@@ -230,8 +279,24 @@ namespace AncientWarfare3.core.court
         public static bool HasRequiredServiceHistory(Actor pActor,
             Kingdom pKingdom, int requiredOfficeGrade)
         {
+            CourtServiceHistory history = LoadServiceHistory(pActor, pKingdom);
+            return requiredOfficeGrade == 20
+                ? history.HasMiddleService
+                : history.HasLowerService;
+        }
+
+        /// <summary>
+        ///     一条查询同时回答 grade 30 与 grade 20 两问。严格通道对每名候选
+        ///     都要问这两级,而底层 SQL 对两者完全相同。
+        /// </summary>
+        internal static CourtServiceHistory LoadServiceHistory(Actor pActor,
+            Kingdom pKingdom)
+        {
+            bool lower = false;
+            bool middle = false;
             if (DB == null || pActor?.data == null ||
-                pKingdom?.data == null) return false;
+                pKingdom?.data == null)
+                return new CourtServiceHistory(false, false);
             try
             {
                 using var command = new SQLiteCommand(DB);
@@ -259,12 +324,15 @@ namespace AncientWarfare3.core.court
                         : World.world?.cities?.get(cityId);
                     int grade = OfficialCareerStateService.OfficeGradeForOffice(
                         pKingdom, layer, office, city);
-                    if (OfficialCareerRankRules.IsRequiredServiceGrade(
-                            grade, requiredOfficeGrade)) return true;
+                    if (!lower && OfficialCareerRankRules.
+                            IsRequiredServiceGrade(grade, 30)) lower = true;
+                    if (!middle && OfficialCareerRankRules.
+                            IsRequiredServiceGrade(grade, 20)) middle = true;
+                    if (lower && middle) break;
                 }
             }
             catch { }
-            return false;
+            return new CourtServiceHistory(lower, middle);
         }
 
         public static bool IsAppointmentExempt(Actor pActor,

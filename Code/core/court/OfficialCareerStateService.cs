@@ -739,6 +739,11 @@ namespace AncientWarfare3.core.court
                                     Math.Abs(mutation.Merit - mutation.State.Merit) > 0.0001f;
                 eligibilityChanged |= mutation.Rank != mutation.PreviousRank ||
                                      mutation.LocalGrade != mutation.State.LocalGrade;
+                // 品级是候选目录的排序键。目录靠事件维护、不再定期重建,所以
+                // 升迁后必须把人挪到新位置,否则表会随升迁慢慢失序。
+                if (mutation.Rank != mutation.PreviousRank)
+                    OfficerCandidateCatalog.Reposition(pKingdom,
+                        mutation.Actor);
                 if (mutation.Evaluated)
                     RecordEvaluation(pKingdom, mutation);
                 else if (OfficialCareerBiographyRules.ShouldRecordRankAdvance(

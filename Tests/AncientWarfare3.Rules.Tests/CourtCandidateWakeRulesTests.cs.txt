@@ -1,0 +1,56 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class CourtCandidateWakeRulesTests
+{
+    internal static void Run()
+    {
+        // 只有「男性且不是奴隶/国王/继承人」才值得为其成年唤醒一次补缺对账。
+        // 这四条全部是 LocalOfficialCandidateRules.CanEnter 与
+        // CanUseCandidateFacts 的硬性前置,所以排除掉的人这一刻确实进不了
+        // 任何一层的候选池。
+        True(CourtCandidateWakeRules.ShouldWakeForNewAdult(
+                pMale: true, pSlave: false, pKing: false, pHeir: false),
+            "an ordinary new adult male must wake vacancy reconciliation");
+
+        False(CourtCandidateWakeRules.ShouldWakeForNewAdult(
+                pMale: false, pSlave: false, pKing: false, pHeir: false),
+            "females cannot enter any court layer, so they must not wake it");
+        False(CourtCandidateWakeRules.ShouldWakeForNewAdult(
+                pMale: true, pSlave: true, pKing: false, pHeir: false),
+            "slaves are excluded by CanEnter");
+        False(CourtCandidateWakeRules.ShouldWakeForNewAdult(
+                pMale: true, pSlave: false, pKing: true, pHeir: false),
+            "a king is excluded by CanEnter");
+        False(CourtCandidateWakeRules.ShouldWakeForNewAdult(
+                pMale: true, pSlave: false, pKing: false, pHeir: true),
+            "the registered heir is excluded by CanEnter");
+
+        // 任意一条排除项成立就不唤醒 —— 不能出现「多个排除项互相抵消」。
+        for (int mask = 0; mask < 16; mask++)
+        {
+            bool male = (mask & 1) != 0;
+            bool slave = (mask & 2) != 0;
+            bool king = (mask & 4) != 0;
+            bool heir = (mask & 8) != 0;
+            bool expected = male && !slave && !king && !heir;
+            if (CourtCandidateWakeRules.ShouldWakeForNewAdult(
+                    male, slave, king, heir) != expected)
+                throw new InvalidOperationException(
+                    "wake decision must be the conjunction of all four facts: "
+                    + mask);
+        }
+
+        Console.WriteLine("CourtCandidateWakeRulesTests passed.");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+}

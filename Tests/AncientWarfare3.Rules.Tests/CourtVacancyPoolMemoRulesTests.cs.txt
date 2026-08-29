@@ -1,0 +1,52 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class CourtVacancyPoolMemoRulesTests
+{
+    internal static void Run()
+    {
+        // 从没记过账 —— 必须尝试。新登记的空缺走的就是这条。
+        True(CourtVacancyPoolMemoRules.ShouldRetry(pHasMemo: false,
+                pMemoGeneration: 0, pMemoYear: 0,
+                pCurrentGeneration: 0, pCurrentYear: 0),
+            "a vacancy with no memo must always be attempted");
+
+        // 上次没人,而候选池和年份都没动过 —— 结果不会变,别再扫一遍全国。
+        False(CourtVacancyPoolMemoRules.ShouldRetry(pHasMemo: true,
+                pMemoGeneration: 7, pMemoYear: 300,
+                pCurrentGeneration: 7, pCurrentYear: 300),
+            "an unchanged candidate pool cannot produce a different result");
+
+        // 池变了 —— 立刻重试,不等冷却。这正是用代际号而不是固定年数的理由。
+        True(CourtVacancyPoolMemoRules.ShouldRetry(pHasMemo: true,
+                pMemoGeneration: 7, pMemoYear: 300,
+                pCurrentGeneration: 8, pCurrentYear: 300),
+            "a changed candidate pool must be retried immediately");
+
+        // 年份兜底:万一某个改变候选池的事件漏接了 CandidatePoolChanged,
+        // 最多压一年。
+        True(CourtVacancyPoolMemoRules.ShouldRetry(pHasMemo: true,
+                pMemoGeneration: 7, pMemoYear: 300,
+                pCurrentGeneration: 7, pCurrentYear: 301),
+            "a new year must retry even when no pool change was observed");
+
+        // 代际号回绕/重置(王国被销毁后重建)也要重试,不能因为数值相等之外的
+        // 任何巧合把席位永久压住。
+        True(CourtVacancyPoolMemoRules.ShouldRetry(pHasMemo: true,
+                pMemoGeneration: 9, pMemoYear: 300,
+                pCurrentGeneration: 0, pCurrentYear: 300),
+            "a reset generation counter must retry");
+
+        Console.WriteLine("CourtVacancyPoolMemoRulesTests passed.");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+}

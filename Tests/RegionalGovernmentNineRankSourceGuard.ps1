@@ -6,6 +6,7 @@ $career = Get-Content -Raw (Join-Path $root 'Code\core\court\OfficialCareerState
 $court = Get-Content -Raw (Join-Path $root 'Code\core\court\CourtService.cs')
 $local = Get-Content -Raw (Join-Path $root 'Code\core\court\LocalCourtAppointmentService.cs')
 $cityLeader = Get-Content -Raw (Join-Path $root 'Code\patch\AW_CityLeaderPatch.cs')
+$cityGovernor = Get-Content -Raw (Join-Path $root 'Code\core\court\CityGovernorProjectionRepairService.cs')
 foreach ($pair in @(
     @($rank, 'RequiredRankForLocalOfficeGrade'),
     @($rank, 'ResolveInitialLocalAppointmentRank'),
@@ -32,9 +33,16 @@ if ($career -notmatch
     'if \(!examinationSystem\)[\s\S]{0,1600}ResolveInitialLocalAppointmentRank') {
     throw 'No-examination nine-rank appointments must use local office rank floors'
 }
-if ($local -notmatch
-    'LoadAllCandidates[\s\S]{0,2200}CanUseCandidateFacts\(actor, pKingdom\)') {
-    throw 'The local world roster must preserve hard-valid legacy candidates'
+# The intent here is that the local roster still applies the hard-validity
+# facts gate. The original anchor was LoadAllCandidates, a helper that was
+# retired when local filling moved onto the shared CourtCandidateSession
+# (CourtVacancySourceGuardTests now asserts that helper stays gone). Re-anchor
+# on the two pools the session hands out; both must be built through the gate.
+foreach ($pool in @('StrictCandidates', 'FactsCandidates')) {
+    if ($local -notmatch
+        "$pool\([\s\S]{0,200}CanUseCandidateFacts\(actor, pKingdom\)") {
+        throw 'The local world roster must preserve hard-valid legacy candidates'
+    }
 }
 if (-not $local.Contains('examinationEnabled: false')) {
     throw 'The local hard-validity filter must retain actor identity checks'
@@ -48,8 +56,15 @@ foreach ($token in @(
         throw "Missing local hard-validity filter: $token"
     }
 }
-if ($cityLeader -notmatch
-    'TryGetRealmLeader[\s\S]{0,500}pAllowVacancyPromotion: false[\s\S]{0,500}pAllowVacancyPromotion: true') {
+# City governor selection kept its strict-then-fallback shape but moved out of
+# AW_CityLeaderPatch.cs; TryGetRealmLeader no longer exists anywhere in the
+# tree. Anchor on CityGovernorProjectionRepairService.Apply, where the strict
+# pass is the default-argument call and the fallback is gated on !formal.
+if ($cityGovernor -notmatch
+    'bool formal =[\s\S]{0,400}bool vacancyFallback = !formal &&[\s\S]{0,400}pAllowVacancyPromotion: true') {
     throw 'City governor selection must try strict candidates before vacancy fallback'
+}
+if ($cityLeader -match 'pAllowVacancyPromotion') {
+    throw 'City leader patch must not regain its own appointment selection'
 }
 Write-Output 'Regional government nine-rank source guard PASS'

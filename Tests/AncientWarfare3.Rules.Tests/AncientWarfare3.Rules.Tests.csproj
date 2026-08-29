@@ -149,6 +149,15 @@
     <Compile Include="..\..\Code\core\court\CourtVacancyRegistry.cs" Link="Production\CourtVacancyRegistry.cs" />
     <Compile Include="CourtImmediateVacancyModeRulesTests.cs.txt" />
     <Compile Include="CourtAppointmentFailureBackoffRulesTests.cs.txt" />
+    <Compile Include="CourtCandidateWakeRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CourtCandidateWakeRules.cs" Link="Production\CourtCandidateWakeRules.cs" />
+    <Compile Include="CourtVacancyPoolMemoRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CourtVacancyPoolMemoRules.cs" Link="Production\CourtVacancyPoolMemoRules.cs" />
+    <Compile Include="CountyShortlistRulesTests.cs.txt" />
+    <Compile Include="SuccessionOrderRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\SuccessionOrderRules.cs" Link="Production\SuccessionOrderRules.cs" />
+    <Compile Include="..\..\Code\core\policy\CoreFabricationSlotRules.cs" Link="Production\CoreFabricationSlotRules.cs" />
+    <Compile Include="..\..\Code\core\court\CountyShortlistRules.cs" Link="Production\CountyShortlistRules.cs" />
     <Compile Include="CentralCourtVacancySourceGuardTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CourtAppointmentFailureBackoffRules.cs" Link="Production\CourtAppointmentFailureBackoffRules.cs" />
     <Compile Include="CityBureauRetryRulesTests.cs.txt" />

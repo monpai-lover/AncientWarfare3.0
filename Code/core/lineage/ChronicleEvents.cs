@@ -1593,6 +1593,14 @@ namespace AncientWarfare3.core.lineage
                 PosthumousTitleService.OnReignEnded(pKingdom, king, "kingdom_fell", reign);
             DynastyRecordWriter.CloseOpenDynasty(pKingdom.id, DynastyRecordWriter.END_REASON_KINGDOM_FELL);
             EraRecordWriter.CloseOpenEra(pKingdom.id);
+            // 国给的爵位随国灭。授予它的政权没了,封号就没有来源了 —— 不作废
+            // 的话亡国的爵位会跟着人一直传下去,后世还能靠它继承分封。
+            try { NobleRankService.RevokeKingdomTitles(pKingdom, "kingdom_fell"); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Noble title revocation on kingdom fall failed: " +
+                                    error.Message);
+            }
         }
 
         // 驾崩:在位君主死亡。国家史 + 关 reign + 评谥。

@@ -1919,6 +1919,28 @@ namespace AncientWarfare3.core.policy
             return false;
         }
 
+        /// <summary>
+        ///     本国「已被制造核心占用」的城 id —— 当前在造的那座,加上队列里排着的。
+        ///
+        ///     和逐城问 <see cref="HasCoreFabricationProjectForCity"/> 等价,但队列
+        ///     字符串只解码一次。逐城问的话,每座城都要把整条队列解成一个
+        ///     <c>List</c> 加最多 8 个各带 10 个字符串字段的对象 —— 而这个循环
+        ///     每王国每月要跑两遍。
+        /// </summary>
+        public static HashSet<long> CollectCoreFabricationCityIds(
+            Kingdom pKingdom)
+        {
+            var result = new HashSet<long>();
+            if (pKingdom?.data == null) return result;
+            long current = GetCoreFabricationCityId(pKingdom);
+            if (current >= 0) result.Add(current);
+            foreach (KingdomDecisionQueueItem item in
+                     ReadCoreFabricationQueue(pKingdom))
+                if (item != null && item.war_target_city_id >= 0)
+                    result.Add(item.war_target_city_id);
+            return result;
+        }
+
         public static int CountCoreFabricationProjects(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return 0;
@@ -2011,11 +2033,78 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null) return;
             if (IsNodeLocked(pKingdom, DecisionQueueRules.FabricateCoreDecisionId)) return;
-            if (GetCoreFabricationCityId(pKingdom) < 0 && StartNextQueuedCoreFabrication(pKingdom))
-                return;
-            City city = WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom);
-            if (city?.data == null) return;
-            StartCoreFabrication(pKingdom, city);
+            // 正在造的时候什么都不做 —— 槽位占着,扫出来也只能排队,而扫描是这条
+            // 月推进里最贵的一段。
+            long currentCoreCityId = GetCoreFabricationCityId(pKingdom);
+            if (!CoreFabricationSlotRules.ShouldScanForNextTarget(
+                    currentCoreCityId)) return;
+            // 槽位空了:先按既定顺序取队首。取到就结束,一次查询都不用。
+            if (StartNextQueuedCoreFabrication(pKingdom)) return;
+            // 只有「槽位空 + 队列也空」才扫描,而且一次就把后面的顺序全定下来,
+            // 灌满队列。之后每造完一个直接取队首,按部就班,不再扫描。
+            if (!FillCoreFabricationQueue(pKingdom)) return;
+            StartNextQueuedCoreFabrication(pKingdom);
+        }
+
+        /// <summary>
+        ///     一次扫描定下整轮核心化的顺序,把目标城灌进制造队列。
+        ///     返回是否真的排进去了东西。
+        /// </summary>
+        private static bool FillCoreFabricationQueue(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            List<KingdomDecisionQueueItem> queue =
+                ReadCoreFabricationQueue(pKingdom);
+            int room = KingdomDecisionQueueCodec.MaxQueueSize - queue.Count;
+            if (room <= 0) return false;
+
+            // 上次扫了个空,而且此后没有任何「可能冒出新目标」的信号 —— 直接停。
+            // 全国都已核心化是稳定终局,成熟帝国会在这个状态停留很久;不停的话
+            // 就是每月两条查询加一趟遍历的纯空转。
+            int revision = WarTerritoryService.CoreTargetRevision(pKingdom.id);
+            int cityCount = SafeCityCount(pKingdom);
+            bool latched = CoreTargetEmptyLatch.TryGetValue(pKingdom.id,
+                out (int Revision, int CityCount) latch);
+            if (!CoreFabricationSlotRules.ShouldScanForTargets(latched,
+                    latch.Revision, latch.CityCount, revision, cityCount))
+                return false;
+
+            List<City> targets = WarTerritoryService
+                .CollectCoreProjectTargetCities(pKingdom, room);
+            if (targets.Count == 0)
+            {
+                // 记下此刻的信号,之后一直跳过,直到信号变了。
+                CoreTargetEmptyLatch[pKingdom.id] = (revision, cityCount);
+                return false;
+            }
+
+            CoreTargetEmptyLatch.Remove(pKingdom.id);
+            for (int index = 0; index < targets.Count; index++)
+                queue.Add(CreateFabricationDecisionItem(
+                    DecisionQueueRules.FabricateCoreDecisionId, pKingdom,
+                    targets[index], WarTerritoryService.PROJECT_CORE,
+                    "\u5236\u9020\u6838\u5FC3", 0f));
+            WriteCoreFabricationQueue(pKingdom, queue);
+            return true;
+        }
+
+        /// <summary>
+        ///     上次扫描「一个可造核心的城都没有」时的信号快照,按王国记。
+        ///     全国都已核心化之后,月推进靠它彻底停扫,直到信号变化。
+        /// </summary>
+        private static readonly Dictionary<long, (int Revision, int CityCount)>
+            CoreTargetEmptyLatch =
+                new Dictionary<long, (int Revision, int CityCount)>();
+
+        internal static void ClearCoreTargetLatch()
+        {
+            CoreTargetEmptyLatch.Clear();
+        }
+
+        private static int SafeCityCount(Kingdom pKingdom)
+        {
+            try { return Math.Max(0, pKingdom?.countCities() ?? 0); }
+            catch { return 0; }
         }
 
         private static void AdvanceCoreFabrication(Kingdom pKingdom,

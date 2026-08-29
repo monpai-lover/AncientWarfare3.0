@@ -14,6 +14,9 @@ namespace AncientWarfare3.core.policy
         internal static void Reset()
         {
             MonthlyWork.Clear();
+            // 停扫闩是按运行时信号记的,换存档必须清掉,否则新世界会带着
+            // 旧世界的「已经全部核心化」结论开局。
+            KingdomPolicyService.ClearCoreTargetLatch();
         }
 
         internal static void ProcessAuthorityCycle()

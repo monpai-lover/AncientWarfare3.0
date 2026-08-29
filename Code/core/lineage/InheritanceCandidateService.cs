@@ -36,16 +36,32 @@ namespace AncientWarfare3.core.lineage
 
     internal static class InheritanceCandidateService
     {
+        /// <summary>
+        ///     王位继承的候选池。按「王国 + 参照君主」记一次,之后靠事件维护 ——
+        ///     见 <see cref="SuccessionPoolService"/>。一次继承人刷新最多要问三遍
+        ///     (正统/军功/文治),派系支持计算里还要再问,原来每问一次就重走一趟
+        ///     亲缘遍历。
+        /// </summary>
         public static List<Actor> CollectRoyalCandidates(Kingdom pKingdom,
             Actor pReferenceKing = null, long pReferenceKingId = -1L)
+        {
+            if (pKingdom?.data == null) return new List<Actor>();
+            Actor king = pReferenceKing ?? pKingdom.king;
+            long referenceKingId = king?.data?.id ?? pReferenceKingId;
+            return SuccessionPoolService.Get(pKingdom, referenceKingId,
+                () => BuildRoyalCandidates(pKingdom, king, referenceKingId));
+        }
+
+        private static List<Actor> BuildRoyalCandidates(Kingdom pKingdom,
+            Actor pReferenceKing, long pReferenceKingId)
         {
             var result = new List<Actor>(
                 InheritanceCandidateRules.MaximumArchiveIds);
             var seen = new HashSet<long>();
             if (pKingdom?.data == null) return result;
 
-            Actor king = pReferenceKing ?? pKingdom.king;
-            long referenceKingId = king?.data?.id ?? pReferenceKingId;
+            Actor king = pReferenceKing;
+            long referenceKingId = pReferenceKingId;
             AddIndexedCloseKin(referenceKingId, king, result, seen);
 
             pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID,
@@ -616,6 +632,7 @@ namespace AncientWarfare3.core.lineage
                 return default;
             int distance = 8;
             int legitimacy = 0;
+            bool directLine = false;
             if (pReferenceKing?.data != null)
             {
                 if (TryResolveKinship(pActor.data.id, pKinship,
@@ -623,6 +640,9 @@ namespace AncientWarfare3.core.lineage
                 {
                     distance = kingDepth + actorDepth;
                     legitimacy = kingDepth == 0 ? 20 : 10;
+                    // kingDepth==0 表示两人的共同祖先就是君主本人 —— 也就是这个
+                    // 候选是君主的后裔。否则共同祖先在更上一辈,属于旁支。
+                    directLine = kingDepth == 0;
                 }
             }
             bool royal = IsRoyal(pActor, pKingdom, pReferenceKing,
@@ -645,7 +665,14 @@ namespace AncientWarfare3.core.lineage
                 (int)Math.Round(
                     OfficialCareerStateService.ReadMeritFast(pActor)),
                 evaluationGrade: 0, groupSupport: groupSupport,
-                legitimateBirth: legitimateBirth);
+                legitimateBirth: legitimateBirth, directLine: directLine,
+                birthTime: SafeBirthTime(pActor));
+        }
+
+        private static double SafeBirthTime(Actor pActor)
+        {
+            try { return pActor?.data?.created_time ?? double.MaxValue; }
+            catch { return double.MaxValue; }
         }
 
         private static KinshipContext BuildKinshipContext(Actor pReference)

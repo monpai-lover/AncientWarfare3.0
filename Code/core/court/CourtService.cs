@@ -124,7 +124,7 @@ namespace AncientWarfare3.core.court
         // population. Keep the expensive qualification and appointment-score
         // work once per actor/office/phase instead of repeating it for every
         // vacancy and candidate source.
-        private sealed class CandidateSelectionCache
+        internal sealed class CandidateSelectionCache
         {
             private readonly Dictionary<string, bool> _eligibility =
                 new Dictionary<string, bool>(StringComparer.Ordinal);
@@ -289,8 +289,8 @@ namespace AncientWarfare3.core.court
             if (IsWesternElective(pKingdom))
                 return CourtVacancyOutcome.NoCandidate;
 
-            List<Actor> roster = pSession.Actors.ToList();
-            HashSet<string> occupied = BuildActiveOfficeSet(pKingdom, roster);
+            List<Actor> roster = pSession.Roster;
+            HashSet<string> occupied = pSession.ActiveOfficeIds(pKingdom);
             if (occupied.Contains(pVacancy.OfficeId))
                 return CourtVacancyOutcome.Invalid;
             if (pVacancy.Layer == CourtOfficeLayer.Central)
@@ -305,7 +305,7 @@ namespace AncientWarfare3.core.court
                 pVacancy.OfficeId, CourtProfileRegistry.PreferredSchoolFor(
                     pKingdom, pVacancy.OfficeId), null,
                 pSession.ReservedActorIds, pAllowActing: true,
-                new CandidateSelectionCache(), pVacancy.Layer);
+                pSession.SelectionCache, pVacancy.Layer);
             return committed ? CourtVacancyOutcome.Filled :
                 CourtVacancyOutcome.NoCandidate;
         }
@@ -1252,6 +1252,41 @@ namespace AncientWarfare3.core.court
             }
             CivilServiceLegacyTransitionService.AppendEligibleCandidates(
                 pKingdom, pSourceRoster, result);
+            return result;
+        }
+
+        /// <summary>
+        ///     局部层(城/县)的官员候选池:举人及以上、当前不在任何官职上。
+        ///     和中央层共用同一条索引查询,只是资格集合放宽到举人、并且排除
+        ///     任何在任官而不只是中央在任官。
+        /// </summary>
+        internal static List<Actor> LoadLocalFormalCandidates(Kingdom pKingdom)
+        {
+            var result = new List<Actor>();
+            SQLiteConnection db = CourtDB;
+            if (db == null || pKingdom?.data == null) return result;
+            try
+            {
+                foreach (long actorId in CivilServiceFormalCandidateQuery.Load(
+                             db,
+                             CivilServiceExamCandidateTableItem.GetTableName(),
+                             CivilServiceExamSessionTableItem.GetTableName(),
+                             ActorArchiveTableItem.GetTableName(),
+                             CourtOfficerTableItem.GetTableName(), pKingdom.id,
+                             CivilServiceExamRules.CandidateSourceLimit,
+                             pLocalLayer: true))
+                {
+                    Actor actor = World.world?.units?.get(actorId);
+                    if (actor?.data != null) result.Add(actor);
+                }
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning(
+                    "Local civil-service candidate index read failed: " +
+                    exception.Message);
+                result.Clear();
+            }
             return result;
         }
 
@@ -2229,6 +2264,10 @@ namespace AncientWarfare3.core.court
                 pCity?.data == null || pCity.kingdom != pKingdom ||
                 pCountyId < 0L)
                 return false;
+            // 防御性复查。补缺路径已经在
+            // LocalCourtAppointmentService.TryFillRegisteredLocalVacancy 里先判过
+            // 并把「县不在役」报成 Invalid —— 分类必须在那里做:在这里返回 false
+            // 会和「写库失败」混成同一个 TechnicalFailure,让一个死县被无限重试。
             if (!CountyAdministrationService.CountiesForCity(pCity.data.id)
                     .Any(p => p.CountyId == pCountyId && p.Active)) return false;
             return SetOfficer(pActor, pKingdom, CourtOfficeLayer.County,
@@ -2968,13 +3007,13 @@ namespace AncientWarfare3.core.court
 
         private static List<Actor> BuildYearRoster(Kingdom pKingdom)
         {
-            return OfficerCandidateCatalog.GetOrBuild(pKingdom,
-                Date.getCurrentYear());
+            return OfficerCandidateCatalog.GetOrBuild(pKingdom);
         }
 
-        private static HashSet<string> BuildActiveOfficeSet(Kingdom pKingdom, List<Actor> pRoster)
+        internal static HashSet<string> BuildActiveOfficeSet(Kingdom pKingdom, List<Actor> pRoster)
         {
             var result = new HashSet<string>(StringComparer.Ordinal);
+
             // Guest officers are not part of the host kingdom's unit roster.  Include
             // their durable rows before filling vacancies so a local candidate cannot
             // overwrite a still-valid foreign appointment in the same year.

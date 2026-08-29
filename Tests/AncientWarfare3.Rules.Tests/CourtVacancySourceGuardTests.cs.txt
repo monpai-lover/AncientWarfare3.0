@@ -45,7 +45,7 @@ internal static class CourtVacancySourceGuardTests
             "local court must expose a one-vacancy adapter");
         Contains(local, "DiscoverVacancies",
             "local court must expose vacancy discovery");
-        Contains(local, "SelectCandidate(pSession.Actors",
+        Contains(local, "SelectCandidate(pSession.FactsCandidates(",
             "event filling must use the cycle snapshot");
         False(MethodBody(local, "TryFillRegisteredLocalVacancy")
                 .Contains("CandidateScanState", StringComparison.Ordinal),
@@ -123,6 +123,232 @@ internal static class CourtVacancySourceGuardTests
             "restore uses a generation gate");
         Contains(pipeline, "court_vacancies",
             "restore pipeline executes court vacancy restore");
+
+        // ── 8k 存档固定周期卡顿的三道闸 ────────────────────────────────
+        // 现象:court-vacancy 延迟工作项 200~730ms/项,每帧一轮。成因是
+        // assign_failed → TechnicalFailure → 重挂重试票 → 重跑 Reconcile,
+        // 而每轮都要重扫全国候选。下面三组断言各锁住一道闸。
+
+        // ① 分类:县不在役是永久无效,必须在调用方报 Invalid 让条目被摘除,
+        //    不能落到 TryAssignCountyMagistrate 里和写库失败共用一个 false。
+        Contains(local, "county_inactive",
+            "an inactive county must be classified before the assign call");
+        True(local.IndexOf("county_inactive", StringComparison.Ordinal) <
+             local.IndexOf("!CourtService.TryAssignCountyMagistrate(",
+                 StringComparison.Ordinal),
+            "county validity must be decided before the assignment attempt");
+
+        // ② 护栏:失败退避规则必须真的被接上(它曾经零调用者)。
+        Contains(coordinator,
+            "CourtAppointmentFailureBackoffRules.ShouldAttempt",
+            "technical failures must respect the appointment backoff window");
+        Contains(coordinator,
+            "ShouldStopCurrentReconcile(pAttempted: true",
+            "a failed appointment must stop the current reconcile batch");
+        Contains(coordinator, "HasAttemptableEntry",
+            "reconcile must be able to bail out before any candidate work");
+        True(MethodBody(coordinator, "private static void Reconcile")
+                 .IndexOf("HasAttemptableEntry", StringComparison.Ordinal) <
+             MethodBody(coordinator, "private static void Reconcile")
+                 .IndexOf("new CourtCandidateSession",
+                     StringComparison.Ordinal),
+            "the cooldown check must precede building the candidate session");
+
+        // ③ 成本:县令候选按城缓存,且缓存要求显式登记占用 —— 否则同一个人会
+        //    被连着任命到同城的多个县(原来靠每次重跑读到新写入的 COURT_OFFICE_ID)。
+        Contains(session, "CountyCandidatesForCity",
+            "county candidates must be built once per city per cycle");
+        // 同一类作用域错误的第二处:中央补缺原来每个席位 new 一个
+        // CandidateSelectionCache、再 ToList() 复制一遍全国名单,于是缓存跨席位
+        // 一条也没命中。这三样都必须由 session 持有,按轮共享。
+        Contains(session, "CandidateSelectionCache SelectionCache",
+            "the candidate evaluation cache must be owned by the cycle session");
+        Contains(session, "internal List<Actor> Roster",
+            "the roster list must be materialised once per cycle");
+        Contains(session, "CivilServiceQualificationRecord Qualification(",
+            "civil-service qualification reads must be memoised per cycle");
+        Contains(session, "FactsCandidates(",
+            "the base candidate-facts gate must be applied once per cycle");
+        False(MethodBody(local, "private static Actor SelectCandidate")
+                .Contains("CanUseCandidateFacts(", StringComparison.Ordinal),
+            "per-seat candidate selection cannot re-run the base facts gate");
+        Contains(local, "pSession.Reserve(candidate, pVacancy)",
+            "a cached city shortlist must reserve the appointed actor");
+        False(court.Contains("new CandidateSelectionCache(), pVacancy.Layer",
+                StringComparison.Ordinal),
+            "central vacancy filling cannot allocate a per-seat selection cache");
+        False(MethodBody(court, "TryFillRegisteredCentralVacancy")
+                .Contains("pSession.Actors.ToList()", StringComparison.Ordinal),
+            "central vacancy filling cannot copy the roster per seat");
+        Contains(local, "pSession.Reserve(countyCandidate, pVacancy)",
+            "a cached county shortlist must reserve the appointed actor");
+        Contains(qualification,
+            "bool higherStageFailure = examinationSystem &&",
+            "the failed-stage join must not run without the exam system");
+        Contains(qualification,
+            "if (pAllowVacancyPromotion &&\n                (hasCareerRank",
+            "vacancy filling must have a qualification-read short circuit");
+        True(qualification.IndexOf(
+                 "if (pAllowVacancyPromotion &&\n                (hasCareerRank",
+                 StringComparison.Ordinal) <
+             qualification.IndexOf("LoadOrRepair(pActor, pKingdom)",
+                 StringComparison.Ordinal),
+            "vacancy filling must short-circuit before any qualification read");
+
+        // ④ 频率:成年是高频事件,而 Invalidate 不经过 coalesce —— 每个成年
+        //    事件都会把「国家+年份」名单缓存丢掉,逼下一次补缺重走 getUnits()
+        //    再对全国两千多人排一次序。成年既不改国籍也不改排序键,所以补进
+        //    表里即可;进不了候选池的人则连唤醒都不必。
+        string catalog = Read("Code/core/court/OfficerCandidateCatalog.cs");
+        Contains(catalog, "internal static void EnsurePresent(",
+            "the yearly catalog must support a single-actor insert");
+        Contains(catalog, "HashSet<long> Ids",
+            "membership must be testable without scanning the roster");
+        // GetOrBuild 把内部列表原样交出去,就地 Insert 会让正在遍历它的补缺轮次
+        // 抛 Collection was modified。插入必须换表。
+        False(MethodBody(catalog, "internal static void EnsurePresent")
+                .Contains("entry.Actors.Insert(", StringComparison.Ordinal),
+            "the catalog insert must not mutate the list handed to a session");
+        Contains(MethodBody(catalog, "internal static void EnsurePresent"),
+            "Entries[pKingdom.id] = new Entry",
+            "the catalog insert must publish a replacement entry");
+        False(eventPatch.Contains("OfficerCandidateCatalog.Invalidate(",
+                StringComparison.Ordinal),
+            "adulthood cannot discard the whole yearly candidate catalog");
+        Contains(eventPatch, "OfficerCandidateCatalog.EnsurePresent(",
+            "adulthood must insert the new adult into the yearly catalog");
+        // 池子靠事件维护:不再按年作废,否则每国每年都要重扫全国再排一次序。
+        False(catalog.Contains("Year", StringComparison.Ordinal),
+            "the candidate pool must not expire on a calendar schedule");
+        Contains(catalog, "internal static void Remove(",
+            "the candidate pool must support a single-actor eviction");
+        Contains(catalog, "internal static void Reposition(",
+            "a rank change must re-sort its actor instead of rebuilding");
+        // 摘人同样不能就地改 —— 那张表正被本轮的 session 遍历着。
+        False(MethodBody(catalog, "internal static void Remove")
+                .Contains("entry.Actors.Remove", StringComparison.Ordinal),
+            "the catalog eviction must not mutate the list handed to a session");
+        // 只摘不可逆的条件。在任/储君/城主都会回来,摘掉就是把人弄丢。
+        Contains(session, "IsPermanentlyOutOfPool(",
+            "only irreversible conditions may evict from the candidate pool");
+        Contains(MethodBody(session, "private static bool IsPermanentlyOutOfPool"),
+            "isAlive()",
+            "eviction must be decided by irreversible state");
+        // 兜底:补不上时重建一次,且同代际只做一次,否则会无限重建。
+        Contains(coordinator, "TryRepairCandidatePool(",
+            "an unfillable seat must trigger one pool repair");
+        Contains(MethodBody(coordinator,
+                "private static bool TryRepairCandidatePool"),
+            "OfficerCandidateCatalog.Invalidate(",
+            "the repair path is the only remaining full rebuild");
+        Contains(MethodBody(coordinator,
+                "private static bool TryRepairCandidatePool"),
+            "PoolRepairs[pKingdom.id] = pGeneration",
+            "the repair must be capped at one per pool generation");
+        Contains(eventPatch,
+            "CourtCandidateWakeRules.ShouldWakeForNewAdult(",
+            "adulthood must not wake reconciliation unconditionally");
+        True(eventPatch.IndexOf("ShouldWakeForNewAdult(",
+                 StringComparison.Ordinal) <
+             eventPatch.IndexOf("CandidatePoolChanged(",
+                 StringComparison.Ordinal),
+            "the wake gate must be evaluated before the wake");
+
+        // ⑤ 局部层的严格通道。设计见
+        //    docs/superpowers/plans/2026-08-19-nine-rank-vacancy-fallback.md
+        //    Task 3 Step 4:先严格,找不到人才用空缺兜底。中央层一直是这么做的,
+        //    局部层曾经把整条严格通道丢了 —— 于是科举资格与品级在城/县任命上
+        //    完全不起作用(grade 30 的县令 allowUnqualifiedLocalFallback 恒真,
+        //    对所有人返回 true),而且每个席位都要扫全国两千多人。
+        Contains(local, "pAllowVacancyPromotion: false",
+            "local appointment must try strict candidates first");
+        Contains(local, "pAllowVacancyPromotion: true",
+            "local appointment must keep the vacancy fallback");
+        True(local.IndexOf("pAllowVacancyPromotion: false",
+                 StringComparison.Ordinal) <
+             local.IndexOf("pAllowVacancyPromotion: true",
+                 StringComparison.Ordinal),
+            "the strict pass must precede the vacancy fallback");
+        Contains(local, "pStrict: true",
+            "county candidates must have a strict build");
+        Contains(local, "pStrict: false",
+            "county candidates must keep the fallback build");
+        Contains(session, "StrictCandidates(",
+            "the strict pass must draw from the officer candidate pool");
+        Contains(session, "ServiceHistory(",
+            "strict service-history reads must be memoised per cycle");
+        Contains(court, "LoadLocalFormalCandidates",
+            "the local layer must read the indexed formal candidate pool");
+        Contains(Read("Code/core/court/CivilServiceFormalCandidateQuery.cs"),
+            "('juren','gongshi','jinshi')",
+            "the local candidate pool must accept juren");
+        // 一条查询同时回答两级 —— 严格通道每名候选原来发两条同样的 SQL。
+        Contains(qualification, "LoadServiceHistory",
+            "service history must be readable in a single query");
+        False(MethodBody(qualification,
+                    "public static bool CanReceiveFormalCivilAppointment")
+                .Contains("HasRequiredServiceHistory(pActor",
+                    StringComparison.Ordinal),
+            "the appointment gate must use the captured service history");
+        // 资历必须**惰性**取:那一行在 pAllowVacancyPromotion 为真时根本到不了,
+        // 而 C# 的实参是先算后传的。传算好的值 = 给兜底通道每名候选白发一条 SQL。
+        False(local.Contains("pServiceHistory:", StringComparison.Ordinal),
+            "the local layer must not eagerly evaluate service history");
+        Contains(local, "pServiceHistorySession: pSession",
+            "the local layer must hand the session in for lazy lookup");
+        Contains(MethodBody(qualification,
+                "public static bool CanReceiveFormalCivilAppointment"),
+            "pServiceHistorySession?.ServiceHistory(",
+            "the gate must read service history only when it is reached");
+
+        // ⑥ 「上次没人」必须记账,否则补不上的席位每次唤醒都重扫全国。
+        Contains(coordinator, "NoCandidateMemos",
+            "a no-candidate outcome must be remembered");
+        Contains(coordinator, "PoolGenerations",
+            "the candidate pool must carry a generation counter");
+        Contains(coordinator, "CourtVacancyPoolMemoRules.ShouldRetry",
+            "the no-candidate memo must be decided by the pure rule");
+        // 代际号要在空注册表提前返回之前递增,否则池变化会丢。
+        True(MethodBody(coordinator,
+                     "internal static void CandidatePoolChanged")
+                 .IndexOf("PoolGenerations[pKingdom.id]",
+                     StringComparison.Ordinal) <
+             MethodBody(coordinator,
+                     "internal static void CandidatePoolChanged")
+                 .IndexOf("Snapshot(pKingdom.id).Count == 0",
+                     StringComparison.Ordinal),
+            "the generation must advance before the empty-registry bail out");
+        Contains(MethodBody(coordinator,
+                "internal static void RegisterVacancy(CourtVacancyKey pKey"),
+            "NoCandidateMemos.Remove(pKey)",
+            "a re-registered vacancy must get a fresh attempt");
+
+        // ⑦ 县令择优必须和城一级同一套门第顺序:有功名 > 世家 > 寒门。
+        //    科举不是入仕的唯一凭证 —— 世家子弟本就可以不经科举从县令起步,
+        //    县分支此前只按主属性排,等于把世家和寒门当成一回事。
+        string countyBuild = MethodBody(local,
+            "private static IReadOnlyList<Actor> BuildCountyCandidates");
+        Contains(countyBuild, "LocalLowOfficeVacancyRules.CandidateTier",
+            "county selection must rank by candidate tier, not ability alone");
+        Contains(countyBuild, "IsLowestLocalGrade",
+            "the tier only applies to the lowest local office grade");
+        Contains(countyBuild, "CountyShortlistRules.SortsBefore",
+            "the unbounded county path must share the shortlist ordering");
+        False(countyBuild.Contains("OrderByDescending(MainAbility)",
+                StringComparison.Ordinal),
+            "the county build must not sort the whole roster to pick one");
+        Contains(local, "CountyShortlistRules.CanSkipWhenFull",
+            "the bounded shortlist must reuse the pure truncation rule");
+        // 短名单被取空时必须能退回全量,否则截断会改变结果。
+        Contains(local, "CountyCandidateMode.FallbackExhaustive",
+            "an exhausted shortlist must fall back to the full ordering");
+        True(local.IndexOf("CountyCandidateMode.Fallback,",
+                 StringComparison.Ordinal) <
+             local.IndexOf("CountyCandidateMode.FallbackExhaustive",
+                 StringComparison.Ordinal),
+            "the bounded pass must precede the exhaustive rebuild");
+        Contains(session, "int pMode",
+            "the county cache must key on the build mode");
     }
 
     private static string MethodBody(string pText, string pMethodName)

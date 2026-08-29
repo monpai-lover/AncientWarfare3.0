@@ -12,7 +12,8 @@ namespace AncientWarfare3.core.lineage
             int courage, int generalExperience, int stewardship,
             int intelligence, int diplomacy, int officialRank,
             int officialMerit, int evaluationGrade, int groupSupport,
-            bool legitimateBirth = true)
+            bool legitimateBirth = true, bool directLine = false,
+            double birthTime = 0.0)
         {
             ActorId = actorId;
             Alive = alive;
@@ -38,6 +39,8 @@ namespace AncientWarfare3.core.lineage
             EvaluationGrade = Math.Max(0, evaluationGrade);
             GroupSupport = Math.Max(0, groupSupport);
             LegitimateBirth = legitimateBirth;
+            DirectLine = directLine;
+            BirthTime = birthTime;
         }
 
         public long ActorId { get; }
@@ -63,6 +66,10 @@ namespace AncientWarfare3.core.lineage
         public int EvaluationGrade { get; }
         public int GroupSupport { get; }
         public bool LegitimateBirth { get; }
+        /// <summary>直系(君主的后裔)。旁支排在顺位池末尾,是兜底不是竞争者。</summary>
+        public bool DirectLine { get; }
+        /// <summary>出生时刻,越小越年长。同支同档内比长幼用它。</summary>
+        public double BirthTime { get; }
 
         public InheritanceCandidateFacts WithActorId(long pActorId)
         {
@@ -71,7 +78,7 @@ namespace AncientWarfare3.core.lineage
                 ExistingSuccessionLegitimacy, Warfare, Combat, Courage,
                 GeneralExperience, Stewardship, Intelligence, Diplomacy,
                 OfficialRank, OfficialMerit, EvaluationGrade, GroupSupport,
-                LegitimateBirth);
+                LegitimateBirth, DirectLine, BirthTime);
         }
     }
 
@@ -172,11 +179,40 @@ namespace AncientWarfare3.core.lineage
         private static int Compare(InheritanceCandidateFacts pLeft,
             InheritanceCandidateFacts pRight, InheritanceLaw pLaw)
         {
+            // 正统继承用统一的顺位规则:直系在前、嫡压长、同档比齿。
+            //
+            // 原来它和军功/文治一样走加权求和,靠 LegitimateBirth 的 +1000 把嫡子
+            // 顶上去。权重够大时行为大致等价,但那是「大数压小数」而不是硬保证 ——
+            // AgnaticDistance 的 40 分档配上 ExistingSuccessionLegitimacy 的 30 分档
+            // 仍可能在边界上翻盘,而且长幼根本没进过排序键(只能靠 ActorId 兜底,
+            // 那是出生顺序的巧合,不是规则)。分层比较才是全序。
+            //
+            // 军功/文治是「拥立」,比的本来就是能力与支持,不是嫡长,保持原样。
+            if (pLaw == InheritanceLaw.Primogeniture)
+            {
+                if (pLeft.ActorId == pRight.ActorId) return 0;
+                return SuccessionOrderRules.SortsBefore(
+                    SuccessionOrderBasis.Bloodline,
+                    Branch(pLeft), pLeft.LegitimateBirth, pLeft.BirthTime, 0,
+                    pLeft.ActorId,
+                    Branch(pRight), pRight.LegitimateBirth, pRight.BirthTime,
+                    0, pRight.ActorId)
+                    ? -1
+                    : 1;
+            }
+
             int scoreComparison = Score(pRight, pLaw).CompareTo(
                 Score(pLeft, pLaw));
             return scoreComparison != 0
                 ? scoreComparison
                 : pLeft.ActorId.CompareTo(pRight.ActorId);
+        }
+
+        private static int Branch(InheritanceCandidateFacts pFacts)
+        {
+            return pFacts.DirectLine
+                ? SuccessionOrderRules.DirectLine
+                : SuccessionOrderRules.CollateralLine;
         }
     }
 }

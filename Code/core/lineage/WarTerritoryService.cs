@@ -47,12 +47,39 @@ namespace AncientWarfare3.core.lineage
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
         private static readonly Dictionary<string, bool> OwnedNonCoreCache = new Dictionary<string, bool>();
+        /// <summary>
+        ///     每个王国「可造核心的城可能变了」的代际号。全国都已核心化之后,
+        ///     月推进不再每月空扫一遍 —— 它记下这个号,号没变就直接跳过。
+        ///     只有真的可能冒出新目标时才递增:得到/失去城、新核心落成、
+        ///     项目开工或完工。
+        /// </summary>
+        private static readonly Dictionary<long, int> CoreTargetRevisions =
+            new Dictionary<long, int>();
         private static HistoryText H(string pKey) => HistoryLocalizationRules.H(pKey);
         private static string T(string pKey) => HistoryLocalizationRules.Text(pKey);
 
         public static void ClearRuntime()
         {
             OwnedNonCoreCache.Clear();
+            CoreTargetRevisions.Clear();
+        }
+
+        /// <summary>这个王国的「可造核心目标」代际号。</summary>
+        public static int CoreTargetRevision(long pKingdomId)
+        {
+            return pKingdomId >= 0 &&
+                   CoreTargetRevisions.TryGetValue(pKingdomId,
+                       out int revision)
+                ? revision
+                : 0;
+        }
+
+        /// <summary>可造核心的城可能变了 —— 让月推进重新扫一次。</summary>
+        public static void MarkCoreTargetsChanged(long pKingdomId)
+        {
+            if (pKingdomId < 0) return;
+            CoreTargetRevisions.TryGetValue(pKingdomId, out int revision);
+            CoreTargetRevisions[pKingdomId] = revision + 1;
         }
 
         internal sealed class WarGoalRequest
@@ -204,6 +231,10 @@ namespace AncientWarfare3.core.lineage
         public static void OnCityTransferred(City pCity, Kingdom pOldKingdom, Kingdom pNewKingdom)
         {
             if (pCity?.data == null || pNewKingdom?.data == null || !Ready) return;
+            // 换了主人:新主可能多出一座待核心化的城,旧主则少一座。
+            MarkCoreTargetsChanged(pNewKingdom.id);
+            if (pOldKingdom?.data != null)
+                MarkCoreTargetsChanged(pOldKingdom.id);
             try
             {
                 EraChangeTriggerService.MarkTerritoryRecovery(
@@ -458,6 +489,8 @@ namespace AncientWarfare3.core.lineage
                     HistoryText.City(pCity, pKingdom) + H("aw_hist_core_city_became_mid") +
                     HistoryText.Kingdom(pKingdom) + H("aw_hist_core_city_became_suffix"), HistoryTarget.Kingdom(pKingdom));
                 MandateService.OnKingdomCoreCreated(pKingdom, pCity, pSourceType);
+                // 少了一个可造目标(这座城已经是核心了)。
+                MarkCoreTargetsChanged(pKingdom.id);
                 DirtyWarMaps();
                 return coreId;
             }
@@ -523,6 +556,8 @@ namespace AncientWarfare3.core.lineage
                     HistoryText.PlainText(ProjectLabel(pProjectType)) +
                     H("aw_hist_project_target_mid") + TargetText(pTarget, pTargetCity),
                     pTargetCity?.data != null ? HistoryTarget.City(pTargetCity) : HistoryTarget.Kingdom(pTarget));
+                // 开了项目的城暂时不再是可造目标。
+                MarkCoreTargetsChanged(pSource.id);
                 DirtyWarMaps();
                 return projectId;
             }
@@ -1622,7 +1657,9 @@ namespace AncientWarfare3.core.lineage
             bool sourceValid = IsCivil(pSource);
             bool ownCity = pTargetCity?.data != null && !pTargetCity.isRekt() && pTargetCity.kingdom == pSource;
             bool alreadyCore = ownCity && FindCoreId(pSource.id, pTargetCity.data.id) >= 0;
-            bool existing = pCheckExistingProject && ownCity &&
+            // 已经是核心时 CanFabricateCore 在看 pExistingProject 之前就返回了,
+            // 下面这一条 SQL 加一次制造队列解码是白付的。加 !alreadyCore 短路。
+            bool existing = pCheckExistingProject && ownCity && !alreadyCore &&
                             (FindPendingProject(pSource.id, pTargetCity.data.id, PROJECT_CORE).project_id >= 0 ||
                              HasCurrentDecisionProjectForCity(pSource, pTargetCity.data.id, PROJECT_CORE) ||
                              KingdomPolicyService.HasCoreFabricationProjectForCity(pSource, pTargetCity.data.id));
@@ -1648,12 +1685,135 @@ namespace AncientWarfare3.core.lineage
             return null;
         }
 
+        /// <summary>
+        ///     本国下一个可以开始「制造核心」的城。
+        ///
+        ///     原来逐城调 <see cref="CanFabricateCoreProject"/>,每座城两条 SQL
+        ///     (核心表一条、项目表一条),外加一次把整条制造队列字符串解码成
+        ///     <c>List&lt;KingdomDecisionQueueItem&gt;</c>(最多 8 个对象、每个 10 个
+        ///     字符串字段)。而**已经是核心的城不会让循环提前退出** —— 它只是判否、
+        ///     继续下一城。于是疆域完整、全部城市都已核心化的成熟王国,每次调用都要
+        ///     把全部城市走满,一条查询不少。这正是压测后期的常态,而
+        ///     <c>OnKingdomDecisionMonth</c> 每王国每月要调它**两次**。
+        ///
+        ///     现在三样东西都按王国取一次:核心城集合一条查询、在建核心项目的目标城
+        ///     集合一条查询、决议/政策两条在内存里各算一次。逐城判定退化成集合查表。
+        ///     `2 × 城市数` 条查询变成 2 条,与城市数无关。
+        ///
+        ///     判定本身仍然交给 <see cref="WarFabricationRules.CanFabricateCore"/>,
+        ///     传的还是同样四个布尔量,所以规则一个字没变;变的只是这四个量怎么取。
+        ///     遍历顺序也照旧,选出来的仍是 <c>getCities()</c> 里第一个合格的城。
+        /// </summary>
         public static City FindFirstCoreProjectTargetCity(Kingdom pSource)
         {
-            if (!IsCivil(pSource)) return null;
+            List<City> targets = CollectCoreProjectTargetCities(pSource, 1);
+            return targets.Count > 0 ? targets[0] : null;
+        }
+
+        /// <summary>
+        ///     本国接下来可以「制造核心」的城,按 <c>getCities()</c> 顺序,最多取
+        ///     <paramref name="pLimit"/> 个。
+        ///
+        ///     调用方拿这个把制造顺序**一次定下来**写进队列,之后每次造完直接取
+        ///     队首,不再扫描。所以这个函数在一个王国的整轮核心化里通常只跑一次。
+        /// </summary>
+        public static List<City> CollectCoreProjectTargetCities(Kingdom pSource,
+            int pLimit)
+        {
+            var result = new List<City>();
+            if (!IsCivil(pSource) || pLimit <= 0) return result;
+            HashSet<long> coreCityIds = LoadCoreCityIds(pSource.id);
+            HashSet<long> pendingCityIds =
+                LoadPendingProjectCityIds(pSource.id, PROJECT_CORE);
+            long decisionCityId =
+                CurrentDecisionProjectCityId(pSource, PROJECT_CORE);
+            HashSet<long> policyCityIds = KingdomPolicyService
+                .CollectCoreFabricationCityIds(pSource);
             foreach (City city in pSource.getCities())
-                if (CanFabricateCoreProject(pSource, city, out _)) return city;
-            return null;
+            {
+                bool ownCity = city?.data != null && !city.isRekt() &&
+                               city.kingdom == pSource;
+                if (!ownCity) continue;
+                long cityId = city.data.id;
+                bool alreadyCore = coreCityIds.Contains(cityId);
+                bool existing = pendingCityIds.Contains(cityId) ||
+                                (decisionCityId >= 0L &&
+                                 decisionCityId == cityId) ||
+                                policyCityIds.Contains(cityId);
+                if (!WarFabricationRules.CanFabricateCore(true, true,
+                        alreadyCore, existing, out _)) continue;
+                result.Add(city);
+                if (result.Count >= pLimit) break;
+            }
+
+            return result;
+        }
+
+        /// <summary>该王国当前已核心化的城 id,一条查询取回整表。</summary>
+        private static HashSet<long> LoadCoreCityIds(long pKingdomId)
+        {
+            var result = new HashSet<long>();
+            if (!Ready || pKingdomId < 0) return result;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText =
+                    $"SELECT CITY_ID FROM {KingdomCoreTableItem.GetTableName()} " +
+                    "WHERE KINGDOM_ID=@k AND ACTIVE=1";
+                cmd.Parameters.AddWithValue("@k", pKingdomId);
+                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                while (reader.Read())
+                    if (!reader.IsDBNull(0)) result.Add(reader.GetInt64(0));
+            }
+            catch { }
+
+            return result;
+        }
+
+        /// <summary>
+        ///     该王国在建(未完成)项目的目标城 id。过滤条件与逐城版
+        ///     <see cref="FindPendingProject"/> 完全一致,只是去掉了城的约束 ——
+        ///     调用方只问「有没有」,所以取集合和逐城取一行等价。
+        /// </summary>
+        private static HashSet<long> LoadPendingProjectCityIds(long pKingdomId,
+            params string[] pTypes)
+        {
+            var result = new HashSet<long>();
+            if (!Ready || pKingdomId < 0 || pTypes == null ||
+                pTypes.Length == 0) return result;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText =
+                    "SELECT TARGET_CITY_ID FROM " +
+                    WarProjectTableItem.GetTableName() +
+                    " WHERE SOURCE_KINGDOM_ID=@s AND ACTIVE=1 AND COMPLETED=0 " +
+                    BuildTypeFilter(pTypes);
+                cmd.Parameters.AddWithValue("@s", pKingdomId);
+                AddTypeParams(cmd, pTypes);
+                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                while (reader.Read())
+                    if (!reader.IsDBNull(0)) result.Add(reader.GetInt64(0));
+            }
+            catch { }
+
+            return result;
+        }
+
+        /// <summary>
+        ///     当前决议正在推进的项目目标城,不匹配则 -1。把
+        ///     <see cref="HasCurrentDecisionProjectForCity"/> 里与城无关的那半段
+        ///     抽出来,循环外算一次即可。
+        /// </summary>
+        private static long CurrentDecisionProjectCityId(Kingdom pKingdom,
+            params string[] pTypes)
+        {
+            if (pKingdom?.data == null || pTypes == null ||
+                pTypes.Length == 0) return -1L;
+            if (!CurrentDecisionProjectMatches(pKingdom, pTypes)) return -1L;
+            pKingdom.data.get(LineageKeys.DECISION_WAR_TARGET_CITY_ID,
+                out long targetCityId, -1L);
+            return targetCityId;
         }
 
         public static City FindBestCoreTargetCityForDecision(Kingdom pSource, Kingdom pDefender)
@@ -1775,6 +1935,8 @@ namespace AncientWarfare3.core.lineage
                 else
                     UpdateProjectProgress(row.project_id, next);
             }
+            // 项目完工/推进会改变哪些城还算可造目标。
+            MarkCoreTargetsChanged(pKingdom.id);
             DirtyWarMaps();
         }
 

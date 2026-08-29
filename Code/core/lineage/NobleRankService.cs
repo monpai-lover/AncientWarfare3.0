@@ -139,6 +139,62 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
+        /// <summary>
+        ///     一次最多注销多少个爵位。国灭/改朝换代是罕见事件,但一个大国的
+        ///     在册爵位可能不少,所以给个上限免得单帧尖峰;剩下的由后续事件
+        ///     (持有者死亡、再次改朝)继续清理。
+        /// </summary>
+        private const int MaximumKingdomRevokeBatch = 256;
+
+        /// <summary>
+        ///     国家授予的爵位绑定授予国。国灭或改朝换代时,旧朝的爵位一律作废,
+        ///     并逐个记入史册(<see cref="ChronicleEvents.OnNobleRankExtinct"/>)。
+        ///
+        ///     爵位是**国家给的**,不是私产:授予它的政权没了,它就没有来源了。
+        ///     不作废的话,亡国的封号会跟着人一直传下去,后世还能靠它继承分封,
+        ///     等于一个已经不存在的朝廷仍在发号施令。
+        ///
+        ///     只注销 <c>KINGDOM_ID</c> 等于本国的那些 —— 别国给的封号不受影响,
+        ///     持有者换了国籍也一样(封号跟着授予国,不跟着人现在在哪)。
+        /// </summary>
+        public static int RevokeKingdomTitles(Kingdom pKingdom, string pReason)
+        {
+            if (!Ready || pKingdom?.data == null) return 0;
+            IReadOnlyList<long> holderIds = GetActiveTitleHolderIds(
+                pKingdom.id, MaximumKingdomRevokeBatch);
+            int revokedCount = 0;
+            for (int index = 0; index < holderIds.Count; index++)
+            {
+                Actor holder = null;
+                try { holder = World.world?.units?.get(holderIds[index]); }
+                catch { }
+                if (holder?.data == null) continue;
+                NobleTitleSnapshot current = ReadHot(holder);
+                // 授予国不是本国就不动 —— 表里可能有历史遗留的错配行。
+                if (!current.IsActive || current.KingdomId != pKingdom.id)
+                    continue;
+                string display = GetDisplayTitle(holder);
+                if (!TryRevoke(holder, pReason ?? "kingdom_ended",
+                        out NobleTitleSnapshot _)) continue;
+                revokedCount++;
+                try
+                {
+                    ChronicleEvents.OnNobleRankExtinct(pKingdom, holder,
+                        string.IsNullOrEmpty(display)
+                            ? current.TitleName
+                            : display);
+                }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning(
+                        "Noble title extinction history failed: " +
+                        error.Message);
+                }
+            }
+
+            return revokedCount;
+        }
+
         public static bool EnsureFeudatoryPrinceTitle(Kingdom pKingdom,
             Actor pPrince, out string pTitleName)
         {

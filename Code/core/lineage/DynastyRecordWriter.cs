@@ -48,6 +48,19 @@ namespace AncientWarfare3.core.lineage
                 : END_REASON_REPLACED;
             if (!TryCloseOpenDynasty(pKingdom.id, closeReason))
                 return DynastyTransitionStatus.Failure;
+            // 改朝换代:旧朝授予的爵位一律作废并记史。爵位绑定的是授予它的政权,
+            // 新朝没有义务承认前朝的封号 —— 留着它们等于旧朝廷还在发号施令。
+            try
+            {
+                NobleRankService.RevokeKingdomTitles(pKingdom,
+                    "dynasty_replaced");
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "Noble title revocation on dynasty change failed: " +
+                    error.Message);
+            }
             if (newShiId < 0 || !LineageService.IsXia(pNewKing))
                 return DynastyTransitionStatus.NoChange;
 

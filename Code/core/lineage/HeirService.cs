@@ -384,7 +384,40 @@ namespace AncientWarfare3.core.lineage
             HeirSelection selection = SelectByEffectiveLaw(pKingdom,
                 knownKing, referenceKingId,
                 pIncludeRegisteredHeir: false);
+            // 「一个都挑不出来」是继承池漏人的唯一可观测症状 —— 池子靠事件维护、
+            // 不再定期重建,所以漏接了某个入池事件就长这样。这时才重建一次重试。
+            // 同一位参照君主只自愈一次,否则「重建→还是没有→再重建」会变成每次
+            // 刷新都重走亲缘遍历,比不缓存还糟。
+            if (selection.Actor?.data == null &&
+                TryRepairSuccessionPool(pKingdom, referenceKingId))
+                selection = SelectByEffectiveLaw(pKingdom, knownKing,
+                    referenceKingId, pIncludeRegisteredHeir: false);
             return StoreHeirSelection(pKingdom, selection);
+        }
+
+        /// <summary>
+        ///     继承池的出错兜底:重建一次并允许重试。每个王国的每一位参照君主
+        ///     只做一次,返回是否真的做了。
+        /// </summary>
+        private static readonly System.Collections.Generic.Dictionary<long,
+            long> SuccessionPoolRepairs =
+            new System.Collections.Generic.Dictionary<long, long>();
+
+        internal static void ClearSuccessionPoolRepairs()
+        {
+            SuccessionPoolRepairs.Clear();
+        }
+
+        private static bool TryRepairSuccessionPool(Kingdom pKingdom,
+            long pReferenceKingId)
+        {
+            if (pKingdom?.data == null) return false;
+            if (SuccessionPoolRepairs.TryGetValue(pKingdom.id,
+                    out long repairedFor) &&
+                repairedFor == pReferenceKingId) return false;
+            SuccessionPoolRepairs[pKingdom.id] = pReferenceKingId;
+            SuccessionPoolService.Invalidate(pKingdom);
+            return true;
         }
 
         private static long ResolveReferenceKingId(Kingdom pKingdom, Actor pKnownKing)
@@ -423,6 +456,9 @@ namespace AncientWarfare3.core.lineage
             if (!successionSexEligible) return;
             bool fatherIsCurrentKing = royalParent?.kingdom == kingdom &&
                 (kingdom.king == royalParent || royalParent.isKing());
+            // 新子嗣直接插进继承池,而不是让下一次刷新重走一趟亲缘遍历。
+            // 顺位由取人时按有效继承法排定,嫡子会落在诸庶兄之前。
+            SuccessionPoolService.Insert(kingdom, pBaby);
             if (!RoyalSuccessionBirthRules.ShouldRefreshHeirForNewChild(
                     successionSexEligible, fatherIsCurrentKing))
                 return;
@@ -1481,54 +1517,72 @@ namespace AncientWarfare3.core.lineage
         private static Actor PickEldestUnderageDirectSon(Actor pKing)
         {
             if (pKing?.data == null) return null;
-            Actor eldest = null;
-            double earliestTime = double.MaxValue;
+            // 幼主兜底同样走嫡长,不是单纯比出生早晚。
+            Actor best = null;
+            bool bestLegitimate = false;
+            double bestBirth = double.MaxValue;
             foreach (Actor child in pKing.getChildren(false))
             {
                 if (!IsUnderageDirectSonFallback(child, pKing, pHasAdultDirectSon: false)) continue;
-                if (child.data.created_time < earliestTime)
-                {
-                    earliestTime = child.data.created_time;
-                    eldest = child;
-                }
+                bool legitimate = IsLegitimateBirth(child);
+                double birth = SafeCreatedTime(child);
+                if (best != null && !SuccessionOrderRules.SortsBefore(
+                        SuccessionOrderBasis.Bloodline,
+                        SuccessionOrderRules.DirectLine, legitimate, birth, 0,
+                        child.data.id,
+                        SuccessionOrderRules.DirectLine, bestLegitimate,
+                        bestBirth, 0, best.data.id)) continue;
+                best = child;
+                bestLegitimate = legitimate;
+                bestBirth = birth;
             }
-            return eldest;
+            return best;
         }
 
         /// <summary>浠庣洿绯诲瓙濂充腑閫夐暱瀛?闀垮コ(created_time鏈€灏?鏈€鏃╁嚭鐢?銆俻MaleOnly=true 鍙€夊効瀛愩€?/summary>
         private static Actor PickEldest(System.Collections.Generic.IEnumerable<Actor> pCandidates,
             Actor pKing, bool pMaleOnly)
         {
-            Actor eldest = null;
-            double earliestTime = double.MaxValue;
-            foreach (var c in pCandidates)
-            {
-                if (!IsSuitableHeir(c, pKing)) continue;
-                if (pMaleOnly && !c.isSexMale()) continue;
-                if (c.data.created_time < earliestTime)
-                {
-                    earliestTime = c.data.created_time;
-                    eldest = c;
-                }
-            }
-            return eldest;
+            // 同上:嫡压长,和 PickEldestStable 共用一条规则。
+            return PickEldestStable(pCandidates, pKing, pMaleOnly);
         }
 
         /// <summary>浠庡€欓€夐噷鎸?鍚堟牸(娲烩埀闈炵帇鈭ф垚骞粹埀闈炵柉)涓?|age-18| 鏈€灏?pPreferMale 鏃剁敺鎬ц幏 -1000 鍋忕疆(蹇呬紭鍏堜簬濂虫€?銆?/summary>
         private static Actor PickEldestStable(System.Collections.Generic.IEnumerable<Actor> pCandidates,
             Actor pKing, bool pMaleOnly)
         {
-            Actor eldest = null;
-            double earliestTime = double.MaxValue;
+            // 统一顺位:嫡压长。原来这里只比 created_time,于是庶长会压过嫡幼 ——
+            // 和 HeirDirectSonRules 那条路径(一直是嫡优先)自相矛盾,同一个王国
+            // 走不同入口能选出不同的继承人。
+            Actor best = null;
+            bool bestLegitimate = false;
+            double bestBirth = double.MaxValue;
             foreach (Actor candidate in pCandidates)
             {
                 if (!IsSuitableHeir(candidate, pKing)) continue;
                 if (pMaleOnly && !candidate.isSexMale()) continue;
-                if (candidate.data.created_time >= earliestTime) continue;
-                earliestTime = candidate.data.created_time;
-                eldest = candidate;
+                bool legitimate = IsLegitimateBirth(candidate);
+                double birth = SafeCreatedTime(candidate);
+                if (best != null && !SuccessionOrderRules.SortsBefore(
+                        SuccessionOrderBasis.Bloodline,
+                        SuccessionOrderRules.DirectLine, legitimate, birth, 0,
+                        candidate.data.id,
+                        SuccessionOrderRules.DirectLine, bestLegitimate,
+                        bestBirth, 0, best.data.id)) continue;
+                best = candidate;
+                bestLegitimate = legitimate;
+                bestBirth = birth;
             }
-            return eldest;
+            return best;
+        }
+
+        /// <summary>嫡出与否。缺省视为嫡出,和继承池其余各处口径一致。</summary>
+        private static bool IsLegitimateBirth(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            pActor.data.get(LineageKeys.BIRTH_LEGITIMACY,
+                out bool legitimate, true);
+            return legitimate;
         }
 
         private static Actor PickClosest(System.Collections.Generic.IEnumerable<Actor> pCandidates, Actor pKing, bool pPreferMale)

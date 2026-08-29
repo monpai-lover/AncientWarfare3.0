@@ -6,6 +6,30 @@ $identity = Get-Content -Raw (Join-Path $root 'Code\core\lineage\SocialIdentityS
 $migration = Get-Content -Raw (Join-Path $root 'Code\core\lineage\SocialIdentityMigrationService.cs')
 $locale = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'Locales\aw3_social_identity.csv')
 $icon = Join-Path $root 'GameResources\ui\Icons\traits\iconshidafu.png'
+$noble = Get-Content -Raw (Join-Path $root 'Code\core\lineage\NobleRankService.cs')
+$chronicle = Get-Content -Raw (Join-Path $root 'Code\core\lineage\ChronicleEvents.cs')
+$dynasty = Get-Content -Raw (Join-Path $root 'Code\core\lineage\DynastyRecordWriter.cs')
+
+# A noble title is granted by a state, so it dies with that state. Leaving it
+# alive lets a fallen court keep handing out inheritable standing.
+if (-not $noble.Contains('RevokeKingdomTitles(')) {
+    throw 'Kingdom-granted noble titles must be revocable as a set'
+}
+if ($noble -notmatch
+    'RevokeKingdomTitles[\s\S]{0,1600}current\.KingdomId != pKingdom\.id') {
+    throw 'Only titles granted by the ending kingdom may be revoked'
+}
+if ($noble -notmatch
+    'RevokeKingdomTitles[\s\S]{0,2000}ChronicleEvents\.OnNobleRankExtinct') {
+    throw 'Revoked titles must be recorded in history'
+}
+if (-not $chronicle.Contains('NobleRankService.RevokeKingdomTitles(pKingdom, "kingdom_fell")')) {
+    throw 'A destroyed kingdom must revoke the titles it granted'
+}
+if (-not $dynasty.Contains('"dynasty_replaced"')) {
+    throw 'A dynastic replacement must revoke the previous dynasty titles'
+}
+
 $codeText = (Get-ChildItem -Path (Join-Path $root 'Code') -Recurse -Filter '*.cs' |
     ForEach-Object { Get-Content -Raw $_.FullName }) -join "`n"
 
