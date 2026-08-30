@@ -1,4 +1,6 @@
+#if !AW3_RULES_TESTS
 using AncientWarfare3.content.policies;
+#endif
 
 namespace AncientWarfare3.core.lineage
 {
@@ -37,10 +39,12 @@ namespace AncientWarfare3.core.lineage
             return pIsCiv && !pIsRekt && !pHasKing && !pHasMonarchyCandidate && !pIsRebelGovernment;
         }
 
+#if !AW3_RULES_TESTS
         public static bool IsRepublicClass(string pClassState)
         {
             return pClassState == KingdomPolicyDefs.ClassRepublic;
         }
+#endif
 
         public static bool IsEligibleLeader(bool pInLineageSystem, bool pIsMale, bool pIsAdult,
             bool pIsAlive, bool pIsSlave, bool pIsKing)

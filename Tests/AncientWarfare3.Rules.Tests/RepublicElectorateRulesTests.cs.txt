@@ -1,0 +1,133 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
+
+internal static class RepublicElectorateRulesTests
+{
+    public static void Run()
+    {
+        CompareIsATotalOrder();
+        SelectBestMatchesSortThenFirst();
+        EmptyElectorateIsRememberedForTheYear();
+        MemoYearRejectsUnreadableYear();
+    }
+
+    private static void CompareIsATotalOrder()
+    {
+        var rng = new Random(20260830);
+        for (int trial = 0; trial < 6000; trial++)
+        {
+            RepublicCandidateScore a = Random(rng);
+            RepublicCandidateScore b = Random(rng);
+            int ab = Sign(RepublicGovernmentRules.CompareCandidates(a, b));
+            int ba = Sign(RepublicGovernmentRules.CompareCandidates(b, a));
+            Expect(ab == -ba, "compare is antisymmetric");
+            if (a.ActorId != b.ActorId)
+                Expect(ab != 0,
+                    "distinct actor ids never tie, which is what makes argmax " +
+                    "and sort-then-first the same person");
+        }
+
+        RepublicCandidateScore self = Random(rng);
+        Expect(RepublicGovernmentRules.CompareCandidates(self, self) == 0,
+            "compare is reflexive");
+    }
+
+    private static void SelectBestMatchesSortThenFirst()
+    {
+        var rng = new Random(19940825);
+        for (int trial = 0; trial < 4000; trial++)
+        {
+            int count = rng.Next(0, 40);
+            var scores = new List<RepublicCandidateScore>();
+            var usedIds = new HashSet<long>();
+            for (int index = 0; index < count; index++)
+            {
+                RepublicCandidateScore score = Random(rng);
+                while (!usedIds.Add(score.ActorId))
+                    score = Random(rng);
+                scores.Add(score);
+            }
+
+            int picked = RepublicElectorateRules.SelectBest(scores);
+            int reference = SortThenFirst(scores);
+            Expect(picked == reference,
+                "argmax disagrees with sort-then-first on trial " + trial +
+                " (argmax=" + picked + " sorted=" + reference + ")");
+        }
+
+        Expect(RepublicElectorateRules.SelectBest(
+                new List<RepublicCandidateScore>()) == -1,
+            "an empty electorate yields nobody");
+        Expect(RepublicElectorateRules.SelectBest(null) == -1,
+            "a missing electorate yields nobody");
+    }
+
+    private static void EmptyElectorateIsRememberedForTheYear()
+    {
+        Expect(RepublicElectorateRules.ShouldRescanEmptyElectorate(
+                pHasMemo: false, pMemoYear: 0, pCurrentYear: 120),
+            "with no memory recorded the electorate is scanned");
+        Expect(!RepublicElectorateRules.ShouldRescanEmptyElectorate(
+                pHasMemo: true, pMemoYear: 120, pCurrentYear: 120),
+            "a failure already recorded this year does not rescan");
+        Expect(RepublicElectorateRules.ShouldRescanEmptyElectorate(
+                pHasMemo: true, pMemoYear: 120, pCurrentYear: 121),
+            "the next year retries, so nobody is locked out permanently");
+        Expect(RepublicElectorateRules.ShouldRescanEmptyElectorate(
+                pHasMemo: true, pMemoYear: 120, pCurrentYear: 119),
+            "a clock that moved backwards still retries");
+    }
+
+    private static void MemoYearRejectsUnreadableYear()
+    {
+        Expect(RepublicElectorateRules.MemoYearFor(-1) == -1,
+            "an unreadable year is stored as -1");
+        Expect(RepublicElectorateRules.MemoYearFor(0) == 0,
+            "year zero is a real year");
+        Expect(RepublicElectorateRules.MemoYearFor(77) == 77,
+            "a real year is stored verbatim");
+        // -1 must never equal a real year, otherwise a kingdom whose clock is
+        // unreadable would be remembered as "already tried" forever.
+        Expect(RepublicElectorateRules.ShouldRescanEmptyElectorate(
+                pHasMemo: true, pMemoYear: RepublicElectorateRules.MemoYearFor(-1),
+                pCurrentYear: 0),
+            "an unreadable year falls back to rescanning");
+    }
+
+    private static int SortThenFirst(List<RepublicCandidateScore> pScores)
+    {
+        if (pScores.Count == 0) return -1;
+        var order = new List<int>();
+        for (int index = 0; index < pScores.Count; index++) order.Add(index);
+        order.Sort((left, right) =>
+        {
+            int result = RepublicGovernmentRules.CompareCandidates(
+                pScores[left], pScores[right]);
+            return result != 0 ? result : left.CompareTo(right);
+        });
+        return order[0];
+    }
+
+    private static RepublicCandidateScore Random(Random pRng)
+    {
+        return new RepublicCandidateScore(
+            pRng.Next(1, 60),
+            pRng.Next(0, 6),
+            pRng.Next(0, 6),
+            pRng.Next(0, 6),
+            pRng.Next(0, 4),
+            pRng.Next(0, 5),
+            pRng.Next(0, 5));
+    }
+
+    private static int Sign(int pValue)
+    {
+        return pValue < 0 ? -1 : pValue > 0 ? 1 : 0;
+    }
+
+    private static void Expect(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new Exception("FAIL: " + pMessage);
+    }
+}

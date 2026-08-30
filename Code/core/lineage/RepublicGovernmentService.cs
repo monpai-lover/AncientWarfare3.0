@@ -1,16 +1,9 @@
-using System.Collections.Generic;
 using AncientWarfare3.content.policies;
 
 namespace AncientWarfare3.core.lineage
 {
     internal static class RepublicGovernmentService
     {
-        private sealed class RankedCandidate
-        {
-            public Actor Actor;
-            public RepublicCandidateScore Score;
-        }
-
         public static bool IsRepublic(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;
@@ -66,9 +59,8 @@ namespace AncientWarfare3.core.lineage
             if (wasRepublic)
             {
                 Actor registered = GetRegisteredSuccessor(pKingdom);
-                List<RankedCandidate> republicRanked = RankCandidates(pKingdom, pExclude: null);
                 Actor elected = registered ??
-                                (republicRanked.Count > 0 ? republicRanked[0].Actor : null);
+                                SelectBestCandidate(pKingdom, pExclude: null, out _);
                 return PrepareRepublicLeader(pKingdom, elected);
             }
 
@@ -90,25 +82,39 @@ namespace AncientWarfare3.core.lineage
                 return houseRuler;
             }
 
-            List<RankedCandidate> ranked = RankCandidates(pKingdom, pExclude: null);
+            Actor leader = SelectBestCandidate(pKingdom, pExclude: null,
+                out int electableCount);
             AristocraticVacancyDecision decision = AristocraticSuccessionRules.DecideVacancy(
                 successionPending: false,
                 hasHereditaryHeir: false,
                 hasHouseCandidate: false,
-                electableCount: ranked.Count,
+                electableCount: electableCount,
                 monarchyEstablished: true);
             if (decision != AristocraticVacancyDecision.ElectRepublic) return null;
 
             SetRepublic(pKingdom);
-            Actor leader = ranked.Count > 0 ? ranked[0].Actor : null;
             return PrepareRepublicLeader(pKingdom, leader);
         }
 
         public static void RefreshRepublicSuccessor(Kingdom pKingdom, Actor pCurrentLeader)
         {
             if (!IsRepublic(pKingdom)) return;
-            List<RankedCandidate> ranked = RankCandidates(pKingdom, pCurrentLeader);
-            Actor successor = ranked.Count > 0 ? ranked[0].Actor : null;
+            // 上一次一个人都没推举出来的话别每跳重扫 —— 那个状态注定还是找不到人,
+            // 而 ShouldRefreshSuccessorDuringStableReign 恰恰会因为「没有继任者」
+            // 一直把我们叫回来。见 RepublicElectorateRules.ShouldRescanEmptyElectorate。
+            int currentYear = SafeCurrentYear();
+            pKingdom.data.get(LineageKeys.REPUBLIC_EMPTY_ELECTORATE_YEAR,
+                out int memoYear, int.MinValue);
+            if (!RepublicElectorateRules.ShouldRescanEmptyElectorate(
+                    memoYear != int.MinValue, memoYear, currentYear)) return;
+
+            Actor successor = SelectBestCandidate(pKingdom, pCurrentLeader, out _);
+            if (successor == null)
+                pKingdom.data.set(LineageKeys.REPUBLIC_EMPTY_ELECTORATE_YEAR,
+                    RepublicElectorateRules.MemoYearFor(currentYear));
+            else
+                pKingdom.data.set(LineageKeys.REPUBLIC_EMPTY_ELECTORATE_YEAR,
+                    int.MinValue);
             HeirService.StoreSelectedHeir(pKingdom, successor, SuccessionMode.REPUBLIC_ELECTIVE);
         }
 
@@ -154,8 +160,26 @@ namespace AncientWarfare3.core.lineage
         {
             if (pLeader?.data == null) return null;
             MarkRepublicLeader(pLeader);
+            // 换了首领,选民团就变了(新首领本人退出候选),空结果的记忆作废。
+            InvalidateElectorateMemo(pKingdom);
             RefreshRepublicSuccessor(pKingdom, pLeader);
             return pLeader;
+        }
+
+        /// <summary>
+        /// 作废「上次一个人都没推举出来」的记忆,让下一次调用真的重扫一遍。
+        /// 政体或首领刚变过就该调它 —— 那两件事都会改变候选集合。
+        /// </summary>
+        private static void InvalidateElectorateMemo(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.set(LineageKeys.REPUBLIC_EMPTY_ELECTORATE_YEAR, int.MinValue);
+        }
+
+        private static int SafeCurrentYear()
+        {
+            try { return Date.getCurrentYear(); }
+            catch { return -1; }
         }
 
         public static void ClearRepublic(Kingdom pKingdom, string pReason)
@@ -182,6 +206,7 @@ namespace AncientWarfare3.core.lineage
                 HistoryLocalizationRules.H("aw_hist_republic_established"),
                 HistoryTarget.Kingdom(pKingdom));
             pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE, KingdomPolicyDefs.ClassRepublic);
+            InvalidateElectorateMemo(pKingdom);
             YearNameService.EndMonarchicalChronology(pKingdom);
             HeirService.ClearHeir(pKingdom);
             RulerAppellationService.RefreshLivingProjection(pKingdom);
@@ -201,21 +226,33 @@ namespace AncientWarfare3.core.lineage
             WorldLog.logNewKing(pKingdom);
         }
 
-        private static List<RankedCandidate> RankCandidates(Kingdom pKingdom, Actor pExclude)
+        /// <summary>
+        /// 推举出最优候选。三个调用点要的都只是第一名和「有没有人」,所以这里
+        /// 一趟扫出最大值就够了 —— <c>CompareCandidates</c> 末项按唯一的 actor id
+        /// 定胜负,是全序,一趟取最大与排完取第一恒等。见
+        /// <see cref="RepublicElectorateRules"/>。
+        /// </summary>
+        private static Actor SelectBestCandidate(Kingdom pKingdom, Actor pExclude,
+            out int pElectableCount)
         {
-            var result = new List<RankedCandidate>();
-            if (pKingdom?.data == null) return result;
+            pElectableCount = 0;
+            if (pKingdom?.data == null) return null;
+            Actor best = null;
+            RepublicCandidateScore bestScore = default;
             foreach (Actor actor in pKingdom.getUnits())
             {
                 if (actor == pExclude || !IsEligibleCandidate(actor, pKingdom)) continue;
-                result.Add(new RankedCandidate
+                pElectableCount++;
+                RepublicCandidateScore score = BuildScore(actor);
+                if (best == null ||
+                    RepublicGovernmentRules.CompareCandidates(score, bestScore) < 0)
                 {
-                    Actor = actor,
-                    Score = BuildScore(actor)
-                });
+                    best = actor;
+                    bestScore = score;
+                }
             }
-            result.Sort((a, b) => RepublicGovernmentRules.CompareCandidates(a.Score, b.Score));
-            return result;
+
+            return best;
         }
 
         private static bool IsEligibleCandidate(Actor pActor, Kingdom pKingdom)

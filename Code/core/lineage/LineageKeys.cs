@@ -583,6 +583,8 @@ namespace AncientWarfare3.core.lineage
         public const string POLICY_OBSOLETE_NODE_IDS =
             "aw_policy_obsolete_node_ids";
         public const string REPUBLIC_LEADER = "aw_republic_leader";
+        public const string REPUBLIC_EMPTY_ELECTORATE_YEAR =
+            "aw_republic_empty_electorate_year";
         public const string POLICY_ARMY_STATE = "aw_policy_army_state";
         public const string POLICY_NAME_STATE = "aw_policy_name_state";
         public const string POLICY_ENFEOFFMENT_STATE = "aw_policy_enfeoffment_state";
