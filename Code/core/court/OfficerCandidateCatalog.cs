@@ -97,6 +97,9 @@ namespace AncientWarfare3.core.court
             {
                 Actors = next, Ids = nextIds
             };
+            // 城官候选池同样是事件维护的 —— 只算这一个人的排序键插进去,
+            // 不重建。见 CityCandidatePool。
+            LocalCourtAppointmentService.OnCandidateChanged(pKingdom, pActor);
         }
 
         /// <summary>
@@ -124,6 +127,7 @@ namespace AncientWarfare3.core.court
             {
                 Actors = next, Ids = nextIds
             };
+            LocalCourtAppointmentService.OnCandidateLost(pKingdom, pActor);
         }
 
         /// <summary>
@@ -142,9 +146,17 @@ namespace AncientWarfare3.core.court
 
         internal static void Invalidate(Kingdom pKingdom)
         {
-            if (pKingdom?.data != null) Entries.Remove(pKingdom.id);
+            if (pKingdom?.data == null) return;
+            Entries.Remove(pKingdom.id);
+            // 兜底重建是整套池子的,城官池一起丢 —— 否则「补不上 → 重建」
+            // 只重建了一半,漏收的人仍然进不来。
+            CityCandidatePool.Invalidate(pKingdom);
         }
 
-        internal static void ClearRuntime() => Entries.Clear();
+        internal static void ClearRuntime()
+        {
+            Entries.Clear();
+            CityCandidatePool.ClearRuntime();
+        }
     }
 }

@@ -129,6 +129,11 @@ namespace AncientWarfare3.core.court
 
             long leaderNativeCityId = NativeCityId(pCity.leader);
             CountyFillDiagnostics.Count("city_attempt");
+            // 与候选人无关的四问在循环外算一次,同时它也是行为类的来源 ——
+            // 候选表按 (品级, 方镇标志, 通道) 缓存,同类的所有城、所有官职
+            // 共用一张。见 CourtAppointmentContext / CandidatePoolBehavior。
+            CourtAppointmentContext context = CourtAppointmentContext.Build(
+                pKingdom, CourtOfficeLayer.City, pVacancy.OfficeId, pCity);
             // 两遍选择:先在官员候选池里按严格资历找,找不到才用空缺兜底扫全量。
             // 设计见 docs/superpowers/plans/2026-08-19-nine-rank-vacancy-fallback.md
             // Task 3 Step 4 —— 中央层一直是这么做的(CourtService 里那两遍),
@@ -137,7 +142,8 @@ namespace AncientWarfare3.core.court
             Actor candidate = SelectCandidate(pSession.StrictCandidates(
                     pKingdom, actor => CanUseCandidateFacts(actor, pKingdom)),
                 pKingdom, pCity, leaderNativeCityId, pVacancy.OfficeId,
-                pAllowVacancyPromotion: false, pSession);
+                pAllowVacancyPromotion: false, pSession, context,
+                pStrict: true);
             if (candidate == null)
             {
                 CountyFillDiagnostics.Count("city_fallback_used");
@@ -145,7 +151,8 @@ namespace AncientWarfare3.core.court
                         pKingdom,
                         actor => CanUseCandidateFacts(actor, pKingdom)),
                     pKingdom, pCity, leaderNativeCityId, pVacancy.OfficeId,
-                    pAllowVacancyPromotion: true, pSession);
+                    pAllowVacancyPromotion: true, pSession, context,
+                    pStrict: false);
             }
             if (candidate == null)
                 return CountyFillDiagnostics.Report("city_no_candidate",
@@ -156,7 +163,11 @@ namespace AncientWarfare3.core.court
                     pKingdom, pCity, candidate, () =>
                         CourtService.TryAssignLocalOfficerRecord(candidate,
                             pKingdom, pCity, pVacancy.OfficeId, true));
-                if (committed) pSession.Reserve(candidate, pVacancy);
+                if (committed)
+                {
+                    pSession.Reserve(candidate, pVacancy);
+                    CityCandidatePool.Remove(pKingdom, candidate);
+                }
                 return committed ? CourtVacancyOutcome.Filled :
                     CourtVacancyOutcome.TechnicalFailure;
             }
@@ -164,9 +175,10 @@ namespace AncientWarfare3.core.court
                     pCity, pVacancy.OfficeId, true))
                 return CountyFillDiagnostics.Report("city_assign_failed",
                     CourtVacancyOutcome.TechnicalFailure);
-            // 候选表按轮缓存,刚上任的人必须显式登记占用 —— 原来靠下一个席位
-            // 重跑 CanUseCandidateFacts 时读到他新写入的 COURT_OFFICE_ID。
+            // 候选表跨轮持久,刚上任的人必须显式摘出池 —— 他已经有官职了,
+            // 下一轮不该再被选中。Reserve 只在本轮有效。
             pSession.Reserve(candidate, pVacancy);
+            CityCandidatePool.Remove(pKingdom, candidate);
             return CountyFillDiagnostics.Report("city_filled",
                 CourtVacancyOutcome.Filled);
         }
@@ -178,12 +190,6 @@ namespace AncientWarfare3.core.court
         /// 上限不影响结果,只影响什么时候要多付一次。
         /// </summary>
         private const int CountyShortlistLimit = 64;
-
-        /// <summary>
-        /// 城官候选短名单的长度上限。同一个城同一种官职的席位数远小于这个数,
-        /// 整条被占满时会退回全量重建,所以这个上限不影响结果。
-        /// </summary>
-        private const int CityShortlistLimit = 64;
 
         private static class CountyCandidateMode
         {
@@ -514,82 +520,142 @@ namespace AncientWarfare3.core.court
         }
 
         /// <summary>
-        /// 从候选池里取下一个可用的人。
+        /// 从候选池里取这个席位最合适的人。
         ///
-        /// 顺序**只定一次**:按 (城, 官职, 通道) 把候选排好缓存在本轮 session 里,
-        /// 之后同城同职的每个席位直接顺着往下取第一个没被占用的 —— 不再每个席位
-        /// 把整个候选池重扫一遍、逐人重算档次与评分。
+        /// 顺序**按行为类定一次**:候选表按 (品级, 方镇标志, 通道) 缓存,
+        /// 同类的所有城、所有官职共用一张。之后每个席位只扫这张表的**表头**,
+        /// 把按城变化的籍贯加成算回去 —— 不再每个席位把整个候选池重扫一遍、
+        /// 逐人重算档次与评分。
         ///
-        /// 占用只能在取人时判:<c>Reserve</c> 会随着席位一个个填上而变化,建表时
-        /// 滤掉就等于把表绑死在建表那一刻。
+        /// 表头能扫多短由 <see cref="CityShortlistRules"/> 决定:籍贯加成有
+        /// 上限,所以答案必然落在「无加成分 &gt;= 最佳有加成分 - 上限」这一段
+        /// 里,再往后的人拿满加成也追不上。截断不改变结果。
+        ///
+        /// 占用只能在取人时判:<c>Reserve</c> 会随着席位一个个填上而变化,
+        /// 建表时滤掉就等于把表绑死在建表那一刻。
         /// </summary>
         private static Actor SelectCandidate(IReadOnlyList<Actor> pCandidates,
             Kingdom pKingdom, City pCity, long pLeaderNativeCityId,
             string pOfficeId, bool pAllowVacancyPromotion,
-            CourtCandidateSession pSession)
+            CourtCandidateSession pSession, CourtAppointmentContext pContext,
+            bool pStrict)
         {
+            CityCandidatePool.Table table;
             if (pSession == null)
-                return FirstUnreserved(null, BuildCityCandidates(pCandidates,
-                    pKingdom, pCity, pLeaderNativeCityId, pOfficeId,
-                    pAllowVacancyPromotion, null, int.MaxValue));
-            IReadOnlyList<Actor> ordered = pSession.CityCandidatesFor(pCity,
-                pOfficeId, CityCandidateMode(pAllowVacancyPromotion,
-                    pExhaustive: false),
-                () => BuildCityCandidates(pCandidates, pKingdom, pCity,
-                    pLeaderNativeCityId, pOfficeId, pAllowVacancyPromotion,
-                    pSession, CityShortlistLimit));
-            Actor picked = FirstUnreserved(pSession, ordered);
-            if (picked != null || ordered.Count < CityShortlistLimit)
-                return picked;
-            // 短名单整条被占满 —— 它可能截断过,后面还有人。
-            ordered = pSession.CityCandidatesFor(pCity, pOfficeId,
-                CityCandidateMode(pAllowVacancyPromotion, pExhaustive: true),
-                () => BuildCityCandidates(pCandidates, pKingdom, pCity,
-                    pLeaderNativeCityId, pOfficeId, pAllowVacancyPromotion,
-                    pSession, int.MaxValue));
-            return FirstUnreserved(pSession, ordered);
-        }
+            {
+                table = BuildCityCandidates(pCandidates, pKingdom, pCity,
+                    pOfficeId, pAllowVacancyPromotion, null, pContext);
+            }
+            else
+            {
+                var behavior = new CandidatePoolBehavior(pContext.OfficeGrade,
+                    pContext.RegionalGovernor, pAllowVacancyPromotion,
+                    pStrict);
+                // 跨轮持久:顺序算一次就存着,之后靠事件补入/摘出维护,
+                // 不再每轮重建。见 CityCandidatePool。
+                table = CityCandidatePool.GetOrBuild(pKingdom, behavior,
+                    () => BuildCityCandidates(pCandidates, pKingdom, pCity,
+                        pOfficeId, pAllowVacancyPromotion, pSession,
+                        pContext));
+            }
 
-        /// <summary>候选表按「通道 + 是否全量」分开缓存,四种互不覆盖。</summary>
-        private static int CityCandidateMode(bool pAllowVacancyPromotion,
-            bool pExhaustive)
-        {
-            return (pAllowVacancyPromotion ? 1 : 0) + (pExhaustive ? 2 : 0);
+            int picked = PickForCity(table, pLeaderNativeCityId, pSession,
+                pKingdom);
+            return picked < 0 ? null : table.Actors[picked];
         }
 
         /// <summary>
-        /// 城官候选短名单,按「门第档次升序、评分降序、同分按 id 升序」排好。
+        /// 在共享表上把籍贯加成算回去,取第一名。
+        ///
+        /// 表按无加成分降序排好,所以一旦「下一个人拿满加成也追不上当前最佳」
+        /// 就可以停 —— 见 <see cref="CityShortlistRules"/>。跨到更差的门第档次
+        /// 同样可以停:档次优先于分,而加成不改变档次。
+        ///
+        /// 表是跨轮持久的,所以取人时必须逐个复核基础事实:池子靠事件维护,
+        /// 可能多收了已经不合格的人(死了、离境了、已上任)。多收由这里滤掉,
+        /// 少收由「补不上 → 重建」兜住,两个方向都能自愈。
+        /// </summary>
+        private static int PickForCity(CityCandidatePool.Table pTable,
+            long pLeaderNativeCityId, CourtCandidateSession pSession,
+            Kingdom pKingdom)
+        {
+            if (pTable == null) return -1;
+            int best = -1;
+            int bestTier = 0;
+            int bestScore = 0;
+            List<Actor> stale = null;
+            for (int index = 0; index < pTable.Actors.Count; index++)
+            {
+                if (best >= 0 && pTable.Tiers[index] > bestTier) break;
+                if (best >= 0 && pTable.Tiers[index] == bestTier &&
+                    !CityShortlistRules.NeedsMoreForHometownBonus(bestScore,
+                        pTable.Scores[index],
+                        LocalOfficialCandidateRules.HometownBonus)) break;
+                Actor actor = pTable.Actors[index];
+                if (actor?.data == null) continue;
+                if (pSession != null &&
+                    pSession.ReservedActorIds.Contains(pTable.Ids[index]))
+                    continue;
+                // 持久池可能多收 —— 复核基础事实,不合格的顺手摘掉。
+                if (!CanUseCandidateFacts(actor, pKingdom))
+                {
+                    (stale ??= new List<Actor>()).Add(actor);
+                    continue;
+                }
+
+                int score = pTable.Scores[index] +
+                    (pLeaderNativeCityId >= 0L &&
+                     pTable.NativeCityIds[index] == pLeaderNativeCityId
+                        ? LocalOfficialCandidateRules.HometownBonus
+                        : 0);
+                if (best < 0 || CityShortlistRules.SortsBefore(
+                        pTable.Tiers[index], score, pTable.Ids[index],
+                        bestTier, bestScore, pTable.Ids[best]))
+                {
+                    best = index;
+                    bestTier = pTable.Tiers[index];
+                    bestScore = score;
+                }
+            }
+
+            // 摘人会换表,所以必须在遍历结束后做 —— 正在遍历的是旧表。
+            // 选中的那个人由 Reserve 负责,不在这里摘。
+            if (stale != null)
+                for (int index = 0; index < stale.Count; index++)
+                    CityCandidatePool.Remove(pKingdom, stale[index]);
+            return best;
+        }
+
+        /// <summary>
+        /// 一个**行为类**的城官候选表,按「门第档次升序、无加成分降序、
+        /// 同分按 id 升序」排好。籍贯加成不进表 —— 它按城变,由
+        /// <see cref="PickForCity"/> 在取人时补回。
+        ///
         /// 和县令短名单共用 <see cref="CountyShortlistRules"/> 那一个比较器,
         /// 所以两条分支的择优口径是同一套。
+        ///
+        /// 不截断:这张表要服务同类的所有城、所有席位,截断会让后面的城取不到
+        /// 本该属于它的人。塌缩本身已经把建表次数从几十降到个位数,一次全排
+        /// 比几十次有界插入便宜。
         /// </summary>
-        private static IReadOnlyList<Actor> BuildCityCandidates(
-            IReadOnlyList<Actor> pPool, Kingdom pKingdom, City pCity,
-            long pLeaderNativeCityId, string pOfficeId,
-            bool pAllowVacancyPromotion, CourtCandidateSession pSession,
-            int pLimit)
+        private static CityCandidatePool.Table
+            BuildCityCandidates(IReadOnlyList<Actor> pPool, Kingdom pKingdom,
+                City pCity, string pOfficeId, bool pAllowVacancyPromotion,
+                CourtCandidateSession pSession,
+                CourtAppointmentContext pContext)
         {
-            // 与候选人无关的四问在循环外算一次 —— 见 CourtAppointmentContext。
-            // 九品制那一问原来还在循环体里(下面的 HasNineRankSystem)又问了
-            // 一遍,于是每名候选要把王国已完成技术串比对三趟。
-            CourtAppointmentContext context = CourtAppointmentContext.Build(
-                pKingdom, CourtOfficeLayer.City, pOfficeId, pCity);
-            int officeGrade = context.OfficeGrade;
-            bool regionalGovernor = context.RegionalGovernor;
-            bool nineRankSystem = context.NineRankSystem;
+            int officeGrade = pContext.OfficeGrade;
+            bool regionalGovernor = pContext.RegionalGovernor;
+            bool nineRankSystem = pContext.NineRankSystem;
             bool lowOffice = LocalLowOfficeVacancyRules.IsLowestLocalGrade(
                 officeGrade);
-            bool bounded = pLimit != int.MaxValue;
-            // 建表次数和累计遍历行数。城分支的候选表按 (城, 官职, 通道) 缓存,
-            // 所以「一次王国补缺一共遍历了多少行」= 建表次数 × 候选池大小 ——
-            // 这个数就是这条热路径的规模,县分支的 pool 计数看不到它。
+            var table = new CityCandidatePool.Table();
+            // 建表次数和累计遍历行数。按行为类缓存后,city_build 应当远小于
+            // city_attempt —— 它们相等就说明塌缩没生效。
             CountyFillDiagnostics.Count("city_build");
             CountyFillDiagnostics.Count("city_build_rows", pPool?.Count ?? 0);
-            var shortlist = new List<Actor>();
-            var scores = new List<int>();
-            var tiers = new List<int>();
-            var unbounded = bounded
-                ? null
-                : new List<(Actor Actor, int Tier, int Ability)>();
+            var entries =
+                new List<(Actor Actor, int Tier, int Score, long Native)>();
             foreach (Actor actor in pPool)
             {
                 if (actor?.data == null) continue;
@@ -605,7 +671,7 @@ namespace AncientWarfare3.core.court
                             pAllowLocalLowerQualification: true,
                             pCity: pCity,
                             pServiceHistorySession: pSession,
-                            pContext: context)) continue;
+                            pContext: pContext)) continue;
                 actor.data.get(LineageKeys.OFFICER_MERIT,
                     out float merit, 0f);
                 bool formalLocalQualification = pSession != null
@@ -613,10 +679,10 @@ namespace AncientWarfare3.core.court
                       LocalOfficialCandidateRules.IsLocalQualification(
                           qualification.Qualification)
                     : HasFormalLocalQualification(actor, pKingdom);
+                // 籍贯加成留到取人时算 —— 它是这里唯一按城变的项。
                 int score = LocalOfficialCandidateRules.Score(
                     MainAbility(actor), (int)Math.Max(0f, merit),
-                    pLeaderNativeCityId >= 0L &&
-                    NativeCityId(actor) == pLeaderNativeCityId);
+                    sameNativeCity: false);
                 int tier = lowOffice
                     ? (int)LocalLowOfficeVacancyRules.CandidateTier(
                         formalLocalQualification,
@@ -637,41 +703,115 @@ namespace AncientWarfare3.core.court
                     score += Math.Max(0, resolvedRank);
                 }
 
-                if (bounded)
-                    InsertRanked(shortlist, tiers, scores, actor, tier, score,
-                        pLimit);
-                else unbounded.Add((actor, tier, score));
+                entries.Add((actor, tier, score, NativeCityId(actor)));
             }
 
-            if (bounded) return shortlist;
-            unbounded.Sort((left, right) =>
-                CountyShortlistRules.SortsBefore(left.Tier, left.Ability,
-                    left.Actor.data.id, right.Tier, right.Ability,
+            entries.Sort((left, right) =>
+                CountyShortlistRules.SortsBefore(left.Tier, left.Score,
+                    left.Actor.data.id, right.Tier, right.Score,
                     right.Actor.data.id)
                     ? -1
                     : 1);
-            return unbounded.Select(entry => entry.Actor).ToList();
+            for (int index = 0; index < entries.Count; index++)
+            {
+                table.Actors.Add(entries[index].Actor);
+                table.Tiers.Add(entries[index].Tier);
+                table.Scores.Add(entries[index].Score);
+                table.Ids.Add(entries[index].Actor.data.id);
+                table.NativeCityIds.Add(entries[index].Native);
+                table.Members.Add(entries[index].Actor.data.id);
+            }
+
+            return table;
         }
 
         /// <summary>
-        /// 顺着排好的表取第一个没被占用的人。城分支判的是
-        /// <see cref="CourtCandidateSession.ReservedActorIds"/> 本身,和原来
-        /// 逐席位扫描时的判据一致 —— 不走县分支那条允许兼任的
-        /// <c>IsAvailable</c>。
+        /// 一个人在某个行为类下的排序键 —— 事件补入时只算他一个人的这一份。
+        /// 判据和 <see cref="BuildCityCandidates"/> 的循环体逐行对应,两处必须
+        /// 保持一致,否则插进去的位置和全量建表的位置会不同。
+        ///
+        /// 档次返回负数表示「这个行为类不收他」,调用方跳过。
         /// </summary>
-        private static Actor FirstUnreserved(CourtCandidateSession pSession,
-            IReadOnlyList<Actor> pCandidates)
+        internal static CityCandidatePool.Ranked RankForBehavior(Actor pActor,
+            Kingdom pKingdom, CandidatePoolBehavior pBehavior)
         {
-            for (int index = 0; index < pCandidates.Count; index++)
+            if (pActor?.data == null || pKingdom?.data == null)
+                return new CityCandidatePool.Ranked(-1, 0);
+            if (!CanUseCandidateFacts(pActor, pKingdom))
+                return new CityCandidatePool.Ranked(-1, 0);
+            // 严格通道只收官员候选池的人:有功名或有品级。
+            if (pBehavior.Strict && !IsStrictPoolMember(pActor, pKingdom))
+                return new CityCandidatePool.Ranked(-1, 0);
+            var context = new CourtAppointmentContext(pBehavior.OfficeGrade,
+                pBehavior.RegionalGovernor, pKingdom);
+            if (!CivilServiceQualificationService.
+                    CanReceiveFormalCivilAppointment(pActor, pKingdom,
+                        CourtOfficeLayer.City, pOfficeId: null,
+                        pBehavior.VacancyPromotion, pQualification: null,
+                        pQualificationsCaptured: false,
+                        pAllowLocalLowerQualification: true, pCity: null,
+                        pServiceHistorySession: null, pContext: context))
+                return new CityCandidatePool.Ranked(-1, 0);
+            pActor.data.get(LineageKeys.OFFICER_MERIT, out float merit, 0f);
+            bool formalLocalQualification = HasFormalLocalQualification(
+                pActor, pKingdom);
+            int score = LocalOfficialCandidateRules.Score(MainAbility(pActor),
+                (int)Math.Max(0f, merit), sameNativeCity: false);
+            bool lowOffice = LocalLowOfficeVacancyRules.IsLowestLocalGrade(
+                pBehavior.OfficeGrade);
+            int tier = lowOffice
+                ? (int)LocalLowOfficeVacancyRules.CandidateTier(
+                    formalLocalQualification, HasClanOrShi(pActor))
+                : 0;
+            if (lowOffice && pBehavior.VacancyPromotion)
             {
-                Actor actor = pCandidates[index];
-                if (actor?.data == null) continue;
-                if (pSession != null &&
-                    pSession.ReservedActorIds.Contains(actor.data.id)) continue;
-                return actor;
+                int resolvedRank =
+                    OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
+                        OfficialCareerStateService.ReadRankFast(pActor),
+                        pBehavior.OfficeGrade,
+                        CourtService.HasNineRankSystem(pKingdom),
+                        formalLocalQualification ||
+                        LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
+                            isCityLayer: true,
+                            officeGrade: pBehavior.OfficeGrade,
+                            vacancyPromotion: true),
+                        vacancyPromotion: true,
+                        regionalGovernor: pBehavior.RegionalGovernor);
+                score += Math.Max(0, resolvedRank);
             }
 
-            return null;
+            return new CityCandidatePool.Ranked(tier, score);
+        }
+
+        /// <summary>
+        /// 严格池的成员判定:有地方科举功名,或已有品级。和
+        /// <see cref="CourtCandidateSession.StrictCandidates"/> 的两部分并集
+        /// 对应 —— 那里一半来自索引查询,这里按人现判,结论相同。
+        /// </summary>
+        private static bool IsStrictPoolMember(Actor pActor, Kingdom pKingdom)
+        {
+            if (OfficialCareerStateService.ReadRankFast(pActor) >
+                OfficialCareerRankRules.Unranked) return true;
+            return HasFormalLocalQualification(pActor, pKingdom);
+        }
+
+        /// <summary>
+        /// 候选池的维护入口:一个人的状态变了,把他在各行为类表里的位置更新掉。
+        /// 只算他一个人,不重建整池。
+        /// </summary>
+        internal static void OnCandidateChanged(Kingdom pKingdom,
+            Actor pActor)
+        {
+            if (pKingdom?.data == null || pActor?.data == null) return;
+            CityCandidatePool.Reposition(pKingdom, pActor,
+                behavior => RankForBehavior(pActor, pKingdom, behavior),
+                NativeCityId(pActor));
+        }
+
+        /// <summary>一个人彻底出池(死亡、离境)。</summary>
+        internal static void OnCandidateLost(Kingdom pKingdom, Actor pActor)
+        {
+            CityCandidatePool.Remove(pKingdom, pActor);
         }
 
         private static bool HasFormalLocalQualification(Actor pActor,

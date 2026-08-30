@@ -47,5 +47,23 @@ namespace AncientWarfare3.core.court
                 OfficialCareerStateService.IsRegionalGovernorSeat(pKingdom,
                     pLayer, pOfficeId, pCity));
         }
+
+        /// <summary>
+        /// 从**行为类**还原上下文:品级和方镇标志由行为类直接给出,两个制度
+        /// 开关按王国现读。事件补入时用这一条 —— 那时手上只有行为类,没有
+        /// 具体席位。
+        /// </summary>
+        internal CourtAppointmentContext(int pOfficeGrade,
+            bool pRegionalGovernor, Kingdom pKingdom)
+        {
+            Valid = pKingdom?.data != null;
+            ExaminationSystem = Valid &&
+                CivilServiceQualificationService.HasExaminationSystem(
+                    pKingdom);
+            NineRankSystem = Valid &&
+                CourtService.HasNineRankSystem(pKingdom);
+            OfficeGrade = pOfficeGrade;
+            RegionalGovernor = pRegionalGovernor;
+        }
     }
 }

@@ -1,0 +1,185 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.core.court;
+
+/// <summary>
+/// 城官候选池的两条不变量。
+///
+/// 一、<b>顺序算一次,之后插入等价于重排</b>。池子跨轮持久,新人只算自己一个
+///     人的排序键二分插入 —— 这必须和「把所有人重新排一遍」逐项相同,否则
+///     池子会随着人来人往慢慢失序,而失序不会报错,只会悄悄选错人。
+///
+/// 二、<b>籍贯加成的前缀扫描等价于全体重排</b>。共享表按无加成分排序,取人时
+///     才把按城变化的加成算回去。截断只发生在「后面的人拿满加成也追不上」的
+///     位置 —— 这一条要用随机对拍证明,不能靠肉眼。
+/// </summary>
+internal static class CityCandidatePoolRulesTests
+{
+    public static void Run()
+    {
+        BehaviorKeyRoundTrips();
+        InsertionMatchesFullSort();
+        HometownPrefixMatchesFullRerank();
+        HometownBonusActuallyChangesWinner();
+        Console.WriteLine("CityCandidatePoolRulesTests passed.");
+    }
+
+    /// <summary>行为类打包成 int 再还原,四个量都不能丢。</summary>
+    private static void BehaviorKeyRoundTrips()
+    {
+        var seen = new Dictionary<int, string>();
+        foreach (int grade in new[] { 0, 10, 20, 30, 40, 90 })
+        foreach (bool governor in new[] { false, true })
+        foreach (bool vacancy in new[] { false, true })
+        foreach (bool strict in new[] { false, true })
+        {
+            var behavior = new CandidatePoolBehavior(grade, governor,
+                vacancy, strict);
+            string label = grade + "/" + governor + "/" + vacancy + "/" +
+                strict;
+            int key = behavior.Key();
+            if (seen.TryGetValue(key, out string other))
+                throw new Exception("behavior key collision: " + label +
+                    " vs " + other);
+            seen[key] = label;
+        }
+    }
+
+    /// <summary>
+    /// 逐个二分插入 == 全体排序。id 唯一所以这是全序,前缀唯一确定。
+    /// 这里复用生产的比较器,直接对拍插入序列与排序结果。
+    /// </summary>
+    private static void InsertionMatchesFullSort()
+    {
+        var random = new Random(20260830);
+        for (int trial = 0; trial < 2000; trial++)
+        {
+            int count = random.Next(0, 40);
+            var people = new List<(int Tier, int Score, long Id)>();
+            for (int i = 0; i < count; i++)
+                people.Add((random.Next(0, 3), random.Next(0, 8),
+                    random.Next(1, 30)));
+            // id 必须唯一 —— 全序的前提。
+            people = people.GroupBy(p => p.Id).Select(g => g.First()).ToList();
+
+            var incremental = new List<(int Tier, int Score, long Id)>();
+            foreach (var person in people)
+            {
+                int low = 0;
+                int high = incremental.Count;
+                while (low < high)
+                {
+                    int middle = low + ((high - low) >> 1);
+                    var other = incremental[middle];
+                    if (CountyShortlistRules.SortsBefore(other.Tier,
+                            other.Score, other.Id, person.Tier, person.Score,
+                            person.Id)) low = middle + 1;
+                    else high = middle;
+                }
+
+                incremental.Insert(low, person);
+            }
+
+            var sorted = new List<(int Tier, int Score, long Id)>(people);
+            sorted.Sort((left, right) =>
+                CountyShortlistRules.SortsBefore(left.Tier, left.Score,
+                    left.Id, right.Tier, right.Score, right.Id) ? -1 : 1);
+
+            for (int i = 0; i < sorted.Count; i++)
+                if (incremental[i].Id != sorted[i].Id)
+                    throw new Exception(
+                        "incremental insert diverged from full sort at " + i);
+        }
+    }
+
+    /// <summary>
+    /// 前缀扫描取到的第一名,必须和「对全体算上加成后重排取第一」相同。
+    /// </summary>
+    private static void HometownPrefixMatchesFullRerank()
+    {
+        const int bonus = 25;
+        var random = new Random(776);
+        for (int trial = 0; trial < 4000; trial++)
+        {
+            int count = random.Next(0, 30);
+            var rows = new List<(int Tier, int Score, long Id, bool Same)>();
+            var usedIds = new HashSet<long>();
+            for (int i = 0; i < count; i++)
+            {
+                long id = random.Next(1, 200);
+                if (!usedIds.Add(id)) continue;
+                rows.Add((random.Next(0, 3), random.Next(0, 60), id,
+                    random.Next(0, 4) == 0));
+            }
+
+            // 共享表:按**无加成**分排好。
+            rows.Sort((left, right) =>
+                CountyShortlistRules.SortsBefore(left.Tier, left.Score,
+                    left.Id, right.Tier, right.Score, right.Id) ? -1 : 1);
+
+            var reserved = new HashSet<long>();
+            foreach (var row in rows)
+                if (random.Next(0, 6) == 0) reserved.Add(row.Id);
+
+            int picked = CityShortlistRules.PickWithHometownBonus(
+                rows.Select(r => r.Tier).ToList(),
+                rows.Select(r => r.Score).ToList(),
+                rows.Select(r => r.Id).ToList(),
+                rows.Select(r => r.Same).ToList(), reserved, bonus);
+
+            // 参照:对全体算上加成,整体重排,取第一个没被占用的。
+            var reranked = rows.Where(r => !reserved.Contains(r.Id))
+                .Select(r => (r.Tier, Score: r.Score + (r.Same ? bonus : 0),
+                    r.Id)).ToList();
+            reranked.Sort((left, right) =>
+                CountyShortlistRules.SortsBefore(left.Tier, left.Score,
+                    left.Id, right.Tier, right.Score, right.Id) ? -1 : 1);
+
+            long expected = reranked.Count == 0 ? -1L : reranked[0].Id;
+            long actual = picked < 0 ? -1L : rows[picked].Id;
+            if (expected != actual)
+                throw new Exception("hometown prefix scan diverged: expected "
+                    + expected + " got " + actual + " (trial " + trial + ")");
+        }
+    }
+
+    /// <summary>
+    /// 反向哨兵:如果加成根本没被算进去,上面那条对拍也会「通过」——
+    /// 两边都忽略加成就一致了。所以要有一个加成**确实改变了赢家**的用例。
+    /// </summary>
+    private static void HometownBonusActuallyChangesWinner()
+    {
+        const int bonus = 25;
+        // 表按无加成分排:A(50) 在前,B(40) 在后。B 是同乡,40+25=65 > 50。
+        var tiers = new List<int> { 0, 0 };
+        var scores = new List<int> { 50, 40 };
+        var ids = new List<long> { 1L, 2L };
+        var same = new List<bool> { false, true };
+        int picked = CityShortlistRules.PickWithHometownBonus(tiers, scores,
+            ids, same, new HashSet<long>(), bonus);
+        if (picked != 1)
+            throw new Exception(
+                "hometown bonus must be able to overturn the raw order, got " +
+                picked);
+
+        // 而差距超过加成上限时不能被翻盘:A(80) vs 同乡 B(40)+25=65。
+        scores = new List<int> { 80, 40 };
+        picked = CityShortlistRules.PickWithHometownBonus(tiers, scores, ids,
+            same, new HashSet<long>(), bonus);
+        if (picked != 0)
+            throw new Exception(
+                "a gap wider than the bonus must not be overturned, got " +
+                picked);
+
+        // 档次优先于分:更差档次的同乡拿满加成也排在后面。
+        tiers = new List<int> { 0, 1 };
+        scores = new List<int> { 10, 40 };
+        picked = CityShortlistRules.PickWithHometownBonus(tiers, scores, ids,
+            same, new HashSet<long>(), bonus);
+        if (picked != 0)
+            throw new Exception(
+                "candidate tier must outrank the hometown bonus, got " +
+                picked);
+    }
+}

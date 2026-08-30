@@ -21,8 +21,7 @@ namespace AncientWarfare3.core.court
             _guestCandidates;
         private Dictionary<(long CityId, int Mode), IReadOnlyList<Actor>>
             _countyCandidatesByCity;
-        private Dictionary<(long CityId, string OfficeId, int Mode),
-            IReadOnlyList<Actor>> _cityCandidatesByOffice;
+        private Dictionary<int, CityCandidateTable> _cityCandidatesByBehavior;
         private List<Actor> _roster;
         private HashSet<string> _activeOfficeIds;
         private Dictionary<long, CivilServiceQualificationRecord>
@@ -233,27 +232,42 @@ namespace AncientWarfare3.core.court
         }
 
         /// <summary>
-        /// 一个城某个官职的候选表,已按择优顺序排好,本轮内只建一次。
+        /// 一个**行为类**的城官候选表,按无籍贯加成的分排好,本轮只建一次。
         ///
-        /// 原来每补一个席位就把整个候选池重扫一遍、逐人重算档次与评分,只为取出
-        /// 最好的那一个。而同一个城的同一种官职往往有**多个**席位
-        /// (<c>DesiredSeats</c> 会给出数量),于是同一份排序被重复算了 N 遍。
+        /// 原来按 (城, 官职, 通道) 缓存 —— 一个王国几十个 (城 × 官职) 组合就
+        /// 要把候选池重扫几十遍,实测一次补缺 381 次建表、58240 行。而这几十
+        /// 张表内容几乎完全一样:排序只看品级和方镇标志,同品级的两个官职
+        /// 顺序逐字节相同。按行为类缓存后,组合数从几十塌缩到个位数。
         ///
-        /// 现在顺序一次定好,之后每个席位直接顺着往下取第一个还没被占用的人。
-        /// 占用是逐个席位变化的,所以只能在取人时判,不能在建表时滤掉。
+        /// 籍贯加成按城变,不进表;取人时由
+        /// <see cref="CityShortlistRules.PickWithHometownBonus"/> 扫表头补回。
         /// </summary>
-        internal IReadOnlyList<Actor> CityCandidatesFor(City pCity,
-            string pOfficeId, int pMode, Func<IReadOnlyList<Actor>> pBuild)
+        internal sealed class CityCandidateTable
         {
-            if (pCity?.data == null || pBuild == null)
-                return Array.Empty<Actor>();
-            _cityCandidatesByOffice ??=
-                new Dictionary<(long, string, int), IReadOnlyList<Actor>>();
-            var key = (pCity.data.id, pOfficeId ?? "", pMode);
-            if (_cityCandidatesByOffice.TryGetValue(key,
-                    out IReadOnlyList<Actor> cached)) return cached;
-            IReadOnlyList<Actor> built = pBuild() ?? Array.Empty<Actor>();
-            _cityCandidatesByOffice[key] = built;
+            internal readonly List<Actor> Actors = new List<Actor>();
+            internal readonly List<int> Tiers = new List<int>();
+            /// <summary>不含籍贯加成的分。</summary>
+            internal readonly List<int> Scores = new List<int>();
+            internal readonly List<long> Ids = new List<long>();
+            /// <summary>此人的籍贯城 id,取人时和目标城比。</summary>
+            internal readonly List<long> NativeCityIds = new List<long>();
+        }
+
+        /// <summary>
+        /// 取这个行为类的候选表,没有就建。见 <see cref="CityCandidateTable"/>。
+        /// </summary>
+        internal CityCandidateTable CityCandidatesFor(
+            CandidatePoolBehavior pBehavior,
+            Func<CityCandidateTable> pBuild)
+        {
+            if (pBuild == null) return new CityCandidateTable();
+            _cityCandidatesByBehavior ??=
+                new Dictionary<int, CityCandidateTable>();
+            int key = pBehavior.Key();
+            if (_cityCandidatesByBehavior.TryGetValue(key,
+                    out CityCandidateTable cached)) return cached;
+            CityCandidateTable built = pBuild() ?? new CityCandidateTable();
+            _cityCandidatesByBehavior[key] = built;
             return built;
         }
 

@@ -155,6 +155,9 @@
     <Compile Include="..\..\Code\core\court\CourtVacancyPoolMemoRules.cs" Link="Production\CourtVacancyPoolMemoRules.cs" />
     <Compile Include="CountyShortlistRulesTests.cs.txt" />
     <Compile Include="PolicyCompletionRulesTests.cs.txt" />
+    <Compile Include="CityCandidatePoolRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CandidatePoolBehavior.cs" Link="Production\CandidatePoolBehavior.cs" />
+    <Compile Include="..\..\Code\core\court\CityShortlistRules.cs" Link="Production\CityShortlistRules.cs" />
     <Compile Include="..\..\Code\core\policy\PolicyCompletionRules.cs" Link="Production\PolicyCompletionRules.cs" />
     <Compile Include="SuccessionOrderRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\SuccessionOrderRules.cs" Link="Production\SuccessionOrderRules.cs" />

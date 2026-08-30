@@ -369,8 +369,8 @@ internal static class CourtVacancySourceGuardTests
         Contains(local, "CourtAppointmentContext.Build(",
             "candidate table builds must precompute the office context");
         string cityBuild = MethodBody(local,
-            "private static IReadOnlyList<Actor> BuildCityCandidates");
-        Contains(cityBuild, "pContext: context",
+            "private static CityCandidatePool.Table");
+        Contains(cityBuild, "pContext: pContext",
             "the city build must hand the office context to the gate");
         Contains(countyBuild, "pContext: context",
             "the county build must hand the office context to the gate");
@@ -393,6 +393,75 @@ internal static class CourtVacancySourceGuardTests
             "the city fill path must report how many candidate rows it walked");
         Contains(local, "city_attempt",
             "the city fill path must report its attempts");
+
+        // ⑨ 城官候选池:顺序算一次,之后只插新人,不重建。
+        //    原来按 (城, 官职, 通道) 缓存**且每轮重建** —— 一个王国几十个
+        //    (城 × 官职) 组合就要把候选池重扫几十遍,实测一次补缺 381 次建表、
+        //    58240 行。而排序只看品级和方镇标志:同品级的两个官职、同品级的
+        //    两个城,顺序逐字节相同。
+        string pool = Read("Code/core/court/CityCandidatePool.cs");
+        Contains(local, "CityCandidatePool.GetOrBuild(",
+            "the city candidate order must persist across cycles");
+        Contains(pool, "internal static void Insert(",
+            "a new candidate must be inserted, not trigger a rebuild");
+        Contains(MethodBody(pool, "private static int FindInsertPosition"),
+            "CountyShortlistRules.SortsBefore",
+            "insertion must use the same total order as the full sort");
+        Contains(MethodBody(pool, "private static int FindInsertPosition"),
+            "(high - low) >> 1",
+            "insertion must binary search rather than rescan");
+        Contains(pool, "internal static void Remove(",
+            "a departing candidate must be evicted from the persistent pool");
+        Contains(pool, "internal static void Reposition(",
+            "a changed sort key must move its actor instead of rebuilding");
+        // 换表而不是就地改 —— 表会交给正在遍历它的补缺轮次。
+        Contains(MethodBody(pool, "internal static void Insert"),
+            "pair.Value.Copy()",
+            "the pool insert must not mutate a table handed to a session");
+        Contains(MethodBody(pool, "internal static void RemoveById"),
+            "pair.Value.Copy()",
+            "the pool eviction must not mutate a table handed to a session");
+        // 上任的人必须出池 —— 池子跨轮持久,Reserve 只在本轮有效。
+        // 城官有**两条**提交路径(普通任命、地方主官),两条都要摘,所以数
+        // 个数而不是 Contains:漏掉任一条,那个人下一轮还会被选中。
+        if (Occurrences(local, "CityCandidatePool.Remove(pKingdom, candidate)")
+            != 2)
+            throw new InvalidOperationException(
+                "both city commit paths must evict the appointed actor " +
+                "from the persistent pool");
+        // 事件维护必须真的接上目录的三个钩子。
+        Contains(catalog, "LocalCourtAppointmentService.OnCandidateChanged(",
+            "the catalog insert must maintain the city pool too");
+        Contains(catalog, "LocalCourtAppointmentService.OnCandidateLost(",
+            "the catalog eviction must maintain the city pool too");
+        // 兜底重建必须同时丢掉城官池,否则只重建了一半。
+        Contains(MethodBody(catalog, "internal static void Invalidate"),
+            "CityCandidatePool.Invalidate(",
+            "the repair path must rebuild the city pool as well");
+        // 持久池会多收人(资格失效但没摘干净),取人时必须复核。
+        Contains(MethodBody(local, "private static int PickForCity"),
+            "CanUseCandidateFacts(",
+            "a persistent pool must revalidate candidates when picking");
+        // 籍贯加成不进共享表 —— 它按城变。
+        Contains(cityBuild, "sameNativeCity: false",
+            "the shared table must exclude the per-city hometown bonus");
+        Contains(MethodBody(local, "private static int PickForCity"),
+            "NeedsMoreForHometownBonus",
+            "the hometown bonus must be applied by a bounded prefix scan");
+    }
+
+    private static int Occurrences(string pText, string pNeedle)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = pText.IndexOf(pNeedle, index,
+                   StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += pNeedle.Length;
+        }
+
+        return count;
     }
 
     private static string MethodBody(string pText, string pMethodName)
