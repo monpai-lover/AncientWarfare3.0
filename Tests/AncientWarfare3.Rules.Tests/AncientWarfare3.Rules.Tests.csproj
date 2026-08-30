@@ -162,6 +162,8 @@
     <Compile Include="SuccessionOrderRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\SuccessionOrderRules.cs" Link="Production\SuccessionOrderRules.cs" />
     <Compile Include="..\..\Code\core\policy\CoreFabricationSlotRules.cs" Link="Production\CoreFabricationSlotRules.cs" />
+    <Compile Include="GeneralShortlistRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\GeneralShortlistRules.cs" Link="Production\GeneralShortlistRules.cs" />
     <Compile Include="..\..\Code\core\court\CountyShortlistRules.cs" Link="Production\CountyShortlistRules.cs" />
     <Compile Include="CentralCourtVacancySourceGuardTests.cs.txt" />
     <Compile Include="..\..\Code\core\court\CourtAppointmentFailureBackoffRules.cs" Link="Production\CourtAppointmentFailureBackoffRules.cs" />

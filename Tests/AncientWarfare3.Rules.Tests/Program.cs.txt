@@ -481,6 +481,13 @@ if (args.Length == 1 && args[0] == "--succession-order")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--general-shortlist")
+{
+    GeneralShortlistRulesTests.Run();
+    Console.WriteLine("General shortlist tests passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--court-vacancy-events")
 {
     CourtVacancyRulesTests.Run();

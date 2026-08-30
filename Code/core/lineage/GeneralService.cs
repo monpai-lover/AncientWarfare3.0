@@ -34,12 +34,6 @@ namespace AncientWarfare3.core.lineage
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
 
-        private sealed class GeneralCandidate
-        {
-            public Actor actor;
-            public int score;
-        }
-
         public static void OnKingdomYear(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt() || pKingdom.isNeutral() || !pKingdom.isCiv()) return;
@@ -339,6 +333,9 @@ namespace AncientWarfare3.core.lineage
             if (IsGeneral(pActor))
                 UpsertGeneral(pActor, pActor.kingdom, pActive: true);
 
+            // 功绩是稳定分的大头(×2),涨了就得换位,否则候选表会随着战功
+            // 慢慢失序 —— 那正是「按部就班」要避免的重排来源。
+            SyncCandidatePool(pActor);
             RecordMeritMilestone(pActor, old, next, pPoints, pReason);
         }
 
@@ -376,16 +373,137 @@ namespace AncientWarfare3.core.lineage
             RefreshArmyCommanderTraits(pKingdom);
             List<Actor> active = GetActiveGenerals(pKingdom);
             int limit = MaxGeneralCount(pKingdom);
+            // 席位没空就一步都不做。以前这里也是先返回,但下面那条全量扫描
+            // 每三年每王国照跑 —— 现在扫描本身也被持久池吃掉了。
             if (active.Count >= limit) return;
 
-            List<GeneralCandidate> candidates = CollectCandidates(pKingdom, active);
-            foreach (GeneralCandidate candidate in candidates)
+            var taken = new HashSet<long>();
+            for (int i = 0; i < active.Count; i++)
+                if (active[i]?.data != null) taken.Add(active[i].data.id);
+
+            // 持久池:顺序只算一次,之后按部就班。挑不出人时兜底重建一次 ——
+            // 那正是「少收了人」这个漂移方向唯一会显形的地方。
+            bool repaired = false;
+            while (active.Count < limit)
             {
-                if (active.Count >= limit) break;
-                if (candidate.score < 45) break;
-                if (!AppointGeneral(candidate.actor, candidate.score)) continue;
-                active.Add(candidate.actor);
+                Actor picked = PickFromPool(pKingdom, taken);
+                if (picked == null)
+                {
+                    if (repaired) break;
+                    repaired = true;
+                    GeneralCandidatePool.Invalidate(pKingdom);
+                    picked = PickFromPool(pKingdom, taken);
+                    if (picked == null) break;
+                }
+
+                taken.Add(picked.data.id);
+                // 无论任命成不成,都不能再从池里挑到他:成功了他已在职,
+                // 失败说明他其实不合格,留在池里只会让这个循环空转。
+                GeneralCandidatePool.Remove(pKingdom, picked);
+                if (!AppointGeneral(picked, CandidateScore(picked))) continue;
+                active.Add(picked);
             }
+        }
+
+        /// <summary>
+        /// 从持久池里取当前全分最高、且仍然合格的人。
+        ///
+        /// 表按<b>稳定分</b>降序,漂移项(军队长、职业、战斗属性)在这里补回。
+        /// 扫描在「后面的人把漂移项拿满也追不上」时停止 —— 判据见
+        /// <see cref="GeneralShortlistRules.NeedsMoreForVolatile"/>,所以这和
+        /// 「对全池算全分后排序取第一」结果相同,只是不用碰整张表。
+        /// </summary>
+        private static Actor PickFromPool(Kingdom pKingdom,
+            HashSet<long> pTaken)
+        {
+            GeneralCandidatePool.Table table =
+                GeneralCandidatePool.GetOrBuild(pKingdom,
+                    () => BuildCandidateTable(pKingdom));
+            Actor best = null;
+            int bestFull = 0;
+            var stale = new List<Actor>();
+            for (int index = 0; index < table.Count; index++)
+            {
+                int stable = table.Stable[index];
+                if (best != null &&
+                    !GeneralShortlistRules.NeedsMoreForVolatile(bestFull,
+                        stable)) break;
+                if (stable + GeneralShortlistRules.VolatileCap <
+                    GeneralShortlistRules.MinimumAppointScore) break;
+                Actor actor = table.Actors[index];
+                if (actor?.data == null || pTaken.Contains(table.Ids[index]))
+                    continue;
+                // 「多收了人」这个漂移方向就在这里收口:资格是逐个复核的,
+                // 所以漏接一次摘除事件不会让不合格的人真的上任。
+                if (!CanRemainGeneral(actor, pKingdom))
+                {
+                    stale.Add(actor);
+                    continue;
+                }
+
+                int full = GeneralShortlistRules.FullScore(stable,
+                    IsArmyCaptain(actor), SafeIsWarrior(actor),
+                    CombatBonus(actor));
+                if (full < GeneralShortlistRules.MinimumAppointScore) continue;
+                // 并列时取表里在前的那个。表已经是全序(稳定分降序、同分 id
+                // 升序),所以位置本身就是判据;这里再按 id 比一次等于同一次
+                // 选择里叠了第二套并列规则,前缀扫描和全量扫描会给出不同的人。
+                // 对拍见 GeneralShortlistRulesTests.BoundedScanMatchesFullScan。
+                if (best == null || full > bestFull)
+                {
+                    best = actor;
+                    bestFull = full;
+                }
+            }
+
+            for (int index = 0; index < stale.Count; index++)
+                GeneralCandidatePool.Remove(pKingdom, stale[index]);
+            return best;
+        }
+
+        /// <summary>
+        /// 全量建表 —— 每王国**一次**,之后靠事件维护。功绩一条 SQL 批量读入,
+        /// 不再每人一条(那是 general_refresh 191ms 的主要来源)。
+        /// </summary>
+        private static GeneralCandidatePool.Table BuildCandidateTable(
+            Kingdom pKingdom)
+        {
+            var table = new GeneralCandidatePool.Table();
+            if (pKingdom?.data == null) return table;
+            Dictionary<long, int> merits =
+                GeneralMeritIndex.LoadForKingdom(pKingdom.id);
+            var scored = new List<KeyValuePair<long, int>>();
+            var byId = new Dictionary<long, Actor>();
+            List<Actor> units;
+            try { units = pKingdom.getUnits()?.ToList() ?? new List<Actor>(); }
+            catch { return table; }
+
+            for (int index = 0; index < units.Count; index++)
+            {
+                Actor unit = units[index];
+                if (unit?.data == null || byId.ContainsKey(unit.data.id))
+                    continue;
+                int merit = GeneralMeritIndex.Merit(merits, unit);
+                if (!CanEnterPool(unit, pKingdom, merit)) continue;
+                int stable = StableScore(unit, merit);
+                if (stable + GeneralShortlistRules.VolatileCap <= 0) continue;
+                byId[unit.data.id] = unit;
+                scored.Add(new KeyValuePair<long, int>(unit.data.id, stable));
+            }
+
+            scored.Sort((left, right) =>
+                GeneralShortlistRules.SortsBefore(left.Value, left.Key,
+                    right.Value, right.Key) ? -1
+                : left.Key == right.Key && left.Value == right.Value ? 0 : 1);
+            for (int index = 0; index < scored.Count; index++)
+            {
+                table.Actors.Add(byId[scored[index].Key]);
+                table.Stable.Add(scored[index].Value);
+                table.Ids.Add(scored[index].Key);
+                table.Members.Add(scored[index].Key);
+            }
+
+            return table;
         }
 
         private static bool AppointGeneral(Actor pActor, int pScore,
@@ -433,36 +551,97 @@ namespace AncientWarfare3.core.lineage
                 pBypassEligibility: true);
         }
 
-        private static List<GeneralCandidate> CollectCandidates(Kingdom pKingdom, List<Actor> pActive)
-        {
-            var activeIds = new HashSet<long>(pActive.Where(a => a?.data != null).Select(a => a.data.id));
-            var list = new List<GeneralCandidate>();
-            foreach (Actor unit in pKingdom.getUnits())
-            {
-                if (unit?.data == null || activeIds.Contains(unit.data.id)) continue;
-                if (!CanRemainGeneral(unit, pKingdom)) continue;
-                int score = CandidateScore(unit);
-                if (score <= 0) continue;
-                list.Add(new GeneralCandidate { actor = unit, score = score });
-            }
-            list.Sort((a, b) => b.score.CompareTo(a.score));
-            return list;
-        }
-
         private static int CandidateScore(Actor pActor)
         {
             if (pActor?.data == null) return 0;
-            int score = GetMerit(pActor) * 2;
-            if (IsArmyCaptain(pActor)) score += 30;
-            if (pActor.isCityLeader()) score += 20;
-            if (ChronicleGate.IsNobleActor(pActor)) score += 15;
+            return GeneralShortlistRules.FullScore(
+                StableScore(pActor, GetMerit(pActor)), IsArmyCaptain(pActor),
+                SafeIsWarrior(pActor), CombatBonus(pActor));
+        }
+
+        /// <summary>
+        /// 评分里**由离散事件改变**的那一半 —— 功绩、城主、爵位、宗室。
+        /// 这些能在改变时换位,所以进持久表。
+        ///
+        /// 余下三项(军队长、职业、战斗属性)会自己漂移,没有事件可挂,
+        /// 由 <see cref="GeneralShortlistRules.FullScore"/> 在取人时补回。
+        /// </summary>
+        private static int StableScore(Actor pActor, int pMerit)
+        {
+            if (pActor?.data == null) return 0;
+            int score = pMerit * 2;
+            try { if (pActor.isCityLeader()) score += 20; } catch { }
+            try { if (ChronicleGate.IsNobleActor(pActor)) score += 15; }
+            catch { }
             if (IsRoyalAdultNonHeir(pActor)) score += 10;
-            if (pActor.isWarrior()) score += 8;
-            score += Math.Min(15, Mathf.RoundToInt(CombatScore(pActor) * 0.04f));
             return score;
         }
 
+        private static bool SafeIsWarrior(Actor pActor)
+        {
+            try { return pActor != null && pActor.isWarrior(); }
+            catch { return false; }
+        }
+
+        private static int CombatBonus(Actor pActor)
+        {
+            if (pActor?.data == null) return 0;
+            return Math.Min(GeneralShortlistRules.CombatCap,
+                Mathf.RoundToInt(CombatScore(pActor) * 0.04f));
+        }
+
+        /// <summary>
+        /// 建表时的入池判定。传入已经批量读好的功绩,免得
+        /// <see cref="CanRemainGeneral"/> 内部再为每个人问一条 SQL ——
+        /// 全国几千人时那是几千次往返。
+        /// </summary>
+        private static bool CanEnterPool(Actor pActor, Kingdom pKingdom,
+            int pMerit)
+        {
+            if (!CanRemainGeneralCore(pActor, pKingdom)) return false;
+            return HasGeneralQualification(pActor, pMerit);
+        }
+
+        /// <summary>
+        /// 入池 / 换位的统一入口。事件方只要说「这个人变了」,
+        /// 该进的进、该摘的摘、该换位的换位,判定只写在这一处。
+        /// </summary>
+        internal static void SyncCandidatePool(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            Kingdom kingdom = pActor.kingdom;
+            if (kingdom?.data == null) return;
+            // 没建过表的王国不用管 —— 它第一次建表时自然包含当前状态。
+            if (!GeneralCandidatePool.HasTable(kingdom)) return;
+            if (IsGeneral(pActor) || !CanRemainGeneral(pActor, kingdom))
+            {
+                GeneralCandidatePool.Remove(kingdom, pActor);
+                return;
+            }
+
+            GeneralCandidatePool.Reposition(kingdom, pActor,
+                StableScore(pActor, GetMerit(pActor)));
+        }
+
+        /// <summary>换了国籍 / 死了 —— 从旧国的池里摘掉,再按新状态入池。</summary>
+        internal static void ForgetCandidate(long pKingdomId, Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            GeneralCandidatePool.RemoveById(pKingdomId, pActor.data.id);
+        }
+
+        internal static void ClearCandidatePools() =>
+            GeneralCandidatePool.ClearRuntime();
+
         private static bool CanRemainGeneral(Actor pActor, Kingdom pKingdom)
+        {
+            if (!CanRemainGeneralCore(pActor, pKingdom)) return false;
+            return HasGeneralQualification(pActor, GetMerit(pActor));
+        }
+
+        /// <summary>硬性排除项 —— 与功绩无关,所以不碰数据库。</summary>
+        private static bool CanRemainGeneralCore(Actor pActor,
+            Kingdom pKingdom)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
             if (!RoyalAsylumRules.CanPerformProtectedRole(
@@ -478,8 +657,23 @@ namespace AncientWarfare3.core.lineage
             if (DynasticReproductionService
                 .ShouldProtectFromOrdinaryMilitaryService(pActor)) return false;
             if (pActor.hasTrait("madness")) return false;
-            return IsArmyCaptain(pActor) || pActor.isCityLeader() || pActor.isWarrior() ||
-                   ChronicleGate.IsNobleActor(pActor) || GetMerit(pActor) >= 20 || IsRoyalAdultNonHeir(pActor);
+            return true;
+        }
+
+        /// <summary>
+        /// 「凭什么当将领」这一问。功绩由调用方传入 —— 建表时那是批量读来的,
+        /// 逐人复核时才现读。
+        /// </summary>
+        private static bool HasGeneralQualification(Actor pActor, int pMerit)
+        {
+            if (pActor?.data == null) return false;
+            if (pMerit >= 20) return true;
+            if (IsArmyCaptain(pActor)) return true;
+            try { if (pActor.isCityLeader()) return true; } catch { }
+            if (SafeIsWarrior(pActor)) return true;
+            try { if (ChronicleGate.IsNobleActor(pActor)) return true; }
+            catch { }
+            return IsRoyalAdultNonHeir(pActor);
         }
 
         private static bool IsRoyalAdultNonHeir(Actor pActor)
@@ -604,6 +798,9 @@ namespace AncientWarfare3.core.lineage
                 CourtPyramidRoleId.General, pReason ?? "");
             OfficialCareerStateService.ClearCurrentOffice(pActor,
                 kingdom?.id ?? -1L, CourtPyramidRoleId.General);
+            // 卸任的人重新变成候选 —— 除非他已经不合格(死了、被贬为奴、
+            // 换了国籍),SyncCandidatePool 会自己分辨。
+            SyncCandidatePool(pActor);
             if (careerEnded && kingdom?.data != null)
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, kingdom,
                     CourtPyramidRoleId.General, pReason ?? "");

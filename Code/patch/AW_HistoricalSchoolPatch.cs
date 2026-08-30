@@ -371,6 +371,12 @@ namespace AncientWarfare3.patch
             CourtVacancyReconciliationService.ActorLeftKingdom(__state);
             CourtVacancyReconciliationService.CandidatePoolChanged(
                 pKingdomToSet);
+            // 将领候选池按人维护:从旧国摘掉、按新国的状态入池,不整表作废。
+            if (__state?.data != null)
+                AncientWarfare3.core.lineage.GeneralService.ForgetCandidate(
+                    __state.id, __instance);
+            AncientWarfare3.core.lineage.GeneralService.SyncCandidatePool(
+                __instance);
         }
 
         [HarmonyPostfix]

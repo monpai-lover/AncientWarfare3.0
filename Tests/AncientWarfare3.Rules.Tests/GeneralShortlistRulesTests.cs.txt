@@ -1,0 +1,190 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
+
+internal static class GeneralShortlistRulesTests
+{
+    public static void Run()
+    {
+        StableOrderIsATotalOrder();
+        FullScoreClampsCombat();
+        VolatileCapIsTheRealBound();
+        BoundedScanMatchesFullScan();
+        MinimumScoreIsRespected();
+        TakenActorsAreSkipped();
+    }
+
+    private static void StableOrderIsATotalOrder()
+    {
+        Expect(GeneralShortlistRules.SortsBefore(50, 9L, 40, 1L),
+            "higher stable score sorts first");
+        Expect(!GeneralShortlistRules.SortsBefore(40, 1L, 50, 9L),
+            "lower stable score sorts later");
+        Expect(GeneralShortlistRules.SortsBefore(40, 1L, 40, 9L),
+            "ties break by ascending id");
+        Expect(!GeneralShortlistRules.SortsBefore(40, 9L, 40, 1L),
+            "id tie-break is antisymmetric");
+    }
+
+    private static void FullScoreClampsCombat()
+    {
+        int capped = GeneralShortlistRules.FullScore(0, false, false, 999);
+        Expect(capped == GeneralShortlistRules.CombatCap,
+            "combat contribution is capped");
+        Expect(GeneralShortlistRules.FullScore(0, false, false, -5) == 0,
+            "negative combat does not subtract");
+        int all = GeneralShortlistRules.FullScore(7, true, true,
+            GeneralShortlistRules.CombatCap);
+        Expect(all == 7 + GeneralShortlistRules.VolatileCap,
+            "all volatile terms at maximum equal the declared cap");
+    }
+
+    private static void VolatileCapIsTheRealBound()
+    {
+        // The early-out is only sound if no volatile combination can exceed
+        // VolatileCap. Enumerate every combination and check.
+        int worst = 0;
+        for (int captain = 0; captain < 2; captain++)
+        for (int warrior = 0; warrior < 2; warrior++)
+        for (int combat = -3; combat <= GeneralShortlistRules.CombatCap + 3;
+             combat++)
+        {
+            int gain = GeneralShortlistRules.FullScore(0, captain == 1,
+                warrior == 1, combat);
+            if (gain > worst) worst = gain;
+        }
+        Expect(worst == GeneralShortlistRules.VolatileCap,
+            "no volatile combination exceeds VolatileCap");
+
+        Expect(!GeneralShortlistRules.NeedsMoreForVolatile(100,
+                100 - GeneralShortlistRules.VolatileCap - 1),
+            "a candidate that cannot catch up stops the scan");
+        Expect(GeneralShortlistRules.NeedsMoreForVolatile(100,
+                100 - GeneralShortlistRules.VolatileCap),
+            "a candidate that can exactly tie must still be examined");
+    }
+
+    private static void BoundedScanMatchesFullScan()
+    {
+        var rng = new Random(20260830);
+        for (int trial = 0; trial < 4000; trial++)
+        {
+            int count = 1 + rng.Next(40);
+            var stable = new List<int>();
+            var ids = new List<long>();
+            var captain = new List<bool>();
+            var warrior = new List<bool>();
+            var combat = new List<int>();
+            var taken = new HashSet<long>();
+            for (int index = 0; index < count; index++)
+            {
+                stable.Add(rng.Next(0, 120));
+                ids.Add(rng.Next(1, 100000));
+                captain.Add(rng.Next(2) == 0);
+                warrior.Add(rng.Next(2) == 0);
+                combat.Add(rng.Next(-2, 18));
+            }
+            DedupeIds(ids);
+            SortByStable(stable, ids, captain, warrior, combat);
+            for (int index = 0; index < count; index++)
+                if (rng.Next(6) == 0) taken.Add(ids[index]);
+
+            int minimum = rng.Next(2) == 0
+                ? 0 : GeneralShortlistRules.MinimumAppointScore;
+            int bounded = GeneralShortlistRules.PickBest(stable, ids, captain,
+                warrior, combat, taken, minimum);
+            int reference = FullScan(stable, ids, captain, warrior, combat,
+                taken, minimum);
+            Expect(bounded == reference,
+                "bounded scan disagrees with full scan on trial " + trial +
+                " (bounded=" + bounded + " full=" + reference + ")");
+        }
+    }
+
+    private static void MinimumScoreIsRespected()
+    {
+        var stable = new List<int> { 0 };
+        var ids = new List<long> { 5L };
+        int picked = GeneralShortlistRules.PickBest(stable, ids,
+            new List<bool> { false }, new List<bool> { false },
+            new List<int> { 0 }, new HashSet<long>(),
+            GeneralShortlistRules.MinimumAppointScore);
+        Expect(picked == -1, "a candidate below the threshold is rejected");
+
+        picked = GeneralShortlistRules.PickBest(
+            new List<int> { GeneralShortlistRules.MinimumAppointScore }, ids,
+            new List<bool> { false }, new List<bool> { false },
+            new List<int> { 0 }, new HashSet<long>(),
+            GeneralShortlistRules.MinimumAppointScore);
+        Expect(picked == 0, "a candidate exactly at the threshold qualifies");
+    }
+
+    private static void TakenActorsAreSkipped()
+    {
+        var stable = new List<int> { 90, 80 };
+        var ids = new List<long> { 1L, 2L };
+        var flags = new List<bool> { false, false };
+        var combat = new List<int> { 0, 0 };
+        int picked = GeneralShortlistRules.PickBest(stable, ids, flags, flags,
+            combat, new HashSet<long> { 1L }, 0);
+        Expect(picked == 1, "a reserved leader is passed over");
+        picked = GeneralShortlistRules.PickBest(stable, ids, flags, flags,
+            combat, new HashSet<long> { 1L, 2L }, 0);
+        Expect(picked == -1, "an entirely reserved table yields nobody");
+    }
+
+    private static int FullScan(List<int> pStable, List<long> pIds,
+        List<bool> pCaptain, List<bool> pWarrior, List<int> pCombat,
+        HashSet<long> pTaken, int pMinimum)
+    {
+        int best = -1;
+        int bestFull = 0;
+        for (int index = 0; index < pIds.Count; index++)
+        {
+            if (pTaken.Contains(pIds[index])) continue;
+            int full = GeneralShortlistRules.FullScore(pStable[index],
+                pCaptain[index], pWarrior[index], pCombat[index]);
+            if (full < pMinimum) continue;
+            if (best < 0 || full > bestFull)
+            {
+                best = index;
+                bestFull = full;
+            }
+        }
+        return best;
+    }
+
+    private static void DedupeIds(List<long> pIds)
+    {
+        var seen = new HashSet<long>();
+        for (int index = 0; index < pIds.Count; index++)
+        {
+            while (!seen.Add(pIds[index])) pIds[index] = pIds[index] + 1L;
+        }
+    }
+
+    private static void SortByStable(List<int> pStable, List<long> pIds,
+        List<bool> pCaptain, List<bool> pWarrior, List<int> pCombat)
+    {
+        for (int i = 1; i < pIds.Count; i++)
+        for (int j = i; j > 0; j--)
+        {
+            if (GeneralShortlistRules.SortsBefore(pStable[j - 1], pIds[j - 1],
+                    pStable[j], pIds[j])) break;
+            Swap(pStable, j); Swap(pIds, j); Swap(pCaptain, j);
+            Swap(pWarrior, j); Swap(pCombat, j);
+        }
+    }
+
+    private static void Swap<T>(List<T> pList, int pRight)
+    {
+        T carry = pList[pRight - 1];
+        pList[pRight - 1] = pList[pRight];
+        pList[pRight] = carry;
+    }
+
+    private static void Expect(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new Exception("FAIL: " + pMessage);
+    }
+}
