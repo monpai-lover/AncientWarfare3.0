@@ -487,6 +487,7 @@ if (args.Length == 1 && args[0] == "--court-vacancy-events")
     CourtCandidateWakeRulesTests.Run();
     CourtVacancyPoolMemoRulesTests.Run();
     CountyShortlistRulesTests.Run();
+    PolicyCompletionRulesTests.Run();
     CourtVacancySourceGuardTests.Run();
     Console.WriteLine("Court vacancy event tests passed.");
     return;

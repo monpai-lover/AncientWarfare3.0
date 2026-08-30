@@ -128,6 +128,7 @@ namespace AncientWarfare3.core.court
                 return CourtVacancyOutcome.Invalid;
 
             long leaderNativeCityId = NativeCityId(pCity.leader);
+            CountyFillDiagnostics.Count("city_attempt");
             // 两遍选择:先在官员候选池里按严格资历找,找不到才用空缺兜底扫全量。
             // 设计见 docs/superpowers/plans/2026-08-19-nine-rank-vacancy-fallback.md
             // Task 3 Step 4 —— 中央层一直是这么做的(CourtService 里那两遍),
@@ -138,13 +139,17 @@ namespace AncientWarfare3.core.court
                 pKingdom, pCity, leaderNativeCityId, pVacancy.OfficeId,
                 pAllowVacancyPromotion: false, pSession);
             if (candidate == null)
+            {
+                CountyFillDiagnostics.Count("city_fallback_used");
                 candidate = SelectCandidate(pSession.FactsCandidates(
                         pKingdom,
                         actor => CanUseCandidateFacts(actor, pKingdom)),
                     pKingdom, pCity, leaderNativeCityId, pVacancy.OfficeId,
                     pAllowVacancyPromotion: true, pSession);
+            }
             if (candidate == null)
-                return CourtVacancyOutcome.NoCandidate;
+                return CountyFillDiagnostics.Report("city_no_candidate",
+                    CourtVacancyOutcome.NoCandidate);
             if (pVacancy.IsLocalChief)
             {
                 bool committed = ManualLocalChiefAppointmentService.TryAppoint(
@@ -157,11 +162,13 @@ namespace AncientWarfare3.core.court
             }
             if (!CourtService.TryAssignLocalOfficer(candidate, pKingdom,
                     pCity, pVacancy.OfficeId, true))
-                return CourtVacancyOutcome.TechnicalFailure;
+                return CountyFillDiagnostics.Report("city_assign_failed",
+                    CourtVacancyOutcome.TechnicalFailure);
             // 候选表按轮缓存,刚上任的人必须显式登记占用 —— 原来靠下一个席位
             // 重跑 CanUseCandidateFacts 时读到他新写入的 COURT_OFFICE_ID。
             pSession.Reserve(candidate, pVacancy);
-            return CourtVacancyOutcome.Filled;
+            return CountyFillDiagnostics.Report("city_filled",
+                CourtVacancyOutcome.Filled);
         }
 
         /// <summary>
@@ -229,9 +236,12 @@ namespace AncientWarfare3.core.court
                 pool.Count);
 
             bool bounded = pLimit != int.MaxValue;
-            int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
+            // 与候选人无关的四问在循环外算一次。原来每名候选都要重算科举/九品
+            // 两问和品级、方镇两问,而内层是两三千人。
+            CourtAppointmentContext context = CourtAppointmentContext.Build(
                 pKingdom, CourtOfficeLayer.County,
                 CourtOfficeId.CountyMagistrate, pCity);
+            int officeGrade = context.OfficeGrade;
             // 门第档次只在最低一级地方官上起作用 —— 和城分支的 lowOffice 同一条。
             bool lowOffice = LocalLowOfficeVacancyRules.IsLowestLocalGrade(
                 officeGrade);
@@ -263,7 +273,8 @@ namespace AncientWarfare3.core.court
                             pQualificationsCaptured: true,
                             pAllowLocalLowerQualification: true,
                             pCity: pCity,
-                            pServiceHistorySession: pSession)) continue;
+                            pServiceHistorySession: pSession,
+                            pContext: context)) continue;
                 qualifiedCount++;
                 int tier = 0;
                 if (lowOffice)
@@ -557,14 +568,22 @@ namespace AncientWarfare3.core.court
             bool pAllowVacancyPromotion, CourtCandidateSession pSession,
             int pLimit)
         {
-            int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
+            // 与候选人无关的四问在循环外算一次 —— 见 CourtAppointmentContext。
+            // 九品制那一问原来还在循环体里(下面的 HasNineRankSystem)又问了
+            // 一遍,于是每名候选要把王国已完成技术串比对三趟。
+            CourtAppointmentContext context = CourtAppointmentContext.Build(
                 pKingdom, CourtOfficeLayer.City, pOfficeId, pCity);
-            bool regionalGovernor = OfficialCareerStateService.
-                IsRegionalGovernorSeat(pKingdom, CourtOfficeLayer.City,
-                    pOfficeId, pCity);
+            int officeGrade = context.OfficeGrade;
+            bool regionalGovernor = context.RegionalGovernor;
+            bool nineRankSystem = context.NineRankSystem;
             bool lowOffice = LocalLowOfficeVacancyRules.IsLowestLocalGrade(
                 officeGrade);
             bool bounded = pLimit != int.MaxValue;
+            // 建表次数和累计遍历行数。城分支的候选表按 (城, 官职, 通道) 缓存,
+            // 所以「一次王国补缺一共遍历了多少行」= 建表次数 × 候选池大小 ——
+            // 这个数就是这条热路径的规模,县分支的 pool 计数看不到它。
+            CountyFillDiagnostics.Count("city_build");
+            CountyFillDiagnostics.Count("city_build_rows", pPool?.Count ?? 0);
             var shortlist = new List<Actor>();
             var scores = new List<int>();
             var tiers = new List<int>();
@@ -585,7 +604,8 @@ namespace AncientWarfare3.core.court
                             pQualificationsCaptured: pSession != null,
                             pAllowLocalLowerQualification: true,
                             pCity: pCity,
-                            pServiceHistorySession: pSession)) continue;
+                            pServiceHistorySession: pSession,
+                            pContext: context)) continue;
                 actor.data.get(LineageKeys.OFFICER_MERIT,
                     out float merit, 0f);
                 bool formalLocalQualification = pSession != null
@@ -607,8 +627,7 @@ namespace AncientWarfare3.core.court
                     int resolvedRank =
                         OfficialCareerRankRules.ResolveLocalVacancyPromotionRank(
                             OfficialCareerStateService.ReadRankFast(actor),
-                            officeGrade, CourtService.HasNineRankSystem(
-                                pKingdom),
+                            officeGrade, nineRankSystem,
                             formalLocalQualification ||
                             LocalLowOfficeVacancyRules.CanUseUnqualifiedFallback(
                                 isCityLayer: true, officeGrade: officeGrade,

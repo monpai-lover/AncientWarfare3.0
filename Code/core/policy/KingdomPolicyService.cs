@@ -1247,7 +1247,9 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null || string.IsNullOrEmpty(pId)) return false;
             string raw = GetCompletedRaw(pKingdom, pKind);
-            return Split(raw).Contains(pId);
+            // 不切分,逐段比对。见 PolicyCompletionRules.ContainsId 的说明:
+            // 原来的切分写法是 court-vacancy 单项 100~270ms 的主要来源。
+            return PolicyCompletionRules.ContainsId(raw, pId);
         }
 
         internal static bool TryExecuteDeJureMergeDecision(Kingdom pKingdom,

@@ -979,7 +979,7 @@ namespace AncientWarfare3.core.policy
                 " court_death_steps=" +
                 AncientWarfare3.core.court.CourtDeathStepDiagnostics
                     .TakeDiagnostics() +
-                " county_fill=" +
+                " local_fill=" +
                 AncientWarfare3.core.court.CountyFillDiagnostics
                     .TakeDiagnostics() +
                 // 分配量归因(KB/区间)。耗时会被 GC 停顿污染,分配量不会 ——

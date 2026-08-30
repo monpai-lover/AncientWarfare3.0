@@ -349,6 +349,50 @@ internal static class CourtVacancySourceGuardTests
             "the bounded pass must precede the exhaustive rebuild");
         Contains(session, "int pMode",
             "the county cache must key on the build mode");
+
+        // ⑧ 与候选人无关的事实必须提到循环外。
+        //    建候选表是「候选池 × (城,官职) 对数」的双层循环,8k 存档上内层
+        //    是两三千人。而 CanReceiveFormalCivilAppointment 开头那四问 ——
+        //    有没有科举、有没有九品、这个席位几品、是不是方镇主官 —— 只取决于
+        //    (王国,层,官职,城),却被每名候选各算一遍。前两问底下是「已完成
+        //    技术串」的逐项比对,原来每问一次就切一次串。实测 court-vacancy
+        //    单项 100~270ms、aw3_authority 单区间 74MB 分配,主要就出在这里。
+        string policy = Read("Code/core/policy/KingdomPolicyService.cs");
+        Contains(policy, "PolicyCompletionRules.ContainsId(",
+            "the completed-policy check must not split the raw string");
+        False(MethodBody(policy,
+                    "public static bool IsCompleted(Kingdom pKingdom, PolicyNodeKind pKind")
+                .Contains("Split(", StringComparison.Ordinal),
+            "the hottest policy predicate must stay allocation free");
+        Contains(qualification, "pContext.Valid",
+            "the appointment gate must accept a precomputed office context");
+        Contains(local, "CourtAppointmentContext.Build(",
+            "candidate table builds must precompute the office context");
+        string cityBuild = MethodBody(local,
+            "private static IReadOnlyList<Actor> BuildCityCandidates");
+        Contains(cityBuild, "pContext: context",
+            "the city build must hand the office context to the gate");
+        Contains(countyBuild, "pContext: context",
+            "the county build must hand the office context to the gate");
+        // 三个具体的 per-actor 重算点,各锁一条。
+        False(cityBuild.Contains("CourtService.HasNineRankSystem(",
+                StringComparison.Ordinal),
+            "the city build must not re-read the nine-rank tech per candidate");
+        False(cityBuild.Contains("OfficialCareerStateService.OfficeGradeForOffice(",
+                StringComparison.Ordinal),
+            "the city build must not resolve the office grade per candidate");
+        False(cityBuild.Contains("IsRegionalGovernorSeat(",
+                StringComparison.Ordinal),
+            "the city build must not resolve the region seat per candidate");
+        False(countyBuild.Contains("OfficialCareerStateService.OfficeGradeForOffice(",
+                StringComparison.Ordinal),
+            "the county build must not resolve the office grade per candidate");
+        // 城分支此前一个计数都没有 —— 于是日志里 county_fill 长期是 none、
+        // 耗时却在三百毫秒,查不出规模。
+        Contains(local, "city_build_rows",
+            "the city fill path must report how many candidate rows it walked");
+        Contains(local, "city_attempt",
+            "the city fill path must report its attempts");
     }
 
     private static string MethodBody(string pText, string pMethodName)

@@ -110,18 +110,29 @@ namespace AncientWarfare3.core.court
             bool pQualificationsCaptured = false,
             bool pAllowLocalLowerQualification = false,
             City pCity = null,
-            CourtCandidateSession pServiceHistorySession = null)
+            CourtCandidateSession pServiceHistorySession = null,
+            CourtAppointmentContext pContext = default)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
-            bool examinationSystem = HasExaminationSystem(pKingdom);
-            bool nineRankSystem = CourtService.HasNineRankSystem(pKingdom);
+            // 与候选人无关的四问由调用方在循环外算好传进来。没传就现算,
+            // 单点调用的老路径行为不变。
+            bool examinationSystem = pContext.Valid
+                ? pContext.ExaminationSystem
+                : HasExaminationSystem(pKingdom);
+            bool nineRankSystem = pContext.Valid
+                ? pContext.NineRankSystem
+                : CourtService.HasNineRankSystem(pKingdom);
             if (!examinationSystem && !nineRankSystem) return true;
             if (IsAppointmentExempt(pActor, pKingdom, pLayer, pOfficeId))
                 return true;
-            int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
-                pKingdom, pLayer, pOfficeId, pCity);
-            bool regionalGovernor = OfficialCareerStateService.
-                IsRegionalGovernorSeat(pKingdom, pLayer, pOfficeId, pCity);
+            int officeGrade = pContext.Valid
+                ? pContext.OfficeGrade
+                : OfficialCareerStateService.OfficeGradeForOffice(
+                    pKingdom, pLayer, pOfficeId, pCity);
+            bool regionalGovernor = pContext.Valid
+                ? pContext.RegionalGovernor
+                : OfficialCareerStateService.IsRegionalGovernorSeat(
+                    pKingdom, pLayer, pOfficeId, pCity);
             bool countyLayer = pLayer == CourtOfficeLayer.County;
             bool localLayer = pLayer == CourtOfficeLayer.City || countyLayer;
             bool localLeaderQualificationBypass = pAllowLocalLowerQualification &&

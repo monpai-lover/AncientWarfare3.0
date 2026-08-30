@@ -1,0 +1,94 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.core.policy;
+
+/// <summary>
+/// 已完成串的 id 判定必须和原来的 Split().Contains() 逐字节等价。
+///
+/// 这一条被换掉是为了性能(它是补缺热路径上每名候选各问两次的谓词),
+/// 所以判据只有一个:**结果不能有任何变化**。随机串对拍。
+/// </summary>
+internal static class PolicyCompletionRulesTests
+{
+    public static void Run()
+    {
+        KnownShapes();
+        MatchesSplitContains();
+        Console.WriteLine("PolicyCompletionRulesTests passed.");
+    }
+
+    /// <summary>原写法:Split(';', RemoveEmptyEntries).Contains(id)。</summary>
+    private static bool Reference(string raw, string id)
+    {
+        if (string.IsNullOrEmpty(raw)) return false;
+        return raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Contains(id);
+    }
+
+    private static void Expect(bool actual, bool expected, string what)
+    {
+        if (actual != expected)
+            throw new Exception(what + ": expected " + expected +
+                " got " + actual);
+    }
+
+    private static void KnownShapes()
+    {
+        Expect(PolicyCompletionRules.ContainsId("", "a"), false, "empty raw");
+        Expect(PolicyCompletionRules.ContainsId(null, "a"), false, "null raw");
+        Expect(PolicyCompletionRules.ContainsId("a", ""), false, "empty id");
+        Expect(PolicyCompletionRules.ContainsId("a", null), false, "null id");
+        Expect(PolicyCompletionRules.ContainsId("a", "a"), true, "single");
+        Expect(PolicyCompletionRules.ContainsId("a;b;c", "c"), true, "last");
+        Expect(PolicyCompletionRules.ContainsId("a;b;c", "a"), true, "first");
+        Expect(PolicyCompletionRules.ContainsId("a;b;c", "b"), true, "middle");
+        Expect(PolicyCompletionRules.ContainsId("a;b;c", "d"), false, "absent");
+        // 前缀/子串不算命中 —— 段必须整段相等。
+        Expect(PolicyCompletionRules.ContainsId("abc", "ab"), false, "prefix");
+        Expect(PolicyCompletionRules.ContainsId("abc;d", "bc"), false,
+            "infix");
+        Expect(PolicyCompletionRules.ContainsId("ab;abc", "abc"), true,
+            "longer after shorter");
+        // 空段。
+        Expect(PolicyCompletionRules.ContainsId(";;a;;", "a"), true,
+            "empty segments around");
+        Expect(PolicyCompletionRules.ContainsId(";;", "a"), false,
+            "only separators");
+        Expect(PolicyCompletionRules.ContainsId("a;", "a"), true,
+            "trailing separator");
+        // 序数比较:大小写敏感。
+        Expect(PolicyCompletionRules.ContainsId("aw_tech_x", "AW_TECH_X"),
+            false, "case sensitive");
+        // 真实形状。
+        const string real =
+            "aw_tech_writing;aw_tech_nine_rank_system;aw_tech_civil_service";
+        Expect(PolicyCompletionRules.ContainsId(real,
+            "aw_tech_nine_rank_system"), true, "real hit");
+        Expect(PolicyCompletionRules.ContainsId(real, "aw_tech_nine_rank"),
+            false, "real prefix miss");
+    }
+
+    private static void MatchesSplitContains()
+    {
+        var random = new Random(20260830);
+        var tokens = new List<string>
+        {
+            "a", "b", "ab", "abc", "", "aw_tech_x", "aw_tech_xy", "x;y"
+        };
+        for (int trial = 0; trial < 4000; trial++)
+        {
+            int segments = random.Next(0, 6);
+            var parts = new List<string>();
+            for (int i = 0; i < segments; i++)
+                parts.Add(tokens[random.Next(tokens.Count)]);
+            string raw = string.Join(";", parts);
+            string id = tokens[random.Next(tokens.Count)];
+            bool expected = Reference(raw, id);
+            bool actual = PolicyCompletionRules.ContainsId(raw, id);
+            if (actual != expected)
+                throw new Exception("divergence on raw=[" + raw + "] id=[" +
+                    id + "]: expected " + expected + " got " + actual);
+        }
+    }
+}

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace AncientWarfare3.core.court
 {
     /// <summary>
-    /// 县令自动补缺的逐级归因。
+    /// 县令与城官自动补缺的逐级归因。
     ///
     /// 现象:旧存档里县令席位长期显示「空缺」、候选也在,但 AI 永不任命。而
     /// LocalCourtAppointmentService 的县分支每一环单独看都没有针对县的硬阻断
@@ -21,6 +21,11 @@ namespace AncientWarfare3.core.court
     ///                 补人」的一种可能形状。
     ///   no_qualified  候选全被资格闸门挡掉。配合 pool / after_available /
     ///                 after_facts 三个计数就能看出是哪一级清零。
+    ///
+    /// city_ 前缀的是城官分支的同一套观测。城分支才是 8k 存档上 court-vacancy
+    /// 的耗时主体(县分支的候选表按城缓存,一轮通常只建一次),而它原来一个
+    /// 计数都没有,于是日志里 county_fill 长期是 none、耗时却在三百毫秒。
+    /// city_build_rows 直接给出「一次王国补缺一共遍历了多少候选行」。
     /// </summary>
     internal static class CountyFillDiagnostics
     {
