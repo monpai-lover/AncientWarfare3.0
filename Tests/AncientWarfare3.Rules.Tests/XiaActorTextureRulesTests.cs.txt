@@ -24,18 +24,47 @@ internal static class XiaActorTextureRulesTests
 
         Equal(null, XiaActorTextureRules.ResolveOfficialBodyDirectory(0),
             "unranked actors do not request an official body");
-        Equal("leader_1", XiaActorTextureRules.ResolveOfficialBodyDirectory(6),
-            "low officials use leader_1");
+        Equal("leader_3", XiaActorTextureRules.ResolveOfficialBodyDirectory(6),
+            "low officials use green leader_3");
         Equal("leader_2", XiaActorTextureRules.ResolveOfficialBodyDirectory(12),
             "middle officials use leader_2");
-        Equal("leader_3", XiaActorTextureRules.ResolveOfficialBodyDirectory(18),
-            "high officials use leader_3");
+        Equal("leader_1", XiaActorTextureRules.ResolveOfficialBodyDirectory(18),
+            "high officials use purple leader_1");
+        Equal("leader_3",
+            XiaActorTextureRules.ResolveOfficialBodyDirectory(0, 30),
+            "unranked low offices still use green leader_3");
+        Equal("leader_2",
+            XiaActorTextureRules.ResolveOfficialBodyDirectory(0, 20),
+            "unranked middle offices still use leader_2");
+        Equal("leader_1",
+            XiaActorTextureRules.ResolveOfficialBodyDirectory(0, 10),
+            "unranked high offices still use purple leader_1");
+        Equal("leader_1",
+            XiaActorTextureRules.ResolveOfficialBodyDirectory(18, 30),
+            "career rank takes precedence over office grade");
+        Equal("heads_leader/head_0",
+            XiaActorTextureRules.ResolveOfficialHeadPath(0, 30),
+            "unranked low offices use the first leader head");
+        Equal("heads_leader/head_1",
+            XiaActorTextureRules.ResolveOfficialHeadPath(0, 20),
+            "unranked middle offices use the second leader head");
+        Equal("heads_leader/head_2",
+            XiaActorTextureRules.ResolveOfficialHeadPath(0, 10),
+            "unranked high offices use the third leader head");
         Equal("heads_leader/head_0",
             XiaActorTextureRules.ResolveOfficialHeadPath(1),
             "low officials use the first leader head");
         Equal("heads_leader/head_2",
             XiaActorTextureRules.ResolveOfficialHeadPath(18),
             "high officials use the third leader head");
+        Equal("heads_warrior/head_0",
+            XiaActorTextureRules.ResolveWarriorHeadPath(0L),
+            "warriors use the first custom head variant for actor id zero");
+        string warriorHead = XiaActorTextureRules.ResolveWarriorHeadPath(-71L);
+        Equal(true,
+            warriorHead == "heads_warrior/head_0" ||
+            warriorHead == "heads_warrior/head_1",
+            "warrior head variants stay within the two custom heads");
 
         int first = XiaActorTextureRules.StableVariantIndex(-71L, 2);
         Equal(first, XiaActorTextureRules.StableVariantIndex(-71L, 2),

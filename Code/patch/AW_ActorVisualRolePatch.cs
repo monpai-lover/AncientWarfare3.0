@@ -84,7 +84,23 @@ namespace AncientWarfare3.patch
                 {
                     case ActorVisualRole.Warrior:
                         if (!__instance.equipment.helmet.isEmpty())
+                        {
+                            if (string.Equals(__instance.asset?.id,
+                                XiaRace.ID, System.StringComparison.Ordinal))
+                            {
+                                Sprite warriorHead =
+                                    SpriteTextureLoader.getSprite(
+                                        textureAsset.texture_path_base +
+                                        XiaActorTextureRules.ResolveWarriorHeadPath(
+                                            __instance.data.id));
+                                if (warriorHead != null)
+                                {
+                                    __instance.cached_sprite_head = warriorHead;
+                                    return false;
+                                }
+                            }
                             specialPath = textureAsset.texture_head_warrior;
+                        }
                         break;
                     case ActorVisualRole.King:
                         specialPath = textureAsset.texture_head_king;
@@ -152,6 +168,28 @@ namespace AncientWarfare3.patch
                     return TryGetWarriorTexturePath(pActor, textureAsset,
                         out pPath);
                 case ActorVisualRole.Leader:
+                    if (string.Equals(pActor.asset?.id, XiaRace.ID,
+                        System.StringComparison.Ordinal) &&
+                        pActor.data != null)
+                    {
+                        pActor.data.get(LineageKeys.OFFICER_RANK, out int rank,
+                            OfficialCareerRankRules.Unranked);
+                        pActor.data.get(LineageKeys.COURT_OFFICE_ID,
+                            out string officeId, "");
+                        pActor.data.get(LineageKeys.COURT_LAYER,
+                            out string layer, "");
+                        int officeGrade =
+                            OfficialCareerStateService.OfficeGradeForOffice(
+                                pActor.kingdom, layer, officeId, pActor.city);
+                        string officialBody =
+                            XiaActorTextureRules.ResolveOfficialBodyDirectory(
+                                rank, officeGrade);
+                        if (!string.IsNullOrEmpty(officialBody))
+                        {
+                            pPath = textureAsset.texture_path_base + officialBody;
+                            return true;
+                        }
+                    }
                     pPath = textureAsset.texture_path_leader;
                     return !string.IsNullOrEmpty(pPath);
                 case ActorVisualRole.King:
@@ -369,22 +407,25 @@ namespace AncientWarfare3.patch
 
         private static string ResolveXiaSpecialHeadPath(Actor pActor)
         {
-            if (pActor.isKing()) return "heads_king/head_0";
+            if (pActor.isKing()) return "heads_special/head_king";
             if (IsXiaHeir(pActor)) return "heads_heir/head_0";
 
             pActor.data.get(LineageKeys.OFFICER_RANK, out int rank,
                 OfficialCareerRankRules.Unranked);
+            pActor.data.get(LineageKeys.COURT_OFFICE_ID,
+                out string officeId, "");
+            pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
+            int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
+                pActor.kingdom, layer, officeId, pActor.city);
             string officialHead =
-                XiaActorTextureRules.ResolveOfficialHeadPath(rank);
+                XiaActorTextureRules.ResolveOfficialHeadPath(rank, officeGrade);
             if (!string.IsNullOrEmpty(officialHead)) return officialHead;
             if (pActor.isCityLeader())
                 return XiaActorTextureRules.ResolveOfficialHeadPath(
                     OfficialCareerRankRules.MinimumRank);
             if (!pActor.isWarrior()) return null;
 
-            int variant = XiaActorTextureRules.StableVariantIndex(
-                pActor.data.id, 2);
-            return "heads_warrior/head_" + variant;
+            return XiaActorTextureRules.ResolveWarriorHeadPath(pActor.data.id);
         }
 
         private static bool IsXiaHeir(Actor pActor)

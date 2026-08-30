@@ -58,8 +58,10 @@ namespace AncientWarfare3.content
             // 头型:夏人有完整头型贴图,保留。
             tex.texture_heads_male = pBasePath + "heads_male";
             tex.texture_heads_female = pBasePath + "heads_female";
-            tex.texture_head_warrior = pBasePath + "heads_warrior/head_0";
-            tex.texture_head_king = pBasePath + "heads_king/head_0";
+            tex.texture_head_warrior =
+                pBasePath + "heads_special/head_warrior";
+            tex.texture_head_king =
+                pBasePath + "heads_special/head_king";
             tex.texture_heads_old_male =
                 pBasePath + "heads_special/head_old_male";
             tex.texture_heads_old_female =

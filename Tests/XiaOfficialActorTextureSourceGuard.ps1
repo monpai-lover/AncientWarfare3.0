@@ -21,10 +21,18 @@ $sources = @{
 
 $requiredFragments = @{
     TexturePatch = @(
-        'XiaActorTextureRules.ResolveOfficialBodyDirectory(rank)',
+        'private static readonly bool EnableOfficialBodySkinSwitch = true;',
+        'if (EnableOfficialBodySkinSwitch)',
+        'XiaActorTextureRules.ResolveOfficialBodyDirectory(',
+        'LineageKeys.COURT_OFFICE_ID',
+        'OfficialCareerStateService.OfficeGradeForOffice(',
         'XiaRace.TEXTURE_PATH + officialBody')
     TextureBinding = @(
         'tex.texture_path_leader = pBasePath + "leader_1";',
+        'tex.texture_head_king =',
+        'pBasePath + "heads_special/head_king";',
+        'tex.texture_head_warrior =',
+        'pBasePath + "heads_special/head_warrior";',
         'tex.texture_heads_old_male =',
         'heads_special/head_old_male',
         'tex.texture_heads_old_female =',
@@ -34,12 +42,16 @@ $requiredFragments = @{
         'XiaActorTextureRules.ExpandSkins(warriorDirs, count)')
     VisualPatch = @(
         'TryApplyXiaSpecialHead(__instance)',
-        'XiaActorTextureRules.ResolveOfficialHeadPath(rank)',
+        'XiaActorTextureRules.ResolveOfficialBodyDirectory(',
+        'pPath = textureAsset.texture_path_base + officialBody',
+        'OfficialCareerStateService.OfficeGradeForOffice(',
+        'LineageKeys.COURT_LAYER',
+        'XiaActorTextureRules.ResolveOfficialHeadPath(',
+        'XiaActorTextureRules.ResolveWarriorHeadPath(',
         'SpriteTextureLoader.getSprite(',
-        'heads_king/head_0', 'heads_heir/head_0',
-        'heads_warrior/head_')
+        'heads_special/head_king', 'heads_heir/head_0')
     AvatarHead = @(
-        'XiaActorTextureRules.ResolveOfficialHeadPath(rank)',
+        'XiaActorTextureRules.ResolveOfficialHeadPath(',
         'SpriteTextureLoader.getSprite(',
         'heads_heir/head_0', 'actor.isCityLeader()')
     Career = @(
@@ -65,6 +77,16 @@ if (-not $rules.Contains('"heads_leader/head_"')) {
 if ($rules.Contains('heads_leaders/')) {
     $failures.Add('The invalid plural heads_leaders path must not be used')
 }
+if (-not $rules.Contains('"heads_warrior/head_"')) {
+    $failures.Add('Warriors must retain the two custom head variants')
+}
+$textureBinding = $sources.TextureBinding
+if ($textureBinding.Contains('tex.texture_head_king = pBasePath + "heads_king/')) {
+    $failures.Add('Vanilla king head must not use the custom heads_king path')
+}
+if ($textureBinding.Contains('tex.texture_head_warrior = pBasePath + "heads_warrior/')) {
+    $failures.Add('Vanilla warrior head must not use the custom heads_warrior path')
+}
 
 if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) {
     $failures.Add("Updated actor texture source is missing: $sourceRoot")
@@ -73,6 +95,9 @@ else {
     foreach ($sourceFile in Get-ChildItem -LiteralPath $sourceRoot -Recurse -File) {
         $relative = $sourceFile.FullName.Substring($sourceRoot.Length).
             TrimStart('\', '/')
+        if ($relative -like 'heads_king\*') {
+            continue
+        }
         $destination = Join-Path $xiaRoot $relative
         if (-not (Test-Path -LiteralPath $destination -PathType Leaf)) {
             $failures.Add("Updated Xia actor texture was not copied: $relative")
@@ -100,9 +125,9 @@ foreach ($preserved in @(
 }
 
 # ActorAnimationLoader.getHeadSpecial treats its final path segment as a
-# directory. Keep compatibility copies for heads still loaded by vanilla code.
+# directory. Keep compatibility copies for warrior heads still loaded by
+# vanilla code; king now uses the special head path directly.
 foreach ($specialHead in @(
-    'heads_king\head_0',
     'heads_warrior\head_0',
     'heads_warrior\head_1')) {
     $flat = Join-Path $xiaRoot ($specialHead + '.png')
@@ -117,6 +142,13 @@ foreach ($specialHead in @(
         (Get-FileHash -LiteralPath $nested -Algorithm SHA256).Hash) {
         $failures.Add("Special-head compatibility copy differs: $specialHead")
     }
+}
+
+if (Test-Path -LiteralPath (Join-Path $xiaRoot 'heads_king')) {
+    $failures.Add('Obsolete custom heads_king directory must be absent')
+}
+if (-not (Test-Path -LiteralPath (Join-Path $xiaRoot 'heads_special\head_king\head_king.png'))) {
+    $failures.Add('King head must remain at heads_special/head_king')
 }
 
 if ($failures.Count -gt 0) {

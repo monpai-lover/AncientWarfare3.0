@@ -58,7 +58,19 @@ namespace AncientWarfare3.patch
                 return;
             }
 
-            if (pKing || pWarrior) return;
+            if (pKing) return;
+            if (pWarrior)
+            {
+                if (actor?.data != null && pAsset.id == XIA)
+                {
+                    Sprite warrior = SpriteTextureLoader.getSprite(
+                        tex.texture_path_base +
+                        XiaActorTextureRules.ResolveWarriorHeadPath(
+                            actor.data.id));
+                    if (warrior != null) __result = warrior;
+                }
+                return;
+            }
 
             if (actor?.data != null)
             {
@@ -79,8 +91,15 @@ namespace AncientWarfare3.patch
             {
                 actor.data.get(LineageKeys.OFFICER_RANK, out int rank,
                     OfficialCareerRankRules.Unranked);
+                actor.data.get(LineageKeys.COURT_OFFICE_ID,
+                    out string officeId, "");
+                actor.data.get(LineageKeys.COURT_LAYER,
+                    out string layer, "");
+                int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
+                    actor.kingdom, layer, officeId, actor.city);
                 string officialHead =
-                    XiaActorTextureRules.ResolveOfficialHeadPath(rank);
+                    XiaActorTextureRules.ResolveOfficialHeadPath(rank,
+                        officeGrade);
                 if (!string.IsNullOrEmpty(officialHead))
                 {
                     Sprite official = SpriteTextureLoader.getSprite(

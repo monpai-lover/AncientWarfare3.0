@@ -23,7 +23,41 @@ namespace AncientWarfare3.core.presentation
         public static string ResolveOfficialBodyDirectory(int pRank)
         {
             int tier = ResolveOfficialTier(pRank);
-            return tier == NoOfficialTier ? null : "leader_" + tier;
+            return BodyDirectoryForTier(tier);
+        }
+
+        public static string ResolveOfficialBodyDirectory(int pRank,
+            int pOfficeGrade)
+        {
+            int tier = ResolveOfficialTier(pRank, pOfficeGrade);
+            return BodyDirectoryForTier(tier);
+        }
+
+        public static int ResolveOfficialTier(int pRank, int pOfficeGrade)
+        {
+            int byRank = ResolveOfficialTier(pRank);
+            if (byRank != NoOfficialTier) return byRank;
+            if (pOfficeGrade == 10) return HighOfficialTier;
+            if (pOfficeGrade == 20) return MiddleOfficialTier;
+            if (pOfficeGrade == 30) return LowOfficialTier;
+            return NoOfficialTier;
+        }
+
+        private static string BodyDirectoryForTier(int pTier)
+        {
+            if (pTier == LowOfficialTier) return "leader_3";
+            if (pTier == MiddleOfficialTier) return "leader_2";
+            if (pTier == HighOfficialTier) return "leader_1";
+            return null;
+        }
+
+        public static string ResolveOfficialHeadPath(int pRank,
+            int pOfficeGrade)
+        {
+            int tier = ResolveOfficialTier(pRank, pOfficeGrade);
+            return tier == NoOfficialTier
+                ? null
+                : "heads_leader/head_" + (tier - 1);
         }
 
         public static string ResolveOfficialHeadPath(int pRank)
@@ -32,6 +66,11 @@ namespace AncientWarfare3.core.presentation
             return tier == NoOfficialTier
                 ? null
                 : "heads_leader/head_" + (tier - 1);
+        }
+
+        public static string ResolveWarriorHeadPath(long pActorId)
+        {
+            return "heads_warrior/head_" + StableVariantIndex(pActorId, 2);
         }
 
         public static int StableVariantIndex(long pActorId, int pCount)

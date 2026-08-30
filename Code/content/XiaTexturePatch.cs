@@ -9,6 +9,8 @@ namespace AncientWarfare3.content
     [HarmonyPatch]
     public static class XiaTexturePatch
     {
+        private static readonly bool EnableOfficialBodySkinSwitch = true;
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Actor), "getUnitTexturePath")]
         public static bool GetUnitTexturePath_Prefix(Actor __instance, ref string __result)
@@ -30,15 +32,29 @@ namespace AncientWarfare3.content
                     return false;
                 }
 
-                int rank = OfficialCareerRankRules.Unranked;
-                __instance.data?.get(LineageKeys.OFFICER_RANK, out rank,
-                    OfficialCareerRankRules.Unranked);
-                string officialBody =
-                    XiaActorTextureRules.ResolveOfficialBodyDirectory(rank);
-                if (!string.IsNullOrEmpty(officialBody))
+                if (EnableOfficialBodySkinSwitch)
                 {
-                    __result = XiaRace.TEXTURE_PATH + officialBody;
-                    return false;
+                    int rank = OfficialCareerRankRules.Unranked;
+                    __instance.data?.get(LineageKeys.OFFICER_RANK, out rank,
+                        OfficialCareerRankRules.Unranked);
+                    string officeId = "";
+                    string layer = "";
+                    __instance.data?.get(LineageKeys.COURT_OFFICE_ID,
+                        out officeId, "");
+                    __instance.data?.get(LineageKeys.COURT_LAYER,
+                        out layer, "");
+                    int officeGrade =
+                        OfficialCareerStateService.OfficeGradeForOffice(
+                            __instance.kingdom, layer, officeId,
+                            __instance.city);
+                    string officialBody =
+                        XiaActorTextureRules.ResolveOfficialBodyDirectory(
+                            rank, officeGrade);
+                    if (!string.IsNullOrEmpty(officialBody))
+                    {
+                        __result = XiaRace.TEXTURE_PATH + officialBody;
+                        return false;
+                    }
                 }
             }
 
