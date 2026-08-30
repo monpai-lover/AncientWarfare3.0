@@ -392,6 +392,19 @@ namespace AncientWarfare3.core.court
         {
             if (pActor?.data == null || pState == null ||
                 pActor.data.id != pState.ActorId) return;
+            // 库里这一行已经是 KINGDOM_ID=-1 / OFFICE_ID='',热态必须跟上。
+            // 漏掉这几个键的后果不是显示错一次就完了:COURT_OFFICE_ID 是
+            // 「他还是不是官」的唯一热判据,留着旧值等于人已经被免职却还挂着
+            // 郡守身份、还继续被考评。ProjectHotState 只管品级/功绩那一摊,
+            // 所以在这儿补 —— 这个函数的职责本来就是让热态和库对齐。
+            //
+            // StageClearCurrentOffice 只在库里那行确实匹配并被清空时才返回
+            // 非 null,所以到得了这里就一定该清,不会误清在任的人。
+            pActor.data.set(LineageKeys.COURT_KINGDOM_ID, -1L);
+            pActor.data.set(LineageKeys.COURT_LAYER, "");
+            pActor.data.set(LineageKeys.COURT_OFFICE_ID, "");
+            pActor.data.set(LineageKeys.COURT_CITY_ID, -1L);
+            pActor.data.set(LineageKeys.COURT_COUNTY_ID, -1L);
             ProjectHotState(pActor, pState.Rank, pState.Track, pState.Merit,
                 pState.MeritCap, pState.TermEndYear, pState.LastEvaluation,
                 pState.EvaluationModifierUntil, pState.Seniority,

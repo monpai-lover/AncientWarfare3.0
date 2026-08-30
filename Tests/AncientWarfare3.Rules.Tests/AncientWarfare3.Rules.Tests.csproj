@@ -235,6 +235,7 @@
     <Compile Include="..\..\Code\core\lineage\PeasantRebelStateNameRules.cs" Link="Production\PeasantRebelStateNameRules.cs" />
     <Compile Include="ActorVisualRoleRulesTests.cs.txt" />
     <Compile Include="XiaActorTextureRulesTests.cs.txt" />
+    <Compile Include="CourtOfficeDisplayRulesTests.cs.txt" />
     <Compile Include="XiaBanditHeadRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\presentation\XiaBanditHeadRules.cs" Link="Production\XiaBanditHeadRules.cs" />
     <Compile Include="MilitaryGovernorateCourtRulesTests.cs.txt" />
@@ -872,6 +873,7 @@
     <Compile Include="..\..\Code\core\court\CourtIds.cs" Link="Production\CourtIds.cs" />
     <Compile Include="..\..\Code\core\court\CourtTierRules.cs" Link="Production\CourtTierRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtInstitutionRules.cs" Link="Production\CourtInstitutionRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtOfficeDisplayRules.cs" Link="Production\CourtOfficeDisplayRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtProfileId.cs" Link="Production\CourtProfileId.cs" />
     <Compile Include="..\..\Code\core\court\CourtOfficeDefinition.cs" Link="Production\CourtOfficeDefinition.cs" />
     <Compile Include="..\..\Code\core\court\ICourtProfile.cs" Link="Production\ICourtProfile.cs" />

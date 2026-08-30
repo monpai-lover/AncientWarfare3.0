@@ -860,22 +860,37 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
 
+            pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
+            bool leaderOffice = CourtCityOfficeRules.IsCityLeaderOffice(office);
+
             try
             {
-                if (pActor.isCityLeader())
+                // \u6709 city_leader:* \u5B98\u804C\u65F6\u4E0D\u8981\u518D\u5355\u72EC\u52A0\u4E00\u6BB5\u300C\u67D0\u57CE \u592A\u5B88\u300D\u2014\u2014
+                // \u4E0B\u9762\u90A3\u6BB5\u4F1A\u628A\u540C\u4E00\u4E2A\u5B98\u804C\u7ECF DisplayOfficeId \u6620\u5C04\u6210 governor
+                // \u518D\u672C\u5730\u5316\u4E00\u6B21,\u4E24\u6BB5\u8BF4\u7684\u662F\u540C\u4E00\u4EF6\u4E8B\u3002Combine \u53EA\u6309\u5B57\u9762\u53BB\u91CD,
+                // \u300C\u987A\u660C \u592A\u5B88\u300D\u548C\u300C\u90E1\u5B88\u300D\u5B57\u9762\u4E0D\u540C,\u6240\u4EE5\u4F1A\u53CC\u53CC\u7559\u4E0B,\u5B58\u6863\u91CC\u5C31
+                // \u51BB\u6210\u300C\u987A\u660C \u592A\u5B88 \u00B7 governor\u300D\u8FD9\u79CD\u6837\u5B50\u3002
+                if (pActor.isCityLeader() && !leaderOffice)
                     roles.Add(string.IsNullOrEmpty(pCityName) ? "\u592A\u5B88" : pCityName + " \u592A\u5B88");
             }
             catch { }
 
-            pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             if (!string.IsNullOrEmpty(office))
             {
                 pActor.data.get(LineageKeys.COURT_KINGDOM_ID,
                     out long courtKingdomId, -1L);
                 Kingdom courtKingdom = World.world?.kingdoms?.get(courtKingdomId) ??
                                         pActor.kingdom;
-                roles.Add(CourtInstitutionService.OfficeName(
-                    courtKingdom, office));
+                string officeName = CourtInstitutionService.OfficeName(
+                    courtKingdom, office);
+                // OfficeName \u627E\u4E0D\u5230\u8BD1\u540D\u65F6\u4F1A\u9000\u56DE\u88F8 office id\u3002\u90A3\u4E32\u4E1C\u897F\u4E00\u65E6\u5199\u8FDB
+                // \u5F52\u6863\u5C31\u6C38\u4E45\u7559\u5728\u5B58\u6863\u91CC(\u6B7B\u8005\u4E0D\u518D\u91CD\u7B97),\u6240\u4EE5\u5B81\u53EF\u4E0D\u5199\u8FD9\u4E00\u6BB5:
+                // \u4E0A\u9762\u7684\u89D2\u8272\u6BB5\u843D\u5DF2\u7ECF\u591F\u8868\u8FBE\u8EAB\u4EFD\u4E86\u3002
+                if (!CourtOfficeDisplayRules.IsUntranslated(officeName, office))
+                    roles.Add(officeName);
+                else if (leaderOffice && !roles.Contains(pCityName + " \u592A\u5B88"))
+                    roles.Add(string.IsNullOrEmpty(pCityName)
+                        ? "\u592A\u5B88" : pCityName + " \u592A\u5B88");
             }
 
             string combined = CourtTitleRules.Combine(roles.ToArray());

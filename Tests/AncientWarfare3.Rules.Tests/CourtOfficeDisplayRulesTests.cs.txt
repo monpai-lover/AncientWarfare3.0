@@ -1,0 +1,78 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class CourtOfficeDisplayRulesTests
+{
+    public static void Run()
+    {
+        BareOfficeIdIsUntranslated();
+        MappedCityLeaderIdIsUntranslated();
+        RealTranslationSurvives();
+        WesternLatinNamesAreNotFalseFlagged();
+        EmptyInputsAreHandled();
+    }
+
+    private static void BareOfficeIdIsUntranslated()
+    {
+        Expect(CourtOfficeDisplayRules.IsUntranslated("governor", "governor"),
+            "a display name identical to the office id is a fallback leak");
+        Expect(CourtOfficeDisplayRules.IsUntranslated("  governor  ",
+                "governor"),
+            "surrounding whitespace does not hide a fallback leak");
+    }
+
+    private static void MappedCityLeaderIdIsUntranslated()
+    {
+        // This is the case actually observed in a save: the stored office id is
+        // "city_leader:240", OfficeName maps it through DisplayOfficeId to
+        // "governor", the lookup misses, and "governor" is what leaks out.
+        // Comparing against the raw id alone would not catch it.
+        Expect(CourtOfficeDisplayRules.IsUntranslated("governor",
+                "city_leader:240"),
+            "a leak of the mapped id is detected, not just the raw id");
+        Expect(!CourtOfficeDisplayRules.IsUntranslated("郡守",
+                "city_leader:240"),
+            "the real translation of a city leader office is accepted");
+    }
+
+    private static void RealTranslationSurvives()
+    {
+        Expect(!CourtOfficeDisplayRules.IsUntranslated("郡守", "governor"),
+            "a translated name is not mistaken for a leak");
+        Expect(!CourtOfficeDisplayRules.IsUntranslated("金紫光禄大夫",
+                "governor"),
+            "an unrelated translated name is accepted");
+    }
+
+    private static void WesternLatinNamesAreNotFalseFlagged()
+    {
+        // west_* offices translate to Latin script. A heuristic like "contains
+        // ASCII letters means untranslated" would break exactly here, so the
+        // rule must stay a pure equality check.
+        Expect(!CourtOfficeDisplayRules.IsUntranslated("Chancellor",
+                "west_chancellor"),
+            "a Latin-script translation is not flagged as untranslated");
+        Expect(CourtOfficeDisplayRules.IsUntranslated("west_chancellor",
+                "west_chancellor"),
+            "a western office still leaks when the key is missing");
+    }
+
+    private static void EmptyInputsAreHandled()
+    {
+        Expect(CourtOfficeDisplayRules.IsUntranslated("", "governor"),
+            "an empty display name counts as untranslated");
+        Expect(CourtOfficeDisplayRules.IsUntranslated(null, "governor"),
+            "a null display name counts as untranslated");
+        Expect(CourtOfficeDisplayRules.IsUntranslated("   ", "governor"),
+            "a whitespace display name counts as untranslated");
+        Expect(!CourtOfficeDisplayRules.IsUntranslated("郡守", ""),
+            "no office id means there is nothing to leak");
+        Expect(!CourtOfficeDisplayRules.IsUntranslated("郡守", null),
+            "a null office id means there is nothing to leak");
+    }
+
+    private static void Expect(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new Exception("FAIL: " + pMessage);
+    }
+}

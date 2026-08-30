@@ -488,6 +488,13 @@ if (args.Length == 1 && args[0] == "--general-shortlist")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--court-office-display")
+{
+    CourtOfficeDisplayRulesTests.Run();
+    Console.WriteLine("Court office display tests passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--republic-electorate")
 {
     RepublicElectorateRulesTests.Run();
