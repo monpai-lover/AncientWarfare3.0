@@ -18,8 +18,27 @@ namespace AncientWarfare3.patch
             if (pKingdom.data.timer_new_king > 0f) return true;
             Actor king = pKingdom.king;
             if (king?.data != null && king.isAlive()) return true;
-            Actor successor = AuthoritativeSuccessionService.EnsureRegisteredCandidate(
-                pKingdom, king);
+
+            // 双重兜底：有注册继承人 + 无国王，跳过异步 fallback 直接即位。
+            Actor successor = HeirService.PeekRegisteredHeir(pKingdom);
+            if (successor?.data != null)
+            {
+                if (king?.data != null &&
+                    AW3MultiplayerSuccessionFacade.TryDefer(pKingdom, king))
+                {
+                    __result = BehResult.Continue;
+                    return false;
+                }
+                if (HeirService.PrepareRegisteredHeirForAccession(pKingdom, successor))
+                {
+                    __instance.makeKingAndMoveToCapital(pKingdom, successor);
+                    __result = BehResult.Continue;
+                    return false;
+                }
+            }
+
+            // 缓存为空：走异步 fallback（档案回溯/朝廷候选），它内部已包含 RefreshHeir。
+            successor = AuthoritativeSuccessionService.EnsureRegisteredCandidate(pKingdom, king);
             if (king?.data != null &&
                 AW3MultiplayerSuccessionFacade.TryDefer(pKingdom, king))
             {
@@ -27,26 +46,8 @@ namespace AncientWarfare3.patch
                 return false;
             }
             if (successor?.data != null &&
-                HeirService.PrepareRegisteredHeirForAccession(
-                    pKingdom, successor))
-            {
+                HeirService.PrepareRegisteredHeirForAccession(pKingdom, successor))
                 __instance.makeKingAndMoveToCapital(pKingdom, successor);
-                __result = BehResult.Continue;
-                return false;
-            }
-            // 缓存里没有候选人时，强制从顺位池重选一次。
-            // 这发生在 Die_Postfix 的 RefreshHeir 因 king 已经为 null 而没选到人的情况。
-            // 直接调 RefreshHeir + 再 peek，还是没人则走原版 getKingFromLeaders 兜底。
-            HeirService.RefreshHeir(pKingdom);
-            successor = HeirService.PeekRegisteredHeir(pKingdom);
-            if (successor?.data != null &&
-                HeirService.PrepareRegisteredHeirForAccession(
-                    pKingdom, successor))
-            {
-                __instance.makeKingAndMoveToCapital(pKingdom, successor);
-                __result = BehResult.Continue;
-                return false;
-            }
             __result = BehResult.Continue;
             return false;
         }

@@ -250,7 +250,9 @@ namespace AncientWarfare3.core.lineage
             bool cachedEligible = cached?.data != null &&
                                   (effectiveLaw == InheritanceLaw.Primogeniture ||
                                    cached.isAdult());
-            if (!HeirDirectSonRules.NeedsEventDrivenRefresh(pForce,
+            // 继承人位子空着时立刻从顺位池补上，不等下一个事件触发。
+            bool heirVacant = cached?.data == null;
+            if (!heirVacant && !HeirDirectSonRules.NeedsEventDrivenRefresh(pForce,
                     cachedEligible, cachedRelationshipValid,
                     successionDirty))
                 return cached;
