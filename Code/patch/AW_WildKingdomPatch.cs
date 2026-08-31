@@ -64,5 +64,41 @@ namespace AncientWarfare3.patch
             AW_WildKingdomPatch.EnsureWildKingdom("nomads_Xia");
         }
     }
+
+    /// <summary>
+    ///     时序修复:SaveManager.loadWorld 只把 cleanUpWorld 注册成 SmoothLoader lambda 然后立即返回。
+    ///     LoadWorld_Postfix 在 loadWorld 返回时触发,此时建筑尚未写入 world,清理是空操作。
+    ///     真正的清理窗口是 SmoothLoader 驱动 cleanUpWorld → beginChecksBuildings →
+    ///     updateDirtyBuildings 之前。
+    ///
+    ///     策略:LoadWorld_Prefix 设 _pendingPurge 标志; beginChecksBuildings Prefix 检测到标志后
+    ///     执行一次性清理并清标志,确保 updateDirtyBuildings 遍历时不会遇到 kingdom==null 建筑崩溃。
+    ///     标志只在读档流程中置位,不影响正常游戏帧。
+    /// </summary>
+    [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.loadWorld),
+        new[] { typeof(string), typeof(bool) })]
+    internal static class AW_LoadWorldPurgeFlagPatch
+    {
+        internal static bool PendingPurge;
+
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.Last)]
+        private static void Prefix()
+        {
+            PendingPurge = true;
+        }
+    }
+
+    [HarmonyPatch(typeof(WildKingdomsManager), "beginChecksBuildings")]
+    internal static class AW_WildKingdomsBeginChecksPatch
+    {
+        [HarmonyPrefix]
+        private static void Prefix()
+        {
+            if (!AW_LoadWorldPurgeFlagPatch.PendingPurge) return;
+            AW_LoadWorldPurgeFlagPatch.PendingPurge = false;
+            AW_SavePatch.PurgeNullKingdomBuildings();
+        }
+    }
 }
 
