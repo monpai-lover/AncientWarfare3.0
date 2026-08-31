@@ -29,9 +29,14 @@ namespace AncientWarfare3.patch
             if (successor?.data != null &&
                 HeirService.PrepareRegisteredHeirForAccession(
                     pKingdom, successor))
+            {
                 __instance.makeKingAndMoveToCapital(pKingdom, successor);
-            __result = BehResult.Continue;
-            return false;
+                __result = BehResult.Continue;
+                return false;
+            }
+            // 没有 AW3 管理的候选人，放行原版逻辑：
+            // 原版会走 getKingFromLeaders 从城市领袖里选继任，作为最终兜底。
+            return true;
         }
 
         private static bool UsesManagedLineage(Kingdom pKingdom)
