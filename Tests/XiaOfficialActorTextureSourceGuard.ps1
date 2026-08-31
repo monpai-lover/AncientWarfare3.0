@@ -49,6 +49,7 @@ $requiredFragments = @{
         'XiaActorTextureRules.ResolveOfficialHeadPath(',
         'XiaActorTextureRules.ResolveWarriorHeadPath(',
         'SpriteTextureLoader.getSprite(',
+        'ActorAnimationLoader.getHeadSpecial(',
         'heads_special/head_king', 'heads_heir/head_0')
     AvatarHead = @(
         'XiaActorTextureRules.ResolveOfficialHeadPath(',
@@ -77,6 +78,14 @@ if (-not $rules.Contains('"heads_leader/head_"')) {
 if ($rules.Contains('heads_leaders/')) {
     $failures.Add('The invalid plural heads_leaders path must not be used')
 }
+
+$visualPatch = $sources.VisualPatch
+if (-not ($visualPatch -match '(?s)if \(pActor\.isKing\(\)\).*?ActorAnimationLoader\.getHeadSpecial')) {
+    $failures.Add('Map king heads must use ActorAnimationLoader.getHeadSpecial')
+}
+if (-not ($visualPatch -match '(?s)Sprite head = SpriteTextureLoader\.getSprite')) {
+    $failures.Add('Flat Xia special heads must use SpriteTextureLoader.getSprite')
+}
 if (-not $rules.Contains('"heads_warrior/head_"')) {
     $failures.Add('Warriors must retain the two custom head variants')
 }
@@ -103,10 +112,19 @@ else {
             $failures.Add("Updated Xia actor texture was not copied: $relative")
             continue
         }
-        $sourceHash = (Get-FileHash -LiteralPath $sourceFile.FullName -Algorithm SHA256).Hash
-        $destinationHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
-        if ($sourceHash -ne $destinationHash) {
-            $failures.Add("Updated Xia actor texture differs: $relative")
+        if ($sourceFile.Extension -ieq '.json') {
+            $sourceText = ([IO.File]::ReadAllText($sourceFile.FullName) -replace "`r`n", "`n" -replace "`r", "`n").TrimEnd()
+            $destinationText = ([IO.File]::ReadAllText($destination) -replace "`r`n", "`n" -replace "`r", "`n").TrimEnd()
+            if ($sourceText -ne $destinationText) {
+                $failures.Add("Updated Xia actor texture differs: $relative")
+            }
+        }
+        else {
+            $sourceHash = (Get-FileHash -LiteralPath $sourceFile.FullName -Algorithm SHA256).Hash
+            $destinationHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
+            if ($sourceHash -ne $destinationHash) {
+                $failures.Add("Updated Xia actor texture differs: $relative")
+            }
         }
     }
 }

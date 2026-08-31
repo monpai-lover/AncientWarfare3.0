@@ -398,6 +398,13 @@ namespace AncientWarfare3.patch
             ActorTextureSubAsset textureAsset = pActor.getTextureAsset();
             if (textureAsset == null) return true;
 
+            if (pActor.isKing())
+            {
+                pActor.cached_sprite_head = ActorAnimationLoader.getHeadSpecial(
+                    textureAsset.texture_path_base + headPath);
+                return true;
+            }
+
             Sprite head = SpriteTextureLoader.getSprite(
                 textureAsset.texture_path_base + headPath);
             if (head == null) return false;
