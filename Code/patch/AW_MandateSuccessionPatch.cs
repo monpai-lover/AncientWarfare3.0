@@ -34,9 +34,21 @@ namespace AncientWarfare3.patch
                 __result = BehResult.Continue;
                 return false;
             }
-            // 没有 AW3 管理的候选人，放行原版逻辑：
-            // 原版会走 getKingFromLeaders 从城市领袖里选继任，作为最终兜底。
-            return true;
+            // 缓存里没有候选人时，强制从顺位池重选一次。
+            // 这发生在 Die_Postfix 的 RefreshHeir 因 king 已经为 null 而没选到人的情况。
+            // 直接调 RefreshHeir + 再 peek，还是没人则走原版 getKingFromLeaders 兜底。
+            HeirService.RefreshHeir(pKingdom);
+            successor = HeirService.PeekRegisteredHeir(pKingdom);
+            if (successor?.data != null &&
+                HeirService.PrepareRegisteredHeirForAccession(
+                    pKingdom, successor))
+            {
+                __instance.makeKingAndMoveToCapital(pKingdom, successor);
+                __result = BehResult.Continue;
+                return false;
+            }
+            __result = BehResult.Continue;
+            return false;
         }
 
         private static bool UsesManagedLineage(Kingdom pKingdom)
