@@ -252,8 +252,13 @@ aw_noble_branch_root,贵族本支,Noble root branch,貴族本支
 aw_noble_distance_prefix,距贵族 ,Noble distance: ,距貴族 
 aw_noble_distance_suffix, 代, generations, 代
 aw_identity_noble,贵族,Noble,貴族
+aw_identity_gentry,世家,Gentry clan,世家
+aw_identity_declined,寒门,Declined house,寒門
 aw_identity_common,平民,Commoner,平民
 aw_identity_slave,奴隶,Slave,奴隸
+aw_career_history_label,历任:,Offices held:,歷任:
+aw_career_former_prefix,前,Former ,前
+aw_former_office_label,前职,Former office,前職
 aw_relation_self,本人,Self,本人
 aw_relation_father,父,Father,父
 aw_relation_mother,母,Mother,母

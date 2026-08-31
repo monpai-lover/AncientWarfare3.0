@@ -298,6 +298,12 @@ namespace AncientWarfare3.core.lineage
         public string social_title = "";
         public string social_title_color = "";
         public bool   has_held_title;
+        // 氏是否为现存王国的当朝统治之氏 —— 只有这种才叫「贵族」,
+        // 其余有氏者是「世家」。国灭/改朝换代时 reign 收口,此位自动转假。
+        public bool   ruling_shi;
+        // 历任官职,OfficeTenureSummaryRules.Encode 的编码串。
+        // 带的是 office_id 而非官名:死者的国可能已经没了,官名得展示层解析。
+        public string career_summary = "";
         public long   shi_id = -1;
         public int    noble_distance = 99;
         public int    head;          // 头像数据(可选,用于自绘头像)

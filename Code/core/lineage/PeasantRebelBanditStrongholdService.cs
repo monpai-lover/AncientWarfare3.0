@@ -161,6 +161,13 @@ namespace AncientWarfare3.core.lineage
             List<WorldTile> towerTiles = null;
             List<TileZone> wallFallbackInterior = null;
             BanditZoneWallPlan wallFallbackPlan = null;
+            // Precompute territory, roads, and passable land once for all
+            // candidates — each zone-tile scan is O(zones × tiles_per_zone).
+            PeasantRebelBanditZoneWallService.ComputeSharedSets(
+                motherZones,
+                out HashSet<CultiwayWallPoint> sharedTerritory,
+                out HashSet<CultiwayWallPoint> sharedRoads,
+                out HashSet<CultiwayWallPoint> sharedPassable);
             foreach (IReadOnlyList<string> candidateKeys in candidates)
             {
                 if (candidateKeys.Count != 4) continue;
@@ -169,7 +176,8 @@ namespace AncientWarfare3.core.lineage
                 if (candidate.Count != 4) continue;
                 if (!PeasantRebelBanditZoneWallService.TryPlan(
                         pMother, candidate, strongholdCenter,
-                        out BanditZoneWallPlan candidateWall) ||
+                        out BanditZoneWallPlan candidateWall,
+                        sharedPassable, sharedTerritory, sharedRoads) ||
                     candidateWall.WallPoints.Count == 0) continue;
                 if (wallFallbackInterior == null)
                 {
@@ -178,7 +186,7 @@ namespace AncientWarfare3.core.lineage
                 }
                 List<WorldTile> candidateTowerTiles =
                     FindGateTowerTiles(candidateWall, strongholdCenter,
-                        towerAsset, candidate);
+                        towerAsset, candidate, sharedTerritory);
                 if (!PeasantRebelBanditStrongholdRules.
                         CanUseWallCandidate(true,
                             candidateTowerTiles?.Count ?? 0)) continue;
@@ -1667,7 +1675,8 @@ namespace AncientWarfare3.core.lineage
 
         private static List<WorldTile> FindGateTowerTiles(
             BanditZoneWallPlan pWallPlan, WorldTile pCenter,
-            BuildingAsset pAsset, IReadOnlyCollection<TileZone> pZones)
+            BuildingAsset pAsset, IReadOnlyCollection<TileZone> pZones,
+            HashSet<CultiwayWallPoint> pSharedTerritoryPoints = null)
         {
             if (pWallPlan?.GateCenters == null ||
                 pWallPlan.GateCenters.Count != 4 || pCenter == null ||
@@ -1679,14 +1688,22 @@ namespace AncientWarfare3.core.lineage
                 return null;
             }
             var zones = new HashSet<TileZone>(pZones);
-            var territoryPoints = new HashSet<CultiwayWallPoint>();
-            foreach (TileZone zone in zones)
+            HashSet<CultiwayWallPoint> territoryPoints;
+            if (pSharedTerritoryPoints != null)
             {
-                if (zone?.tiles == null) continue;
-                foreach (WorldTile tile in zone.tiles)
-                    if (tile != null)
-                        territoryPoints.Add(new CultiwayWallPoint(
-                            tile.x, tile.y));
+                territoryPoints = pSharedTerritoryPoints;
+            }
+            else
+            {
+                territoryPoints = new HashSet<CultiwayWallPoint>();
+                foreach (TileZone zone in zones)
+                {
+                    if (zone?.tiles == null) continue;
+                    foreach (WorldTile tile in zone.tiles)
+                        if (tile != null)
+                            territoryPoints.Add(new CultiwayWallPoint(
+                                tile.x, tile.y));
+                }
             }
             var wallPoints = new HashSet<CultiwayWallPoint>(
                 pWallPlan.WallPoints);

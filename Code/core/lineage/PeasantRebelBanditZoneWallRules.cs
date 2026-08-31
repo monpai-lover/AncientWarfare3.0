@@ -61,6 +61,9 @@ namespace AncientWarfare3.core.lineage
                 pPassable ?? Array.Empty<CultiwayWallPoint>());
             var roads = new HashSet<CultiwayWallPoint>(
                 pRoads ?? Array.Empty<CultiwayWallPoint>());
+            // Pre-expand road influence once so CarveCardinalGate can do O(1)
+            // lookups instead of an O(roads) linear scan per boundary tile.
+            var roadInfluence = ExpandRoadInfluence(roads, RoadSearchRadius);
             HashSet<CultiwayWallPoint> closed = territory.Where(point =>
                     passable.Contains(point) && IsOuterBoundary(point,
                         territory))
@@ -75,13 +78,13 @@ namespace AncientWarfare3.core.lineage
             var opened = new HashSet<CultiwayWallPoint>(closed);
             var gateCenters = new List<CultiwayWallPoint>(4)
             {
-                CarveCardinalGate(opened, closed, roads, 0, 1,
+                CarveCardinalGate(opened, closed, roadInfluence, 0, 1,
                     maxY, centerX),
-                CarveCardinalGate(opened, closed, roads, 1, 0,
+                CarveCardinalGate(opened, closed, roadInfluence, 1, 0,
                     maxX, centerY),
-                CarveCardinalGate(opened, closed, roads, 0, -1,
+                CarveCardinalGate(opened, closed, roadInfluence, 0, -1,
                     minY, centerX),
-                CarveCardinalGate(opened, closed, roads, -1, 0,
+                CarveCardinalGate(opened, closed, roadInfluence, -1, 0,
                     minX, centerY)
             };
 
@@ -148,10 +151,25 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
+        private static HashSet<CultiwayWallPoint> ExpandRoadInfluence(
+            HashSet<CultiwayWallPoint> pRoads, int pRadius)
+        {
+            var result = new HashSet<CultiwayWallPoint>();
+            if (pRoads.Count == 0) return result;
+            int r2 = pRadius * pRadius;
+            foreach (CultiwayWallPoint road in pRoads)
+                for (int dy = -pRadius; dy <= pRadius; dy++)
+                for (int dx = -pRadius; dx <= pRadius; dx++)
+                    if (dx * dx + dy * dy <= r2)
+                        result.Add(new CultiwayWallPoint(
+                            road.X + dx, road.Y + dy));
+            return result;
+        }
+
         private static CultiwayWallPoint CarveCardinalGate(
             HashSet<CultiwayWallPoint> pOpened,
             HashSet<CultiwayWallPoint> pClosed,
-            HashSet<CultiwayWallPoint> pRoads,
+            HashSet<CultiwayWallPoint> pRoadInfluence,
             int pDirectionX, int pDirectionY, int pSide,
             int pLateralCenter)
         {
@@ -159,7 +177,8 @@ namespace AncientWarfare3.core.lineage
             List<CultiwayWallPoint> candidates = pClosed.Where(point =>
                     (verticalSide ? point.Y : point.X) == pSide &&
                     HasThreeTileRun(point, pClosed, verticalSide))
-                .OrderByDescending(point => HasRoadNearby(point, pRoads))
+                .OrderByDescending(point =>
+                    pRoadInfluence.Contains(point))
                 .ThenBy(point => Math.Abs(
                     (verticalSide ? point.X : point.Y) - pLateralCenter))
                 .ThenBy(point => point.X)

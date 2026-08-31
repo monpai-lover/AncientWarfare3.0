@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
@@ -784,6 +785,12 @@ namespace AncientWarfare3.ui.windows
                 if (_personFilter != "" && e.category != _personFilter) continue;
                 QueueHistoryRow(BuildEventRow(e, false));
             }
+
+            List<OfficialCareerReadModel> allCareer =
+                OfficialCareerService.LoadCareer(_contextId);
+            HistoryRow careerSummary = BuildCareerSummaryRow(allCareer);
+            if (careerSummary != null)
+                QueueHistoryRow(careerSummary);
         }
 
         public static void RefreshPersonAfterConferment(
@@ -895,6 +902,26 @@ namespace AncientWarfare3.ui.windows
                 QueueHistoryRow(BuildCareerRow(record));
             foreach (HistoryEntry entry in careerEvents)
                 QueueHistoryRow(BuildEventRow(entry, false));
+        }
+
+        private static HistoryRow BuildCareerSummaryRow(
+            List<OfficialCareerReadModel> pCareer)
+        {
+            List<OfficialCareerReadModel> former = pCareer
+                .Where(c => !c.IsCurrent)
+                .Take(4).ToList();
+            if (former.Count == 0) return null;
+            string prefix = AW_L10n.Text("aw_career_former_prefix", "前");
+            string label = AW_L10n.Text("aw_career_history_label", "历任:");
+            string offices = string.Join("、", former.Select(c =>
+                prefix + CareerOfficeLabel(c.OfficeId, c.InstitutionAtAppointment)));
+            return new HistoryRow
+            {
+                text = label + " " + offices,
+                dim = true,
+                tooltip_title = AW_L10n.Text("aw_career_history_label", "历任:"),
+                tooltip_desc = offices
+            };
         }
 
         private static HistoryRow BuildCareerRow(OfficialCareerReadModel pCareer)

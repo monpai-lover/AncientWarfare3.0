@@ -243,6 +243,7 @@
     <Compile Include="TestActorVisualRoleStubs.cs.txt" />
     <Compile Include="..\..\Code\core\presentation\ActorVisualRoleRules.cs" Link="Production\ActorVisualRoleRules.cs" />
     <Compile Include="..\..\Code\core\presentation\ActorVisualRoleResolver.cs" Link="Production\ActorVisualRoleResolver.cs" />
+    <Compile Include="..\..\Code\core\presentation\XiaActorTextureRules.cs" Link="Production\XiaActorTextureRules.cs" />
     <Compile Include="ActorManualNameRulesTests.cs.txt" />
     <Compile Include="ActorManualRenameRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\naming\ActorManualNameRules.cs" Link="Production\ActorManualNameRules.cs" />

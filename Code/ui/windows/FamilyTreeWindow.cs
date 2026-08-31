@@ -2815,6 +2815,8 @@ namespace AncientWarfare3.ui.windows
                 social_title = node.SocialTitle,
                 social_title_color = node.SocialTitleColor,
                 has_held_title = node.HasHeldTitle,
+                ruling_shi = node.RulingShi,
+                career_summary = node.CareerSummary,
                 shi_id = node.ShiId,
                 noble_distance = node.NobleDistance,
                 head = node.Head,

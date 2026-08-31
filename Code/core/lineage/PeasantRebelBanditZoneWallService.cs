@@ -8,9 +8,54 @@ namespace AncientWarfare3.core.lineage
     {
         private const int TerrainCollectionPadding = 1;
 
+        internal static void ComputeSharedSets(
+            IEnumerable<TileZone> pZones,
+            out HashSet<CultiwayWallPoint> pTerritory,
+            out HashSet<CultiwayWallPoint> pRoads,
+            out HashSet<CultiwayWallPoint> pPassable)
+        {
+            pTerritory = new HashSet<CultiwayWallPoint>();
+            pRoads = new HashSet<CultiwayWallPoint>();
+            foreach (TileZone zone in pZones)
+            {
+                if (zone?.tiles == null) continue;
+                foreach (WorldTile tile in zone.tiles)
+                {
+                    if (tile == null) continue;
+                    var point = new CultiwayWallPoint(tile.x, tile.y);
+                    pTerritory.Add(point);
+                    if (tile.Type?.road == true) pRoads.Add(point);
+                }
+            }
+            pPassable = pTerritory.Count == 0
+                ? new HashSet<CultiwayWallPoint>()
+                : CollectPassableLand(pTerritory);
+        }
+
+        internal static HashSet<CultiwayWallPoint> ComputeSharedPassable(
+            IEnumerable<TileZone> pZones)
+        {
+            var territory = new HashSet<CultiwayWallPoint>();
+            foreach (TileZone zone in pZones)
+            {
+                if (zone?.tiles == null) continue;
+                foreach (WorldTile tile in zone.tiles)
+                {
+                    if (tile != null)
+                        territory.Add(new CultiwayWallPoint(tile.x, tile.y));
+                }
+            }
+            return territory.Count == 0
+                ? new HashSet<CultiwayWallPoint>()
+                : CollectPassableLand(territory);
+        }
+
         internal static bool TryPlan(City pMother,
             IReadOnlyCollection<TileZone> pSelectedZones,
-            WorldTile pCenter, out BanditZoneWallPlan pPlan)
+            WorldTile pCenter, out BanditZoneWallPlan pPlan,
+            HashSet<CultiwayWallPoint> pSharedPassable = null,
+            HashSet<CultiwayWallPoint> pSharedTerritory = null,
+            HashSet<CultiwayWallPoint> pSharedRoads = null)
         {
             pPlan = null;
             if (pMother?.data == null || pMother.isRekt() ||
@@ -24,23 +69,33 @@ namespace AncientWarfare3.core.lineage
                     zone => zone != null && zone.city == pMother));
                 if (selected.Count != pSelectedZones.Count) return false;
 
-                var territory = new HashSet<CultiwayWallPoint>();
-                var roads = new HashSet<CultiwayWallPoint>();
-                foreach (TileZone zone in selected)
+                HashSet<CultiwayWallPoint> territory;
+                HashSet<CultiwayWallPoint> roads;
+                if (pSharedTerritory != null && pSharedRoads != null)
                 {
-                    if (zone.tiles == null) return false;
-                    foreach (WorldTile tile in zone.tiles)
+                    territory = pSharedTerritory;
+                    roads = pSharedRoads;
+                }
+                else
+                {
+                    territory = new HashSet<CultiwayWallPoint>();
+                    roads = new HashSet<CultiwayWallPoint>();
+                    foreach (TileZone zone in selected)
                     {
-                        if (tile == null) continue;
-                        var point = new CultiwayWallPoint(tile.x, tile.y);
-                        territory.Add(point);
-                        if (tile.Type?.road == true) roads.Add(point);
+                        if (zone.tiles == null) return false;
+                        foreach (WorldTile tile in zone.tiles)
+                        {
+                            if (tile == null) continue;
+                            var point = new CultiwayWallPoint(tile.x, tile.y);
+                            territory.Add(point);
+                            if (tile.Type?.road == true) roads.Add(point);
+                        }
                     }
                 }
                 if (territory.Count == 0) return false;
 
                 HashSet<CultiwayWallPoint> passable =
-                    CollectPassableLand(territory);
+                    pSharedPassable ?? CollectPassableLand(territory);
                 BanditZoneWallPlan computed =
                     PeasantRebelBanditZoneWallRules.Build(
                         MapBox.width, MapBox.height,

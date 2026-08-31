@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
@@ -214,7 +215,20 @@ namespace AncientWarfare3.patch
                                        activeGeneral;
             officeId = OfficialCareerRankRules.ResolveDisplayedOfficeId(
                 officeId, activeGeneral, CourtPyramidRoleId.General);
-            if (string.IsNullOrEmpty(officeId)) return;
+            if (string.IsNullOrEmpty(officeId))
+            {
+                OfficialCareerReadModel last = OfficialCareerService
+                    .LoadCareer(pActor.data.id)
+                    .FirstOrDefault(c => !c.IsCurrent);
+                if (last == null) return;
+                string former = AW_L10n.Text("aw_career_former_prefix", "前");
+                string name = AW_L10n.Text(
+                    CourtInstitutionRules.OfficeLocalizationKey(
+                        last.InstitutionAtAppointment, last.OfficeId),
+                    last.OfficeId);
+                ShowRawRow(pWindow, "aw_former_office_label", former + name);
+                return;
+            }
             Kingdom courtKingdom = ResolveCourtKingdom(pActor);
             if (courtKingdom?.data == null ||
                 !CourtService.HasNineRankSystem(courtKingdom)) return;

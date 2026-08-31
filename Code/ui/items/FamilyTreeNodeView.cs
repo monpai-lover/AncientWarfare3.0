@@ -1056,11 +1056,14 @@ namespace AncientWarfare3.ui.items
             return ResolveNameColor(pNode);
         }
 
-        /// <summary>节点 tooltip 正文:多行丰富信息(身份/性别 · 氏族 · 国/城 · 生卒 · 代)。空字段省略该行。</summary>
         private static string BuildActorTip(FamilyTreeNode pNode,
             string pPrimaryDisplayName)
         {
             var sb = new System.Text.StringBuilder();
+            Kingdom k = (pNode.kingdom_id >= 0)
+                ? World.world?.kingdoms?.get(pNode.kingdom_id)
+                : null;
+            if (k != null && k.isRekt()) k = null;
 
             if (!pNode.is_alive &&
                 !string.IsNullOrWhiteSpace(pNode.display_name) &&
@@ -1071,7 +1074,8 @@ namespace AncientWarfare3.ui.items
                     "Ruler Name") + "：" + pNode.display_name.Trim());
 
             // 行1:身份 · 性别 · 状态(在世/已故)
-            string identity = IdentityLabel(pNode.status);
+            string identity = IdentityLabel(pNode.status, pNode.shi_id,
+                pNode.ruling_shi);
             string sex = FamilyTreeArchivePresentationRules.ResolveSexLabel(
                 pNode.sex, AW_L10n.Text("aw_sex_male", "男"),
                 AW_L10n.Text("aw_sex_female", "女"));
@@ -1088,6 +1092,14 @@ namespace AncientWarfare3.ui.items
             if (!string.IsNullOrEmpty(pNode.ritual_appellation))
                 sb.AppendLine(AW_L10n.Text("aw_ruler_appellation", "礼制称呼:") +
                               pNode.ritual_appellation);
+
+            // 历任官职。官名要靠 Kingdom 才解析得出(自定义官制/学派/品级都挂在
+            // 国上),所以查询层只带 office_id 出来,到这里才取词 —— 这一层手上
+            // 有 k。亡国的话 k 为 null,OfficeName 退到通用 locale,仍能显示。
+            string careers = FormatCareerSummary(pNode.career_summary, k);
+            if (careers.Length > 0)
+                sb.AppendLine(AW_L10n.Text("aw_career_history_label",
+                    "历任官职:") + careers);
 
             if (!string.IsNullOrEmpty(pNode.branch_home_display) &&
                 string.IsNullOrEmpty(pNode.parent_shi_display))
@@ -1213,12 +1225,58 @@ namespace AncientWarfare3.ui.items
                     new TooltipData { tip_name = title, tip_description = desc });
         }
 
-        private static string IdentityLabel(string pStatus)
+        /// <summary>
+        /// 把编码过的履历串取词成「前·京兆尹、县令」。
+        ///
+        /// 「前」只加在已卸任的那几任上 —— 一个起复过的人现在还在任，
+        /// 显示成「前」等于在谱系上谎报他已经不在位了。已故者一律算前任，
+        /// 这个判断在 <see cref="OfficeTenureSummaryRules.Encode"/> 里就做完了。
+        /// </summary>
+        private static string FormatCareerSummary(string pEncoded, Kingdom pKingdom)
         {
-            // 返回完整身份词(调用方不再 +"族",否则"平民"会变"平族")。
-            if (pStatus == LineageStatus.NOBLE) return AW_L10n.Text("aw_identity_noble", "贵族");
-            if (pStatus == LineageStatus.COMMON) return AW_L10n.Text("aw_identity_common", "平民");
-            if (pStatus == LineageStatus.SLAVE) return AW_L10n.Text("aw_identity_slave", "奴隶");
+            var entries = OfficeTenureSummaryRules.Decode(pEncoded);
+            if (entries.Count == 0) return "";
+            string former = AW_L10n.Text(
+                OfficeTenureSummaryRules.FormerPrefixKey, "前");
+            var text = new System.Text.StringBuilder();
+            foreach (var entry in entries)
+            {
+                string name = AncientWarfare3.core.court
+                    .CourtInstitutionService.OfficeName(pKingdom, entry.Key);
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                if (text.Length > 0) text.Append("、");
+                if (entry.Value) text.Append(former).Append('·');
+                text.Append(name);
+            }
+
+            return text.ToString();
+        }
+
+        private static string IdentityLabel(string pStatus, long pShiId,
+            bool pRulingShi)
+        {
+            // 五档:贵族 / 世家 / 寒门 / 平民 / 奴隶。
+            //
+            // 分界只有一条:**是不是皇亲国戚**。
+            //
+            // 贵族 —— 氏是现存王国的当朝统治之氏。只有这一种叫贵族。
+            //         国灭或改朝换代后 reign 收口,pRulingShi 自动转假,
+            //         该族当天就从「贵族」落回「世家」——不需要任何补扫。
+            // 世家 —— 有氏、有爵位/门第,但跟当朝统治家族无关。
+            // 寒门 —— 平民化的旧世家:氏还在,身份已经掉成平民。
+            //         所以判据是「有氏 + COMMON」,不是「无氏」。
+            // 平民 —— 压根没有氏,没有可追的门第。
+            // 奴隶 —— 单独一档。
+            if (pStatus == LineageStatus.SLAVE)
+                return AW_L10n.Text("aw_identity_slave", "奴隶");
+            if (pRulingShi && pShiId >= 0)
+                return AW_L10n.Text("aw_identity_noble", "贵族");
+            if (pStatus == LineageStatus.NOBLE)
+                return AW_L10n.Text("aw_identity_gentry", "世家");
+            if (pStatus == LineageStatus.COMMON)
+                return pShiId >= 0
+                    ? AW_L10n.Text("aw_identity_declined", "寒门")
+                    : AW_L10n.Text("aw_identity_common", "平民");
             return "";
         }
 

@@ -29,7 +29,12 @@ namespace AncientWarfare3.patch
 
         internal static Kingdom EnsureWildKingdom(ActorAsset pActorAsset)
         {
-            string wildId = pActorAsset?.kingdom_id_wild;
+            return EnsureWildKingdom(pActorAsset?.kingdom_id_wild);
+        }
+
+        internal static Kingdom EnsureWildKingdom(string pWildId)
+        {
+            string wildId = pWildId;
             if (string.IsNullOrEmpty(wildId)) return null;
 
             WildKingdomsManager mgr = World.world?.kingdoms_wild;
@@ -48,6 +53,19 @@ namespace AncientWarfare3.patch
             Kingdom created = mgr.newWildKingdom(asset); // private,publicized dll 可访问
             ModClass.LogInfo("[补建] 野生王国 " + wildId + " 不在 kingdoms_wild,已补建(spawn 单位 kingdom 不再为 null)。");
             return created ?? mgr.get(wildId);
+        }
+
+    }
+
+    [HarmonyPatch]
+    internal static class AW_BuildingWildKingdomPatch
+    {
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(Building), nameof(Building.setBuilding))]
+        private static void BuildingSetBuilding_Prefix(BuildingAsset pAsset)
+        {
+            AW_WildKingdomPatch.EnsureWildKingdom(pAsset?.kingdom);
         }
     }
 }

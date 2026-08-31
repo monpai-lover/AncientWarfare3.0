@@ -94,7 +94,8 @@ namespace AncientWarfare3.core.lineage
         internal LineageTreeNodeSnapshot(ActorArchiveTableItem actor,
             LineageTreeShiSnapshot shi, LineageTreeShiSnapshot foundedBranch,
             string ritualAppellation, string retrospectiveRelation,
-            bool hasHeldTitle, LineageTreeStringBudget strings)
+            bool hasHeldTitle, bool rulingShi, string careerSummary,
+            LineageTreeStringBudget strings)
         {
             Id = actor?.id ?? -1L;
             DisplayName = strings.Take(LineageDisplayNameRules.ProjectArchive(
@@ -160,6 +161,8 @@ namespace AncientWarfare3.core.lineage
             RitualAppellation = strings.Take(ritualAppellation);
             RetrospectiveRelation = strings.Take(retrospectiveRelation);
             HasHeldTitle = hasHeldTitle;
+            RulingShi = rulingShi;
+            CareerSummary = strings.Take(careerSummary);
         }
 
         public long Id { get; }
@@ -214,6 +217,16 @@ namespace AncientWarfare3.core.lineage
         public string RitualAppellation { get; }
         public string RetrospectiveRelation { get; }
         public bool HasHeldTitle { get; }
+
+        /// <summary>
+        /// 本人的氏是否为某个**现存**王国当朝的统治之氏 —— 也就是皇亲国戚。
+        /// 只有这一档显示「贵族」，见 <see cref="GentryIdentityRules"/>。
+        /// 国灭或改朝换代后此值自然转假，不需要另外销毁什么。
+        /// </summary>
+        public bool RulingShi { get; }
+
+        /// <summary>历任官职，已按时间排好、去过重的成品串。</summary>
+        public string CareerSummary { get; }
     }
 
     internal sealed class LineageTreeShiSnapshot
@@ -879,6 +892,10 @@ namespace AncientWarfare3.core.lineage
                     maximum);
             HashSet<long> titleHolderIds = ReadTitleHolderIds(pDb,
                 transaction, orderedIds);
+            HashSet<long> rulingShiIds = ReadRulingShiIds(pDb, transaction,
+                actors.Values.Select(pActor => pActor.shi_id));
+            Dictionary<long, List<OfficeTenureSummaryRules.Tenure>> tenures =
+                ReadOfficeTenures(pDb, transaction, orderedIds);
             ReadPosthumousSnapshots(pDb, transaction, orderedIds,
                 out Dictionary<long, string> appellations,
                 out Dictionary<long, string> retrospectiveRelations);
@@ -905,10 +922,18 @@ namespace AncientWarfare3.core.lineage
                 appellations.TryGetValue(actor.id, out string appellation);
                 retrospectiveRelations.TryGetValue(actor.id,
                     out string retrospectiveRelation);
+                tenures.TryGetValue(actor.id,
+                    out List<OfficeTenureSummaryRules.Tenure> actorTenures);
+                string careerSummary = OfficeTenureSummaryRules.Encode(
+                    OfficeTenureSummaryRules.Summarize(actorTenures,
+                        OfficeTenureSummaryRules.MaximumEntries),
+                    actor.is_alive != 1);
                 treeNodes[actor.id] = new LineageTreeNodeSnapshot(actor,
                     shi, foundedBranch, appellation,
                     retrospectiveRelation,
-                    titleHolderIds.Contains(actor.id), stringBudget);
+                    titleHolderIds.Contains(actor.id),
+                    rulingShiIds.Contains(actor.shi_id), careerSummary,
+                    stringBudget);
             }
 
             List<long> locatePath = BuildLocatePath(requestedLocateActorId,
@@ -1102,6 +1127,97 @@ namespace AncientWarfare3.core.lineage
             {
                 // Legacy saves without either title table retain the
                 // agnatic fallback until normal schema initialization.
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// 哪些人的氏是**现存**王国当朝的统治之氏 —— 也就是皇亲国戚。
+        ///
+        /// 判据是「该氏名下有人正在某个仍存在的王国当朝」：KingdomReign 里
+        /// END_TIME&lt;0 表示这一朝还没结束。国灭或改朝换代会让那条 reign 收口，
+        /// 于是这个信号自动转假 —— 不需要任何一处去主动清理，
+        /// 这正是把它算成查询而不是存字段的理由。
+        ///
+        /// 一条 SQL 覆盖整棵树，不是每人一条。
+        /// </summary>
+        private static HashSet<long> ReadRulingShiIds(
+            SQLiteConnection connection, SQLiteTransaction transaction,
+            IEnumerable<long> shiIds)
+        {
+            var result = new HashSet<long>();
+            long[] ids = (shiIds ?? Enumerable.Empty<long>())
+                .Where(id => id > 0L).Distinct().Take(512).ToArray();
+            if (ids.Length == 0) return result;
+
+            try
+            {
+                using var command = new SQLiteCommand(connection);
+                command.Transaction = transaction;
+                command.CommandText =
+                    "SELECT DISTINCT holder.SHI_ID FROM ActorArchive holder " +
+                    "WHERE holder.SHI_ID IN (" + string.Join(",", ids) +
+                    ") AND EXISTS (SELECT 1 FROM " +
+                    KingdomReignTableItem.GetTableName() + " reign " +
+                    "WHERE reign.KING_ACTOR_ID=holder.ID " +
+                    "AND reign.END_TIME<0)";
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read()) result.Add(reader.GetInt64(0));
+            }
+            catch (SQLiteException)
+            {
+                // 旧存档没有 reign 表时全部按非宗亲处理 —— 少显示一个「贵族」
+                // 比错显示一个更可接受。
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// 每人的历任官职，一条 SQL 取全树。排序去重交给
+        /// <see cref="OfficeTenureSummaryRules"/>，这里只负责把行取回来。
+        ///
+        /// 取的是 office_id 原文，不是官名 —— 死者的 Kingdom 可能已经不存在，
+        /// 官名解析必须留到拿得到 Kingdom 的展示层。
+        /// </summary>
+        private static Dictionary<long, List<OfficeTenureSummaryRules.Tenure>>
+            ReadOfficeTenures(SQLiteConnection connection,
+                SQLiteTransaction transaction, IEnumerable<long> actorIds)
+        {
+            var result =
+                new Dictionary<long,
+                    List<OfficeTenureSummaryRules.Tenure>>();
+            long[] ids = (actorIds ?? Enumerable.Empty<long>())
+                .Where(id => id >= 0L).Distinct().Take(512).ToArray();
+            if (ids.Length == 0) return result;
+
+            try
+            {
+                using var command = new SQLiteCommand(connection);
+                command.Transaction = transaction;
+                command.CommandText =
+                    "SELECT ACTOR_ID,IFNULL(OFFICE_ID,'')," +
+                    "IFNULL(APPOINTED_YEAR,0),IFNULL(ACTIVE,0) FROM " +
+                    CourtOfficerTableItem.GetTableName() +
+                    " WHERE ACTOR_ID IN (" + string.Join(",", ids) + ")";
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    long actorId = reader.GetInt64(0);
+                    if (!result.TryGetValue(actorId,
+                            out List<OfficeTenureSummaryRules.Tenure> list))
+                    {
+                        list = new List<OfficeTenureSummaryRules.Tenure>();
+                        result[actorId] = list;
+                    }
+
+                    list.Add(new OfficeTenureSummaryRules.Tenure(
+                        reader.GetString(1), reader.GetInt32(2),
+                        reader.GetInt32(3) != 0));
+                }
+            }
+            catch (SQLiteException)
+            {
+                // 没有 CourtOfficer 表的存档就是没有履历可显示，不是错误。
             }
             return result;
         }
