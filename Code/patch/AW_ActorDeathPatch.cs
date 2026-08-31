@@ -293,18 +293,28 @@ namespace AncientWarfare3.patch
                 "military governorate ruler succession", () =>
                 MilitaryGovernorateSuccessionService.OnRulerDied(
                     __state.DyingKingdom, __state.DyingKingActorId));
-            // 清零原版的继承等待计时器，让 KingdomBehCheckKing 在下一帧
-            // 立即执行继承，不再等随机 5-20 秒的 timer_new_king 冷却。
             TryRunDeathStage(__instance,
                 ActorDeathPerformanceStage.KingSuccession,
-                "immediate succession timer clear", () =>
+                "immediate succession heir refresh", () =>
             {
                 if (__state.DyingKingdom?.data != null)
-                {
-                    __state.DyingKingdom.data.timer_new_king = 0f;
                     HeirService.RefreshHeir(__state.DyingKingdom);
-                }
             });
+        }
+
+        // Kingdom.removeKing() は常に timer_new_king = rand(5,20) をセットする。
+        // 王が死亡して除去される場合（king.isAlive()==false）はタイマーを即0に戻す。
+        // これで KingdomBehCheckKing が次フレームに継承を即実行できる。
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Kingdom), "removeKing")]
+        public static void RemoveKing_Postfix(Kingdom __instance)
+        {
+            // king フィールドは removeKing 内で null にセットされるため、
+            // DyingKingActorId との照合でこれが死亡除去かどうか判定する。
+            if (__instance?.data == null) return;
+            if (DyingKingActorId < 0L) return;
+            // DyingKingActorId は Die_Prefix で記録、Die_Postfix 終了後もまだ有効。
+            __instance.data.timer_new_king = 0f;
         }
 
         private static void TryRunDeathStage(Actor pActor,
