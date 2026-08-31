@@ -293,6 +293,18 @@ namespace AncientWarfare3.patch
                 "military governorate ruler succession", () =>
                 MilitaryGovernorateSuccessionService.OnRulerDied(
                     __state.DyingKingdom, __state.DyingKingActorId));
+            // 清零原版的继承等待计时器，让 KingdomBehCheckKing 在下一帧
+            // 立即执行继承，不再等随机 5-20 秒的 timer_new_king 冷却。
+            TryRunDeathStage(__instance,
+                ActorDeathPerformanceStage.KingSuccession,
+                "immediate succession timer clear", () =>
+            {
+                if (__state.DyingKingdom?.data != null)
+                {
+                    __state.DyingKingdom.data.timer_new_king = 0f;
+                    HeirService.RefreshHeir(__state.DyingKingdom);
+                }
+            });
         }
 
         private static void TryRunDeathStage(Actor pActor,

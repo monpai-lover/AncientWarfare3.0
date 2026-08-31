@@ -150,8 +150,19 @@ namespace AncientWarfare3.content
                     case "order_temple":      b.fundament = new BuildingFundament(2, 2, 3, 0); break;
                     case "order_watch_tower":
                         b.fundament = new BuildingFundament(1, 1, 1, 0);
-                        // 投射物从 human 源建筑 clone 已带过来,无需手动设(arch.projectile_id/b.tower_projectile
-                        // 在 NML 现场编译用的非 publicized dll 中不可访问,设了会编译失败)。
+                        // 箭塔在寨子生成/读档两条路径都有问题，必须同时清两个标志：
+                        //
+                        // ① city_building=true（继承自 $city_building$ 模板）→ setBuilding 路径②：
+                        //   setKingdom(current_tile.zone_city.kingdom)
+                        //   读档时 bandit 城市的 kingdom 还是 null → 崩溃（Building.cs:369）
+                        //
+                        // ② asset.kingdom="nomads_Xia"（本类第 120 行统一设置）→ setBuilding 路径①：
+                        //   setKingdom(kingdoms_wild.get("nomads_Xia"))
+                        //   若野生王国实例不存在 → null → 崩溃（Building.cs:246）
+                        //
+                        // 两条路径都清掉：PlaceTowers 已经显式调 building.setKingdom(bandit) 设归属。
+                        b.city_building = false;
+                        b.kingdom = "";
                         break;
                     case "order_library":     b.fundament = new BuildingFundament(2, 2, 2, 0); break;
                     case "order_docks_0":     b.upgrade_to = "docks_" + archId; b.can_be_upgraded = true; break;

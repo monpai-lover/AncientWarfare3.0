@@ -35,6 +35,10 @@ namespace AncientWarfare3.patch
         public static void SaveWorldToDirectory_Prefix()
         {
             if (_multiplayerSnapshotSaveDepth > 0) return;
+            // 存档前清理 kingdom==null 的建筑，防止脏数据写入存档文件。
+            // 成因：watch_tower_Xia 之前版本 asset.kingdom="nomads_Xia" 但
+            // kingdoms_wild 实例不存在，setBuilding 路径①把 null 赋给 building.kingdom。
+            PurgeNullKingdomBuildings();
             try
             {
                 EnterOwnedSaveBoundary();
@@ -230,6 +234,40 @@ namespace AncientWarfare3.patch
             DeJureRegionStore.ObserveLoadDirectory(pPath);
             CountyAdministrationStore.ObserveLoadDirectory(pPath);
             AW3WorldLoadCoordinator.ObserveLoadWorldStarted(pPath);
+        }
+
+        // 读档结束后清理 kingdom==null 的建筑，防止 ChunkObjectContainer.addBuilding
+        // 取 pBuilding.kingdom.id 崩溃。成因见 SaveWorldToDirectory_Prefix 注释。
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.loadWorld), new[] { typeof(string), typeof(bool) })]
+        public static void LoadWorld_Postfix()
+        {
+            PurgeNullKingdomBuildings();
+        }
+
+        internal static void PurgeNullKingdomBuildings()
+        {
+            if (World.world?.buildings == null) return;
+            var toRemove = new System.Collections.Generic.List<Building>();
+            foreach (Building b in World.world.buildings.getSimpleList())
+            {
+                if (b?.data == null || b.isRemoved() || b.isOnRemove()) continue;
+                if (b.kingdom == null)
+                    toRemove.Add(b);
+            }
+            foreach (Building b in toRemove)
+            {
+                try { b.removeBuildingFinal(); }
+                catch (System.Exception e)
+                {
+                    ModClass.LogWarning(
+                        "PurgeNullKingdomBuildings: removal failed id=" +
+                        (b.data?.id ?? -1L) + " " + e.Message);
+                }
+            }
+            if (toRemove.Count > 0)
+                ModClass.LogInfo("[AW3] 清理 kingdom==null 建筑 " +
+                    toRemove.Count + " 个");
         }
 
         [HarmonyPostfix]
