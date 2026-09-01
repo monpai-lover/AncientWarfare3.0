@@ -65,12 +65,13 @@ namespace AncientWarfare3.core.lineage
                 if (AuthoritativeSuccessionRules.CanStartCourtUsurpation(
                         evidence))
                 {
-                    if (!SuccessionRelationshipIndex.IsReady)
-                        evidence = SuccessionEvidenceStatus.PendingEvidence;
-                    else if (evidence ==
-                             SuccessionEvidenceStatus.ExtinctConfirmed &&
-                             SuccessionRelationshipIndex.HasLivingLineageMembers(
-                                 context.LineageId))
+                    // 走 AW3 族谱(SQLite)判定血脉是否绝嗣：它始终就绪，
+                    // 不像原版内存索引那样需要等待异步重建，也不会漏掉
+                    // 没有原版 parent_id 数据的宗族成员。
+                    if (evidence ==
+                            SuccessionEvidenceStatus.ExtinctConfirmed &&
+                        LineageQuery.GetLivingLineageMemberIds(
+                            context.LineageId, 1).Count > 0)
                         evidence = SuccessionEvidenceStatus.
                             EligibleLineExhausted;
                 }

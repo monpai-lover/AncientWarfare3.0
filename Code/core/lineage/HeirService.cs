@@ -539,8 +539,7 @@ namespace AncientWarfare3.core.lineage
             if (referenceKingId < 0L || pActor.kingdom != pKingdom ||
                 !IsHeirBaseEligible(pActor, pKingdom, king) ||
                 pActor.data.id == referenceKingId) return false;
-            long ancestor = SuccessionRelationshipIndex.
-                NearestCommonAgnaticAncestor(
+            long ancestor = LineageQuery.NearestCommonAgnaticAncestor(
                 referenceKingId, pActor.data.id, out int kingDepth,
                 out int candidateDepth);
             if (ancestor < 0L) return false;
@@ -1006,8 +1005,7 @@ namespace AncientWarfare3.core.lineage
             // 一个 Dictionary 并把国王整条父系链重走一遍 —— 同一张表被重建了
             // N 遍。实测 succession:reconcile_heir 单次 60.9ms,占
             // annual_succession 的 99.8%,而该阶段又是权威周期里最大的单项。
-            var kingAncestry =
-                new SuccessionRelationshipIndex.AgnaticAncestorDepths();
+            var kingAncestry = new LineageQuery.AgnaticAncestorDepths();
             kingAncestry.Reset(kingId);
             var pool = CollectSuccessionCandidatePool(pKingdom, king, kingId);
             // [AW3 HEIR DIAG] 只在继承人位子空着时打印，避免每年刷屏。
@@ -1136,11 +1134,10 @@ namespace AncientWarfare3.core.lineage
             var siblingIds = new HashSet<long>();
             try
             {
-                foreach (long childId in SuccessionRelationshipIndex.
-                             GetChildIds(pParentA))
+                // 走 AW3 族谱查询，覆盖没有原版 parent_id 数据的宗族成员。
+                foreach (long childId in LineageQuery.GetChildIds(pParentA))
                     if (childId >= 0L) siblingIds.Add(childId);
-                foreach (long childId in SuccessionRelationshipIndex.
-                             GetChildIds(pParentB))
+                foreach (long childId in LineageQuery.GetChildIds(pParentB))
                     if (childId >= 0L) siblingIds.Add(childId);
             }
             catch { }
@@ -1165,8 +1162,8 @@ namespace AncientWarfare3.core.lineage
             pParentB = -1L;
             try
             {
-                foreach (long parentId in SuccessionRelationshipIndex.
-                             GetParentIds(pActorId))
+                // 走 AW3 族谱查询，覆盖没有原版 parent_id 数据的宗族成员。
+                foreach (long parentId in LineageQuery.GetParentIds(pActorId))
                 {
                     if (parentId < 0L || parentId == pParentA ||
                         parentId == pParentB) continue;
@@ -1191,7 +1188,7 @@ namespace AncientWarfare3.core.lineage
             var actors = new Dictionary<long, Actor>();
             var candidates = new List<HeirDirectSonCandidate>();
             IReadOnlyList<long> indexedChildren =
-                SuccessionRelationshipIndex.GetChildIds(kingId);
+                LineageQuery.GetChildIds(kingId);
             for (int i = 0; i < indexedChildren.Count; i++)
                 AddDirectSonCandidate(World.world?.units?.get(indexedChildren[i]),
                     pKing, actors, candidates);
@@ -1328,7 +1325,7 @@ namespace AncientWarfare3.core.lineage
             {
                 if (_agnatic.TryGetValue(pActorId, out bool cached))
                     return cached;
-                bool value = SuccessionRelationshipIndex.IsAgnaticDescendant(
+                bool value = LineageQuery.IsAgnaticDescendant(
                     pActorId, pLineageId);
                 _agnatic[pActorId] = value;
                 return value;
@@ -1529,11 +1526,9 @@ namespace AncientWarfare3.core.lineage
 
         private static IEnumerable<long> KinNeighborIds(long pActorId)
         {
-            foreach (long parent in SuccessionRelationshipIndex.
-                         GetParentIds(pActorId))
+            foreach (long parent in LineageQuery.GetParentIds(pActorId))
                 if (parent >= 0) yield return parent;
-            foreach (long child in SuccessionRelationshipIndex.
-                         GetChildIds(pActorId))
+            foreach (long child in LineageQuery.GetChildIds(pActorId))
                 if (child >= 0) yield return child;
         }
 

@@ -78,12 +78,10 @@ namespace AncientWarfare3.core.lineage
                 king.data.get(LineageKeys.SHI_ID, out shiId, -1L);
 
             if (!AtLimit(result) && lineageId >= 0)
-                AddArchived(SuccessionRelationshipIndex.
-                    GetLivingLineageMemberIds(lineageId,
+                AddArchived(LineageQuery.GetLivingLineageMemberIds(lineageId,
                     InheritanceCandidateRules.MaximumArchiveIds), result, seen);
             if (!AtLimit(result) && shiId >= 0)
-                AddArchived(SuccessionRelationshipIndex.
-                    GetLivingShiMemberIds(shiId,
+                AddArchived(LineageQuery.GetLivingShiMemberIds(shiId,
                     InheritanceCandidateRules.MaximumArchiveIds), result, seen);
 
             return result;
@@ -111,13 +109,11 @@ namespace AncientWarfare3.core.lineage
                 catch { }
             }
 
-            long fatherId = SuccessionRelationshipIndex.GetFatherId(
-                pReferenceKingId);
+            long fatherId = LineageQuery.GetFatherId(pReferenceKingId);
             AddSiblingBranches(fatherId, pReferenceKingId, pResult, pSeen);
             if (AtLimit(pResult) || fatherId < 0) return;
 
-            long grandfatherId = SuccessionRelationshipIndex.GetFatherId(
-                fatherId);
+            long grandfatherId = LineageQuery.GetFatherId(fatherId);
             AddSiblingBranches(grandfatherId, fatherId, pResult, pSeen);
         }
 
@@ -126,7 +122,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pParentId < 0 || AtLimit(pResult)) return;
             IReadOnlyList<long> siblingIds =
-                SuccessionRelationshipIndex.GetChildIds(pParentId);
+                LineageQuery.GetChildIds(pParentId);
             for (int i = 0; i < siblingIds.Count && !AtLimit(pResult); i++)
             {
                 long siblingId = siblingIds[i];
@@ -141,7 +137,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pParentId < 0 || AtLimit(pResult)) return false;
             IReadOnlyList<long> childIds =
-                SuccessionRelationshipIndex.GetChildIds(pParentId);
+                LineageQuery.GetChildIds(pParentId);
             bool found = childIds.Count > 0;
             for (int i = 0; i < childIds.Count && !AtLimit(pResult); i++)
                 AddLive(ResolveActor(childIds[i]), pResult, pSeen);
@@ -186,11 +182,11 @@ namespace AncientWarfare3.core.lineage
                     shiId)) return true;
 
             IReadOnlyList<long> archiveIds = lineageId >= 0
-                ? SuccessionRelationshipIndex.GetLivingLineageMemberIds(
+                ? LineageQuery.GetLivingLineageMemberIds(
                     lineageId,
                     InheritanceCandidateRules.MaximumArchiveIds)
                 : shiId >= 0
-                    ? SuccessionRelationshipIndex.GetLivingShiMemberIds(
+                    ? LineageQuery.GetLivingShiMemberIds(
                         shiId,
                         InheritanceCandidateRules.MaximumArchiveIds)
                     : null;
@@ -725,7 +721,7 @@ namespace AncientWarfare3.core.lineage
             long father;
             try
             {
-                father = SuccessionRelationshipIndex.GetFatherId(pActorId);
+                father = LineageQuery.GetFatherId(pActorId);
             }
             catch { father = -1L; }
             pCache[pActorId] = father;

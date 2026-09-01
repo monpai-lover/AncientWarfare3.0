@@ -76,7 +76,7 @@ namespace AncientWarfare3.core.lineage
             if (king?.data != null)
             {
                 IReadOnlyList<long> childIds =
-                    SuccessionRelationshipIndex.GetChildIds(king.data.id);
+                    LineageQuery.GetChildIds(king.data.id);
                 int acceptedPrinceCandidates = 0;
                 for (int index = 0; index < childIds.Count &&
                      acceptedPrinceCandidates < MaximumRecipientCandidates;
