@@ -103,6 +103,15 @@ namespace AncientWarfare3.patch
                         }
                         break;
                     case ActorVisualRole.King:
+                        if (string.Equals(__instance.asset?.id, XiaRace.ID,
+                            System.StringComparison.Ordinal))
+                        {
+                            __instance.cached_sprite_head =
+                                SpriteTextureLoader.getSprite(
+                                    textureAsset.texture_path_base +
+                                    XiaActorTextureRules.ResolveKingHeadPath());
+                            return false;
+                        }
                         specialPath = textureAsset.texture_head_king;
                         break;
                     case ActorVisualRole.Civilian:
@@ -400,8 +409,9 @@ namespace AncientWarfare3.patch
 
             if (pActor.isKing())
             {
-                pActor.cached_sprite_head = ActorAnimationLoader.getHeadSpecial(
-                    textureAsset.texture_path_base + headPath);
+                pActor.cached_sprite_head = SpriteTextureLoader.getSprite(
+                    textureAsset.texture_path_base +
+                    XiaActorTextureRules.ResolveKingHeadPath());
                 return true;
             }
 
@@ -414,7 +424,8 @@ namespace AncientWarfare3.patch
 
         private static string ResolveXiaSpecialHeadPath(Actor pActor)
         {
-            if (pActor.isKing()) return "heads_special/head_king";
+            if (pActor.isKing())
+                return XiaActorTextureRules.ResolveKingHeadPath();
             if (IsXiaHeir(pActor)) return "heads_heir/head_0";
 
             pActor.data.get(LineageKeys.OFFICER_RANK, out int rank,

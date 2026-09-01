@@ -1,5 +1,7 @@
+using AncientWarfare3.content;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.presentation;
 using HarmonyLib;
 using UnityEngine;
 
@@ -100,6 +102,15 @@ namespace AncientWarfare3.patch
                 }
                 else if (__instance.is_profession_king)
                 {
+                    if (string.Equals(__instance.asset?.id, XiaRace.ID,
+                        System.StringComparison.Ordinal))
+                    {
+                        __instance.cached_sprite_head =
+                            SpriteTextureLoader.getSprite(
+                                textureAsset.texture_path_base +
+                                XiaActorTextureRules.ResolveKingHeadPath());
+                        return false;
+                    }
                     path = textureAsset.texture_head_king;
                     specialHead = true;
                 }

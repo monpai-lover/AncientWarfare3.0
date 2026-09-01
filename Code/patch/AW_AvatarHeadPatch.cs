@@ -58,7 +58,14 @@ namespace AncientWarfare3.patch
                 return;
             }
 
-            if (pKing) return;
+            if (pKing)
+            {
+                Sprite kingHead = SpriteTextureLoader.getSprite(
+                    tex.texture_path_base +
+                    XiaActorTextureRules.ResolveKingHeadPath());
+                if (kingHead != null) __result = kingHead;
+                return;
+            }
             if (pWarrior)
             {
                 if (actor?.data != null && pAsset.id == XIA)
