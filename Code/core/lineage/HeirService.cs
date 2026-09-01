@@ -1008,41 +1008,15 @@ namespace AncientWarfare3.core.lineage
             var kingAncestry = new LineageQuery.AgnaticAncestorDepths();
             kingAncestry.Reset(kingId);
             var pool = CollectSuccessionCandidatePool(pKingdom, king, kingId);
-            // [AW3 HEIR DIAG] 只在继承人位子空着时打印，避免每年刷屏。
-            bool diagEnabled = PeekRegisteredHeir(pKingdom) == null;
-            if (diagEnabled)
-                ModClass.LogInfo("[AW3 HEIR] kingdom=" + pKingdom.id +
-                    " king=" + kingId + " pool_size=" + pool.Count);
             foreach (Actor cand in pool)
             {
-                if (!IsHeirBaseEligible(cand, pKingdom, king))
-                {
-                    if (diagEnabled)
-                    {
-                        bool isXia = LineageService.IsXia(cand);
-                        bool usesAw = LineageService.UsesAwLineageSystem(cand);
-                        bool sexOk = IsSuccessionSexEligible(cand, pKingdom);
-                        bool roleOk = SuccessionTransitionRules.IsOfficialRoleEligible(
-                            cand.isKing(), false, false, false, false);
-                        ModClass.LogInfo("[AW3 HEIR] skip id=" + cand.data?.id +
-                            " isKing=" + cand.isKing() +
-                            " alive=" + cand.isAlive() +
-                            " rekt=" + cand.isRekt() +
-                            " slave=" + SlaveService.IsSlave(cand) +
-                            " isXia=" + isXia +
-                            " usesAw=" + usesAw +
-                            " sexOk=" + sexOk +
-                            " roleOk=" + roleOk);
-                    }
-                    continue;
-                }
+                if (!IsHeirBaseEligible(cand, pKingdom, king)) continue;
                 long candId = cand.data.id;
                 if (candId == kingId) continue;
+
+                // 同源判定:与国王的最近共同父系祖先(走 AW3 SQLite 族谱,覆盖无原版 parent_id 的宗族成员)。
                 long anc = kingAncestry.NearestCommon(candId,
                     out int kingDepth, out int candDepth);
-                if (diagEnabled)
-                    ModClass.LogInfo("[AW3 HEIR] cand id=" + candId +
-                        " anc=" + anc + " kd=" + kingDepth + " cd=" + candDepth);
                 if (anc < 0) continue;
 
                 bool isDesc = kingDepth == 0;          // 共同祖先即国王本人 → 国王男系后裔
