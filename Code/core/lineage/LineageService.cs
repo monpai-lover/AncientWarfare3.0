@@ -832,21 +832,27 @@ namespace AncientWarfare3.core.lineage
             if (SlaveService.IsSlave(pActor))
                 SlaveService.FreeSlave(pActor, "promoted");
 
-            // Ordinary officials receive scholar-official status without
-            // entering the noble lineage admission path.
-            if (pTrigger == NobleTrigger.Official &&
-                !SocialIdentityService.IsFormalNoble(pActor))
-            {
-                SocialIdentityService.ApplyOfficial(pActor);
-                ApplyDisplayName(pActor);
-                return;
-            }
+            // 普通官员(未获正式爵位)同样要入谱系、立氏、建宗族 —— 只是不升为贵族。
+            // 这里不再提前返回:EnsureLineageForNoble 本身**不写 LINEAGE_STATUS**
+            // (贵族状态一律由调用方另设,见 EnsureRoyalHeirLineage),所以走完
+            // admission 只会给他姓族/氏支,不会让他变成贵族;贵族专属的那段
+            // (NOBLE_DISTANCE / LINEAGE_STATUS / guizu 特质)在下方由同样的
+            // 「授士大夫身份并返回」拦住。
+            //
+            // 之前在此提前返回会让平民出身的低级官拿到士大夫身份却始终 SHI_ID = -1,
+            // EnsureOfficialShiAndClan 随后撞上 `if (shiId < 0) return;` 而不建宗族,
+            // 身份词也因为无氏被 GentryIdentityRules 判成平民。
+
+            bool ordinaryOfficial = pTrigger == NobleTrigger.Official &&
+                                    !SocialIdentityService.IsFormalNoble(pActor);
 
             if (westernAdmission)
             {
+                // pNoble 必须如实传:西式 admission 会照它写贵族身份,
+                // 普通官员传 true 会把他直接抬成贵族。
                 if (!WesternLineageAdmissionService.TryEnsure(pActor,
                         pRuler: pTrigger == NobleTrigger.King,
-                        pHeir: false, pNoble: true,
+                        pHeir: false, pNoble: !ordinaryOfficial,
                         pOfficial: pTrigger == NobleTrigger.Official,
                         pSourceType: pTrigger.ToString().ToLowerInvariant()))
                     return;
@@ -858,8 +864,7 @@ namespace AncientWarfare3.core.lineage
                 EnsureForeignPseudoOfficialLineage(pActor, pTrigger,
                     pOfficeId: pOfficeId, pArchiveActor: false);
 
-            if (pTrigger == NobleTrigger.Official &&
-                !SocialIdentityService.IsFormalNoble(pActor))
+            if (ordinaryOfficial)
             {
                 SocialIdentityService.ApplyOfficial(pActor);
                 ApplyDisplayName(pActor);
