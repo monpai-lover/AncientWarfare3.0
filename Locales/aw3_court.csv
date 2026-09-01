@@ -337,7 +337,7 @@ aw_tech_official_court_desc,将东周六卿改制为三公九卿，允许百家�
 aw_tech_nine_rank_system,九品中正,Nine-rank System,九品中正
 aw_tech_nine_rank_system_desc,每六年复评乡品；门第明显加分，但寒门可凭能力、学派资历、考课和功绩进入上品,Review local grades every six years; lineage matters; capable commoners can still reach the upper grades through learning and merit,每六年復評鄉品；門第明顯加分，但寒門可憑能力、學派資歷、考課和功績進入上品
 aw_tech_civil_service_examination,贡举制度,Civil Service Examinations,貢舉制度
-aw_tech_civil_service_examination_desc,通过贡举考试选拔受教育的士人，使贵族、寒门与平民都能凭才学入仕,Select educated candidates through examinations so nobles declined houses and commoners can enter office by learning,通過貢舉考試選拔受教育的士人，使貴族、寒門與平民都能憑才學入仕
+aw_tech_civil_service_examination_desc,通过贡举考试选拔受教育的士人，使贵族、世家、寒门与平民都能凭才学入仕,Select educated candidates through examinations so nobles gentry declined houses and commoners can enter office by learning,通過貢舉考試選拔受教育的士人，使貴族、世家、寒門與平民都能憑才學入仕
 aw_civil_service_mode_imperial,科举,Imperial Examination,科舉
 aw_civil_service_mode_tribute,贡举,Tribute Examination,貢舉
 aw_civil_service_qualification_none,无资格,Unqualified,無資格
@@ -389,7 +389,7 @@ aw_civil_service_stage_ranking,定榜,Ranking,定榜
 aw_civil_service_stage_completed,已定榜,Completed,已定榜
 aw_civil_service_stage_cancelled,已罢科,Cancelled,已罷科
 aw_civil_service_origin_noble,贵族,Noble,貴族
-aw_civil_service_origin_declined,寒门,Declined House,寒門
+aw_civil_service_origin_declined,世家,Gentry,世家
 aw_civil_service_origin_commoner,平民,Commoner,平民
 aw_civil_service_school_none,无学派,No School,無學派
 aw_civil_service_local_grade,乡品,Local Grade,鄉品
