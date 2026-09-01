@@ -1009,18 +1009,43 @@ namespace AncientWarfare3.core.lineage
             var kingAncestry =
                 new SuccessionRelationshipIndex.AgnaticAncestorDepths();
             kingAncestry.Reset(kingId);
-            foreach (Actor cand in CollectSuccessionCandidatePool(pKingdom,
-                         king, kingId))
+            var pool = CollectSuccessionCandidatePool(pKingdom, king, kingId);
+            // [AW3 HEIR DIAG] 只在继承人位子空着时打印，避免每年刷屏。
+            bool diagEnabled = PeekRegisteredHeir(pKingdom) == null;
+            if (diagEnabled)
+                ModClass.LogInfo("[AW3 HEIR] kingdom=" + pKingdom.id +
+                    " king=" + kingId + " pool_size=" + pool.Count);
+            foreach (Actor cand in pool)
             {
-                if (!IsHeirBaseEligible(cand, pKingdom, king)) continue;
+                if (!IsHeirBaseEligible(cand, pKingdom, king))
+                {
+                    if (diagEnabled)
+                    {
+                        bool isXia = LineageService.IsXia(cand);
+                        bool usesAw = LineageService.UsesAwLineageSystem(cand);
+                        bool sexOk = IsSuccessionSexEligible(cand, pKingdom);
+                        bool roleOk = SuccessionTransitionRules.IsOfficialRoleEligible(
+                            cand.isKing(), false, false, false, false);
+                        ModClass.LogInfo("[AW3 HEIR] skip id=" + cand.data?.id +
+                            " isKing=" + cand.isKing() +
+                            " alive=" + cand.isAlive() +
+                            " rekt=" + cand.isRekt() +
+                            " slave=" + SlaveService.IsSlave(cand) +
+                            " isXia=" + isXia +
+                            " usesAw=" + usesAw +
+                            " sexOk=" + sexOk +
+                            " roleOk=" + roleOk);
+                    }
+                    continue;
+                }
                 long candId = cand.data.id;
                 if (candId == kingId) continue;
-
-                // 同源判定:与国王的最近共同父系祖先(纯 parent 记录,不看 LINEAGE_ID)。
-                // 姓氏合流后姓辨识失效,故按"同源"而非"同姓"判亲缘;无共同父系祖先 = 非同源 → 排除。
                 long anc = kingAncestry.NearestCommon(candId,
                     out int kingDepth, out int candDepth);
-                if (anc < 0) continue;                 // 非同源 → 严禁入选(不会抓不相干的人)
+                if (diagEnabled)
+                    ModClass.LogInfo("[AW3 HEIR] cand id=" + candId +
+                        " anc=" + anc + " kd=" + kingDepth + " cd=" + candDepth);
+                if (anc < 0) continue;
 
                 bool isDesc = kingDepth == 0;          // 共同祖先即国王本人 → 国王男系后裔
                 int delta = candDepth - kingDepth;     // >0 晚辈 / 0 同辈 / <0 长辈
@@ -1214,7 +1239,18 @@ namespace AncientWarfare3.core.lineage
         private static bool IsHeirBaseEligible(Actor pActor, Kingdom pKingdom, Actor pKing)
         {
             if (pActor?.data == null || pActor == pKing) return false;
-            if (!LineageService.IsXia(pActor) && !LineageService.UsesAwLineageSystem(pActor)) return false;
+            // 夏朝/Xia化王国放宽条件：只要是本国成员即可参与继承，
+            // 不强求必须有 LINEAGE_ID（部分 royal clan 成员可能没有谱系数据）。
+            bool usesManaged = UsesManagedLineageForKingdom(pKingdom);
+            if (!usesManaged)
+            {
+                if (!LineageService.IsXia(pActor) &&
+                    !LineageService.UsesAwLineageSystem(pActor)) return false;
+            }
+            else
+            {
+                if (pActor.kingdom != pKingdom) return false;
+            }
             if (!IsSuccessionSexEligible(pActor, pKingdom)) return false;
             if (pActor.isRekt() || !pActor.isAlive()) return false;
             if (!SuccessionTransitionRules.IsOfficialRoleEligible(
@@ -1223,8 +1259,15 @@ namespace AncientWarfare3.core.lineage
                 return false;
             if (pActor.hasTrait("madness")) return false;
             if (SlaveService.IsSlave(pActor)) return false;
-            // 亲缘不再用 LINEAGE_ID(合流后失效)判定,改由调用方按"最近共同父系祖先(同源)"筛选。
             return true;
+        }
+
+        private static bool UsesManagedLineageForKingdom(Kingdom pKingdom)
+        {
+            return pKingdom?.data != null &&
+                   SuccessionTransitionRules.ShouldUseManagedSuccession(
+                       LineageService.IsXiaKingdom(pKingdom),
+                       XiaizationService.UsesXiaizedInstitutionSystem(pKingdom));
         }
 
         private static bool IsSuccessionSexEligible(Actor pActor,
