@@ -185,6 +185,20 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomYear(Kingdom pKingdom)
         {
+            // 两个空位兜底检查：只读 kingdom 字段，不扫描 actor。
+            // ① 继承人空缺 → 立刻从顺位池补第一顺位。
+            if (PeekRegisteredHeir(pKingdom) == null &&
+                !RepublicGovernmentService.IsRepublic(pKingdom) &&
+                pKingdom?.data != null &&
+                !SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king))
+                RefreshHeir(pKingdom);
+            // ② 无国王 + 有继承人 → 直接让继承人即位（KingdomBehCheckKing 的补充驱动）。
+            if (pKingdom?.king == null || !pKingdom.king.isAlive())
+            {
+                Actor heir = PeekRegisteredHeir(pKingdom);
+                if (heir?.data != null && PrepareRegisteredHeirForAccession(pKingdom, heir))
+                    pKingdom.setKing(heir);
+            }
             // 这三段本来只有 RecentFeatureBenchmark,而它受 _sampling 门控 ——
             // 实测 annual_succession 单次 88.22ms 的那一帧不是采样帧,同区间
             // aw3_total_ms 只有 2.484,等于完全漏掉。这里补一层跨帧累计。
