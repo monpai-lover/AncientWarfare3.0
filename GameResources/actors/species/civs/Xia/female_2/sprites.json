@@ -12,21 +12,21 @@
                          "PivotX":  4,
                          "PivotY":  8,
                          "RectX":  0,
-                         "RectY":  0
+                         "RectY":  -1
                      },
                      {
                          "Path":  "walk_2_head.png",
                          "PivotX":  4,
                          "PivotY":  8,
                          "RectX":  0,
-                         "RectY":  -1
+                         "RectY":  -2
                      },
                      {
                          "Path":  "walk_3_head.png",
                          "PivotX":  4,
                          "PivotY":  6,
                          "RectX":  0,
-                         "RectY":  -2
+                         "RectY":  -3
                      },
                      {
                          "Path":  "swim_0_head.png",
