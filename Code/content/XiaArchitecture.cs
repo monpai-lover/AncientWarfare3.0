@@ -115,8 +115,8 @@ namespace AncientWarfare3.content
                 b.group = "civ_building";
                 b.mini_civ_auto_load = true;
                 b.civ_kingdom = archId;
-                // 对齐 Cultiway(CloneHuman 设了 asset.kingdom=野生王国 id):补野生王国归属,
-                // 否则建筑 kingdom 仍指向 human 的 nomads,城市/野生归属可能错乱。
+                // 对齐 Cultiway(CloneHuman):夏朝建筑资产使用对应的野生王国归属，
+                // 由 Building.setBuilding 初始化，创建完成后再由城市/寨子生成路径绑定实际王国。
                 b.kingdom = "nomads_" + archId;
                 b.main_path = MAIN_PATH;
                 b.has_sprite_construction = true;
@@ -150,19 +150,9 @@ namespace AncientWarfare3.content
                     case "order_temple":      b.fundament = new BuildingFundament(2, 2, 3, 0); break;
                     case "order_watch_tower":
                         b.fundament = new BuildingFundament(1, 1, 1, 0);
-                        // 箭塔在寨子生成/读档两条路径都有问题，必须同时清两个标志：
-                        //
-                        // ① city_building=true（继承自 $city_building$ 模板）→ setBuilding 路径②：
-                        //   setKingdom(current_tile.zone_city.kingdom)
-                        //   读档时 bandit 城市的 kingdom 还是 null → 崩溃（Building.cs:369）
-                        //
-                        // ② asset.kingdom="nomads_Xia"（本类第 120 行统一设置）→ setBuilding 路径①：
-                        //   setKingdom(kingdoms_wild.get("nomads_Xia"))
-                        //   若野生王国实例不存在 → null → 崩溃（Building.cs:246）
-                        //
-                        // 两条路径都清掉：PlaceTowers 已经显式调 building.setKingdom(bandit) 设归属。
+                        // 箭塔不参与城市自动归属；生成完成后由各业务路径显式绑定城市/寨子王国。
+                        // 保留 asset.kingdom=nomads_Xia，避免未经过业务封装的创建/读档实例得到 null。
                         b.city_building = false;
-                        b.kingdom = "";
                         break;
                     case "order_library":     b.fundament = new BuildingFundament(2, 2, 2, 0); break;
                     case "order_docks_0":     b.upgrade_to = "docks_" + archId; b.can_be_upgraded = true; break;

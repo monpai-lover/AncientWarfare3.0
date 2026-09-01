@@ -5,6 +5,7 @@ using AncientWarfare3.content;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
+using AncientWarfare3.patch;
 using AncientWarfare3.utils;
 using ai.behaviours;
 using UnityEngine;
@@ -470,6 +471,7 @@ namespace AncientWarfare3.core.lineage
                 if (tile == null) continue;
                 try
                 {
+                    AW_WildKingdomPatch.EnsureWildKingdom(tower.kingdom);
                     if (!World.world.buildings.canBuildFrom(tile, tower, pCity)) continue;
                     Building building = World.world.buildings.addBuilding(tower, tile, pCheckForBuild: false);
                     if (building == null) continue;

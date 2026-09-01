@@ -35,7 +35,9 @@ namespace AncientWarfare3.patch
         public static void SaveWorldToDirectory_Prefix()
         {
             if (_multiplayerSnapshotSaveDepth > 0) return;
-            // 存档前清理 kingdom==null 的建筑，防止脏数据写入存档文件。
+            // 存档前先恢复可推断的城市箭塔归属，再清理无法恢复的 null 建筑，
+            // 防止脏数据写入存档文件。
+            AW_XiaWatchTowerKingdomPatch.RestoreCityWatchTowerKingdoms();
             // 成因：watch_tower_Xia 之前版本 asset.kingdom="nomads_Xia" 但
             // kingdoms_wild 实例不存在，setBuilding 路径①把 null 赋给 building.kingdom。
             PurgeNullKingdomBuildings();
@@ -238,13 +240,6 @@ namespace AncientWarfare3.patch
 
         // 读档结束后清理 kingdom==null 的建筑，防止 ChunkObjectContainer.addBuilding
         // 取 pBuilding.kingdom.id 崩溃。成因见 SaveWorldToDirectory_Prefix 注释。
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.loadWorld), new[] { typeof(string), typeof(bool) })]
-        public static void LoadWorld_Postfix()
-        {
-            PurgeNullKingdomBuildings();
-        }
-
         internal static void PurgeNullKingdomBuildings()
         {
             if (World.world?.buildings == null) return;

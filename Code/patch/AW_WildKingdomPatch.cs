@@ -89,6 +89,82 @@ namespace AncientWarfare3.patch
         }
     }
 
+    /// <summary>
+    ///     夏朝箭塔关闭 city_building 后，原版不会再把它绑定到所在城市。
+    ///     创建和读档都在 BuildingManager 完成后补一次城市王国归属；没有城市的
+    ///     寨子/边境箭塔不在这里处理，由对应业务路径显式绑定。
+    /// </summary>
+    [HarmonyPatch]
+    internal static class AW_XiaWatchTowerKingdomPatch
+    {
+        private const string WatchTowerAssetId = "watch_tower_Xia";
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(BuildingManager), "addBuilding",
+            new[] { typeof(BuildingAsset), typeof(WorldTile), typeof(bool),
+                typeof(bool), typeof(BuildPlacingType) })]
+        private static void AddBuildingPrefix(BuildingAsset pAsset)
+        {
+            AW_WildKingdomPatch.EnsureWildKingdom(pAsset?.kingdom);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(BuildingManager), "addBuilding",
+            new[] { typeof(BuildingAsset), typeof(WorldTile), typeof(bool),
+                typeof(bool), typeof(BuildPlacingType) })]
+        private static void AddBuildingPostfix(Building __result,
+            BuildingAsset pAsset, WorldTile pTile)
+        {
+            RestoreCityWatchTowerKingdom(__result, pAsset, pTile);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(BuildingManager), nameof(BuildingManager.loadObject),
+            new[] { typeof(BuildingData) })]
+        private static void LoadObjectPrefix(BuildingData pData)
+        {
+            AW_WildKingdomPatch.EnsureWildKingdom(
+                AssetManager.buildings.get(pData?.asset_id)?.kingdom);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(BuildingManager), nameof(BuildingManager.loadObject),
+            new[] { typeof(BuildingData) })]
+        private static void LoadObjectPostfix(Building __result)
+        {
+            RestoreCityWatchTowerKingdom(__result, __result?.asset,
+                __result?.current_tile);
+        }
+
+        internal static void RestoreCityWatchTowerKingdoms()
+        {
+            if (World.world?.buildings == null) return;
+            foreach (Building building in World.world.buildings.getSimpleList())
+            {
+                RestoreCityWatchTowerKingdom(building, building?.asset,
+                    building?.current_tile);
+            }
+        }
+
+        private static void RestoreCityWatchTowerKingdom(Building pBuilding,
+            BuildingAsset pAsset, WorldTile pTile)
+        {
+            if (pBuilding?.data == null || pBuilding.isRemoved() ||
+                pBuilding.isOnRemove() || pAsset?.id != WatchTowerAssetId ||
+                pTile == null) return;
+
+            City city = null;
+            try
+            {
+                city = pTile.zone_city ?? pTile.zone?.city;
+            }
+            catch { }
+
+            if (city?.kingdom != null)
+                pBuilding.setKingdom(city.kingdom);
+        }
+    }
+
     [HarmonyPatch(typeof(WildKingdomsManager), "beginChecksBuildings")]
     internal static class AW_WildKingdomsBeginChecksPatch
     {
@@ -97,8 +173,8 @@ namespace AncientWarfare3.patch
         {
             if (!AW_LoadWorldPurgeFlagPatch.PendingPurge) return;
             AW_LoadWorldPurgeFlagPatch.PendingPurge = false;
+            AW_XiaWatchTowerKingdomPatch.RestoreCityWatchTowerKingdoms();
             AW_SavePatch.PurgeNullKingdomBuildings();
         }
     }
 }
-

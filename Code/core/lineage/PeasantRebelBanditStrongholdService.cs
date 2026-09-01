@@ -4,6 +4,7 @@ using System.Linq;
 using ai;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.schools;
+using AncientWarfare3.patch;
 using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.lineage
@@ -1835,6 +1836,7 @@ namespace AncientWarfare3.core.lineage
                 plan.TowerTiles.Count == 0) return;
             foreach (WorldTile tile in plan.TowerTiles)
             {
+                AW_WildKingdomPatch.EnsureWildKingdom(plan.TowerAsset.kingdom);
                 Building building = World.world.buildings.addBuilding(
                     plan.TowerAsset, tile, pCheckForBuild: true,
                     pSfx: false, pType: BuildPlacingType.Load);
