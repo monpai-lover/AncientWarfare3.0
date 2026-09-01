@@ -2,95 +2,79 @@
     "Specific": [
         {
             "Path": "walk_0_head.png",
-            "PivotX": 4,
-            "PivotY": 6,
-            "RectX": -2,
-            "RectY": 43,
-            "RectW": 1,
-            "RectH": 1
+            "PivotX": 16,
+            "PivotY": 24,
+            "RectX": 0,
+            "RectY": -12
         },
         {
             "Path": "walk_1_head.png",
-            "PivotX": 4,
-            "PivotY": 8,
-            "RectX": -2,
-            "RectY": 51,
-            "RectW": 1,
-            "RectH": 1
+            "PivotX": 16,
+            "PivotY": 32,
+            "RectX": 0,
+            "RectY": -4
         },
         {
             "Path": "walk_2_head.png",
-            "PivotX": 4,
-            "PivotY": 8,
-            "RectX": -2,
-            "RectY": 47,
-            "RectW": 1,
-            "RectH": 1
+            "PivotX": 16,
+            "PivotY": 32,
+            "RectX": 0,
+            "RectY": -8
         },
         {
             "Path": "walk_3_head.png",
-            "PivotX": 4,
-            "PivotY": 6,
-            "RectX": -2,
-            "RectY": 43,
-            "RectW": 1,
-            "RectH": 1
+            "PivotX": 16,
+            "PivotY": 24,
+            "RectX": 0,
+            "RectY": -12
         },
         {
             "Path": "swim_0_head.png",
-            "PivotX": 4,
-            "PivotY": 6,
-            "RectX": -2,
-            "RectY": 35,
-            "RectW": 1,
-            "RectH": 1
+            "PivotX": 16,
+            "PivotY": 24,
+            "RectX": 0,
+            "RectY": -20
         },
         {
             "Path": "swim_1_head.png",
-            "PivotX": 4,
-            "PivotY": 8,
-            "RectX": -2,
-            "RectY": 31,
-            "RectW": 1,
-            "RectH": 1
+            "PivotX": 16,
+            "PivotY": 32,
+            "RectX": 0,
+            "RectY": -24
         },
         {
             "Path": "swim_2_head.png",
-            "PivotX": 4,
-            "PivotY": 8,
-            "RectX": -2,
-            "RectY": 35,
-            "RectW": 1,
-            "RectH": 1
+            "PivotX": 16,
+            "PivotY": 32,
+            "RectX": 0,
+            "RectY": -20
         },
         {
             "Path": "swim_3_head.png",
-            "PivotX": 4,
-            "PivotY": 6,
-            "RectX": -2,
-            "RectY": 31,
-            "RectW": 1,
-            "RectH": 1
+            "PivotX": 16,
+            "PivotY": 24,
+            "RectX": 0,
+            "RectY": -24
         },
         {
             "Path": "walk_0_item.png",
-            "PivotX": 1,
-            "PivotY": 4
+            "PivotX": 4,
+            "PivotY": 16
         },
         {
             "Path": "walk_1_item.png",
-            "PivotX": 1,
-            "PivotY": 7
+            "PivotX": 4,
+            "PivotY": 28
         },
         {
             "Path": "walk_2_item.png",
-            "PivotX": 1,
-            "PivotY": 6
+            "PivotX": 4,
+            "PivotY": 24
         },
         {
             "Path": "walk_3_item.png",
-            "PivotX": 1,
-            "PivotY": 5
+            "PivotX": 4,
+            "PivotY": 20
         }
     ]
 }

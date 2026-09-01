@@ -4,22 +4,50 @@ using AncientWarfare3.content;
 namespace AncientWarfare3.core.presentation
 {
     /// <summary>
-    ///     夏人国王高分辨率单位的缩放规则。贴图按四倍像素绘制,
-    ///     单位缩放乘四分之一抵消,净视觉大小不变。
+    ///     夏人国王高分辨率单位的规则。贴图按四倍像素绘制,
+    ///     靠**合成图的 pixelsPerUnit** 把世界尺寸压回去,
+    ///     actor_scale / current_scale 一律不动。
+    ///
+    ///     为什么用 ppu 而不是缩放 current_scale:
+    ///     原版只有 current_scale 这一个缩放源,主贴图和所有普通分辨率的
+    ///     附属物(影子、手持物、星标、选择框、状态图标、气泡……)共用它。
+    ///     把它 ÷4 会把附属物一起缩掉,而附属物散落在原版各处,逐个特判改不完。
+    ///     pixelsPerUnit 只影响这张精灵自己的世界尺寸,正是为这种情形准备的。
+    ///
+    ///     代价只有一处:AnimationFrameData 里 pos_head / pos_item / size_unit
+    ///     是按 4× 帧标定的像素,消费方一律乘 current_scale,所以要在动画容器
+    ///     加载完成后除以倍率(见 AW_HighResolutionSpritePatch)。
+    ///     pos_head_new 例外 —— 合成器在图集像素空间里用它,必须保持原值。
     /// </summary>
     public static class XiaKingScaleRules
     {
         /// <summary>国王贴图相对普通单位的绘制倍率。</summary>
         public const int BodyResolutionFactor = 4;
 
-        /// <summary>渲染缩放系数:纯视觉,不影响 target_scale(体型/碰撞)。</summary>
-        public const float BodyScaleMultiplier = 0.0825f;
+        /// <summary>国王身体帧所在的贴图目录后缀,用来认出高分辨率动画容器。</summary>
+        public const string KingTexturePathSuffix = "/king";
 
         /// <summary>
-        ///     头像框是反向缩放的(原版按 2.5f / scale 保持边框大小恒定),
-        ///     所以头像本体缩小多少,边框就要放大回来多少。
+        ///     检视面板里国王画像的下移量,单位是头像的**局部**像素
+        ///     (4× 空间,身体帧高 44,所以 44 ≈ 一整个身高)。
+        ///     纯视觉微调:画像偏上调大、偏下调小。
         /// </summary>
-        public const float FrameScaleMultiplier = BodyResolutionFactor;
+        public const float InspectPortraitOffsetY = 21f;
+
+        /// <summary>
+        ///     手持物锚点的微调,单位是**普通分辨率像素**,直接加在
+        ///     pos_item 上(在它被除回普通分辨率之后)。
+        ///
+        ///     加在帧数据上而不是各个消费方,是为了一处生效两处受益:
+        ///     地图上 pos_item 要乘 current_scale,面板里它是局部像素再乘倍率,
+        ///     所以同一个值在面板里自动放大成四倍,两边位移量一致。
+        ///
+        ///     偏差的来源是手部锚点在 4× 重绘时挪了位,属于帧数据本身。
+        /// </summary>
+        public const float ItemAnchorOffsetX = -1f;
+
+        /// <summary>见 <see cref="ItemAnchorOffsetX"/>。</summary>
+        public const float ItemAnchorOffsetY = -2f;
 
         /// <summary>
         ///     只有夏人国王走高分辨率身体,其余夏人单位保持原分辨率。
@@ -31,33 +59,33 @@ namespace AncientWarfare3.core.presentation
         }
 
         /// <summary>
-        ///     当前缩放与目标差得足够远时必须瞬时对齐,不能走成长补间——
-        ///     高分辨率的 ¼ 缩放是对贴图倍率的抵消,补间会让刚即位的国王
-        ///     先缩成一个点再慢慢长回来。
+        ///     这条贴图路径是不是高分辨率单位的帧目录。
+        ///     动画容器按贴图路径缓存,国王独占 .../Xia/king,
+        ///     所以按路径认最省事,也不需要 Actor 在场。
         /// </summary>
-        public static bool NeedsImmediateScale(float pCurrentScale,
-            float pTargetScale)
+        public static bool IsHighResolutionTexturePath(string pTexturePath)
         {
-            return Math.Abs(pCurrentScale - pTargetScale) > 0.001f;
+            if (string.IsNullOrEmpty(pTexturePath)) return false;
+            return pTexturePath.Replace('\\', '/')
+                       .EndsWith(KingTexturePathSuffix, StringComparison.Ordinal)
+                   && pTexturePath.IndexOf(XiaRace.ID,
+                       StringComparison.Ordinal) >= 0;
         }
 
         /// <summary>
-        ///     检视面板里国王头像图片的额外下移量(像素)。
-        ///     头帧 4× 放大后图像整体偏上,这里在 showStatic 设好 anchoredPosition
-        ///     之后再减去这个偏移让画像回到正确位置。
-        /// </summary>
-        public const float InspectPortraitOffsetY = 20f;
-
-        /// <summary>
-        ///     检视头像的绝对缩放,复刻原版 UnitAvatarLoader.load 的公式
-        ///     (inspect_avatar_scale * avatarSize)再乘抵消系数。
-        ///     必须是绝对值:头像加载器是池化复用的,基于当前 localScale
-        ///     做乘法会在反复打开面板时累积缩小。
+        ///     检视面板头像的缩放:原版公式(UnitAvatarLoader.cs:155)再除以贴图倍率。
+        ///     地图上靠 pixelsPerUnit 抵消 4× 贴图,检视面板不走那条路径 ——
+        ///     setImageParams 直接按 sprite.rect 定 sizeDelta(:487),
+        ///     完全无视 ppu,所以必须在这里单独抵消一次。
+        ///
+        ///     必须**绝对赋值**,不能在现有 localScale 上乘系数:
+        ///     UnitAvatarLoader 是池化复用的,同一个实例每次开面板都会重新 load,
+        ///     乘法会逐次累积,表现为头像每点一次就更小。
         /// </summary>
         public static float ResolveAvatarScale(float pInspectAvatarScale,
             float pAvatarSize)
         {
-            return pInspectAvatarScale * pAvatarSize * BodyScaleMultiplier;
+            return pInspectAvatarScale * pAvatarSize / BodyResolutionFactor;
         }
     }
 }
