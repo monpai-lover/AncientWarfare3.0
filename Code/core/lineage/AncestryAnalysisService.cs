@@ -83,6 +83,14 @@ namespace AncientWarfare3.core.lineage
 
                 report.actor_name = NameOf(actor, row, pActorId);
                 report.identity = ResolveIdentity(actor, row);
+                report.identity_shi_id = LiveLong(actor, LineageKeys.SHI_ID, row?.shi_id ?? -1L);
+                // ruling_shi: actor 的氏支是当朝统治氏支（与王共氏且有效）
+                if (report.identity_shi_id >= 0 && actor?.kingdom?.king?.data != null)
+                {
+                    actor.kingdom.king.data.get(LineageKeys.SHI_ID, out long kingShi, -1L);
+                    report.identity_ruling_shi = kingShi >= 0 &&
+                        kingShi == report.identity_shi_id;
+                }
                 report.noble_blood = ResolveNobleBlood(pActorId, actor, row);
                 report.noble_ancestors = CollectNobleAncestors(pActorId);
 

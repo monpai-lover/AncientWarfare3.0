@@ -320,6 +320,7 @@ namespace AncientWarfare3.ui.items
             string key = pOrigin switch
             {
                 "noble" => "aw_civil_service_origin_noble",
+                "gentry" => "aw_civil_service_origin_gentry",
                 "declined_noble" => "aw_civil_service_origin_declined",
                 _ => "aw_civil_service_origin_commoner"
             };

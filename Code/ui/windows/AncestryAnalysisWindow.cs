@@ -34,7 +34,7 @@ namespace AncientWarfare3.ui.windows
 
             AncestryReport report = AncestryAnalysisService.BuildReport(_actorId);
             AddHeader(report.actor_name);
-            AddLine(AW_L10n.Text("aw_ancestry_identity", "\u8EAB\u4EFD") + ": " + IdentityLabel(report.identity));
+            AddLine(AW_L10n.Text("aw_ancestry_identity", "\u8EAB\u4EFD") + ": " + IdentityLabel(report));
 
             if (report.noble_blood.has_noble_blood)
             {
@@ -166,15 +166,23 @@ namespace AncientWarfare3.ui.windows
             return pMarker.label + " (" + source + " +" + pMarker.distance + ")";
         }
 
-        private static string IdentityLabel(string pIdentity)
+        private static string IdentityLabel(AncestryReport pReport)
         {
-            switch (pIdentity)
-            {
-                case LineageStatus.NOBLE: return AW_L10n.Text("aw_role_noble", "\u8D35\u65CF");
-                case LineageStatus.COMMON: return AW_L10n.Text("aw_role_common_lineage", "\u6709\u6C0F\u5E73\u6C11");
-                case LineageStatus.SLAVE: return AW_L10n.Text("aw_role_slave", "\u5974\u96B6");
-                default: return AW_L10n.Text("aw_role_common", "\u5E73\u6C11");
-            }
+            string identity = pReport?.identity ?? "";
+            long shiId = pReport?.identity_shi_id ?? -1L;
+            bool rulingShi = pReport?.identity_ruling_shi ?? false;
+            // \u56DB\u6863\uFF1A\u8D35\u65CF / \u4E16\u5BB6 / \u5BD2\u95E8 / \u5E73\u6C11\uFF08\u5BF9\u9F50 FamilyTreeNodeView.IdentityLabel \u903B\u8F91\uFF09
+            if (identity == LineageStatus.SLAVE)
+                return AW_L10n.Text("aw_role_slave", "\u5974\u96B6");
+            if (rulingShi && shiId >= 0)
+                return AW_L10n.Text("aw_identity_noble", "\u8D35\u65CF");
+            if (identity == LineageStatus.NOBLE)
+                return AW_L10n.Text("aw_identity_gentry", "\u4E16\u5BB6");
+            if (identity == LineageStatus.COMMON)
+                return shiId >= 0
+                    ? AW_L10n.Text("aw_identity_declined", "\u5BD2\u95E8")
+                    : AW_L10n.Text("aw_identity_common", "\u5E73\u6C11");
+            return AW_L10n.Text("aw_identity_common", "\u5E73\u6C11");
         }
     }
 }

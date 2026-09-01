@@ -99,12 +99,14 @@ namespace AncientWarfare3.core.court
         public const int MaximumWaitingReserve = 32;
 
         public const string NobleOrigin = "noble";
-        public const string DeclinedNobleOrigin = "declined_noble";
+        public const string GentryOrigin = "gentry";         // 世家：曾经是贵族，现已衰落
+        public const string DeclinedNobleOrigin = "declined_noble"; // 寒门：有氏但从未出过贵族/官员
         public const string CommonerOrigin = "commoner";
 
         private static readonly string[] GuaranteedOrigins =
         {
             NobleOrigin,
+            GentryOrigin,
             DeclinedNobleOrigin,
             CommonerOrigin
         };
@@ -577,12 +579,18 @@ namespace AncientWarfare3.core.court
         public static string ResolveSocialOrigin(string currentStatus,
             bool everNoble, long lineageId)
         {
+            // 贵族：当前身份仍是贵族
             if (string.Equals(currentStatus, NobleOrigin,
                     StringComparison.OrdinalIgnoreCase))
                 return NobleOrigin;
-            return everNoble || lineageId >= 0L
-                ? DeclinedNobleOrigin
-                : CommonerOrigin;
+            // 世家：曾经是贵族（有过贵族血脉）
+            if (everNoble)
+                return GentryOrigin;
+            // 寒门：有氏（有谱系 id）但家族从未出过贵族
+            if (lineageId >= 0L)
+                return DeclinedNobleOrigin;
+            // 平民：无氏无贵族血脉
+            return CommonerOrigin;
         }
 
         public static IReadOnlyList<CivilServiceExamCandidateFacts>

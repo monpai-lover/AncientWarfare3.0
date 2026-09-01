@@ -389,7 +389,8 @@ aw_civil_service_stage_ranking,定榜,Ranking,定榜
 aw_civil_service_stage_completed,已定榜,Completed,已定榜
 aw_civil_service_stage_cancelled,已罢科,Cancelled,已罷科
 aw_civil_service_origin_noble,贵族,Noble,貴族
-aw_civil_service_origin_declined,世家,Gentry,世家
+aw_civil_service_origin_gentry,世家,Gentry,世家
+aw_civil_service_origin_declined,寒门,Declined House,寒門
 aw_civil_service_origin_commoner,平民,Commoner,平民
 aw_civil_service_school_none,无学派,No School,無學派
 aw_civil_service_local_grade,乡品,Local Grade,鄉品

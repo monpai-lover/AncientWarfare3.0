@@ -380,6 +380,8 @@ namespace AncientWarfare3.core.lineage
         public long actor_id = -1;
         public string actor_name = "";
         public string identity = "";
+        public long identity_shi_id = -1;   // 用于在 IdentityLabel 里区分贵族/世家
+        public bool identity_ruling_shi;    // 当前氏是当朝统治氏支
         public int max_depth;
         public int known_ancestors;
         public float unknown_percent;
