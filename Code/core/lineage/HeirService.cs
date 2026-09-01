@@ -1239,17 +1239,13 @@ namespace AncientWarfare3.core.lineage
         private static bool IsHeirBaseEligible(Actor pActor, Kingdom pKingdom, Actor pKing)
         {
             if (pActor?.data == null || pActor == pKing) return false;
-            // 夏朝/Xia化王国放宽条件：只要是本国成员即可参与继承，
-            // 不强求必须有 LINEAGE_ID（部分 royal clan 成员可能没有谱系数据）。
+            // 夏朝/Xia化王国放宽种族/谱系限制：不强求 LINEAGE_ID 或 IsXia，
+            // 候选人不需要在本国，归化在 NormalizeHeirForRegistration 里进行。
             bool usesManaged = UsesManagedLineageForKingdom(pKingdom);
             if (!usesManaged)
             {
                 if (!LineageService.IsXia(pActor) &&
                     !LineageService.UsesAwLineageSystem(pActor)) return false;
-            }
-            else
-            {
-                if (pActor.kingdom != pKingdom) return false;
             }
             if (!IsSuccessionSexEligible(pActor, pKingdom)) return false;
             if (pActor.isRekt() || !pActor.isAlive()) return false;
