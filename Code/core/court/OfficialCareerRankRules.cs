@@ -343,6 +343,25 @@ namespace AncientWarfare3.core.court
             return MinimumRank;
         }
 
+        /// <summary>
+        ///     自定义官职上写的「最低任职品阶」。
+        ///
+        ///     任命在本模组里等于提拔(可以越级),所以这个值不是准入门槛而是
+        ///     **任职品阶的下限**:任命成立后,任职者的仕途等级至少抬到这个数。
+        ///     <see cref="RequiredRankForOfficeGrade"/> 那张表只认 10/20/30 三档
+        ///     官职等级,自定义官场随便填的等级一律落到
+        ///     <see cref="MinimumRank"/>,所以自定义官职必须有自己的下限来源。
+        ///
+        ///     0 表示不设下限,按官职等级那张表走。
+        /// </summary>
+        public static int ApplyCustomOfficeRankFloor(int pRank,
+            int pCustomMinimumRank)
+        {
+            int rank = ClampRank(pRank);
+            if (pCustomMinimumRank <= Unranked) return rank;
+            return Math.Max(rank, ClampRank(pCustomMinimumRank));
+        }
+
         public static bool IsRequiredServiceGrade(int servedOfficeGrade,
             int requiredOfficeGrade)
         {

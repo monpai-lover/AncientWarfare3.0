@@ -201,7 +201,7 @@ namespace AncientWarfare3.ui.windows
                 "The court section and hierarchy layer containing this office.",
                 CycleLayer, out _layerText);
             _gradeInput = AddInputField(_basePanel, "Grade", 0, 2,
-                "aw_custom_court_settings_grade", "Grade",
+                "aw_custom_court_settings_grade", "Office grade",
                 "aw_custom_court_settings_grade_desc",
                 "The formal grade used to rank this office against others.");
             _slotsInput = AddInputField(_basePanel, "Slots", 0, 3,
@@ -223,9 +223,9 @@ namespace AncientWarfare3.ui.windows
                 CyclePreferredSchool,
                 out _preferredSchoolText);
             _minimumRankInput = AddInputField(_basePanel, "MinimumRank", 1, 1,
-                "aw_custom_court_settings_minimum_rank", "Minimum career rank",
+                "aw_custom_court_settings_minimum_rank", "Minimum office rank",
                 "aw_custom_court_settings_minimum_rank_desc",
-                "The lowest career rank eligible for appointment.");
+                "The career rank floor applied to whoever holds this office.");
             _requiredSchoolButton = AddCycleField(_basePanel,
                 "RequiredSchool", 1, 2,
                 "aw_custom_court_settings_required_school", "Required school",
@@ -244,13 +244,13 @@ namespace AncientWarfare3.ui.windows
                 "The candidate must already hold this prerequisite office.",
                 CycleRequiredOffice, out _requiredOfficeText);
             AddFieldHelp(_basePanel, "Grade",
-                "aw_custom_court_settings_grade", "Grade",
+                "aw_custom_court_settings_grade", "Office grade",
                 "aw_custom_court_settings_grade_desc",
                 "The formal grade used to rank this office against others.");
             AddFieldHelp(_basePanel, "MinimumRank",
-                "aw_custom_court_settings_minimum_rank", "Minimum career rank",
+                "aw_custom_court_settings_minimum_rank", "Minimum office rank",
                 "aw_custom_court_settings_minimum_rank_desc",
-                "The lowest career rank eligible for appointment.");
+                "The career rank floor applied to whoever holds this office.");
             AddFieldHelp(_basePanel, "RequiredSchool",
                 "aw_custom_court_settings_required_school", "Required school",
                 "aw_custom_court_settings_required_school_desc",

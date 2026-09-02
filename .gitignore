@@ -126,3 +126,13 @@ __pycache__/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Local analysis scratch: scan dumps plus a full build-check copy of Code/ (~26 MB)
+/.analysis/
+
+# Timestamped local safety backups taken before risky sprite/schema edits
+/.aw3-*-backup-*/
+/.aw3-targeted-backups/
+
+# Leftover marker from the worktree layout
+/worktrees_placeholder.txt

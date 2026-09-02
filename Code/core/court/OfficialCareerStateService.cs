@@ -1624,11 +1624,34 @@ namespace AncientWarfare3.core.court
                 localGrade, pAllowLocalLowerQualification, pCity);
         }
 
+        /// <summary>
+        ///     所有任命品阶都从这里出去,所以自定义官职的「最低任职品阶」下限
+        ///     只在这一处兜住 —— 底下那个函数有十几个 return,逐个改必漏。
+        ///
+        ///     代理(<paramref name="pActing"/>)不抬:代理本来就只保留原品阶。
+        ///     没有九品制时底下返回 <see cref="OfficialCareerRankRules.Unranked"/>,
+        ///     整套品阶都不存在,自然也不抬。
+        /// </summary>
         private static int ResolveAppointmentRankFast(Actor pActor,
             Kingdom pKingdom, string pLayer, string pOfficeId, bool pActing,
             bool pVacancyPromotion, OfficialCareerStateView pExisting,
             int pLocalGrade, bool pAllowLocalLowerQualification = false,
             City pCity = null)
+        {
+            int rank = ResolveAppointmentRankCore(pActor, pKingdom, pLayer,
+                pOfficeId, pActing, pVacancyPromotion, pExisting, pLocalGrade,
+                pAllowLocalLowerQualification, pCity);
+            if (pActing || rank <= OfficialCareerRankRules.Unranked)
+                return rank;
+            return OfficialCareerRankRules.ApplyCustomOfficeRankFloor(rank,
+                MinimumRankForOffice(pKingdom, pLayer, pOfficeId, pCity));
+        }
+
+        private static int ResolveAppointmentRankCore(Actor pActor,
+            Kingdom pKingdom, string pLayer, string pOfficeId, bool pActing,
+            bool pVacancyPromotion, OfficialCareerStateView pExisting,
+            int pLocalGrade, bool pAllowLocalLowerQualification,
+            City pCity)
         {
             if (pActor?.data == null || pKingdom?.data == null)
                 return OfficialCareerRankRules.Unranked;
@@ -1999,6 +2022,40 @@ namespace AncientWarfare3.core.court
                 pKingdom, pOfficeId) ??
                 CourtProfileRegistry.FindOfficeAcrossProfiles(pOfficeId);
             return definition?.Grade ?? 30;
+        }
+
+        /// <summary>
+        ///     自定义官职面板上填的「最低任职品阶」。原版官职没有这一栏,返回 0
+        ///     表示不设下限。取值路径和
+        ///     <see cref="OfficeGradeForOffice(Kingdom,string,string,City)"/>
+        ///     完全一致:先地方模板、再中央快照,都没有才算原版官职。
+        /// </summary>
+        internal static int MinimumRankForOffice(Kingdom pKingdom,
+            string pLayer, string pOfficeId, City pCity = null)
+        {
+            if (string.IsNullOrEmpty(pOfficeId)) return 0;
+            if (pLayer == CourtOfficeLayer.City &&
+                CustomCourtRuntime.TryGetLocalTemplate(pKingdom, pCity,
+                    out CustomLocalCourtTemplate local))
+            {
+                CustomCourtOffice office = (local.Offices ??
+                    new List<CustomCourtOffice>()).FirstOrDefault(item =>
+                    item != null && item.Id == pOfficeId);
+                if (office != null)
+                    return OfficialCareerRankRules.ClampRank(
+                        office.Requirements?.MinimumRank ?? 0);
+            }
+            if (pLayer != CourtOfficeLayer.City &&
+                CustomCourtRuntime.TryGetSnapshot(pKingdom,
+                    out CustomCourtTemplate snapshot))
+            {
+                CustomCourtOffice office = CustomCourtTemplateRules.FindOffice(
+                    snapshot, pOfficeId);
+                if (office != null)
+                    return OfficialCareerRankRules.ClampRank(
+                        office.Requirements?.MinimumRank ?? 0);
+            }
+            return 0;
         }
 
         internal static bool IsRegionalGovernorSeat(Kingdom pKingdom,
