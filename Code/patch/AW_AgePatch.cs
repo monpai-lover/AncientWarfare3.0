@@ -60,6 +60,12 @@ namespace AncientWarfare3.patch
         public static bool CheckSpriteHead_Prefix(Actor __instance)
         {
             if (__instance?.data == null || !LineageService.IsXia(__instance)) return true;
+            if (!ActorVisualRoleRules.ShouldRenderCustomHead(__instance.isBaby()))
+            {
+                __instance.dirty_sprite_head = false;
+                __instance.cached_sprite_head = null;
+                return false;
+            }
             if (!__instance.dirty_sprite_head) return false;
 
             __instance.dirty_sprite_head = false;

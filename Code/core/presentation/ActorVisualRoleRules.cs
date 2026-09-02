@@ -11,6 +11,11 @@ namespace AncientWarfare3.core.presentation
 
     public static class ActorVisualRoleRules
     {
+        public static bool ShouldRenderCustomHead(bool pIsBaby)
+        {
+            return !pIsBaby;
+        }
+
         public static bool IsKing(ActorVisualRole pRole,
             bool pVanillaKing)
         {

@@ -34,6 +34,14 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), "checkSpriteHead")]
         public static bool CheckSpriteHeadPrefix(Actor __instance)
         {
+            if (__instance?.data != null &&
+                !ActorVisualRoleRules.ShouldRenderCustomHead(
+                    __instance.isBaby()))
+            {
+                __instance.dirty_sprite_head = false;
+                __instance.cached_sprite_head = null;
+                return false;
+            }
             if (ShouldUseBanditKingHead(__instance))
                 return ApplyBanditKingHead(__instance);
             if (ShouldUseBanditHead(__instance))

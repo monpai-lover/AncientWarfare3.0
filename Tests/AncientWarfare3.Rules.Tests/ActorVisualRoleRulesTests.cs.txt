@@ -48,6 +48,12 @@ internal static class ActorVisualRoleRulesTests
         Equal(true, ActorVisualRoleRules.IsKing(
                 ActorVisualRole.King, pVanillaKing: false),
             "king role enables king presentation");
+        Equal(false,
+            ActorVisualRoleRules.ShouldRenderCustomHead(pIsBaby: true),
+            "babies do not render custom map heads");
+        Equal(true,
+            ActorVisualRoleRules.ShouldRenderCustomHead(pIsBaby: false),
+            "adults can render custom map heads");
 
         Equal(ActorVisualRole.Warrior,
             ActorVisualRoleRules.ResolveMilitaryGovernorateRole(
