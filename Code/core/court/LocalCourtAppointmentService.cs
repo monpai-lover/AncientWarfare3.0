@@ -516,6 +516,8 @@ namespace AncientWarfare3.core.court
         {
             OfficerCandidateCatalog.ClearRuntime();
             AncientWarfare3.core.lineage.SuccessionPoolService.ClearRuntime();
+            AncientWarfare3.core.lineage.InheritanceCandidateService
+                .ClearRuntime();
             AncientWarfare3.core.lineage.HeirService.ClearSuccessionPoolRepairs();
             AncientWarfare3.core.lineage.GeneralService.ClearCandidatePools();
         }

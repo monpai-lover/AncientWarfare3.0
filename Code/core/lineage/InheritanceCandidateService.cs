@@ -92,7 +92,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pReferenceKingId < 0 || AtLimit(pResult)) return;
 
-            bool foundIndexedChild = AddIndexedChildren(pReferenceKingId,
+            bool foundIndexedChild = AddKingDescendants(pReferenceKingId,
                 pResult, pSeen);
             if (!foundIndexedChild && pReferenceKing?.data != null)
             {
@@ -130,6 +130,61 @@ namespace AncientWarfare3.core.lineage
                 AddLive(ResolveActor(siblingId), pResult, pSeen);
                 AddIndexedChildren(siblingId, pResult, pSeen);
             }
+        }
+
+        /// <summary>
+        ///     君主的直系后裔,按辈分逐层往下收:子 → 孙 → 曾孙 → …
+        ///
+        ///     原来这里只收儿子一辈。孙辈只能靠后面的宗族/世系存档补,而那两张
+        ///     表只有**归档过**的人(ActorArchiveTableItem.IS_ALIVE=1),现场活着
+        ///     但没触发过归档的宗亲根本不在里面 —— 实测继承池只有 2 个人。结果是
+        ///     嫡长孙压根进不了池子,FindHeir 里"直系压过旁系"那一段无从生效,
+        ///     顺位直接落到胞弟甚至无人可继。
+        ///
+        ///     遍历必须穿过**已故**的中间辈:嫡长孙承重的前提就是嫡长子先卒。
+        ///     所以死者也进 frontier(只是不占池子名额),只按辈数和查询次数封顶。
+        ///
+        ///     后裔挤掉旁支不是问题:FindHeir 里任何一个合格的直系后裔都排在
+        ///     全部旁支之前,池子里有 32 个后裔时旁支本来也轮不上。
+        ///
+        ///     返回值沿用旧语义:族谱里查到过子女记录没有(没有才回退 vanilla
+        ///     getChildren,覆盖出生事务落库前那一小段窗口)。
+        /// </summary>
+        private static bool AddKingDescendants(long pReferenceKingId,
+            List<Actor> pResult, HashSet<long> pSeen)
+        {
+            if (pReferenceKingId < 0) return false;
+            var frontier = new List<long>(
+                LineageQuery.GetChildIds(pReferenceKingId));
+            bool foundChildRecord = frontier.Count > 0;
+            var visited = new HashSet<long> { pReferenceKingId };
+            int lookups = 0;
+
+            for (int generation = 1;
+                 generation <= InheritanceCandidateRules
+                     .MaximumDescendantGenerations &&
+                 frontier.Count > 0 && !AtLimit(pResult);
+                 generation++)
+            {
+                bool expand = generation <
+                              InheritanceCandidateRules
+                                  .MaximumDescendantGenerations;
+                var next = new List<long>();
+                for (int i = 0; i < frontier.Count && !AtLimit(pResult); i++)
+                {
+                    long descendantId = frontier[i];
+                    if (descendantId < 0 || !visited.Add(descendantId))
+                        continue;
+                    AddLive(ResolveActor(descendantId), pResult, pSeen);
+                    if (!expand || lookups >= InheritanceCandidateRules
+                            .MaximumDescendantLookups) continue;
+                    lookups++;
+                    next.AddRange(LineageQuery.GetChildIds(descendantId));
+                }
+                frontier = next;
+            }
+
+            return foundChildRecord;
         }
 
         private static bool AddIndexedChildren(long pParentId,
@@ -331,12 +386,14 @@ namespace AncientWarfare3.core.lineage
                 AddCivilSupport(pKingdom, finalists, support,
                     supporterCount, supportTargets);
 
+            // 只有支持票数变了,其余全是同一个 actor 的同一批读取。
+            // 原来这里把 BuildFacts 整个重跑一遍(七项属性 + 官阶 + 功勋 +
+            // 将领/奴隶/疯癫判定 + 一趟父系链求亲缘),每个入围者白算一次。
             var finalFacts = new List<InheritanceCandidateFacts>(finalists.Length);
             foreach (InheritanceCandidateFacts facts in finalists)
             {
                 support.TryGetValue(facts.ActorId, out int weight);
-                finalFacts.Add(BuildFacts(actorsById[facts.ActorId], pKingdom,
-                    king, weight, kinship));
+                finalFacts.Add(facts.WithGroupSupport(weight));
             }
             InheritanceCandidateFacts[] ranked =
                 InheritanceCandidateRules.SelectFinalists(finalFacts, pLaw);
@@ -671,7 +728,43 @@ namespace AncientWarfare3.core.lineage
             catch { return double.MaxValue; }
         }
 
+        /// <summary>
+        ///     亲缘上下文按参照君主记一份。
+        ///
+        ///     一次继承人核对里 BuildKinshipContext 要被建**三到五遍**
+        ///     (正统/军功/文治各一次,派系支持里还要再问),而每一遍都沿国王父系链
+        ///     从头走一次:每代一个 GetFatherId = GetParentIds(两条 SQL)+
+        ///     GetActorSex(祖先都已故,再一条档案读)。二十代就是六十来趟 SQLite,
+        ///     乘三就是两百趟 —— 和当初 succession:reconcile_heir 那 228ms 是同一类账。
+        ///
+        ///     顺带 FatherByActorId 也跨法共用:候选人的父系链只走一次,
+        ///     后面两条法直接查表。
+        ///
+        ///     参照君主一变(改朝换代)键就不匹配,自动重建;父系链上都是已故的人,
+        ///     他们的亲子边不会再变,所以缓存本身是安全的。
+        /// </summary>
+        private static long _kinshipReferenceId = -1L;
+        private static KinshipContext _kinshipContext;
+
+        internal static void ClearRuntime()
+        {
+            _kinshipReferenceId = -1L;
+            _kinshipContext = null;
+        }
+
         private static KinshipContext BuildKinshipContext(Actor pReference)
+        {
+            long referenceId = pReference?.data?.id ?? -1L;
+            if (_kinshipContext != null && _kinshipReferenceId == referenceId)
+                return _kinshipContext;
+            KinshipContext built = BuildKinshipContextUncached(pReference);
+            _kinshipReferenceId = referenceId;
+            _kinshipContext = built;
+            return built;
+        }
+
+        private static KinshipContext BuildKinshipContextUncached(
+            Actor pReference)
         {
             var context = new KinshipContext();
             long current = pReference?.data?.id ?? -1L;

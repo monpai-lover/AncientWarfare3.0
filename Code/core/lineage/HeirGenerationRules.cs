@@ -8,9 +8,11 @@ namespace AncientWarfare3.core.lineage
         public readonly int GenerationDelta;
         public readonly double BirthTime;
         public readonly bool IsAdult;
+        public readonly bool LegitimateBirth;
 
         public HeirCandidateRank(long actorId, bool eligible, bool isAgnaticDescendantOfKing,
-            int generationDelta, double birthTime, bool isAdult)
+            int generationDelta, double birthTime, bool isAdult,
+            bool legitimateBirth = true)
         {
             ActorId = actorId;
             Eligible = eligible;
@@ -18,6 +20,7 @@ namespace AncientWarfare3.core.lineage
             GenerationDelta = generationDelta;
             BirthTime = birthTime;
             IsAdult = isAdult;
+            LegitimateBirth = legitimateBirth;
         }
     }
 
@@ -46,17 +49,26 @@ namespace AncientWarfare3.core.lineage
 
         /// <summary>
         ///     候选排序:先比层级(直系&lt;同辈&lt;晚辈旁系&lt;长辈旁系),再比辈分接近度(|delta| 小者优先),
-        ///     再比嫡长(出生早者优先),最后成年优先。返回 &lt;0 表示 A 更优先。
+        ///     再比嫡庶(嫡出优先),再比长幼(出生早者优先),最后成年优先。
+        ///     返回 &lt;0 表示 A 更优先。
+        ///
+        ///     嫡庶这一档原来是缺的 —— 只有儿子那一辈走 HeirDirectSonRules 时论嫡庶,
+        ///     孙辈及以下只按出生先后。于是庶长孙压过嫡长孙。这里补齐,口径与
+        ///     <see cref="SuccessionOrderRules"/> 一致:**嫡庶压过长幼**,嫡幼排在庶长之前。
         /// </summary>
         public static int Compare(
-            int pTierA, int pGenerationDeltaA, double pBirthTimeA, bool pIsAdultA,
-            int pTierB, int pGenerationDeltaB, double pBirthTimeB, bool pIsAdultB)
+            int pTierA, int pGenerationDeltaA, bool pLegitimateBirthA,
+            double pBirthTimeA, bool pIsAdultA,
+            int pTierB, int pGenerationDeltaB, bool pLegitimateBirthB,
+            double pBirthTimeB, bool pIsAdultB)
         {
             if (pTierA != pTierB) return pTierA.CompareTo(pTierB);
             int absA = pGenerationDeltaA < 0 ? -pGenerationDeltaA : pGenerationDeltaA;
             int absB = pGenerationDeltaB < 0 ? -pGenerationDeltaB : pGenerationDeltaB;
             if (absA != absB) return absA.CompareTo(absB);                             // 辈分越接近国王越优先
-            if (pBirthTimeA != pBirthTimeB) return pBirthTimeA.CompareTo(pBirthTimeB); // 嫡长(早生)优先
+            if (pLegitimateBirthA != pLegitimateBirthB)
+                return pLegitimateBirthA ? -1 : 1;                                     // 嫡出优先,且压过长幼
+            if (pBirthTimeA != pBirthTimeB) return pBirthTimeA.CompareTo(pBirthTimeB); // 长幼(早生)优先
             if (pIsAdultA != pIsAdultB) return pIsAdultA ? -1 : 1;                     // 再论成年
             return 0;
         }
@@ -73,6 +85,7 @@ namespace AncientWarfare3.core.lineage
             long bestId = -1L;
             int bestTier = TierIneligible;
             int bestDelta = 0;
+            bool bestLegitimate = false;
             double bestBirth = 0;
             bool bestAdult = false;
             if (pCandidates == null) return bestId;
@@ -84,12 +97,16 @@ namespace AncientWarfare3.core.lineage
                     candidate.GenerationDelta);
                 if (!IsEligible(tier)) continue;
                 if (bestId >= 0 && Compare(
-                        tier, candidate.GenerationDelta, candidate.BirthTime, candidate.IsAdult,
-                        bestTier, bestDelta, bestBirth, bestAdult) >= 0)
+                        tier, candidate.GenerationDelta,
+                        candidate.LegitimateBirth, candidate.BirthTime,
+                        candidate.IsAdult,
+                        bestTier, bestDelta, bestLegitimate, bestBirth,
+                        bestAdult) >= 0)
                     continue;
                 bestId = candidate.ActorId;
                 bestTier = tier;
                 bestDelta = candidate.GenerationDelta;
+                bestLegitimate = candidate.LegitimateBirth;
                 bestBirth = candidate.BirthTime;
                 bestAdult = candidate.IsAdult;
             }

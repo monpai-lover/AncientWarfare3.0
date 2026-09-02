@@ -913,6 +913,12 @@ namespace AncientWarfare3.core.lineage
         public const string KINGDOM_HEIR_SELECTION_DIRTY =
             "aw_heir_selection_dirty";
         public const string IS_HEIR = "aw_is_heir";
+        /// <summary>
+        ///     他是**哪个国**的继承人。IS_HEIR 只是个裸 bool,读的时候各处都拿
+        ///     actor.kingdom 去凑名号 —— 而继承人常常一时还没归化过来(在外国、
+        ///     刚被 DetachForTransfer 清空),名号就跟着算错甚至算没。
+        /// </summary>
+        public const string HEIR_KINGDOM_ID = "aw_heir_kingdom_id";
         public const string KINGDOM_PRE_SUCCESSION_KING_ID = "aw_pre_succession_king_id";
         public const string KINGDOM_PRE_SUCCESSION_GENERATION =
             "aw_pre_succession_generation";

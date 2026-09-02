@@ -29,6 +29,20 @@ internal static class HeirFullBrotherRulesTests
             new HeirFullBrotherCandidate(30L, eligible: true,
                 sharesBothParents: false, birthTime: 1d)
         }), "a half brother is never a full-brother fallback");
+        Equal(41L, HeirFullBrotherRules.SelectEldestEligibleId(new[]
+        {
+            new HeirFullBrotherCandidate(40L, eligible: true,
+                sharesBothParents: true, birthTime: 1d, sameRealm: false),
+            new HeirFullBrotherCandidate(41L, eligible: true,
+                sharesBothParents: true, birthTime: 9d, sameRealm: true)
+        }), "a full brother at home outranks an elder one abroad");
+        Equal(50L, HeirFullBrotherRules.SelectEldestEligibleId(new[]
+        {
+            new HeirFullBrotherCandidate(51L, eligible: true,
+                sharesBothParents: true, birthTime: 4d, sameRealm: false),
+            new HeirFullBrotherCandidate(50L, eligible: true,
+                sharesBothParents: true, birthTime: 3d, sameRealm: false)
+        }), "with nobody at home the eldest brother abroad still succeeds");
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pName)

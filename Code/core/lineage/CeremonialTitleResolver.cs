@@ -23,9 +23,17 @@ namespace AncientWarfare3.core.lineage
 
             try
             {
-                if (PeasantRebelRouteService.IsBandit(pActor.kingdom) &&
-                    HeirService.IsCurrentHeir(pActor.kingdom, pActor))
-                    return HeirTitleRules.BuildSocialTitle("", pActor.kingdom);
+                // 登记在册的继承人 —— 太子/储君/世子/留后,由**他所继承的那个国**
+                // 定称谓(见 HeirService.ResolveHeirKingdom:归化可能还没落定,
+                // 拿 actor.kingdom 会算错甚至算没)。
+                //
+                // 这一段原来只认流寇政权(IsBandit),正常王朝的太子在这里一无所获,
+                // 于是 actor 面板那行身份是空的,存档里的 primary_ceremonial_title
+                // 也跟着空 —— 族谱 tooltip 一并看不到。BuildSocialTitle 自己
+                // 开头就分流了流寇,所以一条通用分支就够,不必特判。
+                Kingdom heirKingdom = HeirService.ResolveHeirKingdom(pActor);
+                if (heirKingdom?.data != null)
+                    return HeirTitleRules.BuildSocialTitle("", heirKingdom);
             }
             catch { }
 

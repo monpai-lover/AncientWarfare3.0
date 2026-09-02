@@ -80,6 +80,22 @@ namespace AncientWarfare3.core.lineage
                 OfficialRank, OfficialMerit, EvaluationGrade, GroupSupport,
                 LegitimateBirth, DirectLine, BirthTime);
         }
+
+        /// <summary>
+        ///     只换派系支持票数。军功/文治那两条法在算完支持度之后要重排一次,
+        ///     原来是把整个 BuildFacts 重跑一遍 —— 而除了这一个字段,其余全是
+        ///     同一个 actor 的同一批读取(七项属性、官阶、功勋、将领/奴隶/疯癫判定、
+        ///     还有一趟父系链求亲缘)。每个候选人白算一遍。
+        /// </summary>
+        public InheritanceCandidateFacts WithGroupSupport(int pGroupSupport)
+        {
+            return new InheritanceCandidateFacts(ActorId, Alive, Male, Adult,
+                Royal, King, Enslaved, Mad, Domestic, AgnaticDistance,
+                ExistingSuccessionLegitimacy, Warfare, Combat, Courage,
+                GeneralExperience, Stewardship, Intelligence, Diplomacy,
+                OfficialRank, OfficialMerit, EvaluationGrade, pGroupSupport,
+                LegitimateBirth, DirectLine, BirthTime);
+        }
     }
 
     public static class InheritanceCandidateRules
@@ -88,6 +104,23 @@ namespace AncientWarfare3.core.lineage
         public const int MaximumLiveResolutions = 32;
         public const int MaximumFinalists = 8;
         public const int MaximumOfficerSupporters = 96;
+
+        /// <summary>
+        ///     收继承池时往下走几辈直系后裔(子/孙/曾孙/玄孙…)。
+        ///
+        ///     必须**穿过已故的一辈**才能收到下一辈 —— 嫡长孙承重正是这个情形:
+        ///     嫡长子先卒,他的儿子仍在直系顺位的最前面。所以不能"这一辈有活人
+        ///     就停",得按辈数封顶。
+        /// </summary>
+        public const int MaximumDescendantGenerations = 6;
+
+        /// <summary>
+        ///     后裔遍历允许的族谱子女查询次数上限。每次查询是一趟 SQLite
+        ///     (FamilyEdge + 档案),而继承池按「王国 + 参照君主」只建一次,
+        ///     所以给得比 <see cref="MaximumLiveResolutions"/> 宽:遍历要经过
+        ///     已故的中间辈,那些人不占池子名额但要花一次查询。
+        /// </summary>
+        public const int MaximumDescendantLookups = 48;
 
         public static bool IsEligible(InheritanceCandidateFacts pFacts,
             InheritanceLaw pLaw)

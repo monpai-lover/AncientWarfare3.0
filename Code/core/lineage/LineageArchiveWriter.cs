@@ -842,7 +842,12 @@ namespace AncientWarfare3.core.lineage
                 pActor.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
                 if (isHeir || HeirService.IsCurrentHeir(pActor.kingdom, pActor))
                 {
-                    roles.Add(HeirTitleRules.BuildSocialTitle(pKingdomName, pActor.kingdom));
+                    // 见 HeirService.ResolveHeirKingdom:名号认所继承的那个国。
+                    Kingdom heirKingdom =
+                        HeirService.ResolveHeirKingdom(pActor) ??
+                        pActor.kingdom;
+                    roles.Add(HeirTitleRules.BuildSocialTitle(
+                        heirKingdom?.name ?? pKingdomName, heirKingdom));
                     rolesColor = color;
                 }
             }

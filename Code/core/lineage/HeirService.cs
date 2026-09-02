@@ -134,12 +134,28 @@ namespace AncientWarfare3.core.lineage
         }
 
         /// <summary>娓呮帀 kingdom 褰撳墠鐧昏缁ф壙浜?actor 鐨?IS_HEIR 鏍囪(鑻ヨ actor 浠嶅湪)銆?/summary>
-        private static void ClearOldHeirFlag(Kingdom pKingdom)
+        private static void ClearOldHeirFlag(Kingdom pKingdom,
+            long pKeepActorId = -1L)
         {
             pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID, out long oldId, -1L);
             if (oldId < 0) return;
+            // 旧继承人就是新继承人(改的只是模式/参照君主):清了马上又要设回去,
+            // 白跑一趟全王国扫描,还多两次 clearGraphicsFully。
+            if (oldId == pKeepActorId) return;
             Actor old = World.world?.units?.get(oldId);
             if (old?.data == null) return;
+
+            // 他登记的国就是本国 → 不可能有第二处登记,跳过全王国扫描。
+            // (HEIR_KINGDOM_ID 是登记时随 IS_HEIR 一起写的;老存档里可能是 -1,
+            //  那就还是走扫描。)
+            old.data.get(LineageKeys.HEIR_KINGDOM_ID, out long heirKingdomId,
+                -1L);
+            if (heirKingdomId == pKingdom.id)
+            {
+                SetHeirFlag(old, false);
+                return;
+            }
+
             int otherRegistrations = CountOtherLiveHeirRegistrations(oldId, pKingdom);
             if (HeirRegistrationRules.ShouldClearGlobalFlag(otherRegistrations))
                 SetHeirFlag(old, false);
@@ -192,6 +208,17 @@ namespace AncientWarfare3.core.lineage
                 pKingdom?.data != null &&
                 !SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king))
                 RefreshHeir(pKingdom);
+            // ①b 继承人漂到了别国 → 每年重新归化一次。
+            //
+            // 册立那一刻归化是成功的(不成会走 register_failed),但**登记之后
+            // 再没有任何东西校验过国籍**:ReconcileHeir 只看"在位/成年/签名/脏标",
+            // 四条都满足就提前返回,连刷新都不进。于是继承人被联姻、难民潮、
+            // 城池易主、游学迁走之后,就一直挂在外国当太子 —— 而太子的名号又是
+            // 按所在国算的,顺带连身份也显示不出来。
+            //
+            // 一年一次,只在真漂了的时候做;归化不成就标脏,让下一次刷新换人
+            // (那个人也已经被 LogRegistrationFailure 挡进本年度黑名单)。
+            ReconcileHeirNationality(pKingdom);
             // ② 无国王 + 有继承人 → 直接让继承人即位（KingdomBehCheckKing 的补充驱动）。
             if (pKingdom?.king == null || !pKingdom.king.isAlive())
             {
@@ -239,6 +266,30 @@ namespace AncientWarfare3.core.lineage
                 KingdomAnnualStepDiagnostics.Account("succession:dispute",
                     stamp);
             }
+        }
+
+        /// <summary>
+        ///     已登记的继承人若不在本国,重新归化他。见 <see cref="OnKingdomYear"/>
+        ///     里的调用点说明:这是唯一一处在册立**之后**校验国籍的地方。
+        /// </summary>
+        private static void ReconcileHeirNationality(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null ||
+                RepublicGovernmentService.IsRepublic(pKingdom)) return;
+            if (SuccessionTransitionRules.IsPending(
+                    pKingdom.data.timer_new_king)) return;
+            Actor registered = PeekRegisteredHeir(pKingdom);
+            if (registered?.data == null ||
+                registered.kingdom == pKingdom) return;
+
+            LogHeirDivergence(pKingdom, registered);
+            if (NormalizeHeirForRegistration(pKingdom, registered))
+            {
+                // 归化回来了:名号跟着所继承的国走,顺手把标记补齐。
+                SetHeirFlag(registered, true, pKingdom);
+                return;
+            }
+            MarkSelectionDirty(pKingdom);
         }
 
         public static Actor ReconcileHeir(Kingdom pKingdom, bool pForce)
@@ -341,8 +392,45 @@ namespace AncientWarfare3.core.lineage
 
             Actor knownKing = pKingdom.king;
             long referenceKingId = ResolveReferenceKingId(pKingdom, knownKing);
-            return SelectByEffectiveLaw(pKingdom, knownKing,
-                referenceKingId, pIncludeRegisteredHeir: false).Actor;
+            HeirSelection selection = SelectByEffectiveLaw(pKingdom, knownKing,
+                referenceKingId, pIncludeRegisteredHeir: false);
+
+            // 这里原来到此为止:算一个候选人交给界面画成"太子",而这个人
+            // **从未被登记**。于是 StoreHeirSelection 那一整套都没跑过 ——
+            // 不归化(国籍还留在原来的国)、不写 IS_HEIR(身份栏空白)、
+            // 连册立失败的探针都不会响。王国窗口的继承人头像走的正是这条
+            // (KingdomWindowAddition.cs:1028),所以"看得见太子、其余全没有"。
+            //
+            // 算出来的人本身是对的,缺的只是登记。所以把**这一次**的选择直接
+            // 送进册立,而不是回头再调 RefreshHeir 重算一遍 —— 重算既要重走
+            // 一整趟顺位遍历,又可能在 ShouldOverwriteCachedHeir 那里无声折返,
+            // 结果和界面上画着的人对不上。
+            EnsureRegisteredForReadModel(pKingdom, selection);
+            return PeekRegisteredHeir(pKingdom) ?? selection.Actor;
+        }
+
+        /// <summary>
+        ///     只读路径算出了继承人却没人登记他时,就地补一次正式册立 ——
+        ///     归化、IS_HEIR、HEIR_KINGDOM_ID 全在 <see cref="StoreHeirSelection"/> 那条路上。
+        ///
+        ///     每个王国每年最多一次:这条路径由界面重绘驱动,不能每帧都写。
+        ///     先记年份再动手,顺带把重入挡掉(册立过程里若有人又问
+        ///     HasSuccessionCandidate,第二次直接返回)。
+        /// </summary>
+        private static readonly System.Collections.Generic.Dictionary<long, int>
+            ReadModelRegistrations =
+                new System.Collections.Generic.Dictionary<long, int>();
+
+        private static void EnsureRegisteredForReadModel(Kingdom pKingdom,
+            HeirSelection pSelection)
+        {
+            if (pKingdom?.data == null || pSelection.Actor?.data == null)
+                return;
+            int year = SafeCurrentYear();
+            if (ReadModelRegistrations.TryGetValue(pKingdom.id,
+                    out int lastYear) && lastYear == year) return;
+            ReadModelRegistrations[pKingdom.id] = year;
+            StoreHeirSelection(pKingdom, pSelection);
         }
 
         internal static Actor PreviewSuccessionCandidate(Kingdom pKingdom,
@@ -388,14 +476,28 @@ namespace AncientWarfare3.core.lineage
             Actor knownKing = pKingdom.king;
             Actor storedHeir = PeekStoredHeirForMinimap(pKingdom);
             if (storedHeir?.data != null)
+            {
                 NormalizeHeirForRegistration(pKingdom, storedHeir);
+                // 老存档里已登记的继承人没有 HEIR_KINGDOM_ID(那时还没这个键),
+                // 而 StoreHeirSelection 在「选择没变」时会提前返回、不再走 SetHeirFlag,
+                // 光靠它补不上。这里顺手补一次,幂等。
+                SetHeirFlag(storedHeir, true, pKingdom);
+            }
             EnsureLegitimateLine(pKingdom, knownKing);
             InheritanceLawService.RestorePrimogenitureForDirectSon(pKingdom,
                 PickEldestLivingSon(knownKing)?.data != null);
             long referenceKingId = ResolveReferenceKingId(pKingdom, knownKing);
             bool pending = SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king);
             if (!SuccessionTransitionRules.ShouldOverwriteCachedHeir(pending, referenceKingId >= 0))
+            {
+                // 最后一个没有痕迹的决策点:交接中(timer_new_king>0)或者
+                // 连参照君主都取不到时,整趟册立会在这里无声折返。
+                if (AncientWarfare3.core.performance.AWDiagnosticsGate.Enabled)
+                    ModClass.LogInfo("[AW3 HEIR] refresh_skipped kingdom=" +
+                        pKingdom.id + " pending=" + pending +
+                        " reference_king=" + referenceKingId);
                 return PeekRegisteredHeir(pKingdom);
+            }
 
             HeirSelection selection = SelectByEffectiveLaw(pKingdom,
                 knownKing, referenceKingId,
@@ -412,28 +514,80 @@ namespace AncientWarfare3.core.lineage
         }
 
         /// <summary>
-        ///     继承池的出错兜底:重建一次并允许重试。每个王国的每一位参照君主
-        ///     只做一次,返回是否真的做了。
+        ///     继承池的出错兜底:重建一次并允许重试。
+        ///
+        ///     节流到「每个王国、每位参照君主、每年一次」。原来是**整朝只做一次**,
+        ///     而池子是持续化的:重建之后如果还是选不出人,那次机会就用光了,
+        ///     此后即便有宗亲迁回本国、或有成员从别处补进族谱,也没有任何东西会
+        ///     再把他放进池子(Insert 只在出生时触发),这个王国就在本朝内永久无嗣。
+        ///     一年一次的上限已经足够便宜 —— 它只在「一个都挑不出来」时才触发,
+        ///     而那本来就是要重算的情形。
         /// </summary>
         private static readonly System.Collections.Generic.Dictionary<long,
-            long> SuccessionPoolRepairs =
-            new System.Collections.Generic.Dictionary<long, long>();
+            (long ReferenceKingId, int Year)> SuccessionPoolRepairs =
+            new System.Collections.Generic.Dictionary<long, (long, int)>();
+
+        /// <summary>
+        ///     国王父系祖先表,按「王国 + 参照君主」记一份。
+        ///
+        ///     这张表的内容对全国所有候选人都是同一份,而建一次要沿父系链每代
+        ///     GetParentIds(两条 SQL)+ GetActorSex(祖先皆已故,再一条档案读)。
+        ///     原来 FindHeir 每次刷新新建一份、IsRecognizedSuccessionCandidate
+        ///     每个单位新建一份。
+        ///
+        ///     参照君主一变(改朝换代)键就不匹配,自动重建;链上都是已故的人,
+        ///     亲子边不会再变。串行使用(NearestCommon 内部有复用的 scratch 集合),
+        ///     权威周期都在主线程,没有并发问题。
+        /// </summary>
+        private static readonly System.Collections.Generic.Dictionary<long,
+                (long ReferenceKingId, LineageQuery.AgnaticAncestorDepths
+                    Depths)>
+            KingAncestries =
+                new System.Collections.Generic.Dictionary<long,
+                    (long, LineageQuery.AgnaticAncestorDepths)>();
+
+        private static LineageQuery.AgnaticAncestorDepths GetKingAncestry(
+            Kingdom pKingdom, long pReferenceKingId)
+        {
+            if (pKingdom?.data == null || pReferenceKingId < 0L) return null;
+            if (KingAncestries.TryGetValue(pKingdom.id,
+                    out (long ReferenceKingId,
+                        LineageQuery.AgnaticAncestorDepths Depths) entry) &&
+                entry.ReferenceKingId == pReferenceKingId &&
+                entry.Depths != null) return entry.Depths;
+
+            var depths = new LineageQuery.AgnaticAncestorDepths();
+            depths.Reset(pReferenceKingId);
+            KingAncestries[pKingdom.id] = (pReferenceKingId, depths);
+            return depths;
+        }
 
         internal static void ClearSuccessionPoolRepairs()
         {
             SuccessionPoolRepairs.Clear();
+            RegistrationBlocked.Clear();
+            ReadModelRegistrations.Clear();
+            KingAncestries.Clear();
         }
 
         private static bool TryRepairSuccessionPool(Kingdom pKingdom,
             long pReferenceKingId)
         {
             if (pKingdom?.data == null) return false;
+            int year = SafeCurrentYear();
             if (SuccessionPoolRepairs.TryGetValue(pKingdom.id,
-                    out long repairedFor) &&
-                repairedFor == pReferenceKingId) return false;
-            SuccessionPoolRepairs[pKingdom.id] = pReferenceKingId;
+                    out (long ReferenceKingId, int Year) repaired) &&
+                repaired.ReferenceKingId == pReferenceKingId &&
+                repaired.Year == year) return false;
+            SuccessionPoolRepairs[pKingdom.id] = (pReferenceKingId, year);
             SuccessionPoolService.Invalidate(pKingdom);
             return true;
+        }
+
+        private static int SafeCurrentYear()
+        {
+            try { return Date.getYear(World.world.getCurWorldTime()); }
+            catch { return 0; }
         }
 
         private static long ResolveReferenceKingId(Kingdom pKingdom, Actor pKnownKing)
@@ -474,7 +628,10 @@ namespace AncientWarfare3.core.lineage
                 (kingdom.king == royalParent || royalParent.isKing());
             // 新子嗣直接插进继承池,而不是让下一次刷新重走一趟亲缘遍历。
             // 顺位由取人时按有效继承法排定,嫡子会落在诸庶兄之前。
-            SuccessionPoolService.Insert(kingdom, pBaby);
+            // 带上双亲 id:池子只收池中人(或参照君主)的子女,王孙、王曾孙照样
+            // 进得来,与王室无关的新生儿不会一路堆进池子。
+            SuccessionPoolService.Insert(kingdom, pBaby,
+                pParent1?.data?.id ?? -1L, pParent2?.data?.id ?? -1L);
             if (!RoyalSuccessionBirthRules.ShouldRefreshHeirForNewChild(
                     successionSexEligible, fatherIsCurrentKing))
                 return;
@@ -539,9 +696,16 @@ namespace AncientWarfare3.core.lineage
             if (referenceKingId < 0L || pActor.kingdom != pKingdom ||
                 !IsHeirBaseEligible(pActor, pKingdom, king) ||
                 pActor.data.id == referenceKingId) return false;
-            long ancestor = LineageQuery.NearestCommonAgnaticAncestor(
-                referenceKingId, pActor.data.id, out int kingDepth,
-                out int candidateDepth);
+            // 走共享的祖先表:静态版每调一次都要新建一个 Dictionary + HashSet,
+            // 并把**国王整条父系链**从头走一遍(每代 GetParentIds 两条 SQL +
+            // GetActorSex 一条档案读)。而这个方法是逐单位调的 —— 征兵时的免征
+            // 判定(TemporaryLevyService:2515)对每个够格的男丁都要问一次。
+            // 国王那半边对全国所有人都是同一份,建一次就够。
+            LineageQuery.AgnaticAncestorDepths ancestry =
+                GetKingAncestry(pKingdom, referenceKingId);
+            if (ancestry == null) return false;
+            long ancestor = ancestry.NearestCommon(pActor.data.id,
+                out int kingDepth, out int candidateDepth);
             if (ancestor < 0L) return false;
             int tier = HeirGenerationRules.ClassifyTier(
                 kingDepth == 0, candidateDepth - kingDepth);
@@ -713,7 +877,7 @@ namespace AncientWarfare3.core.lineage
                 !NormalizeHeirForRegistration(pKingdom, heir))
                 return previousHeir;
 
-            ClearOldHeirFlag(pKingdom);
+            ClearOldHeirFlag(pKingdom, heir?.data?.id ?? -1L);
             if (heir?.data != null)
                 LineageService.EnsureRoyalHeirLineage(pKingdom, heir);
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID, heir?.data?.id ?? -1L);
@@ -726,7 +890,7 @@ namespace AncientWarfare3.core.lineage
             HeirMinimapMarkerIndex.Refresh(pKingdom);
             InheritanceLawService.MirrorCandidate(pKingdom, heir,
                 pSelection.Mode, referenceKingId);
-            SetHeirFlag(heir, true);
+            SetHeirFlag(heir, true, pKingdom);
             if (heir?.data != null) CourtService.EnsurePersonalSchool(heir);
             if (heir?.data != null && heir.data.id != previousHeirId)
                 ChronicleEvents.OnHeirDesignated(pKingdom, pKingdom.king,
@@ -756,42 +920,220 @@ namespace AncientWarfare3.core.lineage
             Actor pHeir)
         {
             if (pKingdom?.data == null || pHeir?.data == null ||
-                !pHeir.isAlive()) return false;
+                !pHeir.isAlive())
+            {
+                LogRegistrationFailure(pKingdom, pHeir, "not_alive");
+                return false;
+            }
             City home = ResolveRegistrationHome(pKingdom, pHeir);
             if (!ReleaseForeignKingshipForSuccession(pKingdom, pHeir))
+            {
+                LogRegistrationFailure(pKingdom, pHeir, "foreign_kingship");
                 return false;
+            }
             if (!RoyalGuardService.ReleaseForRegisteredHeir(pKingdom,
-                    pHeir, "became_heir")) return false;
+                    pHeir, "became_heir"))
+            {
+                LogRegistrationFailure(pKingdom, pHeir, "royal_guard");
+                return false;
+            }
             if (SlaveService.IsSlave(pHeir) &&
                 (!SlaveService.FreeSlave(pHeir, "became_heir") ||
-                 SlaveService.IsSlave(pHeir))) return false;
+                 SlaveService.IsSlave(pHeir)))
+            {
+                LogRegistrationFailure(pKingdom, pHeir, "slave");
+                return false;
+            }
 
             FormerHeirService.ClearSnapshot(pHeir);
             RoyalAsylumService.RecallForSuccession(pHeir, pKingdom);
             try
             {
+                // 太子不领郡县:册立时解去地方官职。
+                //
+                // 原来只解军职,县令的位子留着 —— 于是出现一个"住在京城的县令":
+                // 下面几行会把他从本城迁到都城,而官职还挂在原来那座城上。更要紧
+                // 的是他会继续按地方官被派去边郡,死得比宗室里其他人快得多(实测
+                // 载入存档后胞弟刚册为太子就没了)。入仕那一侧本来就禁着
+                // (LocalOfficialCandidateRules.CanEnter 把登记继承人排除在候选之外),
+                // 只有"先为官、后册立"这条路漏了,这里补上,与新君即位时的
+                // RecallForSuccession 同一口径。
+                if (IsCityLeaderOfAnyCity(pKingdom, pHeir))
+                    RemoveCityLeaderOffice(pKingdom, pHeir);
                 if (pHeir.hasArmy()) pHeir.removeFromArmy();
                 if (home?.data == null && pHeir.city?.kingdom != pKingdom)
                     pHeir.setCity(null);
                 if (pHeir.kingdom != pKingdom)
                     ActorKingdomSafetyService.DetachForTransfer(pHeir);
-                using (FormalAffiliationTransferScope.Open(
-                           pHeir.data.id, pKingdom.id,
-                           home?.data?.id ?? -1L))
+
+                if (!NaturalizeForRegistration(pKingdom, pHeir, home))
+                {
+                    LogRegistrationFailure(pKingdom, pHeir, "naturalize");
+                    return false;
+                }
+
+                // 学派籍贯只是从属记录,同步不上不该否掉册立 —— 否掉的代价是
+                // 国籍也不改、继承人身份也不写,王国就此无嗣。改成尽力而为,
+                // 按他实际落到的城同步(原来传的是**预期**居所,安置换了城就对不上)。
+                if (!HistoricalAffiliationService.SynchronizeHomeForSuccession(
+                        pHeir, pKingdom, pHeir.city ?? home))
+                    LogRegistrationFailure(pKingdom, pHeir, "school_home");
+                pHeir.clearGraphicsFully();
+            }
+            catch { LogRegistrationFailure(pKingdom, pHeir, "exception");
+                    return false; }
+            // 归化的硬指标只有**国籍**。原来还要求 pHeir.city == home,
+            // 也就是必须迁进都城才算登记成功;都城安置不下(容量、住房、
+            // joinCity 被别的规则挡住)整个册立就失败,而失败在
+            // StoreHeirSelection 里是 return previousHeir —— 于是既没统一国籍,
+            // 也没写继承人身份,外部还照旧从只读预览里显示他是太子。
+            return pHeir.kingdom == pKingdom;
+        }
+
+        /// <summary>
+        ///     把继承人归化进本国:先试指定居所,不成再顺着本国其它城试,
+        ///     一座都安置不下就至少把国籍改过来。
+        ///
+        ///     居所只是就近安置,国籍才是继承的前提。两者原来绑在一处,
+        ///     所以"住不进都城"会一路升级成"这个王国没有继承人"。
+        ///
+        ///     每座城要单独开一次 FormalAffiliationTransferScope —— 那道许可是
+        ///     按 (actor, kingdom, city) 三元组匹配的(FormalAffiliationTransferRules.Allows),
+        ///     拿着都城的许可去 joinCity 别的城会被学派籍贯规则挡掉。
+        /// </summary>
+        private static bool NaturalizeForRegistration(Kingdom pKingdom,
+            Actor pHeir, City pHome)
+        {
+            if (TryJoinForRegistration(pKingdom, pHeir, pHome)) return true;
+            foreach (City city in pKingdom.getCities())
+            {
+                if (city == pHome || city?.data == null || city.isRekt() ||
+                    city.kingdom != pKingdom) continue;
+                if (TryJoinForRegistration(pKingdom, pHeir, city)) return true;
+            }
+
+            // 一座城都安置不下:先脱离外国的城,否则国籍会跟着城被带回去
+            // (原版 actor 的归属很大程度上由 city 决定),再单改国籍。
+            try
+            {
+                if (pHeir.city?.kingdom != pKingdom) pHeir.setCity(null);
+            }
+            catch { }
+            return TryJoinForRegistration(pKingdom, pHeir, null);
+        }
+
+        /// <summary>
+        ///     一次归化尝试。成功的判据是**国籍归本国、且没有残留的外国城**。
+        ///
+        ///     光看 `pHeir.kingdom == pKingdom` 不够:原版 setKingdom 只是给字段
+        ///     赋值(Actor.cs:7810),而 joinCity 可能被别的规则挡下来。那样就得到
+        ///     一个"国籍在本国、城还在外国"的半成品,任何一处从 city 反推归属的
+        ///     地方都会把国籍带回去 —— 玩家看到的就是"归化没效果"。
+        /// </summary>
+        private static bool TryJoinForRegistration(Kingdom pKingdom,
+            Actor pHeir, City pHome)
+        {
+            try
+            {
+                using (FormalAffiliationTransferScope.Open(pHeir.data.id,
+                           pKingdom.id, pHome?.data?.id ?? -1L))
                 {
                     if (pHeir.kingdom != pKingdom)
                         pHeir.joinKingdom(pKingdom);
-                    if (home?.data != null && pHeir.city != home)
-                        pHeir.joinCity(home);
+                    if (pHome?.data != null && pHeir.city != pHome)
+                        pHeir.joinCity(pHome);
                 }
-                if (!HistoricalAffiliationService.
-                        SynchronizeHomeForSuccession(pHeir, pKingdom, home))
-                    return false;
-                pHeir.clearGraphicsFully();
             }
             catch { return false; }
-            return pHeir.kingdom == pKingdom &&
-                   (home?.data == null || pHeir.city == home);
+            if (pHeir.kingdom != pKingdom) return false;
+            City current = pHeir.city;
+            return current?.data == null || current.kingdom == pKingdom;
+        }
+
+        /// <summary>
+        ///     册立失败的现场,受性能诊断总开关门控。这条路径原来是
+        ///     `catch { return false; }` —— 失败没有任何痕迹,而后果
+        ///     (继承人身份不写入)要过一年才在别处显形。
+        /// </summary>
+        /// <summary>
+        ///     已登记的继承人却不在本国 —— 归化在册立那一刻是成功的(否则会走
+        ///     register_failed),之后被别处扳了回去。这条现场把两类原因分开:
+        ///     城还在外国(是城在拖着国籍走),还是城已就位而国籍单独被改。
+        ///     每年最多一行,受性能诊断总开关门控。
+        /// </summary>
+        private static void LogHeirDivergence(Kingdom pKingdom, Actor pHeir)
+        {
+            if (!AncientWarfare3.core.performance.AWDiagnosticsGate.Enabled)
+                return;
+            if (pKingdom?.data == null || pHeir?.data == null) return;
+            if (pHeir.kingdom == pKingdom) return;
+            City city = pHeir.city;
+            ModClass.LogInfo("[AW3 HEIR] diverged kingdom=" + pKingdom.id +
+                " heir=" + pHeir.data.id +
+                " heir_kingdom=" + (pHeir.kingdom?.id ?? -1L) +
+                " heir_city=" + (city?.data?.id ?? -1L) +
+                " city_kingdom=" + (city?.kingdom?.id ?? -1L) +
+                " school_home=" + (AncientWarfare3.core.schools
+                    .HistoricalAffiliationService.HomeKingdom(pHeir)?.id ??
+                    -1L));
+        }
+
+        private static void LogRegistrationFailure(Kingdom pKingdom,
+            Actor pHeir, string pStage)
+        {
+            BlockRegistrationForThisYear(pKingdom, pHeir);
+            if (!AncientWarfare3.core.performance.AWDiagnosticsGate.Enabled)
+                return;
+            ModClass.LogInfo("[AW3 HEIR] register_failed stage=" + pStage +
+                " kingdom=" + (pKingdom?.id ?? -1L) +
+                " heir=" + (pHeir?.data?.id ?? -1L) +
+                " heir_kingdom=" + (pHeir?.kingdom?.id ?? -1L) +
+                " heir_city=" + (pHeir?.city?.data?.id ?? -1L) +
+                " capital=" + (pKingdom?.capital?.data?.id ?? -1L));
+        }
+
+        /// <summary>
+        ///     本年内册立失败过的人。册立失败原来是终局:StoreHeirSelection 对
+        ///     false 的反应是"什么都不写",而下一次刷新又会挑中同一个人、再失败一次
+        ///     —— 顺位第二席永远没有机会,王国就这么一直空着。
+        ///
+        ///     挡一年:这一年里换下一顺位去立,明年清空重来(卡住的原因多半是
+        ///     暂时的 —— 都城刚陷落、人在外国当着王、还挂着禁卫军身份)。
+        ///     这不是遮盖问题,失败照样打日志;只是不让一个人堵死整条顺位。
+        /// </summary>
+        private static readonly System.Collections.Generic.Dictionary<long,
+                (int Year, System.Collections.Generic.HashSet<long> Ids)>
+            RegistrationBlocked =
+                new System.Collections.Generic.Dictionary<long,
+                    (int, System.Collections.Generic.HashSet<long>)>();
+
+        private static void BlockRegistrationForThisYear(Kingdom pKingdom,
+            Actor pHeir)
+        {
+            long heirId = pHeir?.data?.id ?? -1L;
+            if (pKingdom?.data == null || heirId < 0L) return;
+            int year = SafeCurrentYear();
+            if (!RegistrationBlocked.TryGetValue(pKingdom.id,
+                    out (int Year, System.Collections.Generic.HashSet<long> Ids)
+                        entry) || entry.Year != year)
+            {
+                entry = (year, new System.Collections.Generic.HashSet<long>());
+                RegistrationBlocked[pKingdom.id] = entry;
+            }
+            entry.Ids.Add(heirId);
+        }
+
+        private static bool IsRegistrationBlocked(Kingdom pKingdom,
+            Actor pActor)
+        {
+            long actorId = pActor?.data?.id ?? -1L;
+            if (pKingdom?.data == null || actorId < 0L) return false;
+            return RegistrationBlocked.TryGetValue(pKingdom.id,
+                       out (int Year,
+                           System.Collections.Generic.HashSet<long> Ids)
+                           entry) &&
+                   entry.Year == SafeCurrentYear() &&
+                   entry.Ids.Contains(actorId);
         }
 
         internal static bool ReleaseForeignKingshipForSuccession(
@@ -962,13 +1304,60 @@ namespace AncientWarfare3.core.lineage
             catch { return false; }
         }
 
-        private static void SetHeirFlag(Actor pActor, bool pValue)
+        private static void SetHeirFlag(Actor pActor, bool pValue,
+            Kingdom pKingdom = null)
         {
             if (pActor?.data == null) return;
+            // 名号要认「他是哪个国的继承人」,不能认他此刻站在哪个国 ——
+            // 归化可能还没落定。这个 id 和 IS_HEIR 一起写、一起清。
+            long kingdomId = pValue ? pKingdom?.id ?? -1L : -1L;
+            pActor.data.get(LineageKeys.HEIR_KINGDOM_ID,
+                out long oldKingdomId, -1L);
+            if (oldKingdomId != kingdomId)
+                pActor.data.set(LineageKeys.HEIR_KINGDOM_ID, kingdomId);
+
             pActor.data.get(LineageKeys.IS_HEIR, out bool oldValue, false);
             if (oldValue == pValue) return;
             pActor.data.set(LineageKeys.IS_HEIR, pValue);
             pActor.clearGraphicsFully();
+        }
+
+        /// <summary>
+        ///     他是哪个国的继承人。取登记时落下的 <see cref="LineageKeys.HEIR_KINGDOM_ID"/>,
+        ///     并用那个国的 KINGDOM_HEIR_ID 反证一次;对不上再退回 actor 当前的国。
+        ///
+        ///     名号(太子/储君/世子……)必须由**这个**国来定:
+        ///     HeirTitleRules.BuildSocialTitle 要读所属国的帝制/天命/藩镇/共和状态,
+        ///     拿一个还没归化过来的外国去读,得到的是另一套称谓,甚至什么都没有 ——
+        ///     用户报的"族谱 tooltip 和 actor 身上都看不到太子身份"就是这么来的。
+        /// </summary>
+        internal static Kingdom ResolveHeirKingdom(Actor pActor)
+        {
+            if (pActor?.data == null) return null;
+            pActor.data.get(LineageKeys.HEIR_KINGDOM_ID, out long kingdomId,
+                -1L);
+            if (kingdomId >= 0L)
+            {
+                Kingdom registered = FindKingdomById(kingdomId);
+                if (registered?.data != null &&
+                    IsCurrentHeir(registered, pActor)) return registered;
+            }
+            Kingdom current = pActor.kingdom;
+            return current?.data != null && IsCurrentHeir(current, pActor)
+                ? current
+                : null;
+        }
+
+        /// <summary>
+        ///     按 id 取王国。走管理器的索引查询,**不要**遍历 kingdoms ——
+        ///     ResolveHeirKingdom 挂在 LineageArchiveWriter 的每次归档和族谱
+        ///     tooltip 的每个节点上,线性扫描会随王国数量放大。
+        /// </summary>
+        private static Kingdom FindKingdomById(long pKingdomId)
+        {
+            if (pKingdomId < 0L) return null;
+            try { return World.world?.kingdoms?.get(pKingdomId); }
+            catch { return null; }
         }
 
         /// <summary>
@@ -992,11 +1381,13 @@ namespace AncientWarfare3.core.lineage
 
             Actor directDescendant = null;
             int directDescendantDelta = 0;
+            bool directDescendantLegitimate = false;
             double directDescendantBirth = 0;
             bool directDescendantAdult = false;
             Actor collateral = null;
             int collateralTier = HeirGenerationRules.TierIneligible;
             int collateralDelta = 0;
+            bool collateralLegitimate = false;
             double collateralBirth = 0;
             bool collateralAdult = false;
 
@@ -1005,8 +1396,12 @@ namespace AncientWarfare3.core.lineage
             // 一个 Dictionary 并把国王整条父系链重走一遍 —— 同一张表被重建了
             // N 遍。实测 succession:reconcile_heir 单次 60.9ms,占
             // annual_succession 的 99.8%,而该阶段又是权威周期里最大的单项。
-            var kingAncestry = new LineageQuery.AgnaticAncestorDepths();
-            kingAncestry.Reset(kingId);
+            // 按「王国 + 参照君主」共享(见 GetKingAncestry):原来每次刷新新建
+            // 一份,而一次核对最多要跑三遍(正统/军功/文治)。
+            LineageQuery.AgnaticAncestorDepths kingAncestry =
+                GetKingAncestry(pKingdom, kingId);
+            if (kingAncestry == null)
+                return new HeirSelection(null, SuccessionMode.NONE);
             var pool = CollectSuccessionCandidatePool(pKingdom, king, kingId);
             foreach (Actor cand in pool)
             {
@@ -1025,16 +1420,20 @@ namespace AncientWarfare3.core.lineage
 
                 double birth = SafeCreatedTime(cand);
                 bool adult = SafeIsAdult(cand);
+                bool legitimate = IsLegitimateBirth(cand);
                 if (isDesc)
                 {
                     if (directDescendant == null ||
-                        HeirGenerationRules.Compare(tier, delta, birth, adult,
+                        HeirGenerationRules.Compare(tier, delta, legitimate,
+                            birth, adult,
                             HeirGenerationRules.TierDirectDescendant,
-                            directDescendantDelta, directDescendantBirth,
+                            directDescendantDelta, directDescendantLegitimate,
+                            directDescendantBirth,
                             directDescendantAdult) < 0)
                     {
                         directDescendant = cand;
                         directDescendantDelta = delta;
+                        directDescendantLegitimate = legitimate;
                         directDescendantBirth = birth;
                         directDescendantAdult = adult;
                     }
@@ -1042,12 +1441,14 @@ namespace AncientWarfare3.core.lineage
                 }
 
                 if (collateral == null || HeirGenerationRules.Compare(
-                        tier, delta, birth, adult, collateralTier,
-                        collateralDelta, collateralBirth, collateralAdult) < 0)
+                        tier, delta, legitimate, birth, adult, collateralTier,
+                        collateralDelta, collateralLegitimate, collateralBirth,
+                        collateralAdult) < 0)
                 {
                     collateral = cand;
                     collateralTier = tier;
                     collateralDelta = delta;
+                    collateralLegitimate = legitimate;
                     collateralBirth = birth;
                     collateralAdult = adult;
                 }
@@ -1065,10 +1466,38 @@ namespace AncientWarfare3.core.lineage
                     SuccessionMode.COLLATERAL_RESTORE);
 
             if (collateral == null)
+            {
+                LogVacancy(pKingdom, kingId, pool.Count);
                 return new HeirSelection(null, SuccessionMode.NONE); // 真·绝嗣/亡国
+            }
 
             return new HeirSelection(collateral,
                 SuccessionMode.COLLATERAL_RESTORE);
+        }
+
+        /// <summary>
+        ///     一个人都挑不出来时的一行现场记录,受性能诊断总开关门控
+        ///     (关掉时零成本)。之前那批 [AW3 HEIR] 探针是按候选人逐条打印的,
+        ///     每个空位王国每年刷屏,所以撤了;这里只在**确实选不出人**时打一行,
+        ///     且把三个关键前提一并带上 —— 池子大小、父系链有没有接上、
+        ///     同胞兄弟认没认出来。绝大多数"明明有胞弟却空着"都倒在这三项里。
+        /// </summary>
+        private static void LogVacancy(Kingdom pKingdom, long pKingId,
+            int pPoolSize)
+        {
+            if (!AncientWarfare3.core.performance.AWDiagnosticsGate.Enabled)
+                return;
+            long fatherId = -1L;
+            bool parentPair = false;
+            try
+            {
+                fatherId = LineageQuery.GetFatherId(pKingId);
+                parentPair = TryGetParentPair(pKingId, out long _, out long _);
+            }
+            catch { }
+            ModClass.LogInfo("[AW3 HEIR] vacancy kingdom=" + pKingdom.id +
+                " king=" + pKingId + " pool=" + pPoolSize +
+                " father=" + fatherId + " parent_pair=" + parentPair);
         }
 
         private static Actor PickEldestEligibleFullBrother(Kingdom pKingdom,
@@ -1088,12 +1517,14 @@ namespace AncientWarfare3.core.lineage
                     actors.ContainsKey(sibling.data.id)) continue;
                 bool sharesBothParents = HasSameParentPair(sibling.data.id,
                     parentA, parentB);
-                bool eligible = sharesBothParents &&
-                    sibling.kingdom == pKingdom && SafeIsAdult(sibling) &&
+                // 不在本国不再是硬条件 —— 与 IsHeirBaseEligible 一致,归化在
+                // NormalizeHeirForRegistration 里做;这里只作为排序偏好。
+                bool eligible = sharesBothParents && SafeIsAdult(sibling) &&
                     IsHeirBaseEligible(sibling, pKingdom, pKing);
                 actors[sibling.data.id] = sibling;
                 candidates.Add(new HeirFullBrotherCandidate(sibling.data.id,
-                    eligible, sharesBothParents, SafeCreatedTime(sibling)));
+                    eligible, sharesBothParents, SafeCreatedTime(sibling),
+                    sibling.kingdom == pKingdom));
             }
 
             long selectedId = HeirFullBrotherRules.SelectEldestEligibleId(
@@ -1210,6 +1641,8 @@ namespace AncientWarfare3.core.lineage
         private static bool IsHeirBaseEligible(Actor pActor, Kingdom pKingdom, Actor pKing)
         {
             if (pActor?.data == null || pActor == pKing) return false;
+            // 本年内册立失败过的人让位给下一顺位,免得一个人堵死整条顺位。
+            if (IsRegistrationBlocked(pKingdom, pActor)) return false;
             // 夏朝/Xia化王国放宽种族/谱系限制：不强求 LINEAGE_ID 或 IsXia，
             // 候选人不需要在本国，归化在 NormalizeHeirForRegistration 里进行。
             bool usesManaged = UsesManagedLineageForKingdom(pKingdom);

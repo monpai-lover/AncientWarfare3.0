@@ -766,12 +766,36 @@ namespace AncientWarfare3.core.lineage
                 new Dictionary<long, int>();
             private readonly HashSet<long> _scratch = new HashSet<long>();
 
+            /// <summary>
+            ///     父亲 id 的记忆表。候选人的父系链高度重叠(都收敛到王室那条线上),
+            ///     而每一步 GetFatherId 都是 GetParentIds(两条 SQL)+ 逐个
+            ///     GetActorSex。这个对象现在按「王国 + 参照君主」长期复用
+            ///     (HeirService.GetKingAncestry),所以记忆表跨候选人、跨单位有效。
+            ///
+            ///     **只记正结果**:查不到父亲往往是暂时的(出生事务还没落库、
+            ///     档案还没写),把 -1 记下来会让这一朝再也纠正不过来 —— 之前
+            ///     "有胞弟却选不出继承人"就是父系链断的那一类故障。
+            /// </summary>
+            private readonly Dictionary<long, long> _fathers =
+                new Dictionary<long, long>();
+
+            private long CachedFather(long pActorId)
+            {
+                if (pActorId < 0L) return -1L;
+                if (_fathers.TryGetValue(pActorId, out long cached))
+                    return cached;
+                long father = GetFatherId(pActorId);
+                if (father >= 0L) _fathers[pActorId] = father;
+                return father;
+            }
+
             public long RootId { get; private set; } = -1L;
             public bool IsUsable => RootId >= 0L;
 
             public void Reset(long pRootId)
             {
                 _depths.Clear();
+                _fathers.Clear();
                 RootId = -1L;
                 if (pRootId < 0L) return;
                 RootId = pRootId;
@@ -779,7 +803,7 @@ namespace AncientWarfare3.core.lineage
                 for (int depth = 0; depth <= 96; depth++)
                 {
                     if (!_depths.ContainsKey(current)) _depths[current] = depth;
-                    long father = GetFatherId(current);
+                    long father = CachedFather(current);
                     if (father < 0L || father == current ||
                         _depths.ContainsKey(father)) break;
                     current = father;
@@ -819,7 +843,7 @@ namespace AncientWarfare3.core.lineage
                         return current;
                     }
                     if (!_scratch.Add(current)) break;
-                    long father = GetFatherId(current);
+                    long father = CachedFather(current);
                     if (father < 0L || father == current) break;
                     current = father;
                 }
@@ -1958,8 +1982,15 @@ namespace AncientWarfare3.core.lineage
             pLive.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
             if (isHeir || HeirService.IsCurrentHeir(pLive.kingdom, pLive))
             {
-                string kingdomName = pLive.kingdom?.name ?? pNode.kingdom_name ?? "";
-                roles.Add(HeirTitleRules.BuildSocialTitle(kingdomName, pLive.kingdom));
+                // 名号由**他所继承的那个国**定,不是他此刻所在的国 —— 归化
+                // 可能还没落定,拿错了国称谓就跟着错(见 HeirService.ResolveHeirKingdom)。
+                Kingdom heirKingdom = HeirService.ResolveHeirKingdom(pLive) ??
+                                      pLive.kingdom;
+                string kingdomName = heirKingdom?.name ??
+                                     pLive.kingdom?.name ??
+                                     pNode.kingdom_name ?? "";
+                roles.Add(HeirTitleRules.BuildSocialTitle(kingdomName,
+                    heirKingdom));
                 rolesColor = color;
             }
             if (GeneralService.IsFiefHolder(pLive))
