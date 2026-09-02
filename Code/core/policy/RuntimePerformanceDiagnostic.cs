@@ -707,6 +707,8 @@ namespace AncientWarfare3.core.policy
                 " school_sql_batches_total=" + schoolDiagnostics.SqlBatches +
                 " school_sql_commit_total_ms=" +
                 Milliseconds(schoolDiagnostics.SqlCommitTicks) +
+                " wal_checkpoint=" +
+                core.db.LineageArchiveCheckpointService.GetDiagnostics() +
                 " live_population=" + livePopulation +
                 " total_actor_objects=" + totalActorObjects +
                 " dying_actor_objects=" + dyingActorObjects +
@@ -873,15 +875,6 @@ namespace AncientWarfare3.core.policy
                 " path_reused=" + pathDiagnostics.Reused +
                 " path_reused_running=" +
                 pathDiagnostics.ReusedRunning +
-                " path_reuse_probe=recorded=" +
-                pathDiagnostics.ReuseProbeRecorded +
-                ",probes=" + pathDiagnostics.ReuseProbeProbes +
-                ",loose=" + pathDiagnostics.ReuseProbeLooseHits +
-                ",strict=" + pathDiagnostics.ReuseProbeStrictHits +
-                ",tracked=" + pathDiagnostics.ReuseProbeTracked +
-                ",evictions=" + pathDiagnostics.ReuseProbeEvictions +
-                " path_straight_segments=" +
-                pathDiagnostics.StraightSegments +
                 " path_cancelled=" + pathDiagnostics.Cancelled +
                 " path_completed=" + pathDiagnostics.Completed +
                 " path_failed=" + pathDiagnostics.Failed +

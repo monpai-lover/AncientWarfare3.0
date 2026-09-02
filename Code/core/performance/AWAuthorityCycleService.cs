@@ -69,6 +69,9 @@ namespace AncientWarfare3.core.performance
             RefugeePersistedJourneys,
             RefugeeThreatenedCities,
             SlaveCaptureScan,
+            // WAL 检查点的派发点。这一步本身只是判断要不要起一个后台任务
+            // (自身节流,绝大多数调用是早退),真正的 I/O 不在这一帧上。
+            LineageWalCheckpoint,
         }
 
         // 每个权威周期最多处理几张重试票据。一张票据触发一次整王国的
@@ -250,7 +253,9 @@ namespace AncientWarfare3.core.performance
             WarArmyReturnService.ClearRuntime();
             ArmyRtsAssignmentReconciliationService.Reset();
             AWEnemyPresenceCache.Clear();
-            AWStatusSimulationScheduler.ClearRuntime();
+            // 世界切换时放掉后台检查点的连接:它指向的是上一局的运行时库,
+            // 留着会挡住 CloseAndDeleteRuntimeDb 删文件。
+            core.db.LineageArchiveCheckpointService.Shutdown();
             CityReservePoolService.ClearRuntime();
             WarForceEliminationSettlementService.ClearRuntime();
             WarTerminalSettlementCoordinator.ClearRuntime();
@@ -389,6 +394,8 @@ namespace AncientWarfare3.core.performance
             Step(AuthorityStep.SlaveCaptureScan,
                 RecentFeatureBenchmarkRules.CaptureScanIndex,
                 SlaveCaptureScanService.DrainFrame);
+            Step(AuthorityStep.LineageWalCheckpoint,
+                core.db.LineageArchiveCheckpointService.RequestIfDue);
         }
 
         private static void DrainAuthorityCompletions()

@@ -29,13 +29,21 @@ namespace AncientWarfare3.core.db
                 // 同时测了 mmap_size=64MB:37.3 us/次,比只调 cache 更慢,
                 // 所以不开。
                 "PRAGMA cache_size=-32768;" +
+                // 0 = 关掉自动检查点,改由 LineageArchiveCheckpointService 在
+                // 后台线程上驱动。
+                //
                 // 阈值按页算,1000 页在 1024 的页大小下只是 1MB。实测检查点
                 // 成本约为「5ms 固定 + 每 MB 约 6ms」:
                 //   139KB 4.48ms / 1.06MB 12.44ms / 4.24MB 29.33ms
                 // 固定开销在小 WAL 时占主导,所以调低阈值会让总量变差
                 // (256KB 阈值 = 4 次 x 6.4ms = 25.6ms/MB,而 1MB 阈值是
-                // 12.4ms/MB)。保持 1000。
-                "PRAGMA wal_autocheckpoint=1000;";
+                // 12.4ms/MB)—— 也就是说无论阈值取多少,这笔账都赖不掉。
+                //
+                // 真正的问题不是总量而是**落点**:自动检查点发生在提交那一刻,
+                // 而学派写缓冲的提交跑在权威帧的主线程上。实测开坛讲学时单次
+                // transaction.Commit() 266.43ms(正常提交 0.2~0.4ms),整帧
+                // 297ms —— 玩家直接看得见。检查点是纯 I/O,放后台就行。
+                "PRAGMA wal_autocheckpoint=0;";
             command.ExecuteNonQuery();
         }
 
@@ -45,9 +53,15 @@ namespace AncientWarfare3.core.db
 
             try
             {
-                using var command = pConnection.CreateCommand();
-                command.CommandText = "PRAGMA wal_checkpoint(PASSIVE);";
-                command.ExecuteNonQuery();
+                // 与后台检查点串行:两者都在搬同一个 WAL,重叠没有意义,
+                // 而存档要的是「回来时 WAL 已经干净」这个确定结果。
+                lock (LineageArchiveCheckpointService.Gate)
+                {
+                    using var command = pConnection.CreateCommand();
+                    command.CommandText = "PRAGMA wal_checkpoint(PASSIVE);";
+                    command.ExecuteNonQuery();
+                }
+
                 return true;
             }
             catch (SQLiteException error)

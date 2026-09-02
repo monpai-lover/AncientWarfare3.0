@@ -4,6 +4,14 @@ using HarmonyLib;
 
 namespace AncientWarfare3.patch
 {
+    // 类级 [HarmonyPatch] 必需:PatchClassProcessor 在类上没有这个特性时
+    // 直接返回,方法级特性一个都不会被处理(且不报错)。本类长期缺这一行,
+    // 所以下面 12 个 prefix 从未执行过。
+    //
+    // ⚠ 目前本类仍在 ModClass.DormantPatchTypes 里被显式停用 —— 特性补齐只是
+    //   为了不再依赖"缺特性"这种隐式关闭。要启用请从那张表里移除,并先实机
+    //   验证亚种/家族/军队/宗教等归属是否正确(prefix 返回 true 会完全跳过原版)。
+    [HarmonyPatch]
     internal static class AW_DirtyMetaActorIndexPatch
     {
         [HarmonyPrefix, HarmonyPatch(typeof(SubspeciesManager), "updateDirtyUnits")]

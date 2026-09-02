@@ -4,6 +4,7 @@ using NeoModLoader;
 using NeoModLoader.api;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using AncientWarfare3.core.pathfinding;
@@ -32,6 +33,30 @@ namespace AncientWarfare3
             TimeSpan.FromSeconds(2);
         private static bool _namingCollisionLogWritten;
         private bool _runtimeShutdownComplete;
+
+        /// <summary>
+        ///     故意不装载的补丁类。
+        ///
+        ///     这几个类因为缺少类级 <c>[HarmonyPatch]</c> 而**从未真正装载过**:
+        ///     PatchClassProcessor 在类上没有该特性时直接返回、一个方法都不打,
+        ///     而且不抛异常 —— 所以下面的循环照样打印 "Harmony patch OK"。
+        ///     补上特性等于让它们第一次上线,风险不在"改动"而在"从零开始跑",
+        ///     因此先在这里显式停用,实机验证过再逐个移出本表。
+        ///
+        ///     停用理由:
+        ///     - <see cref="AW_DirtyMetaActorIndexPatch"/>:12 个 prefix 接管全部
+        ///       meta manager 的 updateDirtyUnits(返回 true 就完全跳过原版)。
+        ///       索引本身一直由 AWCooperativeWorldMaintenanceRunner 在建 ——
+        ///       开销一直在付、收益一次没拿到 —— 接上是设计意图,但没跑过,
+        ///       出错的表现会是亚种/家族/军队归属错乱,不易察觉。
+        ///     - <see cref="AW_SpecialGovernmentCombatPatch"/>:给极热的
+        ///       WorldLawAsset.isEnabled 加 prefix,性能与正确性都要实机确认。
+        /// </summary>
+        private static readonly HashSet<Type> DormantPatchTypes = new HashSet<Type>
+        {
+            typeof(AW_DirtyMetaActorIndexPatch),
+            typeof(AW_SpecialGovernmentCombatPatch)
+        };
 
         protected override void OnModLoad()
         {
@@ -134,10 +159,32 @@ namespace AncientWarfare3
                         type.Namespace, disableIntegratedNamingPatches))
                     continue;
 
+                if (DormantPatchTypes.Contains(type))
+                {
+                    LogInfo("Harmony patch 显式停用(待实机验证): " +
+                        type.FullName);
+                    continue;
+                }
+
                 try
                 {
-                    harmony.CreateClassProcessor(type).Patch();
-                    LogInfo("Harmony patch OK: " + type.FullName);
+                    var patched = harmony.CreateClassProcessor(type).Patch();
+                    // Patch() 返回 null/空 = 一个方法都没打上。最常见的成因是类上
+                    // 漏了 [HarmonyPatch] —— 而 PatchClassProcessor 对此不报错,
+                    // 于是补丁静默失效、日志里却是一片 OK。这里必须显式喊出来。
+                    //
+                    // 但 [HarmonyPrepare] 返回 false 也会得到同样的空结果,那是
+                    // **有意**关闭,不是事故。不排除它就会天天喊狼来了,告警很快
+                    // 就没人看了。
+                    if (patched != null && patched.Count > 0)
+                        LogInfo("Harmony patch OK: " + type.FullName +
+                            " (" + patched.Count + ")");
+                    else if (IsPrepareDisabled(type))
+                        LogInfo("Harmony patch 按 [HarmonyPrepare] 关闭: " +
+                            type.FullName);
+                    else
+                        LogWarning("Harmony patch 未生效(类级 " +
+                            "[HarmonyPatch] 缺失?): " + type.FullName);
                 }
                 catch (Exception e)
                 {
@@ -214,6 +261,41 @@ namespace AncientWarfare3
                                        BindingFlags.Static | BindingFlags.Instance;
             return pType.GetMethods(flags)
                 .Any(m => m.GetCustomAttributes(typeof(HarmonyPatch), true).Length > 0);
+        }
+
+        /// <summary>
+        ///     这个类是否带一个返回 false 的 [HarmonyPrepare]。
+        ///
+        ///     Harmony 用 Prepare 做条件装载,返回 false 就整类跳过 —— 结果和
+        ///     「类上漏了 [HarmonyPatch]」一样是空的 patch 列表,但性质相反:
+        ///     一个是有意关闭,一个是事故。只按结果判断会把前者也报成告警。
+        ///
+        ///     只认无参、静态、返回 bool 的常量式 Prepare(读不到就当没有,
+        ///     照常告警 —— 宁可多喊一次,不可漏掉真事故)。
+        /// </summary>
+        private static bool IsPrepareDisabled(Type pType)
+        {
+            try
+            {
+                const BindingFlags flags = BindingFlags.Public |
+                    BindingFlags.NonPublic | BindingFlags.Static;
+                foreach (MethodInfo method in pType.GetMethods(flags))
+                {
+                    if (method.GetCustomAttributes(
+                            typeof(HarmonyPrepare), true).Length == 0)
+                        continue;
+                    if (method.ReturnType != typeof(bool) ||
+                        method.GetParameters().Length != 0)
+                        continue;
+                    if (!(bool)method.Invoke(null, null)) return true;
+                }
+            }
+            catch (Exception)
+            {
+                // Prepare 有副作用或抛异常时不做判断,退回告警。
+            }
+
+            return false;
         }
 
         private void OnApplicationQuit()

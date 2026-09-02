@@ -46,6 +46,14 @@ namespace AncientWarfare3.core.performance
         private static string _currentAw3Phase = "idle";
         private static string _longestPhase = string.Empty;
         private static double _longestPhaseMilliseconds;
+        // RunPhase 收到的 pPhase 是**动作开始前**算出来的阶段名,而 vanilla 的
+        // 动作是一个突发,内部会连续走过多个阶段。所以 longest 的名字只是这段
+        // 突发的**入口**,不是耗时真正落在的地方 —— 之前一次排查就是被
+        // "b5.complete:198.86ms" 带偏的,而 b5(路径 worker 等待)整个区间只有
+        // 0.108ms。记下步数,让读日志的人一眼看出这是一段而不是一个阶段;
+        // 精确到单个阶段的归因看 actor_post_stages 的 max 分量。
+        private static int _pendingPhaseSteps = 1;
+        private static int _longestPhaseSteps = 1;
         private static bool _faulted;
         private static string _faultMessage = string.Empty;
         private static bool _criticalHookInstalled;
@@ -162,6 +170,7 @@ namespace AncientWarfare3.core.performance
             AWSimulationTickBenchmark.TickCapture benchmarkTick =
                 AWSimulationTickBenchmark.CapturePhaseTarget();
             long startedAt = Stopwatch.GetTimestamp();
+            _pendingPhaseSteps = 1;
             _simulationPhaseDepth++;
             double elapsed;
             try
@@ -193,6 +202,7 @@ namespace AncientWarfare3.core.performance
             {
                 _longestPhaseMilliseconds = elapsed;
                 _longestPhase = pPhase;
+                _longestPhaseSteps = _pendingPhaseSteps;
             }
 
             if (PhaseEstimates.TryGetValue(pPhase, out double previous))
@@ -210,6 +220,12 @@ namespace AncientWarfare3.core.performance
         public static void SetPhase(string pPhase)
         {
             SetPhase(AWSimulationDomain.Vanilla, pPhase);
+        }
+
+        // 由突发执行器在动作内部回报实际走过的步数,供 longest 标注用。
+        public static void NotePhaseSteps(int pSteps)
+        {
+            if (pSteps > 0) _pendingPhaseSteps = pSteps;
         }
 
         public static void SetPhase(AWSimulationDomain pDomain,
@@ -263,7 +279,7 @@ namespace AncientWarfare3.core.performance
                 "(vanilla={5:0.00},aw3={6:0.00}) phase={7}/{8} " +
                 "cycles={9}/{10} speed={11:0.#}x/{12:0.00}x " +
                 "credits={13:0.0} ticks={14}/{15} " +
-                "longest={16}:{17:0.00}ms workers={18}/{19}/{20}" +
+                "longest={16}x{26}步:{17:0.00}ms workers={18}/{19}/{20}" +
                 "(total/fg/path) world={21}:{22}@{23:0.00} " +
                 "{24} dynamic_fps_reason={25}",
                 AWPerformanceSettings.Mode.ToString().ToLowerInvariant(),
@@ -282,7 +298,8 @@ namespace AncientWarfare3.core.performance
                 AWSimulationTime.BoundWorldSeedId,
                 AWSimulationTime.Generation, AWSimulationTime.DiagnosticTime,
                 AWMilitaryFrontLaneScheduler.GetDiagnostics(),
-                _wartimeBudgetState.Reason);
+                _wartimeBudgetState.Reason,
+                _longestPhaseSteps);
         }
 
         private static void FinalizePreviousFrame()

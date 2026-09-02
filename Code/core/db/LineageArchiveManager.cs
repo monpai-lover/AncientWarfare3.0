@@ -456,6 +456,10 @@ namespace AncientWarfare3.core.db
 
         private void CloseRuntimeDatabase()
         {
+            // 后台检查点持有同一个库文件的第二条连接。Windows 上不放掉它,
+            // CloseAndDeleteRuntimeDb 的 File.Delete 会直接失败。放在这里而不是
+            // 调用方,是因为这是关库的唯一收口。
+            LineageArchiveCheckpointService.Shutdown();
             if (_db == null) return;
             _db.Close();
             _db.Dispose();

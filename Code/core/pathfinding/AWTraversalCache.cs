@@ -522,52 +522,63 @@ namespace AncientWarfare3.core.pathfinding
                 _topologyBuildScheduled) return;
             long revision = _topologySourceRevision;
             long worldGeneration = AWAsyncRuntime.WorldGeneration;
+            // execution 的构造函数要把全图每个 chunk 的快照整份复制一遍,实测
+            // 单次 26~28MB。先问 CanSchedule 再构造:调度注定失败时(没有
+            // compute worker、存档栅栏、世代不匹配)照样构造,等于每次拓扑重建
+            // 都白分配一份全图副本再扔掉 —— 实测 PathfindingBootstrap 一个区间
+            // 分配 54MB,而它自己只用得到其中一半。
+            //
+            // CanSchedule 与 TrySchedule 之间存在竞态,但两边都不假定结果:
+            // TrySchedule 仍会失败并落到下面的后台任务,只是不再是必然路径。
+            bool canSchedule = AWAsyncRuntime.CanSchedule(
+                "traversal-topology-cache", AWAsyncLane.Traversal,
+                new AWAsyncStamp(worldGeneration,
+                    UnityEngine.Time.frameCount, revision));
             var execution = new AWTraversalTopologyBuildExecution(_current,
                 worldGeneration, _current.Id, revision);
-            var commit = new AWTraversalTopologyCommit(this);
-            var request = new AWAsyncWorkRequest("traversal-topology-cache",
-                AWAsyncLane.Traversal,
-                new AWAsyncStamp(worldGeneration,
-                    UnityEngine.Time.frameCount, revision),
-                execution.Execute, commit.Commit,
-                HandleTopologyBuildFault);
-            if (AWAsyncRuntime.TrySchedule(request))
+            if (canSchedule)
             {
-                _topologyBuildScheduled = true;
-                return;
-            }
-            if (!AWAsyncRuntime.TraversalEnabled)
-            {
-                // 这里原本是就地 Execute —— 全图海洋连通性 + 区域拓扑,实测一次
-                // 205ms,直接把权威帧撑爆。改成后台算、主线程发布。
-                //
-                // 可以安全离线程:构造函数已经把全图 chunk 快照复制成一份脱离
-                // 实时状态的数组,而 AWOceanConnectivityRules.Apply 与
-                // AWRegionTopologySnapshot.Build 只读这份数组(不碰 World /
-                // Unity / 缓存自身状态)。发布仍然只在主线程做,且过期校验原样
-                // 保留,所以最坏情况只是白算一次。
-                //
-                // 复用上面那个 execution,不再 Dispose 掉重建一个:它的构造函数
-                // 要把全图每个 chunk 的快照整份复制一遍,实测单次 26~28MB。
-                // TrySchedule 在没有 compute worker 时必然失败,所以原来那对
-                // 「Dispose + 重新 new」等于每次拓扑重建都白分配一份全图副本再
-                // 扔掉。调度失败时 request 里的闭包永远不会被调用,execution 也
-                // 没被 Execute 过(Execute 才会把 _chunks 取空),所以此处完好可用。
-                _diagnostics?.OnTraversalSyncFallback();
-                _topologyBuildScheduled = true;
-                _topologyBuildTask = Task.Run(() =>
+                var commit = new AWTraversalTopologyCommit(this);
+                var request = new AWAsyncWorkRequest(
+                    "traversal-topology-cache",
+                    AWAsyncLane.Traversal,
+                    new AWAsyncStamp(worldGeneration,
+                        UnityEngine.Time.frameCount, revision),
+                    execution.Execute, commit.Commit,
+                    HandleTopologyBuildFault);
+                if (AWAsyncRuntime.TrySchedule(request))
                 {
-                    try
-                    {
-                        return (AWTraversalBuildResult)execution.Execute(
-                            CancellationToken.None);
-                    }
-                    finally { execution.Dispose(); }
-                });
-                return;
+                    _topologyBuildScheduled = true;
+                    return;
+                }
             }
 
-            execution.Dispose();
+            // 这里原本是就地 Execute —— 全图海洋连通性 + 区域拓扑,实测一次
+            // 205ms,直接把权威帧撑爆。改成后台算、主线程发布。
+            //
+            // 可以安全离线程:构造函数已经把全图 chunk 快照复制成一份脱离
+            // 实时状态的数组,而 AWOceanConnectivityRules.Apply 与
+            // AWRegionTopologySnapshot.Build 只读这份数组(不碰 World /
+            // Unity / 缓存自身状态)。发布仍然只在主线程做,且过期校验原样
+            // 保留,所以最坏情况只是白算一次。
+            //
+            // 注意这条路径与 TraversalEnabled 无关:该开关只决定「用不用
+            // 异步 worker 车道」,不代表「必须同步算」。原来把它写成
+            // if (!TraversalEnabled) 之后 return,于是开关**开着**、
+            // 但车道排不进去时(worker 忙、存档栅栏)会掉到函数末尾直接
+            // Dispose —— _topologyBuildScheduled 保持 false,下一帧重来,
+            // 每帧白复制一次全图快照且拓扑永远不更新。
+            _diagnostics?.OnTraversalSyncFallback();
+            _topologyBuildScheduled = true;
+            _topologyBuildTask = Task.Run(() =>
+            {
+                try
+                {
+                    return (AWTraversalBuildResult)execution.Execute(
+                        CancellationToken.None);
+                }
+                finally { execution.Dispose(); }
+            });
         }
 
         private void HandleTopologyBuildFault(Exception pError)

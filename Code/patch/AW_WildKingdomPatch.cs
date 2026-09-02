@@ -175,6 +175,7 @@ namespace AncientWarfare3.patch
             AW_LoadWorldPurgeFlagPatch.PendingPurge = false;
             AW_XiaWatchTowerKingdomPatch.RestoreCityWatchTowerKingdoms();
             AW_SavePatch.PurgeNullKingdomBuildings();
+            AW_SavePatch.RepairNullKingdomAssets();
         }
     }
 }

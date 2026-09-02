@@ -55,30 +55,11 @@ namespace AncientWarfare3.core.pathfinding
         private long _dockRequests;
         private long _boatRetries;
         private long _rtsSharedRouteReuses;
-        private long _straightSegments;
         private long _memberCorrections;
         private int _operationalQueueHighWater;
         private int _essentialQueueHighWater;
         private int _ambientQueueHighWater;
         private bool _queuePressureReported;
-
-        // Measurement-only: see AWPathReuseProbe. Remove with it.
-        private readonly AWPathReuseProbe _reuseProbe =
-            new AWPathReuseProbe(
-                AWPathRequestReuseRules.MaximumCompletedCapacity);
-
-        public long ReuseProbeRecorded => _reuseProbe.Recorded;
-        public long ReuseProbeProbes => _reuseProbe.Probes;
-        public long ReuseProbeLooseHits => _reuseProbe.LooseHits;
-        public long ReuseProbeStrictHits => _reuseProbe.StrictHits;
-        public long ReuseProbeEvictions => _reuseProbe.Evictions;
-        public int ReuseProbeTracked => _reuseProbe.Tracked;
-
-        public void OnSessionRetired(AWPathReuseKey pKey) =>
-            _reuseProbe.OnRetired(pKey);
-
-        public void OnReuseMissed(AWPathReuseKey pKey) =>
-            _reuseProbe.OnMissed(pKey);
 
         public long Generated => Interlocked.Read(ref _generated);
         public long Reused => Interlocked.Read(ref _reused);
@@ -116,7 +97,6 @@ namespace AncientWarfare3.core.pathfinding
         public long DockRequests => Interlocked.Read(ref _dockRequests);
         public long BoatRetries => Interlocked.Read(ref _boatRetries);
         public long RtsSharedRouteReuses => Interlocked.Read(ref _rtsSharedRouteReuses);
-        public long StraightSegments => Interlocked.Read(ref _straightSegments);
         public long MemberCorrections => Interlocked.Read(ref _memberCorrections);
         public int OperationalQueueHighWater =>
             Volatile.Read(ref _operationalQueueHighWater);
@@ -204,7 +184,6 @@ namespace AncientWarfare3.core.pathfinding
         public void OnDockRequest() => Interlocked.Increment(ref _dockRequests);
         public void OnBoatRetry() => Interlocked.Increment(ref _boatRetries);
         public void OnRtsSharedRouteReuse() => Interlocked.Increment(ref _rtsSharedRouteReuses);
-        public void OnStraightSegment() => Interlocked.Increment(ref _straightSegments);
         public void OnMemberCorrection() => Interlocked.Increment(ref _memberCorrections);
         public void OnDequeued(AWPathWorkPriority pPriority, long pEnqueuedAt)
         {

@@ -1071,7 +1071,6 @@
     <Compile Include="..\..\Code\core\pathfinding\AWRegionRouteCache.cs" Link="Production\AWRegionRouteCache.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWStreamingPathGenerator.cs" Link="Production\AWStreamingPathGenerator.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathDiagnostics.cs" Link="Production\AWPathDiagnostics.cs" />
-    <Compile Include="..\..\Code\core\pathfinding\AWPathReuseProbe.cs" Link="Production\AWPathReuseProbe.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathFinder.cs" Link="Production\AWPathFinder.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWPathRecoveryManager.cs" Link="Production\AWPathRecoveryManager.cs" />
     <Compile Include="..\..\Code\core\pathfinding\AWNarrowWaterRecoveryRules.cs" Link="Production\AWNarrowWaterRecoveryRules.cs" />

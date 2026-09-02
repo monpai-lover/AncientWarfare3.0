@@ -22,9 +22,38 @@ namespace AncientWarfare3.core.performance
         private ExceptionDispatchInfo _operationException;
         private int _activeGeneration;
         private int _nextGeneration;
-        private int _nextIndex;
+        /// <summary>
+        ///     高 32 位 = 代次,低 32 位 = 已发放到的索引,同样打包进一个 64 位字。
+        ///
+        ///     裸 int 游标的问题:认领是 <c>Interlocked.Increment</c>,**先消费再
+        ///     判断**。一个上一代的参与者只要在「循环条件通过」和「自增」之间被
+        ///     调度出去,等它回来时下一个操作可能已经开始 —— 它那一次自增就吃掉了
+        ///     **新操作**的一个索引,然后因为代次/endIndex 对不上直接 break,不执行。
+        ///     那一项从此没人做,而账面上又确实被发放过。这就是玩家日志里
+        ///     「7/36,nextIndex 已越过 endIndex」的来源。
+        ///
+        ///     改成带代次的 CAS 之后,跨代认领会直接失败、一个索引都不会被消费。
+        /// </summary>
+        private long _cursorState;
         private int _endIndex;
-        private int _remainingParticipants;
+        /// <summary>
+        ///     高 32 位 = 代次,低 32 位 = 剩余参与者数,打包进一个 64 位字。
+        ///
+        ///     原本是一个裸的 int `_remainingParticipants`,加入方(两个 assist
+        ///     入口)先读 <see cref="_activeGeneration"/> 判断代次、再单独 CAS 这个
+        ///     计数 —— **两步不原子**。于是一次 assist 可以「按 A 代做的判断」把
+        ///     +1 落到 B 代的计数上,而事后的 SignalParticipantCompleted 带代次
+        ///     守卫、发现不是 A 代就跳过不减,B 代的账从此永远凑不齐 0。
+        ///
+        ///     打包之后代次进了被比较的那个字,跨代的加入/退出会被 CAS 直接否决,
+        ///     账不可能串代。
+        ///
+        ///     还顺带立起一条不变量:**只要还有已登记的参与者,计数就不为 0,
+        ///     完成标记就不会置位,Complete 就跑不了,代次也就不会前进** ——
+        ///     所以参与者在自己的执行循环里读到的 _nextIndex/_endIndex/
+        ///     _operationAction 必然还属于自己那一代,不会被下一个操作换掉。
+        /// </summary>
+        private long _participantState;
         private int _completionMarked;
         private int _stopRequested;
         private int _executedItems;
@@ -114,23 +143,11 @@ namespace AncientWarfare3.core.performance
             int generation = Volatile.Read(ref _activeGeneration);
             if (generation == 0 ||
                 Volatile.Read(ref _completionMarked) != 0 ||
-                Volatile.Read(ref _nextIndex) >=
+                CursorIndex(Volatile.Read(ref _cursorState)) >=
                 Volatile.Read(ref _endIndex) - 1)
                 return false;
 
-            while (true)
-            {
-                int participants =
-                    Volatile.Read(ref _remainingParticipants);
-                if (participants <= 0 ||
-                    generation != Volatile.Read(ref _activeGeneration) ||
-                    Volatile.Read(ref _completionMarked) != 0)
-                    return false;
-                if (Interlocked.CompareExchange(
-                        ref _remainingParticipants, participants + 1,
-                        participants) == participants)
-                    break;
-            }
+            if (!TryJoinParticipant(generation)) return false;
 
             Interlocked.Exchange(ref _assistantJoined, 1);
             try
@@ -220,12 +237,13 @@ namespace AncientWarfare3.core.performance
                 {
                     // 无捕获异常却仍有未执行项：通常意味着某个 worker 线程在原版非线程安全代码里
                     // 静默撕裂（如并发写普通 Dictionary）。附带索引游标与停止标记，便于定位停在何处。
-                    int stoppedAtIndex = Volatile.Read(ref _nextIndex);
+                    int stoppedAtIndex = CursorIndex(
+                        Volatile.Read(ref _cursorState));
                     int endIndex = Volatile.Read(ref _endIndex);
                     int stopRequested = Volatile.Read(ref _stopRequested);
                     int generation = Volatile.Read(ref _activeGeneration);
-                    int remainingParticipants =
-                        Volatile.Read(ref _remainingParticipants);
+                    int remainingParticipants = ParticipantCount(
+                        Volatile.Read(ref _participantState));
                     int completionMarked =
                         Volatile.Read(ref _completionMarked);
                     exception = ExceptionDispatchInfo.Capture(
@@ -242,14 +260,17 @@ namespace AncientWarfare3.core.performance
                             ", completionMarked=" + completionMarked +
                             ", workers=" + result.WorkerSlots + ")"));
                 }
+                // 拆除按发布的逆序:先撤代次(让所有外部线程再也进不来),
+                // 才允许清载荷。反过来写的话,任何还拿着当前代次在跑的线程
+                // 都可能读到已经被清成 null 的 _operationAction。
+                Volatile.Write(ref _activeGeneration, 0);
+                Volatile.Write(ref _participantState, 0L);
+                Volatile.Write(ref _cursorState, 0L);
+                _endIndex = 0;
                 _operationAction = null;
                 _operationException = null;
                 _operationActive = false;
                 _operationAsynchronous = false;
-                _activeGeneration = 0;
-                _nextIndex = 0;
-                _endIndex = 0;
-                _remainingParticipants = 0;
                 _itemCount = 0;
                 _workerSlots = 0;
                 _assistantJoined = 0;
@@ -313,33 +334,21 @@ namespace AncientWarfare3.core.performance
             int generation = Volatile.Read(ref _activeGeneration);
             if (generation == 0 ||
                 Volatile.Read(ref _completionMarked) != 0 ||
-                Volatile.Read(ref _nextIndex) >=
+                CursorIndex(Volatile.Read(ref _cursorState)) >=
                 Volatile.Read(ref _endIndex) - 1)
                 return false;
 
-            while (true)
-            {
-                int participants =
-                    Volatile.Read(ref _remainingParticipants);
-                if (participants <= 0 ||
-                    generation != Volatile.Read(ref _activeGeneration) ||
-                    Volatile.Read(ref _completionMarked) != 0)
-                    return false;
-                if (Interlocked.CompareExchange(
-                        ref _remainingParticipants, participants + 1,
-                        participants) == participants)
-                    break;
-            }
+            if (!TryJoinParticipant(generation)) return false;
 
             Interlocked.Exchange(ref _assistantJoined, 1);
             long busyStartedAt = Stopwatch.GetTimestamp();
             try
             {
                 while (Volatile.Read(ref _stopRequested) == 0 &&
+                       generation == Volatile.Read(ref _activeGeneration) &&
                        Stopwatch.GetTimestamp() < pDeadline)
                 {
-                    int index = Interlocked.Increment(ref _nextIndex);
-                    if (index >= Volatile.Read(ref _endIndex)) break;
+                    if (!TryClaimIndex(generation, out int index)) break;
                     try
                     {
                         _operationAction(index);
@@ -373,29 +382,54 @@ namespace AncientWarfare3.core.performance
                 if (_operationActive)
                     throw new InvalidOperationException(
                         "Simulation worker pool still owns an operation.");
+
+                int generation = unchecked(++_nextGeneration);
+                if (generation == 0)
+                    generation = unchecked(++_nextGeneration);
+
+                // 全部初始化必须发生在**发布代次之前**。
+                //
+                // 两个 assist 入口不进 _operationLock,它们只凭
+                // _activeGeneration + _completionMarked 就加入并开始执行。所以
+                // 一旦代次先于计数清零被发布,就存在这样一段窗口:
+                //
+                //   主线程: _activeGeneration = G2; _completionMarked = 0;
+                //           ——被调度出去——
+                //   协助线程: 看到 G2、看到未完成 → 加入 → 认领 → 动作真的跑完
+                //           → Interlocked.Increment(ref _executedItems) × N
+                //   主线程: _executedItems = 0;      ← N 次自增被整片抹掉
+                //
+                // 结果是活全干了、账被清空,Complete 拿到 0/N 抛「未执行完」。
+                // 压力台上「动作实际被调用 6 次 / 应为 6 次」却仍然报错,以及
+                // 部分抹除的 7/8,都是这个窗口的形状。
                 _operationActive = true;
                 _operationAsynchronous = pAsynchronous;
-                _activeGeneration = unchecked(++_nextGeneration);
-                if (_activeGeneration == 0)
-                    _activeGeneration = unchecked(++_nextGeneration);
                 _operationAction = pAction;
                 _operationException = null;
-                _nextIndex = pStartIndex - 1;
-                _endIndex = pExclusiveEndIndex;
-                _itemCount = pExclusiveEndIndex - pStartIndex;
-                _workerSlots = pBackgroundWorkers;
-                _remainingParticipants = pBackgroundWorkers +
-                    (pAsynchronous ? 0 : 1);
                 _completionMarked = 0;
                 _stopRequested = 0;
                 _executedItems = 0;
                 _participantBusyTicks = 0L;
                 _mainWaitTicks = 0L;
                 _assistantJoined = 0;
+                _endIndex = pExclusiveEndIndex;
+                _itemCount = pExclusiveEndIndex - pStartIndex;
+                _workerSlots = pBackgroundWorkers;
                 _operationStartedAt = Stopwatch.GetTimestamp();
                 _operationCompletedAt = 0L;
                 _operationCompleted.Reset();
-                ticket = new WorkTicket(_activeGeneration);
+
+                // 这两个字自带代次,外部线程读到旧代次会被 CAS 直接否决,
+                // 所以先于 _activeGeneration 写是安全的。
+                Volatile.Write(ref _cursorState,
+                    PackCursor(generation, pStartIndex - 1));
+                Volatile.Write(ref _participantState,
+                    PackParticipants(generation,
+                        pBackgroundWorkers + (pAsynchronous ? 0 : 1)));
+                // 唯一的发布点。release 写保证上面所有初始化对任何做
+                // Volatile.Read(ref _activeGeneration) 的线程都已经可见。
+                Volatile.Write(ref _activeGeneration, generation);
+                ticket = new WorkTicket(generation);
             }
 
             for (int i = 0; i < pBackgroundWorkers; i++)
@@ -414,11 +448,20 @@ namespace AncientWarfare3.core.performance
             {
                 signal.WaitOne();
                 int generation = _dispatchGate.Consume(workerIndex);
-                if (generation == 0 ||
-                    generation != Volatile.Read(ref _activeGeneration))
-                    continue;
-                ExecuteItems(generation);
-                SignalParticipantCompleted(generation);
+                if (generation == 0) continue;
+                try
+                {
+                    if (generation == Volatile.Read(ref _activeGeneration))
+                        ExecuteItems(generation);
+                }
+                finally
+                {
+                    // 无论有没有真的执行,都必须把自己从参与者里摘掉:
+                    // StartOperation 在派发时就已经把这个 worker 计进去了,不摘
+                    // 就永远凑不齐 0,Wait 会挂死。代次对不上时打包 CAS 会自动
+                    // 否决,不会误伤别的操作,所以这里无条件调用是安全的。
+                    SignalParticipantCompleted(generation);
+                }
             }
         }
 
@@ -429,10 +472,16 @@ namespace AncientWarfare3.core.performance
             long startedAt = Stopwatch.GetTimestamp();
             try
             {
-                while (Volatile.Read(ref _stopRequested) == 0)
+                // 每轮都复查代次:入口查一次不够。带期限的 assist 会在期限到点
+                // 时提前离场,离场后 Complete 可能已经把 _nextIndex/_endIndex 复位
+                // 给下一个操作 —— 这时若还有落在别代的参与者继续 Interlocked
+                // 自增游标,它消费掉的就是**别人**的索引,而且因为 _endIndex 已归 0
+                // 会直接 break 不执行。账面上那一项就此永久丢失,正是玩家日志里
+                // 「7/36 而 nextIndex 已越过 endIndex」的形状。
+                while (Volatile.Read(ref _stopRequested) == 0 &&
+                       pGeneration == Volatile.Read(ref _activeGeneration))
                 {
-                    int index = Interlocked.Increment(ref _nextIndex);
-                    if (index >= Volatile.Read(ref _endIndex)) break;
+                    if (!TryClaimIndex(pGeneration, out int index)) break;
                     try
                     {
                         _operationAction(index);
@@ -466,9 +515,90 @@ namespace AncientWarfare3.core.performance
 
         private void SignalParticipantCompleted(int pGeneration)
         {
-            if (pGeneration == Volatile.Read(ref _activeGeneration) &&
-                Interlocked.Decrement(ref _remainingParticipants) == 0)
-                MarkOperationCompleted(pGeneration);
+            while (true)
+            {
+                long state = Volatile.Read(ref _participantState);
+                if (ParticipantGeneration(state) != pGeneration) return;
+                int count = ParticipantCount(state);
+                if (count <= 0) return;
+                long next = PackParticipants(pGeneration, count - 1);
+                if (Interlocked.CompareExchange(ref _participantState, next,
+                        state) != state)
+                    continue;
+                if (count == 1) MarkOperationCompleted(pGeneration);
+                return;
+            }
+        }
+
+        /// <summary>
+        ///     以参与者身份加入正在进行的操作。代次与计数在同一个 CAS 里比较,
+        ///     所以「判断的那一代」和「加到的那一代」必然是同一代。
+        /// </summary>
+        private bool TryJoinParticipant(int pGeneration)
+        {
+            while (true)
+            {
+                if (Volatile.Read(ref _completionMarked) != 0) return false;
+                long state = Volatile.Read(ref _participantState);
+                if (ParticipantGeneration(state) != pGeneration) return false;
+                int count = ParticipantCount(state);
+                // 计数已经归零表示操作正在收尾,这时候再挤进去只会拖住它。
+                if (count <= 0) return false;
+                long next = PackParticipants(pGeneration, count + 1);
+                if (Interlocked.CompareExchange(ref _participantState, next,
+                        state) == state)
+                    return true;
+            }
+        }
+
+        private static long PackParticipants(int pGeneration, int pCount)
+        {
+            return ((long)pGeneration << 32) | (uint)pCount;
+        }
+
+        /// <summary>
+        ///     认领下一个索引。代次进 CAS,所以跨代认领会失败且**不消费**任何索引。
+        /// </summary>
+        private bool TryClaimIndex(int pGeneration, out int pIndex)
+        {
+            pIndex = 0;
+            while (true)
+            {
+                long state = Volatile.Read(ref _cursorState);
+                if (CursorGeneration(state) != pGeneration) return false;
+                int next = CursorIndex(state) + 1;
+                if (next >= Volatile.Read(ref _endIndex)) return false;
+                if (Interlocked.CompareExchange(ref _cursorState,
+                        PackCursor(pGeneration, next), state) != state)
+                    continue;
+                pIndex = next;
+                return true;
+            }
+        }
+
+        private static long PackCursor(int pGeneration, int pIndex)
+        {
+            return ((long)pGeneration << 32) | (uint)pIndex;
+        }
+
+        private static int CursorGeneration(long pState)
+        {
+            return (int)(pState >> 32);
+        }
+
+        private static int CursorIndex(long pState)
+        {
+            return (int)(pState & 0xFFFFFFFFL);
+        }
+
+        private static int ParticipantGeneration(long pState)
+        {
+            return (int)(pState >> 32);
+        }
+
+        private static int ParticipantCount(long pState)
+        {
+            return (int)(pState & 0xFFFFFFFFL);
         }
 
         private void RecordCompletedOperation(WorkResult pResult)

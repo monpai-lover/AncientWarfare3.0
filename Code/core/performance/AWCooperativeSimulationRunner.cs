@@ -13,7 +13,14 @@ namespace AncientWarfare3.core.performance
         private const int MaximumStagesPerBurst = 256;
         private const double MinimumBurstMilliseconds = 0.25d;
         private const double MaximumBurstMilliseconds = 2d;
-        private const double TargetFrameBurstRatio = 0.01d;
+        // 目标帧时长的占比。曾经是 0.01:50fps 下算出
+        // 19.9 * 0.01 = 0.199ms,永远低于 0.25ms 的下限 —— 也就是说突发预算
+        // 恒等于下限,上面那个 2ms 的上限**从来没有被取到过**,是死常量。
+        // 后果是调度器每 0.25ms 就要出来走一遍(算 phase 名字、CanRun、
+        // RunPhase 记账),而这些开销和它保护的工作量不成比例。
+        // 0.1 让上限真正生效(19.9 * 0.1 ≈ 1.99ms → 取 2ms 封顶);预算不够时
+        // 仍由 remainingMilliseconds 压回去,安全阀没有变。
+        private const double TargetFrameBurstRatio = 0.1d;
         private const double InitialActorParallelStageMilliseconds = 2d;
         private const double InitialBuildingParallelStageMilliseconds = 0.5d;
         private const double SynchronousStageHeadroomRatio = 1.25d;
@@ -1024,6 +1031,7 @@ namespace AncientWarfare3.core.performance
 
             _vanillaStageBursts++;
             _vanillaStageBurstSteps += _activeStageBurstSteps;
+            AWFramePriorityGovernor.NotePhaseSteps(_activeStageBurstSteps);
             if (_activeStageBurstSteps > _maximumVanillaStageBurstSteps)
                 _maximumVanillaStageBurstSteps = _activeStageBurstSteps;
             switch (_activeStageBurstStopReason)
@@ -1082,8 +1090,14 @@ namespace AncientWarfare3.core.performance
                         StageBurstStopReason.StageLimit;
                     return;
                 }
-                if ((_activeStageBurstSteps & 3) == 0 &&
-                    Stopwatch.GetTimestamp() >= _activeStageBurstDeadline)
+                // 原本是 (_activeStageBurstSteps & 3) == 0,即每 4 步才看一次
+                // 截止时间。这和 TargetFrameBurstRatio 是一对:预算被钉死在
+                // 0.25ms 时,4 个小步骤超不了多少;但只要有一个步骤变重,突发
+                // 就会超出预算好几倍才被发现。现在预算是 2ms、步骤本身也有了
+                // 上限(见 AWCooperativeActorPostRunner.PostRangeStepBudgetTicks),
+                // 每步查一次才能让这个预算真的算数。GetTimestamp 是几十纳秒的
+                // 读取,代价远低于它挡下的抖动。
+                if (Stopwatch.GetTimestamp() >= _activeStageBurstDeadline)
                 {
                     _activeStageBurstStopReason =
                         StageBurstStopReason.Deadline;

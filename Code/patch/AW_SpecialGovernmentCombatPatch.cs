@@ -4,6 +4,14 @@ using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.patch
 {
+    // 类级 [HarmonyPatch] 必需:PatchClassProcessor 在类上没有这个特性时
+    // 直接返回,方法级特性一个都不会被处理(且不报错)。本类长期缺这一行,
+    // 所以下面的补丁从未执行过。
+    //
+    // ⚠ 目前本类仍在 ModClass.DormantPatchTypes 里被显式停用。要启用请从那张
+    //   表里移除,并注意 AngryCivilianLaw_Prefix 挂在极热的
+    //   WorldLawAsset.isEnabled 上,需要实机确认帧耗与判定都没问题。
+    [HarmonyPatch]
     internal static class AW_SpecialGovernmentCombatPatch
     {
         [ThreadStatic] private static int _angryCivilianDepth;

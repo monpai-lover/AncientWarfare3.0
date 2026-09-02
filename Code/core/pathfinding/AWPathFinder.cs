@@ -232,7 +232,6 @@ namespace AncientWarfare3.core.pathfinding
                     out PathSessionRecord record) ||
                 !CanReuse(record.Latest, pReuseKey))
             {
-                _diagnostics?.OnReuseMissed(pReuseKey);
                 return false;
             }
             if (record.Running != null) _diagnostics?.OnReusedRunning();
@@ -706,8 +705,6 @@ namespace AncientWarfare3.core.pathfinding
                         out PathSessionRecord record) ||
                     !ReferenceEquals(record.Latest, pTask)) return;
                 _sessions.TryRemove(pActorId, out _);
-                if (pTask.Request != null)
-                    _diagnostics?.OnSessionRetired(pTask.Request.ReuseKey);
                 record.Session.Cancel();
                 pTask.ReleaseOwner();
             }

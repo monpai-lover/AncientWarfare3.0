@@ -41,6 +41,7 @@ namespace AncientWarfare3.patch
             // 成因：watch_tower_Xia 之前版本 asset.kingdom="nomads_Xia" 但
             // kingdoms_wild 实例不存在，setBuilding 路径①把 null 赋给 building.kingdom。
             PurgeNullKingdomBuildings();
+            RepairNullKingdomAssets();
             try
             {
                 EnterOwnedSaveBoundary();
@@ -263,6 +264,106 @@ namespace AncientWarfare3.patch
             if (toRemove.Count > 0)
                 ModClass.LogInfo("[AW3] 清理 kingdom==null 建筑 " +
                     toRemove.Count + " 个");
+        }
+
+        /// <summary>
+        ///     修复 asset == null 的王国。
+        ///
+        ///     成因两条:
+        ///     ① <c>Kingdom.load2</c> 用
+        ///        <c>AssetManager.kingdoms.get(actorAsset.kingdom_id_civilization)</c>
+        ///        取 asset,取不到时**静默**赋 null 并永远保持 null —— 存档里的
+        ///        王国指向一个当时没注册上的王国资产(改过 id、读档时 AW3 资产还
+        ///        没注册完)就会这样。
+        ///     ② <c>Kingdom.Dispose</c> 把 asset 置 null,而 chunk 的
+        ///        objects.kingdoms 存的是 id,仍能通过 getCivOrWildViaID 反查到。
+        ///
+        ///     后果不是"少显示一点东西":<c>Kingdom.isCiv()</c> 是裸的
+        ///     <c>return asset.civ;</c>,而 EnemyFinderContainer.getData 内联的
+        ///     findEnemiesOfKingdomInChunk 会对 chunk 里**每一个**王国调
+        ///     isEnemy → isCiv。塔一扫到这种王国就抛 NRE,而且它一直在那儿,
+        ///     所以是每帧重复崩(用户反馈里的 "repeated 67 times")。
+        /// </summary>
+        internal static void RepairNullKingdomAssets()
+        {
+            int repaired = 0;
+            int unresolved = 0;
+            RepairKingdomAssets(World.world?.kingdoms, pWild: false,
+                ref repaired, ref unresolved);
+            RepairKingdomAssets(World.world?.kingdoms_wild, pWild: true,
+                ref repaired, ref unresolved);
+            if (repaired > 0)
+                ModClass.LogInfo("[AW3] 修复 asset==null 王国 " + repaired +
+                    " 个");
+            if (unresolved > 0)
+                ModClass.LogWarning("[AW3] 仍有 " + unresolved +
+                    " 个王国无法解析 asset;敌人查找对它们会返回空表");
+        }
+
+        private static void RepairKingdomAssets(
+            System.Collections.Generic.IEnumerable<Kingdom> pKingdoms,
+            bool pWild, ref int pRepaired, ref int pUnresolved)
+        {
+            if (pKingdoms == null) return;
+            var targets = new System.Collections.Generic.List<Kingdom>();
+            foreach (Kingdom kingdom in pKingdoms)
+            {
+                if (kingdom?.data != null && kingdom.asset == null)
+                    targets.Add(kingdom);
+            }
+
+            foreach (Kingdom kingdom in targets)
+            {
+                KingdomAsset asset = ResolveKingdomAsset(kingdom, pWild);
+                if (asset == null) { pUnresolved++; continue; }
+                kingdom.asset = asset;
+                pRepaired++;
+            }
+        }
+
+        private static KingdomAsset ResolveKingdomAsset(Kingdom pKingdom,
+            bool pWild)
+        {
+            KingdomAsset fromFounder = LookupKingdomAsset(
+                SafeActorAsset(pKingdom), pWild);
+            if (fromFounder != null) return fromFounder;
+
+            // 建国者资产解析不出来时退回到现存成员:王国存在就还有人。
+            try
+            {
+                foreach (Actor unit in pKingdom.units)
+                {
+                    if (unit?.data == null || !unit.isAlive()) continue;
+                    KingdomAsset fromUnit = LookupKingdomAsset(unit.asset,
+                        pWild);
+                    if (fromUnit != null) return fromUnit;
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        private static ActorAsset SafeActorAsset(Kingdom pKingdom)
+        {
+            try { return pKingdom.getActorAsset(); }
+            catch { return null; }
+        }
+
+        private static KingdomAsset LookupKingdomAsset(ActorAsset pActorAsset,
+            bool pWild)
+        {
+            string id = pWild
+                ? pActorAsset?.kingdom_id_wild
+                : pActorAsset?.kingdom_id_civilization;
+            if (string.IsNullOrEmpty(id)) return null;
+            try
+            {
+                return AssetManager.kingdoms.has(id)
+                    ? AssetManager.kingdoms.get(id)
+                    : null;
+            }
+            catch { return null; }
         }
 
         [HarmonyPostfix]

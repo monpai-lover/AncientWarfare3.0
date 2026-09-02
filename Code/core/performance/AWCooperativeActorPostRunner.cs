@@ -120,9 +120,19 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
     // actors 阶段整体耗时远大于已插桩的分项之和(实测单帧 48-59ms,分项合计
     // 不足 3ms)。这里按 PostStage 累计每个阶段的 Step 耗时,用于定位缺口。
+    // 单个 post job 区间 Step 的时间预算。调度器的突发预算是 0.25ms,而它
+    // 只能在 Step 之间生效,所以 Step 自身必须有上限,否则预算形同虚设。
+    // 让出只发生在 batch 边界,因此实际上限是「本值 + 一个 batch」。
+    private static readonly long PostRangeStepBudgetTicks =
+        Math.Max(1L, Stopwatch.Frequency / 1000L);
+
     private static readonly long[] diagnosticStageTicks =
         new long[Enum.GetValues(typeof(PostStage)).Length];
     private static readonly long[] diagnosticStageCalls =
+        new long[Enum.GetValues(typeof(PostStage)).Length];
+    // 单次调用的最大值。只有总量和次数时,一个 2ms 均值背后到底是"每次 2ms"
+    // 还是"149 次 0.1ms + 1 次 200ms"分不出来 —— 而尖峰归因要的正是后者。
+    private static readonly long[] diagnosticStageMaxTicks =
         new long[Enum.GetValues(typeof(PostStage)).Length];
 
     // 按原版 post job 的 id 累计。AfterPathMovement 之类的阶段只是「跑一段
@@ -139,12 +149,13 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         {
             if (!diagnosticPostJobCost.TryGetValue(pJobId, out long[] entry))
             {
-                entry = new long[2];
+                entry = new long[3];
                 diagnosticPostJobCost[pJobId] = entry;
             }
 
             entry[0] += elapsed;
             entry[1]++;
+            if (elapsed > entry[2]) entry[2] = elapsed;
         }
     }
 
@@ -168,7 +179,9 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             for (int i = 0; i < limit; i++)
                 parts[i] = ranked[i].Key + ":" +
                     (ranked[i].Value[0] * 1000.0 / Stopwatch.Frequency)
-                        .ToString("0.###") + "/" + ranked[i].Value[1];
+                        .ToString("0.###") + "/" + ranked[i].Value[1] +
+                    "/" + (ranked[i].Value[2] * 1000.0 / Stopwatch.Frequency)
+                        .ToString("0.###");
             return string.Join(",", parts);
         }
     }
@@ -182,13 +195,17 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 ref diagnosticStageTicks[index], 0L);
             long calls = Interlocked.Exchange(
                 ref diagnosticStageCalls[index], 0L);
+            long max = Interlocked.Exchange(
+                ref diagnosticStageMaxTicks[index], 0L);
             if (ticks <= 0L && calls <= 0L) continue;
             if (builder.Length > 0) builder.Append(',');
             builder.Append(((PostStage)index).ToString())
                 .Append(':')
                 .Append((ticks * 1000.0 / Stopwatch.Frequency).ToString("0.###"))
                 .Append('/')
-                .Append(calls);
+                .Append(calls)
+                .Append('/')
+                .Append((max * 1000.0 / Stopwatch.Frequency).ToString("0.###"));
         }
         return builder.Length == 0 ? "none" : builder.ToString();
     }
@@ -1289,9 +1306,10 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
     {
         int index = (int)pStage;
         if (index < 0 || index >= diagnosticStageTicks.Length) return;
-        Interlocked.Add(ref diagnosticStageTicks[index],
-            Stopwatch.GetTimestamp() - pStart);
+        long elapsed = Stopwatch.GetTimestamp() - pStart;
+        Interlocked.Add(ref diagnosticStageTicks[index], elapsed);
         Interlocked.Increment(ref diagnosticStageCalls[index]);
+        RecordStageMax(index, elapsed);
         // 同一段耗时再进一次按帧的账本,供最坏帧归因使用。P0 单独成桶,其余
         // 阶段合并成 actor_post —— 最坏帧只需要知道落在哪条道上。
         RuntimePerformanceDiagnostic.AccountFrameCost(
@@ -1299,6 +1317,20 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                 ? RuntimePerformanceDiagnostic.FrameCostBucket.MilitaryP0
                 : RuntimePerformanceDiagnostic.FrameCostBucket.ActorPost,
             pStart);
+    }
+
+    // 无锁 CAS 取最大值:AccountStage 会被多个 Step 调用,而这是纯观测,
+    // 不值得为它引入一把锁。
+    private static void RecordStageMax(int pIndex, long pElapsed)
+    {
+        long observed = Volatile.Read(ref diagnosticStageMaxTicks[pIndex]);
+        while (pElapsed > observed)
+        {
+            long previous = Interlocked.CompareExchange(
+                ref diagnosticStageMaxTicks[pIndex], pElapsed, observed);
+            if (previous == observed) return;
+            observed = previous;
+        }
     }
 
     private bool StepCore()
@@ -1768,6 +1800,23 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             return false;
         }
 
+        // 这里曾经是 batchIndex + workGroupSize 一口气跑完。
+        // workGroupSize = ForegroundParallelism * 4(实测 22*4 = 88),而
+        // batches.Count 只有十几个 —— 「分组」于是退化成「一次跑完」:
+        // [path+1, smooth) 这整段区间(b6_update_ai 等)在**单个 Step 里**
+        // 把所有 batch 的所有 job 跑光,中途没有任何让出点。
+        //
+        // 调度器的突发预算(0.25ms)只能在 Step **之间**生效,拦不住一个
+        // 内部不让出的 Step,于是实测出现单帧 200ms+ 的尖峰:
+        //   post_jobs=b6_update_ai:606.277/1817  ← 约 4ms/tick,全在一个 Step
+        //   actor_post_stages=AfterPathMovement:671.023/302
+        //   actor_post_stages=AwaitPathMovement:0.108/151  ← 路径 worker 等待
+        //                                                     根本不是瓶颈
+        // 改成按时间收口:至少跑一个 batch 保证推进,超预算就带着 batchIndex
+        // 让出,下一个 Step 从断点继续。只在 batch 边界让出,job 区间不会被
+        // 拆到一半,顺序和语义都不变。
+        long rangeDeadline = Stopwatch.GetTimestamp() +
+            PostRangeStepBudgetTicks;
         int batchEnd = Math.Min(
             batches.Count,
             batchIndex + workGroupSize);
@@ -1790,6 +1839,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
                     aggregateJobs[i],
                     aggregateBatchIndex);
             }
+
+            if (Stopwatch.GetTimestamp() >= rangeDeadline) break;
         }
 
         return true;

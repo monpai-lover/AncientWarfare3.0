@@ -78,6 +78,8 @@ internal static class AWEnemyPresenceCache
         if (!_preparationActive ||
             pTile == null ||
             pKingdom == null ||
+            pKingdom.asset == null ||
+            pTile.chunk == null ||
             HasPopulatedEnemy(pKingdom))
         {
             result = null;
@@ -120,7 +122,10 @@ internal static class AWEnemyPresenceCache
         }
 
         keys.Add(pKey);
-        if (!pKingdom.asset.force_look_all_chunks &&
+        // Kingdom.Dispose 会把 asset 置 null,而王国对象仍可被 chunk 的
+        // 王国 id 反查到 —— 这里不能假定它还在。
+        if (pKingdom.asset != null &&
+            !pKingdom.asset.force_look_all_chunks &&
             pRange != 0)
         {
             Randy.randomChance(0.8f);
@@ -223,6 +228,11 @@ internal static class AWEnemyPresenceCache
     private static bool FindPopulatedEnemy(
         Kingdom pMainKingdom)
     {
+        if (pMainKingdom?.asset == null)
+        {
+            return false;
+        }
+
         bool peacefulMonsters =
             WorldLawLibrary
                 .world_law_peaceful_monsters
@@ -254,7 +264,11 @@ internal static class AWEnemyPresenceCache
     {
         foreach (Kingdom candidate in candidates)
         {
-            if (ReferenceEquals(
+            // candidate.asset 为 null 的王国(已 Dispose 或读档时资产没解析上)
+            // 直接跳过:vanilla 的 Kingdom.isCiv() 是裸的 return asset.civ,
+            // 交给 isEnemy 就是一个必现 NRE。
+            if (candidate?.asset == null ||
+                ReferenceEquals(
                     candidate,
                     pMainKingdom) ||
                 candidate.units.Count == 0 &&
