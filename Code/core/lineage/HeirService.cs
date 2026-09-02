@@ -312,7 +312,13 @@ namespace AncientWarfare3.core.lineage
                     cached.data.id, referenceKingId, signedHeirId, signedKingId);
             InheritanceLaw effectiveLaw =
                 InheritanceLawService.GetEffectiveLaw(pKingdom);
-            bool cachedEligible = cached?.data != null &&
+            bool cachedSexEligible = cached?.data != null &&
+                                     (RepublicGovernmentService.IsRepublic(
+                                          pKingdom) ||
+                                      cached.isSexMale() ||
+                                      IsSuccessionSexEligible(cached,
+                                          pKingdom));
+            bool cachedEligible = cachedSexEligible &&
                                   (effectiveLaw == InheritanceLaw.Primogeniture ||
                                    cached.isAdult());
             // 继承人位子空着时立刻从顺位池补上，不等下一个事件触发。
@@ -366,8 +372,12 @@ namespace AncientWarfare3.core.lineage
             Actor heir = World.world?.units?.get(heirId);
             bool isPresent = heir?.data != null;
             bool isAlive = isPresent && heir.isAlive();
+            bool sexEligible = RepublicGovernmentService.IsRepublic(
+                                   pKingdom) ||
+                               heir?.isSexMale() == true ||
+                               IsSuccessionSexEligible(heir, pKingdom);
             return AuthoritativeSuccessionRules.IsRegisteredHeirAvailable(
-                isAlive, isPresent) ? heir : null;
+                       isAlive, isPresent) && sexEligible ? heir : null;
         }
 
         public static Actor PeekStoredHeirForMinimap(Kingdom pKingdom)
@@ -378,6 +388,9 @@ namespace AncientWarfare3.core.lineage
 
             Actor heir = World.world?.units?.get(heirId);
             if (heir?.data == null || !heir.isAlive()) return null;
+            if (!RepublicGovernmentService.IsRepublic(pKingdom) &&
+                !heir.isSexMale() &&
+                !IsSuccessionSexEligible(heir, pKingdom)) return null;
             return heir;
         }
 
@@ -743,6 +756,17 @@ namespace AncientWarfare3.core.lineage
         public static void StoreSelectedHeir(Kingdom pKingdom, Actor pHeir, string pMode)
         {
             if (pKingdom?.data == null) return;
+            if (pHeir?.data != null &&
+                !RepublicGovernmentService.IsRepublic(pKingdom) &&
+                !pHeir.isSexMale() &&
+                !IsSuccessionSexEligible(pHeir, pKingdom))
+            {
+                // An explicit registration must not reintroduce a female heir
+                // after a male-only succession law has taken effect.
+                MarkSelectionDirty(pKingdom);
+                pHeir = null;
+                pMode = SuccessionMode.NONE;
+            }
             StoreHeirSelection(pKingdom, new HeirSelection(pHeir, pMode));
         }
 
@@ -849,6 +873,10 @@ namespace AncientWarfare3.core.lineage
                 ? null
                 : World.world?.units?.get(previousHeirId);
             Actor heir = pSelection.Actor;
+            bool previousHeirSexEligible = previousHeir?.data != null &&
+                (RepublicGovernmentService.IsRepublic(pKingdom) ||
+                 previousHeir.isSexMale() ||
+                 IsSuccessionSexEligible(previousHeir, pKingdom));
             long heirId = heir?.data?.id ?? -1L;
             string mode = heir?.data == null
                 ? SuccessionMode.NONE
@@ -869,7 +897,7 @@ namespace AncientWarfare3.core.lineage
                     mode, referenceKingId))
                 return previousHeir;
 
-            if (heir?.data == null && previousHeir?.data != null &&
+            if (heir?.data == null && previousHeirSexEligible &&
                 previousHeir.isAlive())
                 return previousHeir;
 

@@ -168,6 +168,8 @@ namespace AncientWarfare3.core.lineage
         private static bool _warEnrollmentScanRequested;
         private static int _warEnrollmentScanCursor;
         private static bool _generationDisabledApplied;
+        /// <summary>SweepEndedWarRecords 的轮转游标,见该方法注释。</summary>
+        private static int _endedWarSweepCursor;
 
         internal static void OnWarStarted(War pWar)
         {
@@ -199,6 +201,40 @@ namespace AncientWarfare3.core.lineage
                 pWar?.data == null) return;
             EndedWars.Add(pWar.data.id);
             MarkDemobilizing(pWar.data.id, null);
+        }
+
+        /// <summary>
+        ///     账本按相位的分布。卡在 Mobilizing 的记录数和它名下的存活兵数是
+        ///     这个子系统唯一值得每帧盯的东西:一旦 mob 长期不为 0 而 live 很大,
+        ///     就说明有一批合成兵永远不会被遣散,人口只增不减。
+        /// </summary>
+        internal static string GetDiagnostics()
+        {
+            int mobilizing = 0, active = 0, demobilizing = 0, complete = 0;
+            long live = 0L, tracked = 0L, stuckLive = 0L;
+            foreach (SyntheticMobilizationRecord record in Records.Values)
+            {
+                if (record == null) continue;
+                switch (record.Phase)
+                {
+                    case SyntheticMobilizationPhase.Mobilizing:
+                        mobilizing++;
+                        stuckLive += record.LiveSynthetic;
+                        break;
+                    case SyntheticMobilizationPhase.Active: active++; break;
+                    case SyntheticMobilizationPhase.Demobilizing:
+                        demobilizing++;
+                        break;
+                    default: complete++; break;
+                }
+                live += record.LiveSynthetic;
+                tracked += record.ActorIds.Count;
+            }
+            return "mob:" + mobilizing + ",active:" + active +
+                   ",demob:" + demobilizing + ",done:" + complete +
+                   " live=" + live + " ids=" + tracked +
+                   " mob_live=" + stuckLive +
+                   " ended_wars=" + EndedWars.Count;
         }
 
         private sealed class PendingParticipantWork
@@ -258,6 +294,7 @@ namespace AncientWarfare3.core.lineage
             ProcessPendingCityRecordWork();
             ProcessPendingCity();
             ProcessRecordWork();
+            SweepEndedWarRecords();
         }
 
         internal static void DisableSyntheticGeneration()
@@ -482,6 +519,7 @@ namespace AncientWarfare3.core.lineage
         internal static void ClearRuntime()
         {
             Records.Clear();
+            _endedWarSweepCursor = 0;
             RecordKeysByWar.Clear();
             RecordKeysByCity.Clear();
             PendingCities.Clear();
@@ -843,8 +881,56 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
-        private static void ProcessRecordWork()
+        /// <summary>
+        ///     兜底扫描:把「战争已经不在了但还没进入遣散」的记录捞回队列。
+        ///
+        ///     判据用 <see cref="IsActiveParticipant"/> 而不是 EndedWars ——
+        ///     这是第二次修这个问题时才看清的关键。EndedWars 只收
+        ///     <c>OnWarEnded</c> 真正触发过的战争,而
+        ///     <see cref="MarkDemobilizing"/> 里那句
+        ///     <c>if (end &lt;= 0 ...) return;</c> 会让「战争结束时名下还没有
+        ///     记录」的情况整个作废;战争对象本身随后也可能消失,于是那些记录的
+        ///     WarId 永远不会出现在 EndedWars 里。实测 ended_wars=10 而
+        ///     mob:9 / mob_live=466 纹丝不动,就是因为这 9 条的 WarId 不在集合中。
+        ///
+        ///     IsActiveParticipant 直接问世界:战争还在吗、没结束吗、这个王国
+        ///     还是参战方吗 —— 任一为否就该遣散。读档兜底
+        ///     (ProcessLoadRecordValidation)用的也是它,两条路判据一致。
+        ///
+        ///     每个权威周期只看一条记录,成本恒定。游标越界回绕。
+        /// </summary>
+        private static void SweepEndedWarRecords()
         {
+            int count = Records.Count;
+            if (count == 0)
+            {
+                _endedWarSweepCursor = 0;
+                return;
+            }
+
+            if (_endedWarSweepCursor >= count) _endedWarSweepCursor = 0;
+            int index = 0;
+            foreach (var pair in Records)
+            {
+                if (index++ != _endedWarSweepCursor) continue;
+                _endedWarSweepCursor++;
+                SyntheticMobilizationRecord record = pair.Value;
+                if (record == null ||
+                    record.Phase == SyntheticMobilizationPhase.Complete ||
+                    record.Phase ==
+                        SyntheticMobilizationPhase.Demobilizing) return;
+                if (IsActiveParticipant(record.WarId,
+                        ResolveKingdom(record.KingdomId))) return;
+                record.ReplacementRemaining = 0;
+                record.Phase = SyntheticMobilizationPhase.Demobilizing;
+                EnqueueRecord(pair.Key);
+                return;
+            }
+
+            _endedWarSweepCursor = 0;
+        }
+
+        private static void ProcessRecordWork()        {
             if (RecordWork.Count == 0) return;
             string key = RecordWork.Dequeue();
             QueuedRecordKeys.Remove(key);
@@ -856,9 +942,25 @@ namespace AncientWarfare3.core.lineage
                 ProcessDemobilization(record, key);
                 return;
             }
-            if (record.Phase != SyntheticMobilizationPhase.Mobilizing ||
-                EndedWars.Contains(record.WarId)) return;
+            if (record.Phase != SyntheticMobilizationPhase.Mobilizing) return;
             Kingdom kingdom = ResolveKingdom(record.KingdomId);
+            if (EndedWars.Contains(record.WarId) ||
+                !IsActiveParticipant(record.WarId, kingdom))
+            {
+                // 战争已经不在了,而这条记录还停在 Mobilizing —— 原来这里是
+                // 直接 return,于是它连同名下所有已经造出来的兵被**永久遗弃**:
+                // 不切相位、不重排队,ProcessDemobilization 一次都不会跑。
+                //
+                // 判据必须同时看 IsActiveParticipant 而不能只看 EndedWars:
+                // 后者只收 OnWarEnded 真正触发过的战争,而 MarkDemobilizing 里
+                // 的 `if (end <= 0) return;` 会让「战争结束时名下还没有记录」
+                // 的情况整个作废,那些记录的 WarId 永远进不了 EndedWars。
+                // 实测 ended_wars=10 而 mob:9 / mob_live=466 一直不动。
+                record.ReplacementRemaining = 0;
+                record.Phase = SyntheticMobilizationPhase.Demobilizing;
+                EnqueueRecord(key);
+                return;
+            }
             City city = ResolveCity(record.CityId);
             if (!IsActiveParticipant(record.WarId, kingdom))
             {
@@ -923,19 +1025,19 @@ namespace AncientWarfare3.core.lineage
                     }
                     continue;
                 }
-                bool insideFriendlySafeCity = WarArmyReturnService.
-                    IsInsideFriendlySafeCity(actor);
-                if (insideFriendlySafeCity)
-                    SyntheticLevyService.ConfirmReturnArrivalIfSafe(actor);
-                if (SyntheticMobilizationRules.ShouldDeferDemobilization(
-                        SyntheticLevyService.IsSynthetic(actor),
-                        SyntheticLevyService.HasReturnArrivalConfirmed(
-                            actor),
-                        WarArmyReturnService.IsActive(actor.army),
-                        ActiveMilitaryLifecycleService
-                            .HasWartimeMilitaryLock(actor),
-                        insideFriendlySafeCity))
-                    continue;
+                // 合成兵不再走「返乡 → 到安全城市 → 才遣散」那条路,战争一结束
+                // 就地销毁。
+                //
+                // 原来的返乡门是四个条件的合取(已确认返乡 && 返程未在进行 &&
+                // 无战时占用 && 此刻正站在友方安全城市里),而军队一散,
+                // WarArmyReturnService 就不再送他们回家(它以 actor.army 为键)。
+                // 于是「要遣散必须先回城」和「没人送他们回城」互相锁死,实测
+                // mob_live 长期停在 441 不降。
+                //
+                // 合成兵本来就是战时凭空造出来的抽象兵员、无个人史,不需要善终;
+                // 真正需要返乡的是普通兵和将领,他们不是合成兵、不走这条路径
+                // (将领在 PromoteToPermanentCommand 里已被转正,IsSynthetic 为假)。
+                if (!SyntheticLevyService.IsSynthetic(actor)) continue;
                 SyntheticLevyService.RemoveWithoutPersonalHistory(actor);
             }
             if (pRecord.ActorIds.Count > 0)
@@ -1143,8 +1245,7 @@ namespace AncientWarfare3.core.lineage
                     ExpandLifecycleEnd(existing.EndExclusive, end);
                 return;
             }
-            if (end <= 0 || !PendingWarRecordWorkKeys.Add(key)) return;
-            var work = new PendingWarRecordWork
+            if (end <= 0 || !PendingWarRecordWorkKeys.Add(key)) return;            var work = new PendingWarRecordWork
             {
                 WarId = pWarId,
                 KingdomId = pKingdomId,

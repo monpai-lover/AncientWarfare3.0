@@ -165,6 +165,128 @@ namespace AncientWarfare3.patch
         }
     }
 
+    /// <summary>
+    ///     换国/并国时把「漏网的建筑」一并归到新王国。
+    ///
+    ///     原版 <c>City.switchedKingdom()</c> 遍历的是 <c>city.buildings</c>,
+    ///     而建筑要先经 <c>City.listBuilding</c> 才会进这个列表。于是存在一个
+    ///     窗口:合并国家的那一刻,某座正在建造、尚未挂进城市列表的建筑就**不会**
+    ///     被切到新王国 —— 它保留着旧王国的引用。旧王国随后被销毁,引用变成
+    ///     悬空/null。
+    ///
+    ///     后果不是显示问题:原版
+    ///     <c>ChunkObjectContainer.addBuilding</c> 第一行就是裸的
+    ///     <c>pBuilding.kingdom.id</c>,而 <c>SimObjectsZones.checkBuildings</c>
+    ///     的守卫 <c>isUsable()</c> 只查存活/废墟/移除,**不查 kingdom**。
+    ///     于是 sim_object_zones 每 0.1 秒重算一次就抛一次 NRE,游戏被暂停
+    ///     (玩家反馈的那次栈:checkBuildings → addBuilding → NanoObject.get_id)。
+    ///
+    ///     这里按城市所在地块补扫一遍,把 kingdom 为空或指向已销毁王国的建筑
+    ///     重新绑到城市的新王国上。只在换国这一刻跑,不进每帧路径。
+    /// </summary>
+    [HarmonyPatch(typeof(City), "switchedKingdom")]
+    internal static class AW_CitySwitchedKingdomBuildingPatch
+    {
+        [HarmonyPostfix]
+        private static void Postfix(City __instance)
+        {
+            if (__instance?.data == null) return;
+            Kingdom kingdom = __instance.kingdom;
+            if (kingdom?.data == null) return;
+
+            int repaired = 0;
+            try
+            {
+                System.Collections.Generic.List<Building> buildings =
+                    __instance.buildings;
+                for (int i = 0; i < buildings.Count; i++)
+                {
+                    Building building = buildings[i];
+                    if (building?.data == null || building.isRemoved() ||
+                        building.isOnRemove()) continue;
+                    // asset == null 的王国同样会让 isCiv() 这类裸解引用炸,
+                    // 一并当作"坏引用"重绑。
+                    if (building.kingdom != null &&
+                        building.kingdom.asset != null) continue;
+                    building.setKingdom(kingdom);
+                    repaired++;
+                }
+            }
+            catch (System.Exception error)
+            {
+                ModClass.LogWarning(
+                    "[AW3] switchedKingdom 建筑归属补扫失败: " + error.Message);
+                return;
+            }
+
+            if (repaired > 0)
+                ModClass.LogInfo("[AW3] 换国补扫: 重绑 " + repaired +
+                    " 座王国引用失效的建筑 -> " + kingdom.data.id);
+        }
+    }
+
+    /// <summary>
+    ///     最后一道闸:建筑在进 chunk 索引前必须有可用的 kingdom。
+    ///
+    ///     上面的换国补扫覆盖的是**已经挂进城市列表**的建筑;而真正触发玩家那次
+    ///     崩溃的,恰恰是合并国家时**正在建造、还没进列表**的那一座 —— 它谁也
+    ///     扫不到。这类建筑随后由 <c>City.listBuilding</c> 补进列表,但在那之前
+    ///     sim_object_zones 已经先一步把它塞进 chunk 索引了。
+    ///
+    ///     原版 <c>ChunkObjectContainer.addBuilding</c> 第一行
+    ///     <c>pBuilding.kingdom.id</c> 是裸解引用,而上游守卫
+    ///     <c>Building.isUsable()</c> 只查存活/废墟/移除,不查 kingdom。
+    ///     这里在入口把住:能就地修好(按所在城市/地块重绑)就修,修不好就跳过
+    ///     这一次索引 —— 建筑本身不受影响,下一次 recalc(0.1 秒后)还会再来,
+    ///     那时它通常已经有归属了。跳过一次索引远好过让整局游戏暂停。
+    /// </summary>
+    [HarmonyPatch(typeof(ChunkObjectContainer), "addBuilding")]
+    internal static class AW_ChunkAddBuildingKingdomGuardPatch
+    {
+        private static int _loggedSkips;
+
+        [HarmonyPrefix]
+        private static bool Prefix(Building pBuilding)
+        {
+            if (pBuilding?.data == null) return false;
+            if (pBuilding.kingdom?.data != null) return true;
+
+            Kingdom resolved = null;
+            try
+            {
+                resolved = pBuilding.city?.kingdom;
+                if (resolved?.data == null)
+                {
+                    WorldTile tile = pBuilding.current_tile;
+                    resolved = tile?.zone_city?.kingdom ??
+                               tile?.zone?.city?.kingdom;
+                }
+            }
+            catch { resolved = null; }
+
+            if (resolved?.data != null)
+            {
+                try
+                {
+                    pBuilding.setKingdom(resolved);
+                    return true;
+                }
+                catch { }
+            }
+
+            // 修不好:跳过这次索引,不抛异常。只报前几次,避免每 0.1 秒刷屏。
+            if (_loggedSkips < 3)
+            {
+                _loggedSkips++;
+                ModClass.LogWarning(
+                    "[AW3] 跳过 kingdom 为空的建筑索引 id=" +
+                    pBuilding.data.id + " asset=" +
+                    (pBuilding.asset?.id ?? "?"));
+            }
+            return false;
+        }
+    }
+
     [HarmonyPatch(typeof(WildKingdomsManager), "beginChecksBuildings")]
     internal static class AW_WildKingdomsBeginChecksPatch
     {

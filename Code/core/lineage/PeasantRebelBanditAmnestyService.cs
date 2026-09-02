@@ -515,11 +515,23 @@ namespace AncientWarfare3.core.lineage
             }
 
             pBandit.data.set(LineageKeys.MANDATE_REBEL_ROUTE, "");
-            pBandit.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
-                out string root, "");
-            if (!string.IsNullOrWhiteSpace(root) &&
-                !PeasantRebelRouteService.TryApplyRouteName(
-                    pBandit, root.Trim())) return false;
+            // 招安后必须换成正式国号,不能继续顶着土匪名。
+            //
+            // 原来这里直接把匪号词根当国名用:
+            //     data.get(MANDATE_REBEL_NAME_ROOT, out root);
+            //     TryApplyRouteName(pBandit, root.Trim());
+            // 而 word_libraries/default/土匪名根.txt 里全是**双字**词根
+            // (赤眉、黄巾、绿林、梁山…),NormalizeRoot 也只剥「义军」「贼」两个
+            // 后缀、不动词根本身。于是土匪→义军→正规国家走完整条路之后,国名
+            // 仍然是「赤眉」这种双字匪号,而不是汉式的单字国号。
+            //
+            // 正式国号取自 XiaPreQinKingdomNameRules —— 和其他所有国家同一个
+            // 池子(StateNameService 走的也是它),先秦国名,绝大多数是单字。
+            // 选取用 StateNameRules.SelectFirstAvailable:它按稳定种子起步并
+            // 跳过已被占用的名字,所以同一个王国每次算出来一样,也不会和现存
+            // 国家撞名。
+            if (!PeasantRebelStateNameService.ApplyCanonical(pBandit))
+                return false;
             string targetClass = PeasantRebelBanditAmnestyRules.
                 ResolveSettlementClass(true);
             if (!KingdomPolicyService.ApplyClassStateDirect(

@@ -1,0 +1,66 @@
+using System;
+using AncientWarfare3.api.history;
+using AncientWarfare3.core.court;
+using AncientWarfare3.core.historyapi;
+
+internal static class HistoryApiDiplomacyCareerTests
+{
+    public static void Run()
+    {
+        DiplomacyRowsPreservePairAndStatus();
+        CareerRowsPreserveAppointmentFields();
+        RuntimeRelationModifiersAreNotHistoryDtos();
+        Console.WriteLine("History API diplomacy and career rules passed.");
+    }
+
+    private static void DiplomacyRowsPreservePairAndStatus()
+    {
+        var row = new AW3HistoryRow
+        {
+            RecordId = 8L, EventType = "proposal_response", WorldTime = 22.5d,
+            WorldYear = 17, YearText = "year 17", Content = "accepted"
+        };
+        AW3DiplomacyEvent item = AW3HistoryDtoMapper.ToDiplomacy(
+            row, 11L, 12L, "accepted");
+
+        Equal(11L, item.FirstKingdomId, "first kingdom is preserved");
+        Equal(12L, item.SecondKingdomId, "second kingdom is preserved");
+        Equal("accepted", item.Status, "proposal status is preserved");
+        Equal("accepted", item.Content, "diplomatic detail is preserved");
+    }
+
+    private static void CareerRowsPreserveAppointmentFields()
+    {
+        var row = new OfficialCareerHistoryRow(1L, 2L, 3L, 4L,
+            "county", "county_magistrate", "Officer", 10, 12, false,
+            "transferred", 10.5d, "Realm", "City", "rank_3", 3, 5L);
+        AW3OfficialCareerEntry item = AW3HistoryDtoMapper.ToCareer(row);
+
+        Equal(5L, item.CountyId, "county is preserved");
+        Equal("county", item.Layer, "career layer is preserved");
+        Equal("county_magistrate", item.OfficeId, "office is preserved");
+        Equal("rank_3", item.RankId, "rank is preserved");
+        Equal(3, item.Grade, "grade is preserved");
+        Equal(10.5d, item.AppointedTime, "appointed time is preserved");
+        Equal("transferred", item.EndReason, "end reason is preserved");
+        True(!item.Current, "closed career is not current");
+    }
+
+    private static void RuntimeRelationModifiersAreNotHistoryDtos()
+    {
+        True(typeof(AW3DiplomacyEvent).GetProperty("Modifier") == null,
+            "runtime relation modifiers are not public history events");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!object.Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                expected + ", got " + actual);
+    }
+}

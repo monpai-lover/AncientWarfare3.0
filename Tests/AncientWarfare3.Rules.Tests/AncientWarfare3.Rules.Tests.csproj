@@ -9,6 +9,19 @@
     <WorldBoxManaged Condition="'$(WorldBoxManaged)' == ''">D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed</WorldBoxManaged>
   </PropertyGroup>
 	<ItemGroup>
+		<Compile Include="HistoryApiContractTests.cs.txt" />
+		<Compile Include="HistoryApiCursorRulesTests.cs.txt" />
+		<Compile Include="HistoryApiDiplomacyCareerTests.cs.txt" />
+		<Compile Include="HistoryApiSubscriptionRulesTests.cs.txt" />
+		<Compile Include="..\..\Code\api\history\AW3HistoryContracts.cs" Link="Production\AW3HistoryContracts.cs" />
+		<Compile Include="..\..\Code\api\history\AW3HistoryQuery.cs" Link="Production\AW3HistoryQuery.cs" />
+		<Compile Include="..\..\Code\api\history\AW3HistoryPage.cs" Link="Production\AW3HistoryPage.cs" />
+		<Compile Include="..\..\Code\api\history\AW3HistorySubscription.cs" Link="Production\AW3HistorySubscription.cs" />
+		<Compile Include="..\..\Code\api\history\AW3HistoryApi.cs" Link="Production\AW3HistoryApi.cs" />
+		<Compile Include="..\..\Code\core\historyapi\AW3HistoryCursorRules.cs" Link="Production\AW3HistoryCursorRules.cs" />
+		<Compile Include="..\..\Code\core\historyapi\AW3HistoryDtoMapper.cs" Link="Production\AW3HistoryDtoMapper.cs" />
+		<Compile Include="..\..\Code\core\historyapi\AW3HistorySubscriptionRegistry.cs" Link="Production\AW3HistorySubscriptionRegistry.cs" />
+		<Compile Include="..\..\Code\core\historyapi\AW3HistoryEventIdentityRules.cs" Link="Production\AW3HistoryEventIdentityRules.cs" />
 		<Compile Include="MandateCapitalBuildingTextureRulesTests.cs.txt" />
 		<Compile Include="..\..\Code\core\presentation\MandateCapitalBuildingTextureRules.cs" Link="Production\MandateCapitalBuildingTextureRules.cs" />
 		<Compile Include="CountyRenameRulesTests.cs.txt" />

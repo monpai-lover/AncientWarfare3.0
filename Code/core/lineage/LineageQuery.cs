@@ -16,13 +16,48 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     internal static class LineageQuery
     {
+        [System.ThreadStatic]
+        private static SQLiteConnection _backgroundConnection;
+
+        [System.ThreadStatic]
+        private static bool _backgroundRead;
+
         private const string ShiBranchIdentitySelectColumns =
             "IFNULL(NAMING_PROFILE, 'xia'), " +
             "IFNULL(WESTERN_NAMING_TRADITION, ''), " +
             "IFNULL(ORIGIN_CITY_CHINESE_NAME, ''), " +
             "IFNULL(DISPLAY_STEM, '')";
 
-        private static SQLiteConnection DB => LineageArchiveManager.Instance.OperatingDB;
+        private static SQLiteConnection DB => _backgroundConnection ??
+            (_backgroundRead ? null : LineageArchiveManager.Instance.OperatingDB);
+
+        public static System.IDisposable EnterBackgroundRead(
+            SQLiteConnection pConnection)
+        {
+            if (pConnection == null)
+                throw new System.ArgumentNullException(nameof(pConnection));
+            return new BackgroundReadScope(pConnection);
+        }
+
+        private sealed class BackgroundReadScope : System.IDisposable
+        {
+            private readonly SQLiteConnection _previousConnection;
+            private readonly bool _previousBackgroundRead;
+
+            public BackgroundReadScope(SQLiteConnection pConnection)
+            {
+                _previousConnection = _backgroundConnection;
+                _previousBackgroundRead = _backgroundRead;
+                _backgroundConnection = pConnection;
+                _backgroundRead = true;
+            }
+
+            public void Dispose()
+            {
+                _backgroundConnection = _previousConnection;
+                _backgroundRead = _previousBackgroundRead;
+            }
+        }
 
         // ─────────────────────── 姓族总览(所有姓) ───────────────────────
 
@@ -1352,7 +1387,7 @@ namespace AncientWarfare3.core.lineage
                 }
             }
 
-            Actor live = World.world?.units?.get(pChildId);
+            Actor live = _backgroundRead ? null : World.world?.units?.get(pChildId);
             if (live?.data != null)
             {
                 liveIds.Add(live.data.parent_id_1);
@@ -1409,7 +1444,7 @@ namespace AncientWarfare3.core.lineage
                 }
             }
 
-            Actor parent = World.world?.units?.get(pParentId);
+            Actor parent = _backgroundRead ? null : World.world?.units?.get(pParentId);
             if (parent?.data != null)
             {
                 try

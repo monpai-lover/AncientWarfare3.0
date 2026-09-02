@@ -164,6 +164,20 @@ namespace AncientWarfare3.core.court
                     pKingdom, (CourtConscriptionLaw)previousValue,
                     (CourtConscriptionLaw)pDesiredValue);
 
+            if (pKind == CourtAuxiliaryLawKind.FemaleSuccession)
+            {
+                try
+                {
+                    HeirService.RefreshHeir(pKingdom);
+                }
+                catch (Exception error)
+                {
+                    HeirService.MarkSelectionDirty(pKingdom);
+                    ModClass.LogWarning("Female succession refresh failed: " +
+                                        error.Message);
+                }
+            }
+
             try
             {
                 ChronicleEvents.OnCourtAuxiliaryLawChanged(pKingdom,

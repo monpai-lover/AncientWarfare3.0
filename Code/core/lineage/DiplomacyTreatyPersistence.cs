@@ -1,5 +1,6 @@
 using System;
 using System.Data.SQLite;
+using AncientWarfare3.core.historyapi;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -201,6 +202,11 @@ namespace AncientWarfare3.core.lineage
                                 "withdrawal truce extension failed");
                     }
                     transaction.Commit();
+                    AW3HistoryEventPublisher.PublishDiplomacy(pTruceProposalId,
+                        "DiplomacyProposal", "treaty_extended",
+                        pRequest.RequesterId, pRequest.ResponderId,
+                        pRequest.EventTime, pRequest.CurrentYear,
+                        pRequest.RequestYearPrefix, "accepted", detailId);
                     return true;
                 }
 
@@ -256,6 +262,11 @@ namespace AncientWarfare3.core.lineage
                             "withdrawal truce insert failed");
                 }
                 transaction.Commit();
+                AW3HistoryEventPublisher.PublishDiplomacy(pTruceProposalId,
+                    "DiplomacyProposal", "proposal:truce",
+                    pRequest.RequesterId, pRequest.ResponderId,
+                    pRequest.EventTime, pRequest.CurrentYear,
+                    pRequest.RequestYearPrefix, "accepted", detailId);
                 return true;
             }
             catch
@@ -363,6 +374,12 @@ namespace AncientWarfare3.core.lineage
                             "broken-pact truce insert failed");
                 }
                 transaction.Commit();
+                AW3HistoryEventPublisher.PublishDiplomacy(pTruceProposalId,
+                    "DiplomacyProposal", "proposal:truce",
+                    pRequest.RequesterId, pRequest.ResponderId,
+                    pRequest.EventTime, pRequest.CurrentYear,
+                    pRequest.RequestYearPrefix, "accepted",
+                    "non_aggression_broken");
                 return DiplomacyTreatyBreakOutcome.Committed;
             }
             catch

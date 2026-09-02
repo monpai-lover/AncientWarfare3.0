@@ -48,6 +48,71 @@ internal static class KingSuccessionPreparationRulesTests
         PagedEvidenceContinuesOnTheNextFrame();
         WorldGenerationSeparatesFallbackAttempts();
         UnchangedHeirSignatureSkipsMaintenance();
+        FemaleSuccessionLawInvalidatesCachedHeir();
+    }
+
+    private static void FemaleSuccessionLawInvalidatesCachedHeir()
+    {
+        string heirSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "HeirService.cs"));
+        int reconcileStart = heirSource.IndexOf(
+            "public static Actor ReconcileHeir(", StringComparison.Ordinal);
+        int peekStart = heirSource.IndexOf(
+            "public static Actor PeekRegisteredHeir(", StringComparison.Ordinal);
+        int peekEnd = heirSource.IndexOf(
+            "public static Actor PeekStoredHeirForMinimap(", peekStart,
+            StringComparison.Ordinal);
+        int minimapEnd = heirSource.IndexOf(
+            "public static Actor FindHeirReadOnly(", peekEnd,
+            StringComparison.Ordinal);
+        True(reconcileStart >= 0 && peekStart >= 0 && peekEnd > peekStart &&
+             minimapEnd > peekEnd,
+            "female succession cache validation source is present");
+
+        string reconcile = heirSource.Substring(reconcileStart,
+            peekStart - reconcileStart);
+        True(reconcile.Contains(
+                "IsSuccessionSexEligible(cached, pKingdom)"),
+            "a cached female heir is not eligible after the law is disabled");
+
+        string peek = heirSource.Substring(peekStart, peekEnd - peekStart);
+        True(peek.Contains("IsSuccessionSexEligible(heir, pKingdom)"),
+            "fast registered-heir reads reject a female heir under a male-only law");
+
+        string minimap = heirSource.Substring(peekEnd,
+            minimapEnd - peekEnd);
+        True(minimap.Contains("IsSuccessionSexEligible(heir, pKingdom)"),
+            "map and window heir reads reject a female heir under a male-only law");
+
+        string courtSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "court",
+            "CourtAuxiliaryLawService.cs"));
+        int changeStart = courtSource.IndexOf(
+            "public static CourtAuxiliaryLawChangeResult TryChangeLaw(",
+            StringComparison.Ordinal);
+        int changeEnd = courtSource.IndexOf(
+            "public static int ResolveTermEndYear(", changeStart,
+            StringComparison.Ordinal);
+        True(changeStart >= 0 && changeEnd > changeStart,
+            "auxiliary law change source is present");
+        string change = courtSource.Substring(changeStart,
+            changeEnd - changeStart);
+        True(change.Contains(
+                "pKind == CourtAuxiliaryLawKind.FemaleSuccession") &&
+             change.Contains("HeirService.RefreshHeir(pKingdom)"),
+            "changing female succession law immediately refreshes the heir");
+
+        int storeStart = heirSource.IndexOf(
+            "public static void StoreSelectedHeir(", StringComparison.Ordinal);
+        int storeEnd = heirSource.IndexOf(
+            "public static string ResolveSuccessionModeForCandidate(",
+            storeStart, StringComparison.Ordinal);
+        True(storeStart >= 0 && storeEnd > storeStart,
+            "explicit heir registration source is present");
+        string store = heirSource.Substring(storeStart, storeEnd - storeStart);
+        True(store.Contains("IsSuccessionSexEligible(pHeir, pKingdom)"),
+            "explicit hereditary heir registration applies the female succession law");
     }
 
     private static void InvalidCapitalRepairPrefersInstalledSuccessorHome()

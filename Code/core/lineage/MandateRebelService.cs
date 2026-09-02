@@ -341,11 +341,12 @@ namespace AncientWarfare3.core.lineage
             }
 
             pKingdom.data.set(LineageKeys.MANDATE_REBEL_ROUTE, "");
-            pKingdom.data.get(LineageKeys.MANDATE_REBEL_NAME_ROOT,
-                out string root, "");
-            if (!string.IsNullOrWhiteSpace(root) &&
-                !PeasantRebelRouteService.TryApplyRouteName(
-                    pKingdom, root.Trim())) return false;
+            // 义军打赢旧国、落定为正规政权 —— 这里必须换成正式国号。
+            // 原来是直接把双字匪号词根(赤眉/黄巾/绿林…)当国名用,于是走完
+            // 土匪→义军→正规国家整条路,国名还是双字匪号。详见
+            // PeasantRebelStateNameService 的说明。
+            if (!PeasantRebelStateNameService.ApplyCanonical(pKingdom))
+                return false;
             if (!KingdomPolicyService.ApplyClassStateDirect(
                     pKingdom, target)) return false;
             PeasantRebelRouteService.RemoveRuntime(pKingdom);

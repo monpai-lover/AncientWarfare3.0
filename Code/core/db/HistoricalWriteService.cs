@@ -179,6 +179,14 @@ namespace AncientWarfare3.core.db
             IReadOnlyList<HistoricalSqlColumn> pColumns, out long pEventId,
             out string pError)
         {
+            return TryAppendHistory(pTable, pColumns, null, out pEventId,
+                out pError);
+        }
+
+        public static bool TryAppendHistory(string pTable,
+            IReadOnlyList<HistoricalSqlColumn> pColumns,
+            Action<long> pOnCommitted, out long pEventId, out string pError)
+        {
             string shadowExpected = null;
             string shadowActual = null;
             string operationKey = null;
@@ -225,7 +233,13 @@ namespace AncientWarfare3.core.db
                             columns, pGeneratedEventId: false);
                     shadowActual = envelope.ShadowSummary;
                 }
-                if (_worker.TryEnqueue(envelope, out _))
+                long committedEventId = pEventId;
+                Action<long, object> committed = pOnCommitted == null
+                    ? null
+                    : (sequence, outcome) => pOnCommitted(committedEventId);
+                if (Callbacks.TryEnqueue(_worker, envelope,
+                        (Action<long, long>)null, committed,
+                        null, out _))
                 {
                     accepted = true;
                     pError = string.Empty;

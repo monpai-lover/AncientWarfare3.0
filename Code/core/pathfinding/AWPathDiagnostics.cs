@@ -32,6 +32,8 @@ namespace AncientWarfare3.core.pathfinding
         private readonly long[] _failedByReason =
             new long[Enum.GetValues(typeof(AWPathFailureReason)).Length];
         private long _expandedNodes;
+        private readonly long[] _expandedByClass =
+            new long[Enum.GetValues(typeof(AWPathWorkClass)).Length];
         private long _fallbackSearches;
         private long _staleSteps;
         private long _fastSteps;
@@ -177,6 +179,27 @@ namespace AncientWarfare3.core.pathfinding
             return values.Count == 0 ? "none" : string.Join(",", values);
         }
         public void AddExpandedNodes(int pCount) => Interlocked.Add(ref _expandedNodes, pCount);
+
+        /// <summary>
+        ///     同时按工作类分账。总量说明不了问题:一局里 94% 的请求是 Ambient,
+        ///     但没有通道能看出这 94% 到底吃掉了多少节点 —— 只能靠均值倒推。
+        ///     分开记之后,「闲逛烧掉了多少」是可以直接读出来的。
+        /// </summary>
+        public void AddExpandedNodes(AWPathWorkClass pWorkClass, int pCount)
+        {
+            AddExpandedNodes(pCount);
+            int index = (int)pWorkClass;
+            if (index >= 0 && index < _expandedByClass.Length)
+                Interlocked.Add(ref _expandedByClass[index], pCount);
+        }
+
+        /// <summary>id:节点数 —— 与 post_jobs 等其他分账字段同格式。</summary>
+        public string ExpandedNodesByClass()
+        {
+            return "operational:" + Interlocked.Read(ref _expandedByClass[0]) +
+                   ",essential:" + Interlocked.Read(ref _expandedByClass[1]) +
+                   ",ambient:" + Interlocked.Read(ref _expandedByClass[2]);
+        }
         public void OnFallback() => Interlocked.Increment(ref _fallbackSearches);
         public void OnStaleStep() => Interlocked.Increment(ref _staleSteps);
         public void OnFastStep() => Interlocked.Increment(ref _fastSteps);

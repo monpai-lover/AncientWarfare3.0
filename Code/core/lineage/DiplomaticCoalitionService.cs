@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.historyapi;
 using AncientWarfare3.utils;
 
 namespace AncientWarfare3.core.lineage
@@ -218,6 +219,10 @@ namespace AncientWarfare3.core.lineage
                     throw new InvalidOperationException(
                         "coalition relation modifier write failed");
                 transaction.Commit();
+                AW3HistoryEventPublisher.PublishDiplomacy(coalitionId,
+                    "DiplomaticCoalitionStart", "coalition_started",
+                    pair.FirstKingdomId, pair.SecondKingdomId,
+                    LineageService.CurTime(), year, "", "active", "");
                 pReason = "";
                 return true;
             }
@@ -457,12 +462,32 @@ namespace AncientWarfare3.core.lineage
         {
             try
             {
+                long firstKingdomId = -1L;
+                long secondKingdomId = -1L;
+                double endTime = LineageService.CurTime();
+                using (var read = new SQLiteCommand(
+                    "SELECT MEMBER_A_ID,MEMBER_B_ID FROM " +
+                    "DiplomaticCoalition WHERE COALITION_ID=@id LIMIT 1", DB))
+                {
+                    read.Parameters.AddWithValue("@id", pCoalitionId);
+                    using SQLiteDataReader reader = read.ExecuteReader();
+                    if (reader.Read())
+                    {
+                        firstKingdomId = reader.IsDBNull(0) ? -1L : reader.GetInt64(0);
+                        secondKingdomId = reader.IsDBNull(1) ? -1L : reader.GetInt64(1);
+                    }
+                }
                 using var command = new SQLiteCommand(
                     "UPDATE DiplomaticCoalition SET STATUS=1,END_TIME=@time " +
                     "WHERE COALITION_ID=@id AND STATUS=0", DB);
-                command.Parameters.AddWithValue("@time", LineageService.CurTime());
+                command.Parameters.AddWithValue("@time", endTime);
                 command.Parameters.AddWithValue("@id", pCoalitionId);
-                command.ExecuteNonQuery();
+                if (command.ExecuteNonQuery() == 1 && firstKingdomId >= 0L &&
+                    secondKingdomId >= 0L)
+                    AW3HistoryEventPublisher.PublishDiplomacy(pCoalitionId,
+                        "DiplomaticCoalitionEnd", "coalition_ended",
+                        firstKingdomId, secondKingdomId, endTime, SafeYear(),
+                        "", "ended", "");
                 DiplomaticRelationModifierService.DeactivateSource(
                     "coalition", pCoalitionId);
             }

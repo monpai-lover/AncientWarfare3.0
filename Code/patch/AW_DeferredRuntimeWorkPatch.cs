@@ -1,5 +1,6 @@
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.historyapi;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.naming;
 using AncientWarfare3.core.performance;
@@ -73,6 +74,9 @@ namespace AncientWarfare3.patch
                 HistoricalWriteService.DrainCompletions(
                     AWAsyncCompletionDrainRules.RemainingMilliseconds(
                         deadline), writeLimit);
+
+            if (AWAsyncCompletionDrainRules.HasTime(deadline))
+                AW3HistoryEventPublisher.Drain(16);
         }
 
         // 延迟队列此前只有一个出口:权威周期里每次一项(该配额被

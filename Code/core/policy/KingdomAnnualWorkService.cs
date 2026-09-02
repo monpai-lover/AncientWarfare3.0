@@ -165,8 +165,24 @@ namespace AncientWarfare3.core.policy
                 case KingdomAnnualWorkStage.StateEconomy:
                     RunStateEconomy(pKingdom);
                     break;
-                case KingdomAnnualWorkStage.StateGovernment:
-                    RunStateGovernment(pKingdom);
+                case KingdomAnnualWorkStage.StateGovernmentExam:
+                    RunStateGovernmentExam(pKingdom);
+                    break;
+                case KingdomAnnualWorkStage.StateGovernmentCareer:
+                    MeasureAge(
+                        UpdateAgeBenchmarkRules.KingdomOfficialCareerIndex,
+                        () => OfficialCareerStateService.OnKingdomYear(
+                            pKingdom));
+                    break;
+                case KingdomAnnualWorkStage.StateGovernmentMinisterial:
+                    MeasureAge(
+                        UpdateAgeBenchmarkRules.KingdomMinisterialPowerIndex,
+                        () => MinisterialPowerService.OnKingdomYear(pKingdom));
+                    break;
+                case KingdomAnnualWorkStage.StateGovernmentTribute:
+                    MeasureAge(
+                        UpdateAgeBenchmarkRules.KingdomVassalTributeIndex,
+                        () => VassalService.SettleAnnualTribute(pKingdom));
                     break;
                 case KingdomAnnualWorkStage.StateRealm:
                     RunStateRealm(pKingdom);
@@ -204,8 +220,14 @@ namespace AncientWarfare3.core.policy
                 KingdomAnnualWorkStage.DiplomaticOperation =>
                     "annual_diplomatic_operation",
                 KingdomAnnualWorkStage.StateEconomy => "annual_state_economy",
-                KingdomAnnualWorkStage.StateGovernment =>
-                    "annual_state_government",
+                KingdomAnnualWorkStage.StateGovernmentExam =>
+                    "annual_state_government_exam",
+                KingdomAnnualWorkStage.StateGovernmentCareer =>
+                    "annual_state_government_career",
+                KingdomAnnualWorkStage.StateGovernmentMinisterial =>
+                    "annual_state_government_ministerial",
+                KingdomAnnualWorkStage.StateGovernmentTribute =>
+                    "annual_state_government_tribute",
                 KingdomAnnualWorkStage.StateRealm => "annual_state_realm",
                 KingdomAnnualWorkStage.StrategyMandate =>
                     "annual_strategy_mandate",
@@ -324,7 +346,7 @@ namespace AncientWarfare3.core.policy
                 () => KingdomFoodReliefService.OnKingdomYear(pKingdom));
         }
 
-        private static void RunStateGovernment(Kingdom pKingdom)
+        private static void RunStateGovernmentExam(Kingdom pKingdom)
         {
             long examAge = UpdateAgeBenchmark.Begin();
             long examRecent = RecentFeatureBenchmark.Begin();
@@ -338,12 +360,6 @@ namespace AncientWarfare3.core.policy
                     RecentFeatureBenchmarkRules.CivilServiceExamAnnualIndex,
                     examRecent);
             }
-            MeasureAge(UpdateAgeBenchmarkRules.KingdomOfficialCareerIndex,
-                () => OfficialCareerStateService.OnKingdomYear(pKingdom));
-            MeasureAge(UpdateAgeBenchmarkRules.KingdomMinisterialPowerIndex,
-                () => MinisterialPowerService.OnKingdomYear(pKingdom));
-            MeasureAge(UpdateAgeBenchmarkRules.KingdomVassalTributeIndex,
-                () => VassalService.SettleAnnualTribute(pKingdom));
         }
 
         private static void RunStateRealm(Kingdom pKingdom)

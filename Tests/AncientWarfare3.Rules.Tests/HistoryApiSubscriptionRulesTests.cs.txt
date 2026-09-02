@@ -1,0 +1,88 @@
+using System;
+using AncientWarfare3.api.history;
+using AncientWarfare3.core.historyapi;
+
+internal static class HistoryApiSubscriptionRulesTests
+{
+    public static void Run()
+    {
+        FailedCommitDoesNotPublish();
+        FiltersAndDisposalAreApplied();
+        HandlerFailureDoesNotStopOtherHandlers();
+        LedgerSourcesHaveIndependentIdentity();
+        Console.WriteLine("History API subscription rules passed.");
+    }
+
+    private static void FailedCommitDoesNotPublish()
+    {
+        var registry = new AW3HistorySubscriptionRegistry();
+        int count = 0;
+        using (registry.Subscribe(AW3HistorySubscription.All,
+            item => count++))
+        {
+            registry.PublishCommitted(Event("born", 1L, 2L));
+            registry.PublishFailed(Event("died", 1L, 2L));
+            registry.Drain();
+        }
+        Equal(1, count, "failed writes are not delivered");
+    }
+
+    private static void FiltersAndDisposalAreApplied()
+    {
+        var registry = new AW3HistorySubscriptionRegistry();
+        int count = 0;
+        IDisposable handle = registry.Subscribe(
+            AW3HistorySubscription.Create("biography", "born", 7L, 9L),
+            item => count++);
+        registry.PublishCommitted(Event("born", 7L, 9L));
+        registry.PublishCommitted(Event("died", 7L, 9L));
+        registry.Drain();
+        handle.Dispose();
+        handle.Dispose();
+        registry.PublishCommitted(Event("born", 7L, 9L));
+        registry.Drain();
+        Equal(1, count, "filter and idempotent disposal are applied");
+    }
+
+    private static void HandlerFailureDoesNotStopOtherHandlers()
+    {
+        var registry = new AW3HistorySubscriptionRegistry();
+        int count = 0;
+        using (registry.Subscribe(AW3HistorySubscription.All,
+            item => throw new InvalidOperationException("handler")))
+        using (registry.Subscribe(AW3HistorySubscription.All,
+            item => count++))
+        {
+            registry.PublishCommitted(Event("born", 1L, 2L));
+            registry.Drain();
+        }
+        Equal(1, count, "handler exceptions are isolated");
+    }
+
+    private static void LedgerSourcesHaveIndependentIdentity()
+    {
+        string proposal = AW3HistoryEventIdentityRules.Build(
+            "diplomacy", "DiplomacyProposal", 4L);
+        string marriage = AW3HistoryEventIdentityRules.Build(
+            "diplomacy", "DiplomaticMarriageStart", 4L);
+        Equal(true, proposal != marriage,
+            "different diplomacy ledgers have independent identity");
+        Equal(proposal, AW3HistoryEventIdentityRules.Build(
+            "diplomacy", "DiplomacyProposal", 4L),
+            "same ledger record has stable identity");
+    }
+
+    private static AW3HistoryEvent Event(string type, long actorId,
+        long kingdomId)
+    {
+        return new AW3HistoryEvent(1L, "biography", "PersonBiography", 1L,
+            type, 1d, 1, "year 1", actorId, -1L, kingdomId, kingdomId,
+            "Actor", "content", "life", "");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!object.Equals(expected, actual))
+            throw new InvalidOperationException(message);
+    }
+}

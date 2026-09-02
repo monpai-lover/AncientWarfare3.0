@@ -81,14 +81,21 @@ namespace AncientWarfare3.core.pathfinding
 
                 float direct = AWTraversalRules.Distance(start.X, start.Y, target.X, target.Y);
                 bool longRange = direct > _config.ShortRangeTiles;
-                int primaryLimit = longRange ? _config.MaxNodesLong : _config.MaxNodesShort;
+                int configuredLimit = longRange
+                    ? _config.MaxNodesLong
+                    : _config.MaxNodesShort;
+                int primaryLimit = AWPathSearchBudgetRules.ResolveMaximumNodes(
+                    pRequest.WorkClass, longRange, configuredLimit);
                 SearchResult result = Search(pRequest, start, target,
                     Math.Max(1, primaryLimit), float.PositiveInfinity,
                     pCancellation, workspace);
 #if !AW3_RULES_TESTS
-                AWPathfindingBootstrap.PathDiagnostics.AddExpandedNodes(result.ExpandedNodes);
+                AWPathfindingBootstrap.PathDiagnostics.AddExpandedNodes(
+                    pRequest.WorkClass, result.ExpandedNodes);
 #endif
-                if (!result.Success && result.HitNodeLimit && longRange)
+                if (!result.Success && result.HitNodeLimit && longRange &&
+                    AWPathSearchBudgetRules.AllowsFallbackCorridor(
+                        pRequest.WorkClass))
                 {
 #if !AW3_RULES_TESTS
                     AWPathfindingBootstrap.PathDiagnostics.OnFallback();
@@ -99,7 +106,8 @@ namespace AncientWarfare3.core.pathfinding
                         Math.Max(_config.MaxNodesLongFallback, _config.MaxNodesLong),
                         direct + detour, pCancellation, workspace);
 #if !AW3_RULES_TESTS
-                    AWPathfindingBootstrap.PathDiagnostics.AddExpandedNodes(result.ExpandedNodes);
+                    AWPathfindingBootstrap.PathDiagnostics.AddExpandedNodes(
+                        pRequest.WorkClass, result.ExpandedNodes);
 #endif
                 }
 
@@ -170,7 +178,9 @@ namespace AncientWarfare3.core.pathfinding
             AWTileTraversalSnapshot pTarget, int pMaxNodes, float pCorridorLimit,
             CancellationToken pCancellation, SearchWorkspace pWorkspace)
         {
-            pWorkspace.Reset(pMaxNodes, _config.MaxLabelsPerTile);
+            pWorkspace.Reset(pMaxNodes,
+                AWPathSearchBudgetRules.ResolveMaximumLabelsPerTile(
+                    pRequest.WorkClass, _config.MaxLabelsPerTile));
             float startHeuristic = Heuristic(pStart, pTarget, pRequest.Profile);
             int startIndex = pWorkspace.AddStart(SearchNode.Start(pStart.Id,
                 startHeuristic, pStart.Liquid || pStart.Ocean ? 1 : 0));
@@ -370,6 +380,8 @@ namespace AncientWarfare3.core.pathfinding
             private int[] _labelNodeIndices = Array.Empty<int>();
             private int _labelMask;
             private int _labelStride = 1;
+            /// <summary>本次搜索每格允许的标签数,≤ <see cref="_labelStride"/>。</summary>
+            private int _labelLimit = 1;
             private int _labelSlotCount;
             private int _epoch;
             private int _nodeCount;
@@ -387,11 +399,24 @@ namespace AncientWarfare3.core.pathfinding
                 Open.Clear();
                 int stride = Math.Max(1, Math.Min(byte.MaxValue,
                     pMaxLabelsPerTile));
+                // 每格标签上限和数组的分配宽度必须分开。工作台是线程本地的,
+                // 同一条 worker 上 ambient(上限 1)和 operational(上限 4)会交替
+                // 出现;如果拿上限直接当分配宽度,_labelStride 就会在 1↔4 之间
+                // 来回跳,每跳一次就把四个数组全部重新分配 —— 在 32768 槽的
+                // 规模上,这比省下来的展开还贵。分配宽度只增不减,上限每次照
+                // 本次请求设。
+                _labelLimit = stride;
                 int minimumSlots = Math.Max(16,
                     NextPowerOfTwo(Math.Max(1, pMaxNodes) * 2));
                 if (_labelKeys.Length < minimumSlots ||
-                    _labelStride != stride)
+                    _labelStride < stride)
                 {
+                    // 只增不减:宽度和槽数都取「本次所需」与「已有」的较大者,
+                    // 否则一次小请求会把上一次大请求撑起来的表缩回去,下一次
+                    // 大请求又得重建。
+                    if (stride < _labelStride) stride = _labelStride;
+                    if (minimumSlots < _labelKeys.Length)
+                        minimumSlots = _labelKeys.Length;
                     _labelKeys = new int[minimumSlots];
                     _labelEpochs = new int[minimumSlots];
                     _labelCounts = new byte[minimumSlots];
@@ -447,7 +472,7 @@ namespace AncientWarfare3.core.pathfinding
                         _labelNodeIndices[offset + count];
                 }
 
-                if (count >= _labelStride)
+                if (count >= _labelLimit)
                 {
                     int worst = 0;
                     float worstF = _nodes[_labelNodeIndices[offset]].F;

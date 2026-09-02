@@ -710,6 +710,9 @@ namespace AncientWarfare3.core.policy
                 " wal_checkpoint=" +
                 core.db.LineageArchiveCheckpointService.GetDiagnostics() +
                 " live_population=" + livePopulation +
+                " synthetic_levy=" +
+                core.lineage.SyntheticMobilizationLedgerService
+                    .GetDiagnostics() +
                 " total_actor_objects=" + totalActorObjects +
                 " dying_actor_objects=" + dyingActorObjects +
                 " actor_destroy_queue=" + actorDestroyQueue +
@@ -897,6 +900,8 @@ namespace AncientWarfare3.core.policy
                 " path_ambient_queue_high=" +
                 pathDiagnostics.AmbientQueueHighWater +
                 " path_expanded_nodes=" + pathDiagnostics.ExpandedNodes +
+                " path_expanded_by_class=" +
+                pathDiagnostics.ExpandedNodesByClass() +
                 " path_owner_state=" + PathfindingOwnershipService.State +
                 " presentation_visibility=" +
                 AWPresentationVisibility.GetDiagnostics() +

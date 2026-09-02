@@ -30,6 +30,7 @@ namespace AncientWarfare3.core.lineage
         public string context_kingdom_color = "";
         public string target_type = "";
         public long   target_id = -1;
+        public string projection_key = "";
     }
 
     /// <summary>
@@ -65,7 +66,7 @@ namespace AncientWarfare3.core.lineage
                 "SELECT EVENT_ID, WORLD_TIME, YEAR_PREFIX, YEAR_PREFIX_RICH, SUBJECT_NAME, SUBJECT_COLOR, " +
                 "CONTENT, CONTENT_RICH, EVENT_TYPE, CATEGORY, AGE_AT_EVENT, IS_KING_AT_EVENT, ROLE_SNAPSHOT, ROLE_LABEL, " +
                 "CONTEXT_KINGDOM_ID, CONTEXT_KINGDOM_NAME, CONTEXT_KINGDOM_COLOR, " +
-                "TARGET_TYPE, TARGET_ID " +
+                "TARGET_TYPE, TARGET_ID, PROJECTION_KEY " +
                 $"FROM {PersonBiographyTableItem.GetTableName()} WHERE ACTOR_ID=@id ORDER BY WORLD_TIME ASC, EVENT_ID ASC";
             cmd.Parameters.AddWithValue("@id", pActorId);
             using var reader = (SQLiteDataReader)cmd.ExecuteReader();
@@ -92,7 +93,8 @@ namespace AncientWarfare3.core.lineage
                     context_kingdom_name = SafeStr(reader, 15),
                     context_kingdom_color = SafeStr(reader, 16),
                     target_type = SafeStr(reader, 17),
-                    target_id = reader.IsDBNull(18) ? -1 : reader.GetInt64(18)
+                    target_id = reader.IsDBNull(18) ? -1 : reader.GetInt64(18),
+                    projection_key = SafeStr(reader, 19)
                 };
                 if (IsDuplicateDeathEntry(entry, seenDeathEvents)) continue;
                 result.Add(entry);
@@ -202,7 +204,7 @@ namespace AncientWarfare3.core.lineage
             cmd.CommandText =
                 "SELECT EVENT_ID, WORLD_TIME, YEAR_PREFIX, YEAR_PREFIX_RICH, SUBJECT_NAME, SUBJECT_COLOR, " +
                 "CONTENT, CONTENT_RICH, EVENT_TYPE, KINGDOM_NAME, KINGDOM_COLOR, " +
-                "CONTEXT_KINGDOM_ID, CONTEXT_KINGDOM_NAME, CONTEXT_KINGDOM_COLOR, TARGET_TYPE, TARGET_ID " +
+                "CONTEXT_KINGDOM_ID, CONTEXT_KINGDOM_NAME, CONTEXT_KINGDOM_COLOR, TARGET_TYPE, TARGET_ID, PROJECTION_KEY " +
                 $"FROM {CityHistoryTableItem.GetTableName()} WHERE CITY_ID=@id ORDER BY WORLD_TIME ASC, EVENT_ID ASC";
             cmd.Parameters.AddWithValue("@id", pCityId);
 
@@ -226,7 +228,8 @@ namespace AncientWarfare3.core.lineage
                     context_kingdom_name = SafeStr(reader, 12),
                     context_kingdom_color = SafeStr(reader, 13),
                     target_type = SafeStr(reader, 14),
-                    target_id = reader.IsDBNull(15) ? -1 : reader.GetInt64(15)
+                    target_id = reader.IsDBNull(15) ? -1 : reader.GetInt64(15),
+                    projection_key = SafeStr(reader, 16)
                 });
             }
             ClearNonXiaEventYearPrefixes(result);
@@ -1029,7 +1032,7 @@ namespace AncientWarfare3.core.lineage
             cmd.CommandText =
                 $"SELECT EVENT_ID, WORLD_TIME, YEAR_PREFIX, YEAR_PREFIX_RICH, SUBJECT_NAME, SUBJECT_COLOR, " +
                 $"CONTENT, CONTENT_RICH, EVENT_TYPE, CONTEXT_KINGDOM_ID, CONTEXT_KINGDOM_NAME, CONTEXT_KINGDOM_COLOR, " +
-                $"TARGET_TYPE, TARGET_ID " +
+                 $"TARGET_TYPE, TARGET_ID, PROJECTION_KEY " +
                 $"FROM {pTable} WHERE {pIdColumn}=@id ORDER BY WORLD_TIME ASC, EVENT_ID ASC";
             cmd.Parameters.AddWithValue("@id", pId);
 
@@ -1051,7 +1054,8 @@ namespace AncientWarfare3.core.lineage
                     context_kingdom_name = SafeStr(reader, 10),
                     context_kingdom_color = SafeStr(reader, 11),
                     target_type = SafeStr(reader, 12),
-                    target_id = reader.IsDBNull(13) ? -1 : reader.GetInt64(13)
+                    target_id = reader.IsDBNull(13) ? -1 : reader.GetInt64(13),
+                    projection_key = SafeStr(reader, 14)
                 });
             }
             SortHistoryEntries(result);

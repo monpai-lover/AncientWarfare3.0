@@ -1,0 +1,106 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using AncientWarfare3.api.history;
+
+internal static class HistoryApiContractTests
+{
+    public static void Run()
+    {
+        HistoryPageCopiesItemsAndCursor();
+        QueryNormalizesOptionalFiltersAndLimit();
+        SubscriptionCopiesFilterValues();
+        PublicTypesDoNotExposeRuntimeObjects();
+        UnifiedHistoryContractHasAllDomains();
+        Console.WriteLine("History API contract rules passed.");
+    }
+
+    private static void HistoryPageCopiesItemsAndCursor()
+    {
+        var source = new List<AW3HistoryEvent>
+        {
+            new AW3HistoryEvent(1L, "chronicle", "KingdomHistory", 1L,
+                "founded", 1.0, 1, "year 1", -1L, -1L, 10L, 10L,
+                "Realm", "founded", "life", "")
+        };
+        AW3HistoryPage<AW3HistoryEvent> page =
+            AW3HistoryPage<AW3HistoryEvent>.Create(source, true, "next");
+        source.Clear();
+
+        Equal(1, page.Items.Count, "page copies source items");
+        True(page.HasMore, "page keeps has-more state");
+        Equal("next", page.NextCursor, "page keeps cursor");
+    }
+
+    private static void QueryNormalizesOptionalFiltersAndLimit()
+    {
+        AW3HistoryQuery query = AW3HistoryQuery.Create(
+            worldTimeFrom: double.NaN, worldTimeTo: double.PositiveInfinity,
+            actorId: 0L, kingdomId: 7L, cityId: 8L, countyId: 9L,
+            officeId: null, domain: null, eventType: null, limit: 9999,
+            cursor: null);
+        Equal(-1d, query.WorldTimeFrom, "invalid lower time uses no bound");
+        Equal(-1d, query.WorldTimeTo, "invalid upper time uses no bound");
+        Equal(0L, query.ActorId, "actor filter is preserved");
+        Equal(512, query.Limit, "limit is clamped to hard maximum");
+        Equal("", query.OfficeId, "missing office uses empty text");
+        Equal("", query.Domain, "missing domain uses empty text");
+    }
+
+    private static void SubscriptionCopiesFilterValues()
+    {
+        AW3HistorySubscription subscription =
+            AW3HistorySubscription.Create("biography", "born", 4L, 5L);
+        Equal("biography", subscription.Domain, "subscription domain");
+        Equal("born", subscription.EventType, "subscription event type");
+        Equal(4L, subscription.ActorId, "subscription actor filter");
+        Equal(5L, subscription.KingdomId, "subscription kingdom filter");
+        True(AW3HistorySubscription.All != null,
+            "all subscription is available");
+    }
+
+    private static void PublicTypesDoNotExposeRuntimeObjects()
+    {
+        string[] forbidden = { "Actor", "Kingdom", "City",
+            "System.Data.SQLite.SQLiteConnection",
+            "System.Data.SQLite.SQLiteDataReader" };
+        foreach (Type type in typeof(AW3HistoryEvent).Assembly.GetTypes()
+                     .Where(t => t.Namespace == "AncientWarfare3.api.history"))
+        {
+            foreach (MemberInfo member in type.GetMembers(
+                         BindingFlags.Public | BindingFlags.Instance |
+                         BindingFlags.Static))
+            {
+                Type memberType = member is PropertyInfo property
+                    ? property.PropertyType
+                    : member is FieldInfo field ? field.FieldType : null;
+                if (memberType == null) continue;
+                True(!forbidden.Any(forbiddenType =>
+                        memberType.Name == forbiddenType ||
+                        memberType.FullName == forbiddenType),
+                    type.Name + " does not expose a WorldBox runtime type");
+            }
+        }
+    }
+
+    private static void UnifiedHistoryContractHasAllDomains()
+    {
+        Equal(AW3HistoryDomains.OfficialCareer, "official_career",
+            "official career domain is public");
+        Equal(AW3HistoryEventTypes.Appointment, "appointed",
+            "appointment event type is public");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                expected + ", got " + actual);
+    }
+}

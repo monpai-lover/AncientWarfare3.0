@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.historyapi;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.uiquery;
 
@@ -78,6 +79,7 @@ namespace AncientWarfare3.core.asyncwork
             ActorArchivePendingStore.Clear();
             FamilyTreeProjectionPendingStore.Clear();
             ActorDeathArchiveService.Reset();
+            AW3HistoryEventPublisher.Clear();
             pError = string.Empty;
             return true;
         }
@@ -329,6 +331,7 @@ namespace AncientWarfare3.core.asyncwork
                 }
                 ActorArchivePendingStore.Clear();
                 FamilyTreeProjectionPendingStore.Clear();
+                AW3HistoryEventPublisher.Clear();
                 pError = string.Empty;
                 return true;
             }

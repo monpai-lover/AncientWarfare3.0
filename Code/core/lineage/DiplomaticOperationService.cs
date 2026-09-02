@@ -1,6 +1,7 @@
 using System;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.historyapi;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.utils;
 
@@ -358,6 +359,10 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("PLAYER_INITIATED",
                         pPlayerInitiated ? 1 : 0));
                 if (dueTime < _nextDueTime) _nextDueTime = dueTime;
+                AW3HistoryEventPublisher.PublishDiplomacy(pOperationId,
+                    "DiplomaticOperationStart", "operation_started:" +
+                    TypeId(pPreview.Type), pPreview.SourceKingdomId,
+                    pPreview.TargetKingdomId, now, year, "", "pending", "");
                 pReason = "";
                 return true;
             }
@@ -514,7 +519,15 @@ namespace AncientWarfare3.core.lineage
                 command.Parameters.AddWithValue("@discovered",
                     pDiscovered ? 1 : 0);
                 command.Parameters.AddWithValue("@id", pRow.OperationId);
-                if (command.ExecuteNonQuery() != 1)
+                if (command.ExecuteNonQuery() == 1)
+                {
+                    AW3HistoryEventPublisher.PublishDiplomacy(
+                        pRow.OperationId, "DiplomaticOperationResult",
+                        "operation_result", pRow.SourceKingdomId,
+                        pRow.TargetKingdomId, LineageService.CurTime(),
+                        SafeYear(), "", pStatus.ToString(), pResult);
+                }
+                else
                     ModClass.LogWarning("Covert operation finish lost claim: " +
                                         pRow.OperationId);
             }

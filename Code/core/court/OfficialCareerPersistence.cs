@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
 using AncientWarfare3.core.db;
+#if !AW3_RULES_TESTS
+using AncientWarfare3.core.historyapi;
+#endif
 
 namespace AncientWarfare3.core.court
 {
@@ -298,7 +301,13 @@ namespace AncientWarfare3.core.court
                 token = CaptureClose(pDb, transaction, pRequest);
                 StageClose(pDb, transaction, token);
                 transaction.Commit();
-                return ResultForClose(token, OfficialCareerPersistenceOutcome.Committed);
+                OfficialCareerCloseResult result = ResultForClose(token,
+                    OfficialCareerPersistenceOutcome.Committed);
+#if !AW3_RULES_TESTS
+                AW3HistoryEventPublisher.PublishCareerRecord(
+                    token.Original.OfficerId, "office_ended");
+#endif
+                return result;
             }
             catch (Exception error)
             {
@@ -428,7 +437,14 @@ namespace AncientWarfare3.core.court
                 Stage(pDb, transaction, token);
                 pStageAdditional?.Invoke(pDb, transaction);
                 transaction.Commit();
-                return ResultFor(token, OfficialCareerPersistenceOutcome.Committed);
+                OfficialCareerAppointmentResult result = ResultFor(token,
+                    OfficialCareerPersistenceOutcome.Committed);
+#if !AW3_RULES_TESTS
+                if (result.CreatedAppointmentEvent)
+                    AW3HistoryEventPublisher.PublishCareerRecord(
+                        token.Desired.OfficerId, "appointed");
+#endif
+                return result;
             }
             catch (Exception error)
             {

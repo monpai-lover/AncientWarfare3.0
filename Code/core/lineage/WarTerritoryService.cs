@@ -4,6 +4,7 @@ using System.Data.SQLite;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.historyapi;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.ui;
 using AncientWarfare3.utils;
@@ -2193,6 +2194,12 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("CLAIMANT_NAME", pClaimant?.getName() ?? ""),
                     ColumnVal.Create("TERMS_TEXT", GoalLabel(pGoal.goal_type) + T("aw_hist_colon") + (pResult ?? "")),
                     ColumnVal.Create("WORLD_TIME", LineageService.CurTime()));
+                AW3HistoryEventPublisher.PublishDiplomacy(id,
+                    "PeaceSettlement", "peace_settlement",
+                    pWinner?.id ?? -1L, pLoser?.id ?? -1L,
+                    LineageService.CurTime(), -1, "", "committed",
+                    GoalLabel(pGoal.goal_type) + T("aw_hist_colon") +
+                    (pResult ?? ""));
             }
             catch (Exception e)
             {

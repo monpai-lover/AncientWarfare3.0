@@ -468,7 +468,12 @@ namespace AncientWarfare3.core.pathfinding
                             _diagnostics?.OnCompleted();
                         else if (task.Request.Stream.State == AWPathRequestState.Failed)
                         {
-                            _diagnostics?.OnFailed();
+                            // 原来调的是无参 OnFailed(),它把原因硬写成 None ——
+                            // 于是 path_failed_by_reason 永远只有 None=<总数>,
+                            // 分不出「预算烧完」和「目标本来就到不了」。而流上
+                            // 一直带着真实原因,下一行就在用。
+                            _diagnostics?.OnFailed(
+                                task.Request.Stream.FailureReason);
                             Exception error = task.Request.Stream.Error;
                             if (error != null)
                                 _diagnostics?.Enqueue(new AWPathDiagnosticEvent(

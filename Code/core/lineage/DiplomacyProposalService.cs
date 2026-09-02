@@ -4,6 +4,7 @@ using System.Data.SQLite;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.historyapi;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.performance;
 using AncientWarfare3.utils;
@@ -520,6 +521,10 @@ namespace AncientWarfare3.core.lineage
                         pSelection.DetailId, pReason);
                 return false;
             }
+            AW3HistoryEventPublisher.PublishDiplomacy(proposalId,
+                "DiplomacyProposal", "proposal:" + TypeId(pType),
+                pRequester.id, pResponder.id, createdTime, year,
+                requestYearPrefix, "pending", pSelection.DetailId);
             DiplomacyConversationService.RecordProposal(pRequester,
                 pResponder, proposalId);
             NotifyPair(pRequester.id, pResponder.id);
@@ -2806,8 +2811,16 @@ namespace AncientWarfare3.core.lineage
                     pExpectedStatus ?? "pending");
                 bool changed = command.ExecuteNonQuery() == 1;
                 if (changed)
+                {
+                    AW3HistoryEventPublisher.PublishDiplomacy(
+                        pProposal.ProposalId, "DiplomacyProposalResponse",
+                        "proposal_response", pProposal.RequesterKingdomId,
+                        pProposal.ResponderKingdomId, responseTime,
+                        SafeYear(), responseYearPrefix, StatusId(pStatus),
+                        pReason);
                     NotifyPair(pProposal.RequesterKingdomId,
                         pProposal.ResponderKingdomId);
+                }
                 else
                     ModClass.LogWarning("Diplomacy proposal close failed: " +
                                         "proposal=" + pProposal.ProposalId +

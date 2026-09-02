@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.historyapi;
 using AncientWarfare3.ui;
 using AncientWarfare3.utils;
 
@@ -641,7 +642,10 @@ namespace AncientWarfare3.core.lineage
                         TimeSpan.FromSeconds(5),
                         (out long allocatedId, out string appendError) =>
                             HistoricalWriteService.TryAppendHistory(pTable,
-                                captured, out allocatedId, out appendError),
+                                captured,
+                                id => AW3HistoryEventPublisher.PublishHistoryRow(
+                                    pTable, id),
+                                out allocatedId, out appendError),
                         HistoricalWriteService.FlushForSynchronousFallback,
                         allocatedId =>
                         {
@@ -652,6 +656,8 @@ namespace AncientWarfare3.core.lineage
                             };
                             synchronous.AddRange(pColumns);
                             pDatabase.Insert(pTable, synchronous.ToArray());
+                            AW3HistoryEventPublisher.PublishHistoryRow(
+                                pTable, allocatedId);
                         }, out eventId, out string writeError))
                     throw new InvalidOperationException(writeError);
                 return true;
@@ -714,6 +720,7 @@ namespace AncientWarfare3.core.lineage
                         return command.ExecuteNonQuery() == 1;
                     }, out string writeError);
             if (!applied) throw new InvalidOperationException(writeError);
+            AW3HistoryEventPublisher.PublishHistoryRow(pTable, pEventId);
             return true;
         }
 

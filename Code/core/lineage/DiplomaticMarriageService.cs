@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.historyapi;
 using AncientWarfare3.ui;
 using AncientWarfare3.utils;
 
@@ -271,6 +272,10 @@ namespace AncientWarfare3.core.lineage
                     throw new InvalidOperationException(
                         "royal marriage relation modifier write failed");
                 transaction.Commit();
+                AW3HistoryEventPublisher.PublishDiplomacy(marriageId,
+                    "DiplomaticMarriageStart", "marriage_started",
+                    pair.FirstKingdomId, pair.SecondKingdomId,
+                    LineageService.CurTime(), year, "", "active", "");
                 pReason = "";
             }
             catch (Exception exception)
@@ -349,12 +354,34 @@ namespace AncientWarfare3.core.lineage
 
         private static void CloseStaleMarriage(long pMarriageId)
         {
+            long firstKingdomId = -1L;
+            long secondKingdomId = -1L;
+            double endTime = LineageService.CurTime();
+            try
+            {
+                using var read = new SQLiteCommand(
+                    "SELECT KINGDOM_A_ID,KINGDOM_B_ID FROM " +
+                    "DiplomaticMarriage WHERE MARRIAGE_ID=@id LIMIT 1", DB);
+                read.Parameters.AddWithValue("@id", pMarriageId);
+                using SQLiteDataReader reader = read.ExecuteReader();
+                if (reader.Read())
+                {
+                    firstKingdomId = reader.IsDBNull(0) ? -1L : reader.GetInt64(0);
+                    secondKingdomId = reader.IsDBNull(1) ? -1L : reader.GetInt64(1);
+                }
+            }
+            catch { }
             using var command = new SQLiteCommand(
                 "UPDATE DiplomaticMarriage SET STATUS=1,END_TIME=@time " +
                 "WHERE MARRIAGE_ID=@id AND STATUS=0", DB);
-            command.Parameters.AddWithValue("@time", LineageService.CurTime());
+            command.Parameters.AddWithValue("@time", endTime);
             command.Parameters.AddWithValue("@id", pMarriageId);
-            command.ExecuteNonQuery();
+            if (command.ExecuteNonQuery() == 1 && firstKingdomId >= 0L &&
+                secondKingdomId >= 0L)
+                AW3HistoryEventPublisher.PublishDiplomacy(pMarriageId,
+                    "DiplomaticMarriageEnd", "marriage_ended",
+                    firstKingdomId, secondKingdomId, endTime, SafeYear(),
+                    "", "ended", "");
             DiplomaticRelationModifierService.DeactivateSource(
                 "royal_marriage", pMarriageId);
         }

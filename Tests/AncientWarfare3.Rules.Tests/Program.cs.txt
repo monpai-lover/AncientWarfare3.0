@@ -1,5 +1,6 @@
 using AncientWarfare3.content;
 using AncientWarfare3.content.figures;
+using AncientWarfare3.api.history;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.naming;
@@ -9,6 +10,30 @@ using AncientWarfare3.core.presentation;
 using AncientWarfare3.core.performance;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
+
+if (args.Length == 1 && args[0] == "--history-api-contract")
+{
+    HistoryApiContractTests.Run();
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--history-api-cursor")
+{
+    HistoryApiCursorRulesTests.Run();
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--history-api-diplomacy-career")
+{
+    HistoryApiDiplomacyCareerTests.Run();
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--history-api-subscriptions")
+{
+    HistoryApiSubscriptionRulesTests.Run();
+    return;
+}
 
 if (args.Length == 1 && args[0] == "--legacy-deferred-work-removal")
 {

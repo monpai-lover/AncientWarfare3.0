@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.historyapi;
 using AncientWarfare3.ui;
 using AncientWarfare3.utils;
 
@@ -890,6 +891,10 @@ namespace AncientWarfare3.core.lineage
                         HistoryWriter.BuildYearPrefix(eventTime, context)),
                     ColumnVal.Create("SPEAKER_TITLE",
                         DiplomaticSenderTitle(context)));
+                AW3HistoryEventPublisher.PublishDiplomacy(eventId, pEventType,
+                    pair.FirstKingdomId, pair.SecondKingdomId, eventTime,
+                    SafeYear(), HistoryWriter.BuildYearPrefix(eventTime, context),
+                    "", pDetail);
                 TrimPair(pair);
             }
             catch (Exception exception)
@@ -937,6 +942,9 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("EVENT_TIME", eventTime),
                     ColumnVal.Create("YEAR_PREFIX", yearPrefix),
                     ColumnVal.Create("SPEAKER_TITLE", speakerTitle));
+                AW3HistoryEventPublisher.PublishDiplomacy(eventId, pEventType,
+                    pair.FirstKingdomId, pair.SecondKingdomId, eventTime,
+                    SafeYear(), yearPrefix, "", pDetail);
                 TrimPair(pair);
             }
             catch (Exception exception)

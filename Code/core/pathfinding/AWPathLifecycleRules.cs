@@ -209,6 +209,76 @@ namespace AncientWarfare3.core.pathfinding
         }
     }
 
+    /// <summary>
+    ///     搜索预算按工作类分档。
+    ///
+    ///     原来预算**只看距离**(<see cref="AWPathfindingConfig.ShortRangeTiles"/>
+    ///     以内 3000 节点,以外 12000,再撞上限还要追加 60000 的走廊回退),
+    ///     与请求的用途无关 —— 一个闲逛的平民和一支行军的军队拿到同一档。
+    ///
+    ///     实测一局里 26891 条路径中 25378 条(94%)是 Ambient,总展开 1333 万个
+    ///     节点、约每秒 70 万个,而同期帧率从 60 掉到 34~47、空闲余量
+    ///     (outside_map)从 16ms 掉到 4ms —— 帧被喂满了,倍速也就从 17x 掉到 10x。
+    ///
+    ///     Ambient 的语义是「随便找个地方溜达」:目的地本来就是随手挑的,搜不到
+    ///     换一个即可,失败的代价接近零。为它烧 12000 甚至 72000 个节点是纯浪费。
+    ///     所以这里只压 Ambient 一档,Operational / EssentialTravel 原样不动。
+    ///
+    ///     失败不会变成自旋:<c>AWPathMovementBridge.HandleFailure</c> 走
+    ///     RecoveryManager 的退避,重试不了就 ResetAfterTerminalFailure。
+    /// </summary>
+    internal static class AWPathSearchBudgetRules
+    {
+        /// <summary>闲逛的短程上限。24 格半径内够用,实测全类均值才 496。</summary>
+        internal const int AmbientMaximumNodesShort = 600;
+
+        /// <summary>
+        ///     闲逛的远程上限。超过这个数还没连通,说明这条路绕得离谱 ——
+        ///     对「随便走走」来说换个目的地比走通它划算得多。
+        /// </summary>
+        internal const int AmbientMaximumNodesLong = 1500;
+
+        internal static int ResolveMaximumNodes(AWPathWorkClass pWorkClass,
+            bool pLongRange, int pConfiguredLimit)
+        {
+            if (pWorkClass != AWPathWorkClass.Ambient) return pConfiguredLimit;
+            int ambient = pLongRange
+                ? AmbientMaximumNodesLong
+                : AmbientMaximumNodesShort;
+            // 配置本身比这还小的话(测试或自定义配置)以配置为准,只降不升。
+            return Math.Min(pConfiguredLimit, ambient);
+        }
+
+        /// <summary>
+        ///     撞上限后的走廊回退最贵(默认 60000,军队配置下更高)。闲逛不配。
+        /// </summary>
+        internal static bool AllowsFallbackCorridor(
+            AWPathWorkClass pWorkClass)
+        {
+            return pWorkClass != AWPathWorkClass.Ambient;
+        }
+
+        /// <summary>
+        ///     每格标签上限。这里**不再**按工作类下调 —— 试过,是负优化。
+        ///
+        ///     搜索是多标签(Pareto 支配)A*:一个格子最多保留
+        ///     <see cref="AWPathfindingConfig.MaxLabelsPerTile"/> 个互不支配的
+        ///     状态。直觉上闲逛不需要在体力/风险维度上取最优,把它降到 1 应该
+        ///     更省。实测相反:三局对照下,降到 1 之后倍速从 19.80x 掉到 12.79x,
+        ///     ambient 每条路径的展开数反而从 345 涨到 411~438。
+        ///
+        ///     原因是单标签没有支配剪枝可用:一个格子被更优状态替换之后必须
+        ///     **重新展开**,重复展开的开销超过了多保留三个标签省下的。
+        ///
+        ///     保留这个方法是为了把这条结论钉在代码里,别再试第二次。
+        /// </summary>
+        internal static int ResolveMaximumLabelsPerTile(
+            AWPathWorkClass pWorkClass, int pConfigured)
+        {
+            return pConfigured;
+        }
+    }
+
     public sealed class AWLatestPathSlotRules
     {
         private bool _queued;

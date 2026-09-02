@@ -1,0 +1,89 @@
+using System;
+using AncientWarfare3.api.history;
+using AncientWarfare3.core.historyapi;
+
+internal static class HistoryApiCursorRulesTests
+{
+    public static void Run()
+    {
+        CursorUsesStableChronologicalOrdering();
+        CursorRoundTripsInvariantly();
+        MalformedCursorIsRejected();
+        MapperUsesSafeDefaultsForNullValues();
+        Console.WriteLine("History API cursor rules passed.");
+    }
+
+    private static void CursorUsesStableChronologicalOrdering()
+    {
+        var first = new AW3HistoryCursorKey(10d, "biography", "PersonBiography", 4L);
+        var second = new AW3HistoryCursorKey(10d, "chronicle", "KingdomHistory", 1L);
+        var third = new AW3HistoryCursorKey(10d, "chronicle", "KingdomHistory", 2L);
+
+        True(AW3HistoryCursorRules.Compare(first, second) < 0,
+            "domain is the second cursor ordering component");
+        True(AW3HistoryCursorRules.Compare(second, third) < 0,
+            "record id is the final cursor ordering component");
+    }
+
+    private static void CursorRoundTripsInvariantly()
+    {
+        var original = new AW3HistoryCursorKey(12.5d, "chronicle", "CityHistory", 99L);
+        string encoded = AW3HistoryCursorRules.Encode(original);
+
+        True(AW3HistoryCursorRules.TryDecode(encoded, out AW3HistoryCursorKey decoded),
+            "valid cursor decodes");
+        Equal(original.WorldTime, decoded.WorldTime, "cursor time round trip");
+        Equal(original.Domain, decoded.Domain, "cursor domain round trip");
+        Equal(original.Source, decoded.Source, "cursor source round trip");
+        Equal(original.RecordId, decoded.RecordId, "cursor id round trip");
+    }
+
+    private static void MalformedCursorIsRejected()
+    {
+        AW3HistoryCursorKey ignored;
+        True(!AW3HistoryCursorRules.TryDecode("", out ignored),
+            "empty cursor is rejected");
+        True(!AW3HistoryCursorRules.TryDecode("not-base64", out ignored),
+            "invalid base64 is rejected");
+        True(!AW3HistoryCursorRules.TryDecode(
+                AW3HistoryCursorRules.Encode(new AW3HistoryCursorKey(
+                    double.NaN, "chronicle", "KingdomHistory", 1L)),
+                out ignored), "non-finite cursor time is rejected");
+    }
+
+    private static void MapperUsesSafeDefaultsForNullValues()
+    {
+        var row = new AW3HistoryRow
+        {
+            RecordId = -1L,
+            Domain = null,
+            Source = null,
+            ProjectionKeyText = null,
+            EventType = null,
+            WorldTime = double.NaN,
+            YearText = null,
+            SubjectName = null,
+            Content = null,
+            Category = null
+        };
+        AW3HistoryEvent item = AW3HistoryDtoMapper.ToEvent(row);
+
+        Equal("", item.Domain, "null domain maps to empty text");
+        Equal("", item.Source, "null source maps to empty text");
+        Equal("", item.ProjectionKeyText, "null projection maps to empty text");
+        Equal(-1d, item.WorldTime, "invalid time maps to no time");
+        Equal(-1L, item.SubjectId, "missing subject uses sentinel id");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!object.Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                expected + ", got " + actual);
+    }
+}
