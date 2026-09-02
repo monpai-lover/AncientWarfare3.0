@@ -5,14 +5,14 @@
                          "PivotX":  4,
                          "PivotY":  6,
                          "RectX":  0,
-                         "RectY":  -2
+                         "RectY":  -3
                      },
                      {
                          "Path":  "walk_1_head.png",
                          "PivotX":  4,
                          "PivotY":  8,
                          "RectX":  0,
-                         "RectY":  0
+                         "RectY":  -2
                      },
                      {
                          "Path":  "walk_2_head.png",
@@ -26,21 +26,21 @@
                          "PivotX":  4,
                          "PivotY":  6,
                          "RectX":  0,
-                         "RectY":  -2
+                         "RectY":  -4
                      },
                      {
                          "Path":  "swim_0_head.png",
                          "PivotX":  4,
                          "PivotY":  6,
                          "RectX":  0,
-                         "RectY":  -6
+                         "RectY":  -5
                      },
                      {
                          "Path":  "swim_1_head.png",
                          "PivotX":  4,
                          "PivotY":  8,
                          "RectX":  0,
-                         "RectY":  -5
+                         "RectY":  -6
                      },
                      {
                          "Path":  "swim_2_head.png",
@@ -54,7 +54,7 @@
                          "PivotX":  4,
                          "PivotY":  6,
                          "RectX":  0,
-                         "RectY":  -5
+                         "RectY":  -6
                      },
                      {
                          "Path":  "walk_0_item.png",
