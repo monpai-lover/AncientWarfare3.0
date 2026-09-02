@@ -50,11 +50,12 @@ namespace AncientWarfare3.core.presentation
         public const float ItemAnchorOffsetY = -2f;
 
         /// <summary>
-        ///     只有夏人国王走高分辨率身体,其余夏人单位保持原分辨率。
+        ///     只有成年夏人国王走高分辨率身体,其余单位保持原分辨率。
         /// </summary>
-        public static bool UsesHighResolutionBody(string pAssetId, bool pIsKing)
+        public static bool UsesHighResolutionBody(string pAssetId, bool pIsKing,
+            bool pIsBaby)
         {
-            return pIsKing && string.Equals(pAssetId, XiaRace.ID,
+            return pIsKing && !pIsBaby && string.Equals(pAssetId, XiaRace.ID,
                 StringComparison.Ordinal);
         }
 

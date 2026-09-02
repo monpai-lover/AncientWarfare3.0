@@ -1,0 +1,7 @@
+namespace AncientWarfare3.content
+{
+    internal static class XiaRace
+    {
+        public const string ID = "Xia";
+    }
+}

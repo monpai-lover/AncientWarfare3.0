@@ -40,7 +40,7 @@ namespace AncientWarfare3.patch
             if (__instance == null || __instance._died) return;
             ActorAvatarData data = __instance.getData();
             if (!XiaKingScaleRules.UsesHighResolutionBody(data?.asset?.id,
-                    data?.is_king ?? false)) return;
+                    data?.is_king ?? false, !(data?.is_adult ?? true))) return;
 
             float scale = XiaKingScaleRules.ResolveAvatarScale(
                 data.asset.inspect_avatar_scale, __instance.avatarSize);
@@ -83,7 +83,7 @@ namespace AncientWarfare3.patch
 
             ActorAvatarData data = __instance.getData();
             if (!XiaKingScaleRules.UsesHighResolutionBody(data?.asset?.id,
-                    data?.is_king ?? false)) return;
+                    data?.is_king ?? false, !(data?.is_adult ?? true))) return;
 
             RectTransform rt = pImage.rectTransform;
             Vector2 pos = rt.anchoredPosition;

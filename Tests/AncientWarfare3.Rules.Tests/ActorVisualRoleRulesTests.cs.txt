@@ -55,6 +55,19 @@ internal static class ActorVisualRoleRulesTests
             ActorVisualRoleRules.ShouldRenderCustomHead(pIsBaby: false),
             "adults can render custom map heads");
 
+        Equal(true,
+            XiaKingScaleRules.UsesHighResolutionBody("Xia",
+                pIsKing: true, pIsBaby: false),
+            "adult Xia kings use high-resolution avatar scaling");
+        Equal(false,
+            XiaKingScaleRules.UsesHighResolutionBody("Xia",
+                pIsKing: true, pIsBaby: true),
+            "baby Xia kings keep normal avatar scaling");
+        Equal(false,
+            XiaKingScaleRules.UsesHighResolutionBody("Human",
+                pIsKing: true, pIsBaby: false),
+            "non-Xia kings keep normal avatar scaling");
+
         Equal(ActorVisualRole.Warrior,
             ActorVisualRoleRules.ResolveMilitaryGovernorateRole(
                 pProjectionActive: true, pActorAlive: true,
