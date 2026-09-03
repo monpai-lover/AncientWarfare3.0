@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.naming;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.court
@@ -320,15 +321,19 @@ namespace AncientWarfare3.core.court
                         "power_create", out long fromRegionId);
                     int year = SafeYear();
                     long id = Math.Max(1L, _store.NextRegionId++);
+                    string regionName = ResolveCreatedRegionNameLocked(pCity,
+                        out string stateId, out string commanderyId);
                     var region = new DeJureRegion
                     {
                         RegionId = id,
-                        RegionName = RegionalGovernmentRules.RegionName(
-                            ResolveCountyNameForPresentation(pCity), "州"),
+                        RegionName = regionName,
+                        HistoricalStateId = stateId,
+                        HistoricalCommanderyId = commanderyId,
                         SeatCityId = pCity.data.id,
                         SeatLocked = true,
-                        RegionNameSource =
-                            DeJureHistoricalProfileRules.LegacyPreserved,
+                        RegionNameSource = stateId.Length > 0
+                            ? DeJureHistoricalProfileRules.HistoricalDefault
+                            : DeJureHistoricalProfileRules.LegacyPreserved,
                         CreatedYear = year,
                         CreatedByKind = pReason ?? "power_create",
                         CreatedByKingdomId = pCity.kingdom?.data?.id ?? -1L,
@@ -856,15 +861,19 @@ namespace AncientWarfare3.core.court
             if (!DeJureRegionRetirementRules.ShouldAutoCreateCapitalSeat(
                     hasCurrentRegion: false, explicitlyRemoved)) return;
             long id = Math.Max(1L, _store.NextRegionId++);
+            string capitalRegionName = ResolveCreatedRegionNameLocked(capital,
+                out string capitalStateId, out string capitalCommanderyId);
             var region = new DeJureRegion
             {
                 RegionId = id,
-                RegionName = RegionalGovernmentRules.RegionName(
-                    ResolveCountyNameForPresentation(capital), "州"),
+                RegionName = capitalRegionName,
+                HistoricalStateId = capitalStateId,
+                HistoricalCommanderyId = capitalCommanderyId,
                 SeatCityId = capital.data.id,
                 SeatLocked = true,
-                RegionNameSource =
-                    DeJureHistoricalProfileRules.LegacyPreserved,
+                RegionNameSource = capitalStateId.Length > 0
+                    ? DeJureHistoricalProfileRules.HistoricalDefault
+                    : DeJureHistoricalProfileRules.LegacyPreserved,
                 CreatedYear = SafeYear(),
                 CreatedByKind = pReason ?? "capital_region_repaired",
                 CreatedByKingdomId = pKingdom.id,
@@ -1282,6 +1291,77 @@ namespace AncientWarfare3.core.court
                 XiaHistoricalDeJureCatalogService.Current,
                 new[] { pCity?.data?.name ?? string.Empty },
                 StableHistoricalSelector(pCity?.data?.id ?? 0L));
+        }
+
+        /// <summary>
+        ///     新建 region 的州名。开启「历史州郡县」时优先按成员城市名去
+        ///     历史目录里对，对上就用真正的州名（如「扬州」），而不是把城市名
+        ///     拼个「州」字（「晋江」→「晋江州」）。
+        ///
+        ///     对不上时**不能留空**:城市名多半是随机生成器产的（「晋江」就是），
+        ///     几乎撞不上历史县名。留空会让 HistoricalStateId 一直是空,而
+        ///     DeJureNewCityAssignmentService.ApplyHistoricalCityName 又要靠
+        ///     这个 id 才能给城市取历史名 —— 两边互相等,谁也起不来。
+        ///     所以这里按稳定种子直接分配一个尚未被占用的历史州,把链条接上。
+        /// </summary>
+        private static string ResolveCreatedRegionNameLocked(City pCity,
+            out string pStateId, out string pCommanderyId)
+        {
+            pStateId = string.Empty;
+            pCommanderyId = string.Empty;
+            string fallback = RegionalGovernmentRules.RegionName(
+                ResolveCountyNameForPresentation(pCity), "州");
+            if (!AWPerformanceSettings.EnableHistoricalDeJureCityNames)
+                return fallback;
+            try
+            {
+                XiaHistoricalDeJureProfile profile =
+                    ResolveHistoricalProfileLocked(pCity);
+                if (!string.IsNullOrWhiteSpace(profile.StateName))
+                {
+                    pStateId = profile.StateId;
+                    pCommanderyId = profile.CommanderyId;
+                    return profile.StateName;
+                }
+
+                XiaHistoricalStateDefinition assigned =
+                    SelectUnusedHistoricalStateLocked(pCity);
+                if (assigned == null) return fallback;
+                pStateId = assigned.Id;
+                return assigned.Name;
+            }
+            catch { return fallback; }
+        }
+
+        /// <summary>
+        ///     挑一个当前没有任何 region 占用的历史州。全被占完就返回 null,
+        ///     调用方退回拼接名 —— 重复的州名比拼接名更糟。
+        /// </summary>
+        private static XiaHistoricalStateDefinition
+            SelectUnusedHistoricalStateLocked(City pCity)
+        {
+            XiaHistoricalDeJureCatalog catalog =
+                XiaHistoricalDeJureCatalogService.Current;
+            if (catalog == null) return null;
+            var used = new HashSet<string>(StringComparer.Ordinal);
+            foreach (DeJureRegion existing in _store?.Regions ??
+                         new List<DeJureRegion>())
+            {
+                if (existing == null || !existing.Active) continue;
+                if (!string.IsNullOrWhiteSpace(existing.HistoricalStateId))
+                    used.Add(existing.HistoricalStateId.Trim());
+            }
+
+            XiaHistoricalStateDefinition[] available = catalog.States
+                .Where(p => p != null && p.Id.Length > 0 &&
+                            p.Name.Length > 0 && !used.Contains(p.Id))
+                .OrderBy(p => p.Id, StringComparer.Ordinal).ToArray();
+            if (available.Length == 0) return null;
+            int selector = StableHistoricalSelector(pCity?.data?.id ?? 0L);
+            int index = selector == int.MinValue
+                ? 0
+                : (int)((uint)selector % (uint)available.Length);
+            return available[index];
         }
 
         private static void MigrateHistoricalMetadataLocked()
