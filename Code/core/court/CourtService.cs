@@ -748,11 +748,22 @@ namespace AncientWarfare3.core.court
             if (!KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom)) return;
             if (!LineageArchiveManager.Instance.IsOperational) return;
             ChronicleEvents.EnsureCurrentRulerRecorded(pKingdom);
-            CourtInstitutionService.Refresh(pKingdom, pRecordHistory: true);
+            pKingdom.data.get(LineageKeys.COURT_INSTITUTION,
+                out string institutionBefore, "");
+            string institutionAfter = CourtInstitutionService.Refresh(
+                pKingdom, pRecordHistory: true);
+            // 改制当年必须立刻走一次完整刷新。Refresh 只改
+            // COURT_INSTITUTION/COURT_TIER 两个字段,不碰在任官员;而清退过时
+            // 官职的 ValidateOfficers 在下面那道 5 年节流的**后面**。
+            // 不破这道闸的话,东周→汉制之后旧的司马、司徒最长会继续挂 5 年,
+            // 同时新制度的官职空着没人补。
+            bool institutionReformed = !string.Equals(institutionBefore,
+                institutionAfter, StringComparison.Ordinal);
 
             int year = Date.getCurrentYear();
             pKingdom.data.get(LineageKeys.COURT_LAST_REFRESH_YEAR, out int lastYear, -1);
-            if (!CourtRules.ShouldRefreshCourt(year, lastYear,
+            if (!institutionReformed &&
+                !CourtRules.ShouldRefreshCourt(year, lastYear,
                     CourtRules.DefaultRefreshIntervalYears)) return;
             pKingdom.data.set(LineageKeys.COURT_LAST_REFRESH_YEAR, year);
 
@@ -852,6 +863,12 @@ namespace AncientWarfare3.core.court
             var tierOffices = new HashSet<string>(
                 CentralOfficeIdsForCurrentProfile(pKingdom),
                 StringComparer.Ordinal);
+            // 军事层有自己的一套官职(EnsureMinimumCourt 补缺时按
+            // MilitaryOfficeIdsForCurrentProfile 单独填),改制后同样会留下
+            // 不属于新制度的旧官,所以清退判断也要认这一层。
+            var militaryOffices = new HashSet<string>(
+                MilitaryOfficeIdsForCurrentProfile(pKingdom),
+                StringComparer.Ordinal);
             foreach (Actor actor in RosterOrSafeUnits(pKingdom, pRoster))
             {
                 actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
@@ -879,8 +896,13 @@ namespace AncientWarfare3.core.court
 
                 // 改制后清退不属于当前层级的中央官(旧三公九卿官在升三省六部后退场)。
                 actor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
-                if (layer == CourtOfficeLayer.Central && tierOffices.Count > 0 &&
-                    !string.IsNullOrEmpty(office) && !tierOffices.Contains(office))
+                bool centralObsolete = layer == CourtOfficeLayer.Central &&
+                    tierOffices.Count > 0 && !string.IsNullOrEmpty(office) &&
+                    !tierOffices.Contains(office);
+                bool militaryObsolete = layer == CourtOfficeLayer.Military &&
+                    militaryOffices.Count > 0 && !string.IsNullOrEmpty(office) &&
+                    !militaryOffices.Contains(office);
+                if (centralObsolete || militaryObsolete)
                 {
                     HistoricalSchoolAffiliationSnapshot affiliation =
                         HistoricalAffiliationService.Get(actor.data.id);
