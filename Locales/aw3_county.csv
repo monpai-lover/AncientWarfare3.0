@@ -20,3 +20,21 @@ aw_county_rename_success,县名已更新,County name updated,縣名已更新
 aw_county_restore_success,已恢复历史县名,Historical county name restored,已恢復歷史縣名
 aw_county_rename_map_tip,修改当前选中县的名称,Rename the selected county,修改當前選中縣的名稱
 aw_county_rename_card_tip,修改该县的名称,Rename this county,修改該縣的名稱
+aw_city_state_name_city,城市名,City name,城市名
+aw_city_state_name_state,州名,State name,州名
+aw_city_state_rename_title,城市改名,Rename City,城市改名
+aw_city_state_rename_city_label,城市名,City name,城市名
+aw_city_state_rename_state_label,州名,State name,州名
+aw_city_state_rename_city_placeholder,请输入城市名,Enter city name,請輸入城市名
+aw_city_state_rename_state_placeholder,请输入州名,Enter state name,請輸入州名
+aw_city_state_rename_confirm,确认,Confirm,確認
+aw_city_state_rename_cancel,取消,Cancel,取消
+aw_city_state_rename_empty_city,请输入城市名,Enter a city name,請輸入城市名
+aw_city_state_rename_empty_state,请输入州名,Enter a state name,請輸入州名
+aw_city_state_rename_inactive,城市已不存在,City no longer exists,城市已不存在
+aw_city_state_rename_unauthorized,该城市不属于此政权,City does not belong to this realm,該城市不屬於此政權
+aw_city_state_rename_failed,改名失败,Rename failed,改名失敗
+aw_city_state_rename_success,改名成功,Rename succeeded,改名成功
+aw_city_state_rename_pending,正在改名...,Applying rename...,正在改名...
+aw_city_state_rename_entry,城市改名,Rename City,城市改名
+aw_open_city_state_rename,修改城市名与州名,Edit city and state names,修改城市名與州名

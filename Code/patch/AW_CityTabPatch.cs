@@ -51,62 +51,12 @@ namespace AncientWarfare3.patch
                     AncientWarfare3.ui.windows.CourtWindow.OpenCity(
                         kingdomId, cityId));
 
-            Transform existingRename = rail.Find(RENAME_BTN_NAME);
-            Button rename = existingRename != null
-                ? existingRename.GetComponent<Button>()
-                : BuildRenameButton(rail);
-            if (existingRename != null)
-                existingRename.gameObject.SetActive(kingdomId >= 0);
-            rename.gameObject.SetActive(kingdomId >= 0);
-            rename.onClick.RemoveAllListeners();
-            if (kingdomId >= 0)
-                rename.onClick.AddListener(() =>
-                    AncientWarfare3.ui.windows.CityStateRenameWindow.Open(
-                        cityId));
-        }
-
-        private static Button BuildRenameButton(Transform pRail)
-        {
-            var obj = new GameObject(RENAME_BTN_NAME,
-                typeof(RectTransform), typeof(Image), typeof(Button),
-                typeof(TipButton));
-            obj.transform.SetParent(pRail, false);
-            RectTransform rect = obj.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(SIZE, SIZE);
-            rect.localScale = Vector3.one;
-
-            Image background = obj.GetComponent<Image>();
-            background.sprite = SpriteTextureLoader.getSprite(
-                "ui/special/button");
-            background.type = Image.Type.Sliced;
-
-            var iconObject = new GameObject("Icon", typeof(RectTransform),
-                typeof(Image));
-            iconObject.transform.SetParent(obj.transform, false);
-            RectTransform iconRect =
-                iconObject.GetComponent<RectTransform>();
-            iconRect.anchorMin = Vector2.zero;
-            iconRect.anchorMax = Vector2.one;
-            iconRect.sizeDelta = new Vector2(-8f, -8f);
-            iconRect.anchoredPosition = Vector2.zero;
-            Image icon = iconObject.GetComponent<Image>();
-            icon.sprite = SpriteTextureLoader.getSprite(
-                              "ui/icons/iconRename") ??
-                          SpriteTextureLoader.getSprite(
-                              "ui/icons/iconDocument") ??
-                          SpriteTextureLoader.getSprite(
-                              "ui/icons/iconCity");
-            icon.preserveAspect = true;
-
-            TipButton tip = obj.GetComponent<TipButton>();
-            tip.type = "normal";
-            tip.hoverAction = () => Tooltip.show(obj, "normal",
-                new TooltipData
-                {
-                    tip_name = "aw_city_state_rename_entry",
-                    tip_description = "aw_open_city_state_rename"
-                });
-            return obj.GetComponent<Button>();
+            // 旧的重命名弹窗入口已移除：改名改走城市名横幅上的双输入框
+            // (AW_CityStateNamePatch)。这里把可能残留的旧按钮实例隐藏掉，
+            // 否则上一版部署留下的对象会一直挂在栏里且点了没反应。
+            Transform staleRename = rail.Find(RENAME_BTN_NAME);
+            if (staleRename != null)
+                staleRename.gameObject.SetActive(false);
         }
 
         private static Button BuildButton(Transform pRail)
