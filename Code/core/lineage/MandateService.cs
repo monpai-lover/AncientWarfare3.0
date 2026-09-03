@@ -1655,7 +1655,7 @@ namespace AncientWarfare3.core.lineage
                         City city = FindCity(cityId);
                         if (city?.data == null || city.isRekt() ||
                             PeasantRebelBanditStrongholdService.IsStrongholdCity(
-                                city) || city.kingdom != formerOwner) continue;
+                                city) || city.kingdom == victor) continue;
                         city.joinAnotherKingdom(victor);
                     }
                     MarkCapitalRingTransferred(pWar, formerOwner.id);
