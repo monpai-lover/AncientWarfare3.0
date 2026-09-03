@@ -1,0 +1,49 @@
+using System;
+using AncientWarfare3.content.figures;
+using AncientWarfare3.core.lineage;
+
+internal static class HistoricalFigureCardDrawRulesTests
+{
+    public static void Run()
+    {
+        Equal(HistoricalFigureCardRarity.Gold,
+            HistoricalFigureCardDrawService.RarityForRoll(0), "zero is gold");
+        Equal(HistoricalFigureCardRarity.Red,
+            HistoricalFigureCardDrawService.RarityForRoll(26), "26 is red");
+        Equal(HistoricalFigureCardRarity.Pink,
+            HistoricalFigureCardDrawService.RarityForRoll(90), "90 is pink");
+        Equal(HistoricalFigureCardRarity.Purple,
+            HistoricalFigureCardDrawService.RarityForRoll(410), "410 is purple");
+        Equal(HistoricalFigureCardRarity.Blue,
+            HistoricalFigureCardDrawService.RarityForRoll(2008), "2008 is blue");
+
+        var result = HistoricalFigureCardDrawService.BuildReveal(
+            HistoricalFigureCardCatalog.All, new FixedRandom(2008, 0, 1));
+        Equal(50, result.RollingCards.Count, "reveal has fifty cards");
+        Equal(42, result.WinnerIndex, "winner is centered at index 42");
+        Equal(result.Winner.CardId, result.RollingCards[result.WinnerIndex].CardId,
+            "center card is the winner");
+        Equal(result.Winner.CardId,
+            HistoricalFigureCardDrawService.Skip(result).Winner.CardId,
+            "skip preserves the stored winner");
+    }
+
+    private sealed class FixedRandom : IHistoricalFigureCardRandom
+    {
+        private readonly int[] _values;
+        private int _index;
+        public FixedRandom(params int[] values) { _values = values; }
+        public int Next(int maximumExclusive)
+        {
+            int value = _values[Math.Min(_index++, _values.Length - 1)];
+            return value % maximumExclusive;
+        }
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected=" + expected +
+                                                ", actual=" + actual);
+    }
+}

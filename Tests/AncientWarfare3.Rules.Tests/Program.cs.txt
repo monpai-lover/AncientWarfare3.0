@@ -49,6 +49,13 @@ if (args.Length == 1 && args[0] == "--historical-figure-card-collection")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--historical-figure-card-draw")
+{
+    HistoricalFigureCardDrawRulesTests.Run();
+    Console.WriteLine("Historical figure card draw rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--city-state-rename-rules")
 {
     CityStateRenameRulesTests.Run();
