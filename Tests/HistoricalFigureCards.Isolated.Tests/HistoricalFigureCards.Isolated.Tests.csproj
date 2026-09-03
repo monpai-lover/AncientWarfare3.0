@@ -11,6 +11,16 @@
     <Compile Include="..\..\Code\content\figures\HistoricalFigureDef.cs" Link="Production\HistoricalFigureDef.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureCardModels.cs" Link="Production\HistoricalFigureCardModels.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureCardCatalog.cs" Link="Production\HistoricalFigureCardCatalog.cs" />
+    <Compile Include="..\..\Code\core\lineage\HistoricalFigureCardCollectionStore.cs" Link="Production\HistoricalFigureCardCollectionStore.cs" />
     <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardCatalogRulesTests.cs.txt" Link="HistoricalFigureCardCatalogRulesTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardCollectionRulesTests.cs.txt" Link="HistoricalFigureCardCollectionRulesTests.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
   </ItemGroup>
 </Project>

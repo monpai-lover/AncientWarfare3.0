@@ -1,0 +1,54 @@
+using System;
+using System.IO;
+using AncientWarfare3.core.lineage;
+
+internal static class HistoricalFigureCardCollectionRulesTests
+{
+    public static void Run()
+    {
+        string root = Path.Combine(Path.GetTempPath(),
+            "aw3-card-store-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string path = Path.Combine(root, "historical_figure_cards.json");
+        try
+        {
+            var store = new HistoricalFigureCardCollectionStore(path);
+            Equal(0, store.GetOwnedCount("qin_shihuang"), "empty store starts empty");
+            True(store.RecordDraw("draw-1", "qin_shihuang", "gold",
+                "2026-09-04T00:00:00Z"), "first draw commits");
+            True(store.RecordDraw("draw-2", "qin_shihuang", "gold",
+                "2026-09-04T00:00:01Z"), "duplicate draw commits");
+            Equal(2, store.GetOwnedCount("qin_shihuang"),
+                "duplicate draws increment owned count");
+            Equal("draw-2", store.LastDraw.DrawId, "last draw is retained");
+
+            var reloaded = new HistoricalFigureCardCollectionStore(path);
+            reloaded.Load();
+            Equal(2, reloaded.GetOwnedCount("qin_shihuang"),
+                "collection survives a new store instance");
+
+            File.WriteAllText(path, "not-json");
+            var damaged = new HistoricalFigureCardCollectionStore(path);
+            damaged.Load();
+            Equal(0, damaged.GetOwnedCount("qin_shihuang"),
+                "damaged file loads as an empty collection");
+            True(File.Exists(path + ".corrupt"), "damaged file is preserved");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected=" + expected +
+                                                ", actual=" + actual);
+    }
+}
