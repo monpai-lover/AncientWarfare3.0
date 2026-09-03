@@ -41,6 +41,13 @@ namespace AncientWarfare3.ui
                 SpriteTextureLoader.getSprite("ui/icons/iconClan"));
             Register(groups, AWLineageTabLayoutRules.Archives, overviewButton);
 
+            PowerButton historicalCardsButton = PowerButtonCreator.CreateSimpleButton(
+                "aw_historical_figure_cards_btn",
+                () => windows.HistoricalFigureDrawWindow.Open(),
+                SpriteTextureLoader.getSprite("ui/Icons/iconKings")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconKnowledge"));
+            Register(groups, AWLineageTabLayoutRules.Archives, historicalCardsButton);
+
             PowerButton rosterButton = PowerButtonCreator.CreateSimpleButton(
                 "aw_kingdom_roster_btn",
                 () => OpenRoster(),

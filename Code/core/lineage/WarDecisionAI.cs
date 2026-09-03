@@ -155,6 +155,37 @@ namespace AncientWarfare3.core.lineage
             AsyncAdmissionLeases.Clear();
         }
 
+        /// <summary>
+        ///     清剿战争用：按天命征服战争目标筛选最优选项。
+        ///     与 <c>PickBestImmediateOption</c> 的区别在于这里强制
+        ///     <c>preferMandateConquest</c>，并放宽 No-CB 限制。
+        /// </summary>
+        internal static WarTerritoryService.WarTargetOption PickMopUpOption(
+            Kingdom pMandate, Kingdom pTarget)
+        {
+            if (pMandate?.data == null || pTarget?.data == null) return null;
+            try { return PickBestImmediateOption(pMandate, pTarget, pAllowNoCb: true); }
+            catch { return null; }
+        }
+
+        /// <summary>
+        ///     清剿战争用：目标能否被新天命宣战（不在同一阵营、没有停战协议）。
+        /// </summary>
+        internal static bool CanBeMopUpTarget(Kingdom pMandate,
+            Kingdom pTarget)
+        {
+            if (pMandate?.data == null || pTarget?.data == null) return false;
+            try
+            {
+                if (WarTerritoryService.IsVassalDecisionOnlyTarget(pMandate,
+                        pTarget)) return false;
+                if (DiplomacyProposalService.HasActiveWarBlocker(pMandate,
+                        pTarget)) return false;
+                return true;
+            }
+            catch { return false; }
+        }
+
         private static long NextAsyncAdmissionLeaseId()
         {
             _nextAsyncAdmissionLeaseId = _nextAsyncAdmissionLeaseId ==

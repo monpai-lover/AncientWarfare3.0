@@ -61,7 +61,15 @@ if (args.Length == 1 && args[0] == "--historical-figure-card-deployment")
     HistoricalFigureCardDeploymentRulesTests.Run();
     HistoricalFigureCardParentageRulesTests.Run();
     HistoricalFigureCardSourceGuardTests.Run();
+    HistoricalFigureCardDeploymentServiceSourceGuardTests.Run();
     Console.WriteLine("Historical figure card deployment rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--historical-figure-card-acceptance")
+{
+    HistoricalFigureCardAcceptanceSourceGuardTests.Run();
+    Console.WriteLine("Historical figure card acceptance guards passed.");
     return;
 }
 

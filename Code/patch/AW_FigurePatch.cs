@@ -17,6 +17,7 @@ namespace AncientWarfare3.patch
         public static void NewCreature_Postfix(Actor __instance)
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
+            if (HistoricalFigureCardDeploymentService.IsActive) return;
             if (HistoricalSchoolActorSpawnCapture.IsTargetActor(__instance)) return;
             try
             {
@@ -32,6 +33,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(BabyMaker), nameof(BabyMaker.makeBaby))]
         public static void MakeBaby_Figure_Postfix(Actor __result)
         {
+            if (HistoricalFigureCardDeploymentService.IsActive) return;
             if (__result == null || __result.isBaby() || __result.isEgg()) return;
             HistoricalFigureService.TrySpawnOn(__result, "baby_final");
         }

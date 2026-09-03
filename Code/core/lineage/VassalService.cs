@@ -997,17 +997,26 @@ namespace AncientWarfare3.core.lineage
                     pSuzerain) ||
                 GetTributarySuzerain(pTributary) != pSuzerain ||
                 GetSuzerainId(pTributary) >= 0 ||
-                !KingdomTitleService.IsEmperor(pSuzerain) ||
                 pContractTier != VassalContractTierRules.Inner &&
                 pContractTier != VassalContractTierRules.Outer)
                 return false;
+            // 天命国有皇帝称号,直接通过;非天命国仍需皇帝称号。
+            bool suzerainIsMandate = MandateService.IsMandateKingdom(pSuzerain);
+            if (!suzerainIsMandate && !KingdomTitleService.IsEmperor(pSuzerain))
+            {
+                pReason = "suzerain_not_emperor";
+                return false;
+            }
             if (KingdomTitleService.GetTitle(pSuzerain) <=
                 KingdomTitleService.GetTitle(pTributary))
             {
                 pReason = "target_title_too_high";
                 return false;
             }
-            if (!KingdomAdjacency.AreDirectNeighbors(pTributary, pSuzerain))
+            // 天命国可以内附非直接毗邻的朝贡国（王朝所辖疆域可以跨越封国）；
+            // 非天命国仍要求地理上相邻。
+            if (!suzerainIsMandate &&
+                !KingdomAdjacency.AreDirectNeighbors(pTributary, pSuzerain))
             {
                 pReason = "not_adjacent";
                 return false;

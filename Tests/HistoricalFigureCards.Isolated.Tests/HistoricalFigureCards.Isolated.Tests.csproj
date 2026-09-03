@@ -8,6 +8,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="HistoricalFigureCardDeploymentServiceSourceGuardTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardAcceptanceSourceGuardTests.cs.txt" Link="HistoricalFigureCardAcceptanceSourceGuardTests.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureDef.cs" Link="Production\HistoricalFigureDef.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureCardModels.cs" Link="Production\HistoricalFigureCardModels.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureCardCatalog.cs" Link="Production\HistoricalFigureCardCatalog.cs" />

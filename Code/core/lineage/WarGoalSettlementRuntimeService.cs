@@ -40,6 +40,10 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool HasAffordableGoal(War pWar)
         {
+            // 天命战争的战争目标多半就是「拿下都城」。让它自动兑现等于
+            // 都城一破战争就结束,首都圈移交与小朝廷分裂全被掐掉。
+            if (MandateWarPeaceGuard.BlocksScoreAndGoalSettlement(pWar))
+                return false;
             if (DeJureWarGoalSettlementService.HasAffordableGoal(pWar))
                 return true;
             if (AW3MultiplayerReplicaScope.IsReplicaSession ||
@@ -58,6 +62,12 @@ namespace AncientWarfare3.core.lineage
         {
             pResult = new WarPeaceExecutionResult(false, -1,
                 "war_goal_bundle_incomplete");
+            if (MandateWarPeaceGuard.BlocksScoreAndGoalSettlement(pWar))
+            {
+                pResult = new WarPeaceExecutionResult(false, -1,
+                    MandateWarPeaceRules.SettlementBlockedReason);
+                return false;
+            }
             if (DeJureWarGoalSettlementService.TryExecuteImmediate(pWar,
                     out pResult)) return true;
             if (AW3MultiplayerReplicaScope.IsReplicaSession ||

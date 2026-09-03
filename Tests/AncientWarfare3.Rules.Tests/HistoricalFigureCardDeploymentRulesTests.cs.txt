@@ -20,6 +20,9 @@ internal static class HistoricalFigureCardDeploymentRulesTests
         Equal(false, HistoricalFigureCardDeploymentRules.CanDeploy(
             new HistoricalFigureCardDeploymentFacts(true, true, true, true, true,
                 true, "前汉")), "geographic prefix is rejected");
+        Equal(false, HistoricalFigureCardDeploymentRules.CanDeploy(
+            new HistoricalFigureCardDeploymentFacts(true, true, true, true, true,
+                false, "姹?", false)), "unowned card is rejected");
         True(HistoricalFigureCardDeploymentRules.TryBegin("deployment-1"),
             "first deployment starts");
         Equal(false, HistoricalFigureCardDeploymentRules.TryBegin("deployment-1"),

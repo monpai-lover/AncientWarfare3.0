@@ -43,6 +43,15 @@ namespace AncientWarfare3.core.lineage
             public long CurrentCityId = -1L;
             public int CitySelectionCursor;
             public int ActorScanCursor;
+            /// <summary>
+            ///     当前这座城**累计**扫过多少居民。判「这座城看完了没有」必须
+            ///     用累计数：单个工作项最多只看
+            ///     <see cref="TemporaryLevyRules.MaxCandidatesPerWorkItem"/>
+            ///     个人，拿这一批的数量去跟全城人口比，人口一超过批量就永远
+            ///     比不上，这座城于是永远不会被标记为看完，征兵泵就在它身上
+            ///     空转到天荒地老。
+            /// </summary>
+            public int CityScannedTotal;
 
             public PreparationRecruitmentPlan(long pKingdomId,
                 int pMonthKey)
@@ -1028,8 +1037,11 @@ namespace AncientWarfare3.core.lineage
                     out ArmyRecruitmentDisposition disposition,
                     out Army targetArmy))
             {
-                PersistPreparationRecruitmentPlan(kingdom, plan);
-                SchedulePreparationRecruitment(plan);
+                // 立营被拒时原样重排是纯自旋:游标一点没动,下一拍还是这座城、
+                // 还是同一个拒绝。改为把这座城记为已走过,轮到下一座 ——
+                // 这样一个月的准备一定在 cityCount 个工作项内收敛。
+                AdvancePreparationCity(kingdom, plan, city, emergencyActive,
+                    activeNotice);
                 return;
             }
 
@@ -1043,7 +1055,9 @@ namespace AncientWarfare3.core.lineage
                 living, targetStrength,
                 TemporaryLevyRules.MaxRecruitsPerWorkItem);
             var candidates = new List<Actor>(requested);
-            bool confirmedExhausted = false;
+            // 这一拍要不到人(立营被拒、或该营已满编)就没什么可从这座城里
+            // 再挖的了,直接当作走完 —— 否则扫描游标不动,又是一轮空转。
+            bool confirmedExhausted = requested <= 0;
             if (requested > 0)
                 CollectPreparationCandidates(kingdom, city, targetArmy,
                     requested, plan, candidates, out confirmedExhausted);
@@ -1063,15 +1077,42 @@ namespace AncientWarfare3.core.lineage
                 plan.VisitedCityIds.Add(city.id);
                 plan.CurrentCityId = -1L;
                 plan.ActorScanCursor = 0;
+                plan.CityScannedTotal = 0;
             }
             PersistPreparationRecruitmentPlan(kingdom, plan);
+            // 这两个原先写死成 true,上面刚算出来的实况反而没用上 ——
+            // 警戒/军情已经解除的那一拍还会再排一次工作项。
             if (TemporaryLevyRules.ShouldContinuePreparationMonth(
-                    emergencyActive: true, activeNotice: true,
+                    emergencyActive, activeNotice,
                     plan.VisitedCityIds.Count,
                     kingdom.cities?.Count ?? 0))
                 SchedulePreparationRecruitment(plan);
             else
                 CompletePreparationRecruitment(kingdom);
+        }
+
+        /// <summary>
+        ///     把当前这座城记为走过并推进到下一座。所有「这座城这一拍做不成」
+        ///     的出口都必须走这里 —— 不推进游标就重排工作项，等于拿延迟队列
+        ///     当自旋锁用。
+        /// </summary>
+        private static void AdvancePreparationCity(Kingdom pKingdom,
+            PreparationRecruitmentPlan pPlan, City pCity,
+            bool pEmergencyActive, bool pActiveNotice)
+        {
+            if (pKingdom?.data == null || pPlan == null) return;
+            if (pCity?.data != null) pPlan.VisitedCityIds.Add(pCity.id);
+            pPlan.CurrentCityId = -1L;
+            pPlan.ActorScanCursor = 0;
+            pPlan.CityScannedTotal = 0;
+            PersistPreparationRecruitmentPlan(pKingdom, pPlan);
+            if (TemporaryLevyRules.ShouldContinuePreparationMonth(
+                    pEmergencyActive, pActiveNotice,
+                    pPlan.VisitedCityIds.Count,
+                    pKingdom.cities?.Count ?? 0))
+                SchedulePreparationRecruitment(pPlan);
+            else
+                CompletePreparationRecruitment(pKingdom);
         }
 
         private static bool TrySelectPreparationCity(Kingdom pKingdom,
@@ -1288,7 +1329,20 @@ namespace AncientWarfare3.core.lineage
             if (TemporaryLevyRules.ShouldWaitForPreparationTargets(
                     activeNotice, preferredTargetsReady))
             {
-                ScheduleRecruitmentBatch(plan);
+                // 等著陆/准备目标就绪。这里游标没动,原样重排就是等一个
+                // 永远不会到来的下一拍?不是 —— 目标就绪与否由部署方推进,
+                // 但我们至少要**计数**,否则只要一直不就绪,这一拍就永远在
+                // 队列里重入,把 16 个工作项预算全耗在这一个无意义的等待上。
+                // 计一次数,等真就绪了还能继续干活;计数满了自然收掉。
+                plan.CompletedWorkItems++;
+                PersistRecruitmentPlan(kingdom, plan);
+                if (TemporaryLevyRules.ShouldRunRecruitmentWorkItem(
+                        MilitaryEmergencyService.HasAny(kingdom),
+                        plan.CompletedWorkItems, plan.ScannedCandidates,
+                        plan.RecruitedActors))
+                    ScheduleRecruitmentBatch(plan);
+                else
+                    RecruitmentPlans.Remove(pKingdomId);
                 return;
             }
 
@@ -1303,13 +1357,32 @@ namespace AncientWarfare3.core.lineage
             else
                 city = NextCursorCity(kingdom);
 
+            if (city?.data == null)
+            {
+                // 一座城都指不出来(没城或全被跳过):这一拍没有任何可推进的
+                // 状态,再排工作项就是空转。
+                RecruitmentPlans.Remove(pKingdomId);
+                return;
+            }
+
             bool establishmentReady = StandingArmyService.
                 RequestEstablishment(kingdom, city,
                     out ArmyRecruitmentDisposition disposition,
                     out Army establishmentArmy);
             if (!establishmentReady)
             {
-                ScheduleRecruitmentBatch(plan);
+                // 立营被拒原样重排是自旋:游标不动,下一拍还是这座城同一个拒绝。
+                // 记下进度继续下一座。
+                plan.ScannedCandidates = Math.Max(0, plan.ScannedCandidates);
+                plan.CompletedWorkItems++;
+                PersistRecruitmentPlan(kingdom, plan);
+                if (TemporaryLevyRules.ShouldRunRecruitmentWorkItem(
+                        MilitaryEmergencyService.HasAny(kingdom),
+                        plan.CompletedWorkItems, plan.ScannedCandidates,
+                        plan.RecruitedActors))
+                    ScheduleRecruitmentBatch(plan);
+                else
+                    RecruitmentPlans.Remove(pKingdomId);
                 return;
             }
             if (disposition == ArmyRecruitmentDisposition.Reject)
@@ -1976,8 +2049,12 @@ namespace AncientWarfare3.core.lineage
                     pCandidates.Add(actor);
             }
             pPlan.ActorScanCursor = cursor;
+            // 累计口径:一批最多 16 人,拿这一批去跟全城人口比,
+            // 只要城里超过 16 个人就永远判不出「看完了」。
+            pPlan.CityScannedTotal = Math.Max(0, pPlan.CityScannedTotal) +
+                                     scanned;
             pConfirmedExhausted = TemporaryLevyRules.IsPreparationScanExhausted(
-                scanned, count);
+                pPlan.CityScannedTotal, count);
             return scanned;
         }
 

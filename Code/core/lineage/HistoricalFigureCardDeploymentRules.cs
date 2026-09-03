@@ -9,7 +9,7 @@ namespace AncientWarfare3.core.lineage
         public HistoricalFigureCardDeploymentFacts(bool pHasCity,
             bool pCityIsLiving, bool pActorIsAdult, bool pHasKingdom,
             bool pArchiveAvailable, bool pTransactionActive,
-            string pHistoricalKingdomName)
+            string pHistoricalKingdomName, bool pCardOwned = true)
         {
             HasCity = pHasCity;
             CityIsLiving = pCityIsLiving;
@@ -18,6 +18,7 @@ namespace AncientWarfare3.core.lineage
             ArchiveAvailable = pArchiveAvailable;
             TransactionActive = pTransactionActive;
             HistoricalKingdomName = pHistoricalKingdomName ?? "";
+            CardOwned = pCardOwned;
         }
 
         public bool HasCity { get; }
@@ -27,6 +28,7 @@ namespace AncientWarfare3.core.lineage
         public bool ArchiveAvailable { get; }
         public bool TransactionActive { get; }
         public string HistoricalKingdomName { get; }
+        public bool CardOwned { get; }
     }
 
     public static class HistoricalFigureCardDeploymentRules
@@ -40,6 +42,7 @@ namespace AncientWarfare3.core.lineage
             if (pFacts == null || !pFacts.HasCity || !pFacts.CityIsLiving ||
                 !pFacts.ActorIsAdult || !pFacts.HasKingdom ||
                 !pFacts.ArchiveAvailable || pFacts.TransactionActive ||
+                !pFacts.CardOwned ||
                 string.IsNullOrWhiteSpace(pFacts.HistoricalKingdomName))
                 return false;
             return !HistoricalFigureCardCatalog.HasGeographicPrefix(

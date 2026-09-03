@@ -37,7 +37,7 @@ namespace AncientWarfare3.core.lineage
 
     /// <summary>
     /// Player-level card ownership. This file intentionally lives outside the
-    /// world save and outside FigureStateStore.
+    /// world save and outside the automatic historical spawn state.
     /// </summary>
     public sealed class HistoricalFigureCardCollectionStore
     {

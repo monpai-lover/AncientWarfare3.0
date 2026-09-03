@@ -112,6 +112,13 @@ namespace AncientWarfare3.content.figures
 
         public static bool IsValid => ValidationIssues.Count == 0;
 
+        public static HistoricalFigureCardDefinition Get(string pCardId)
+        {
+            if (string.IsNullOrWhiteSpace(pCardId)) return null;
+            return All.FirstOrDefault(p => p != null &&
+                string.Equals(p.CardId, pCardId.Trim(), StringComparison.Ordinal));
+        }
+
         public static IReadOnlyList<HistoricalFigureCardDefinition> SortForDisplay(
             IEnumerable<HistoricalFigureCardDefinition> pCards)
         {

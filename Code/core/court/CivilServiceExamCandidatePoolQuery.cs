@@ -45,6 +45,17 @@ namespace AncientWarfare3.core.court
                     pCareerTable, pInstitutionTable, pCandidateTable,
                     pSessionTable)) return result;
 
+            // 门第不再由 SQL 判定。旧的 CASE 表达式只看 STATUS/EVER_NOBLE_BLOOD/
+            // LINEAGE_ID，与 SocialStandingService 的宗族口径完全不同 —— 名单按
+            // 旧口径分桶取人、界面按新口径显示，两边对不上。这里退化为「不按门第
+            // 过滤」，由调用方取回全池后用同一个分类器分桶。
+            bool filterByOrigin = !string.IsNullOrEmpty(pSocialOrigin);
+            string originClause = filterByOrigin
+                ? "AND CASE WHEN A.STATUS='noble' THEN 'noble' " +
+                  "WHEN A.EVER_NOBLE_BLOOD=1 OR A.LINEAGE_ID>=0 " +
+                  "THEN 'declined_noble' ELSE 'commoner' END=@socialOrigin "
+                : "";
+
             try
             {
                 using var command = new SQLiteCommand(pDb);
@@ -70,10 +81,8 @@ namespace AncientWarfare3.core.court
                     "WHERE M.ACTIVE=1 AND M.START_YEAR<@year AND " +
                     "A.IS_ALIVE=1 AND A.SEX=0 AND " +
                     "IFNULL(A.STATUS,'')<>@slave AND " +
-                    "A.KINGDOM_ID=@kingdom AND CASE WHEN A.STATUS='noble' " +
-                    "THEN 'noble' WHEN A.EVER_NOBLE_BLOOD=1 OR " +
-                    "A.LINEAGE_ID>=0 THEN 'declined_noble' ELSE 'commoner' " +
-                    "END=@socialOrigin AND NOT EXISTS (SELECT 1 FROM " +
+                    "A.KINGDOM_ID=@kingdom " + originClause +
+                    "AND NOT EXISTS (SELECT 1 FROM " +
                     pOfficerTable + " SO WHERE SO.ACTOR_ID=M.ACTOR_ID " +
                     "AND SO.KINGDOM_ID=@kingdom AND SO.ACTIVE=1 AND " +
                     "SO.LAYER=@centralLayer AND SO.OFFICE_ID IN (" +
@@ -100,8 +109,9 @@ namespace AncientWarfare3.core.court
                 command.Parameters.AddWithValue("@year", pYear);
                 command.Parameters.AddWithValue("@slave",
                     LineageStatus.SLAVE);
-                command.Parameters.AddWithValue("@socialOrigin",
-                    pSocialOrigin ?? "commoner");
+                if (filterByOrigin)
+                    command.Parameters.AddWithValue("@socialOrigin",
+                        pSocialOrigin);
                 command.Parameters.AddWithValue("@centralLayer",
                     CourtOfficeLayer.Central);
                 command.Parameters.AddWithValue("@tribute",

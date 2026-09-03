@@ -14,9 +14,15 @@
 		<Compile Include="HistoricalFigureCardDrawRulesTests.cs.txt" />
 		<Compile Include="HistoricalFigureCardDeploymentRulesTests.cs.txt" />
 		<Compile Include="HistoricalFigureCardParentageRulesTests.cs.txt" />
-		<Compile Include="HistoricalFigureCardSourceGuardTests.cs.txt" />
+    <Compile Include="HistoricalFigureCardSourceGuardTests.cs.txt" />
+    <Compile Include="HistoricalFigureCardDeploymentServiceSourceGuardTests.cs.txt" />
+    <Compile Include="HistoricalFigureCardAcceptanceSourceGuardTests.cs.txt" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardModels.cs" Link="Production\HistoricalFigureCardModels.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardCatalog.cs" Link="Production\HistoricalFigureCardCatalog.cs" />
+		<Compile Include="..\..\Code\core\lineage\HistoricalFigureCardDrawService.cs" Link="Production\HistoricalFigureCardDrawService.cs" />
+		<Compile Include="..\..\Code\core\lineage\HistoricalFigureCardCollectionStore.cs" Link="Production\HistoricalFigureCardCollectionStore.cs" />
+		<Compile Include="..\..\Code\core\lineage\HistoricalFigureCardDeploymentRules.cs" Link="Production\HistoricalFigureCardDeploymentRules.cs" />
+		<Compile Include="..\..\Code\core\lineage\HistoricalFigureCardParentageService.cs" Link="Production\HistoricalFigureCardParentageService.cs" />
 		<Compile Include="HistoryApiContractTests.cs.txt" />
 		<Compile Include="HistoryApiCursorRulesTests.cs.txt" />
 		<Compile Include="HistoryApiDiplomacyCareerTests.cs.txt" />
