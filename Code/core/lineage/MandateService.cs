@@ -1222,68 +1222,65 @@ namespace AncientWarfare3.core.lineage
             _capitalRingCascadeActive = true;
             try
             {
-                // 找一场正在进行中的天命战争（或有参战方快照的战争）
-                // 里，记录 pCity 是参战方首都的条目。
-                foreach (War war in pOldKingdom.getWars())
+                // 判据是王国身上的开战快照,不是「还活着的战争」。
+                // 战争常常先判定结束、首都后落定,那时 getWars() 已经查不到
+                // 那场战争了 —— 早先按战争遍历,整段级联就这么被跳过。
+                pOldKingdom.data.get(
+                    LineageKeys.MANDATE_WAR_KINGDOM_CAPITAL_ID,
+                    out long stampedCapitalId, -1L);
+                if (stampedCapitalId < 0L ||
+                    stampedCapitalId != pCity.data.id) return;
+                if (!IsHostileCapitalConqueror(pOldKingdom, pNewKingdom))
+                    return;
+
+                var deJureCityIds = new List<long>();
+                if (DeJureRegionStore.TryGetForCity(pCity.id,
+                        out DeJureRegion region))
+                    deJureCityIds.AddRange(
+                        region.MemberCityIds ?? new List<long>());
+
+                var neighborIds = new List<long>();
+                foreach (City neighbor in pCity.neighbours_cities ??
+                         new System.Collections.Generic.HashSet<City>())
+                    if (neighbor?.data != null && !neighbor.isRekt() &&
+                        !PeasantRebelBanditStrongholdService
+                            .IsStrongholdCity(neighbor))
+                        neighborIds.Add(neighbor.id);
+
+                IReadOnlyList<long> transferIds =
+                    MandateCoreTransferRules.MergeCapitalTerritoryIds(
+                        new List<long>(), deJureCityIds, neighborIds,
+                        pCity.id);
+                int moved = 0;
+                foreach (long cityId in transferIds)
                 {
-                    if (war?.data == null || war.hasEnded()) continue;
-                    string type = GetWarType(war);
-                    bool mandateWar = type == WAR_TIANMING ||
-                                      type == WAR_TIANMING_REBEL;
-                    if (!mandateWar && !HasMandateWarParticipantSnapshot(war))
-                        continue;
-
-                    EnsureAllParticipantsRegistered(war);
-                    List<MandateWarParticipantCapital> participants =
-                        ReadMandateWarParticipants(war);
-                    foreach (MandateWarParticipantCapital participant in
-                             participants)
-                    {
-                        if (participant.KingdomId != pOldKingdom.id) continue;
-                        if (participant.CapitalCityId != pCity.data.id &&
-                            participant.CapitalCityId != pCity.id) continue;
-                        if (IsCapitalRingTransferred(war, pOldKingdom.id))
-                            break;
-                        if (!IsEnemyParticipant(war, participant, pNewKingdom))
-                            break;
-
-                        List<long> deJureCityIds = new List<long>();
-                        if (DeJureRegionStore.TryGetForCity(pCity.id,
-                                out DeJureRegion region))
-                            deJureCityIds.AddRange(
-                                region.MemberCityIds ?? new List<long>());
-
-                        var neighborIds = new List<long>();
-                        foreach (City neighbor in
-                                 pCity.neighbours_cities ??
-                                 new System.Collections.Generic.HashSet<City>())
-                            if (neighbor?.data != null && !neighbor.isRekt() &&
-                                !PeasantRebelBanditStrongholdService
-                                    .IsStrongholdCity(neighbor))
-                                neighborIds.Add(neighbor.id);
-
-                        IReadOnlyList<long> transferIds =
-                            MandateCoreTransferRules.MergeCapitalTerritoryIds(
-                                new List<long>(), deJureCityIds, neighborIds,
-                                pCity.id);
-                        foreach (long cityId in transferIds)
-                        {
-                            // 首都本身刚刚易主完毕,不再动它。
-                            if (cityId == pCity.data.id || cityId == pCity.id)
-                                continue;
-                            City other = FindCity(cityId);
-                            // 只收仍属于沦陷方的城:法理州里可能混有别国的城,
-                            // 那些不该因为邻国首都被打下来就易主。
-                            if (other?.data == null || other.isRekt() ||
-                                PeasantRebelBanditStrongholdService
-                                    .IsStrongholdCity(other) ||
-                                other.kingdom != pOldKingdom) continue;
-                            other.joinAnotherKingdom(pNewKingdom);
-                        }
-                        MarkCapitalRingTransferred(war, pOldKingdom.id);
-                        break;
-                    }
+                    // 首都本身刚刚易主完毕,不再动它。
+                    if (cityId == pCity.data.id) continue;
+                    City other = FindCity(cityId);
+                    // 只收仍属于沦陷方的城:法理州里可能混有别国的城,
+                    // 那些不该因为邻国首都被打下来就易主。
+                    if (other?.data == null || other.isRekt() ||
+                        PeasantRebelBanditStrongholdService
+                            .IsStrongholdCity(other) ||
+                        other.kingdom != pOldKingdom) continue;
+                    other.joinAnotherKingdom(pNewKingdom);
+                    moved++;
                 }
+
+                // 戳用完就摘,天然一次性。战争侧的已转标记继续维护,
+                // 让战末那条保底路径也认得这次已经处理过。
+                pOldKingdom.data.get(
+                    LineageKeys.MANDATE_WAR_KINGDOM_WAR_ID,
+                    out long stampedWarId, -1L);
+                War stampedWar = FindWar(stampedWarId);
+                if (stampedWar?.data != null)
+                    MarkCapitalRingTransferred(stampedWar, pOldKingdom.id);
+                ClearKingdomMandateWarStamp(pOldKingdom);
+                ModClass.LogInfo("[AW3] 天命首都沦陷: " +
+                    (pCity.data.name ?? "?") + " 归 " +
+                    (pNewKingdom.name ?? "?") + ", 随迁 " + moved + " 城");
+                RumpCourtSplitService.OnCapitalLost(pOldKingdom, pCity,
+                    pNewKingdom);
             }
             catch (Exception error)
             {
@@ -1833,6 +1830,45 @@ namespace AncientWarfare3.core.lineage
             entries.Add(prefix + capitalId);
             pWar.data.set(LineageKeys.MANDATE_WAR_PARTICIPANT_CAPITALS,
                 string.Join(";", entries.ToArray()));
+            StampKingdomMandateWar(pKingdom, pWar, capitalId, pDefender);
+        }
+
+        /// <summary>
+        ///     把开战快照同时盖在**王国**身上。
+        ///
+        ///     首都沦陷级联不能靠 <c>pKingdom.getWars()</c> 找那场战争 ——
+        ///     原版 <c>WarManager.getWars(Kingdom)</c> 只产出未结束的战争,
+        ///     而首都常常在战争判定结束之后才真正落定(先「战争结束了」,
+        ///     后「首都沦陷」)。那一刻遍历战争一无所获,级联整段跳过。
+        ///
+        ///     记的是**开战时**的首都:战末现取会取到迁都后的新都。
+        /// </summary>
+        private static void StampKingdomMandateWar(Kingdom pKingdom,
+            War pWar, long pCapitalId, bool pDefender)
+        {
+            if (pKingdom?.data == null || pWar?.data == null ||
+                pCapitalId < 0L) return;
+            // 已经有戳就不覆盖:同一个国可能同时卷进多场天命战争,
+            // 先记下的那场对应的才是它真正的开战首都。
+            pKingdom.data.get(LineageKeys.MANDATE_WAR_KINGDOM_CAPITAL_ID,
+                out long existing, -1L);
+            if (existing >= 0L) return;
+            pKingdom.data.set(LineageKeys.MANDATE_WAR_KINGDOM_CAPITAL_ID,
+                pCapitalId);
+            pKingdom.data.set(LineageKeys.MANDATE_WAR_KINGDOM_WAR_ID,
+                pWar.data.id);
+            pKingdom.data.set(LineageKeys.MANDATE_WAR_KINGDOM_IS_DEFENDER,
+                pDefender);
+        }
+
+        private static void ClearKingdomMandateWarStamp(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.removeLong(
+                LineageKeys.MANDATE_WAR_KINGDOM_CAPITAL_ID);
+            pKingdom.data.removeLong(LineageKeys.MANDATE_WAR_KINGDOM_WAR_ID);
+            pKingdom.data.removeBool(
+                LineageKeys.MANDATE_WAR_KINGDOM_IS_DEFENDER);
         }
 
         private static List<MandateWarParticipantCapital>
@@ -3263,6 +3299,56 @@ namespace AncientWarfare3.core.lineage
             foreach (Actor actor in World.world.units)
                 if (actor?.data != null && actor.data.id == pId) return actor;
             return null;
+        }
+
+        /// <summary>
+        ///     按 id 取战争，**包含已结束的**。首都沦陷常发生在战争判定结束
+        ///     之后，这里不能走 <c>Kingdom.getWars()</c>（它只产出未结束的）。
+        /// </summary>
+        private static War FindWar(long pId)
+        {
+            if (pId < 0L || World.world?.wars == null) return null;
+            try
+            {
+                foreach (War war in World.world.wars)
+                    if (war?.data != null && war.data.id == pId) return war;
+            }
+            catch { }
+            return null;
+        }
+
+        /// <summary>
+        ///     攻下首都的是不是敌对方。
+        ///
+        ///     开战快照仍能解析到那场战争时，走既有的阵营判定；解析不到
+        ///     （战争已被清理）就退回原版敌对关系 —— 刚打下人家首都的，
+        ///     不会是自己人。
+        /// </summary>
+        private static bool IsHostileCapitalConqueror(Kingdom pFallen,
+            Kingdom pConqueror)
+        {
+            if (pFallen?.data == null || pConqueror?.data == null ||
+                pFallen == pConqueror) return false;
+            pFallen.data.get(LineageKeys.MANDATE_WAR_KINGDOM_WAR_ID,
+                out long warId, -1L);
+            pFallen.data.get(LineageKeys.MANDATE_WAR_KINGDOM_CAPITAL_ID,
+                out long capitalId, -1L);
+            pFallen.data.get(LineageKeys.MANDATE_WAR_KINGDOM_IS_DEFENDER,
+                out bool isDefender, true);
+            War war = FindWar(warId);
+            if (war?.data != null)
+            {
+                var participant = new MandateWarParticipantCapital
+                {
+                    KingdomId = pFallen.id,
+                    CapitalCityId = capitalId,
+                    IsDefender = isDefender
+                };
+                if (IsEnemyParticipant(war, participant, pConqueror))
+                    return true;
+            }
+            try { return pConqueror.isEnemy(pFallen); }
+            catch { return false; }
         }
 
         private static City FindCity(long pId)

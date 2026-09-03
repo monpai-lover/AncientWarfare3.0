@@ -285,7 +285,12 @@ namespace AncientWarfare3.core.lineage
                 pActor.data.get(LineageKeys.LINEAGE_STATUS, out string status, LineageStatus.NONE);
                 if (status == LineageStatus.SLAVE) return "slave";
                 if (pActor.isWarrior()) return "warrior";
-                if (status == LineageStatus.NOBLE || ChronicleGate.IsNobleActor(pActor)) return "noble";
+                // 贵族只认当今王室宗族,与科举名单、人物面板同一判定。
+                // 早先是「谱系状态为贵族 或 有爵位」,而爵位随官职发,
+                // 于是史料里当过官的都被记成贵族。
+                if (core.court.SocialStandingService.Resolve(pActor) ==
+                    core.court.CivilServiceExamRules.NobleOrigin)
+                    return "noble";
                 if (status == LineageStatus.COMMON) return "common_lineage";
             }
             catch { }

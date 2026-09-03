@@ -2634,6 +2634,8 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_KINGDOM_ID, pKingdom.id);
             pActor.data.set(LineageKeys.COURT_LAYER, pLayer ?? "");
             pActor.data.set(LineageKeys.COURT_OFFICE_ID, pOfficeId ?? "");
+            // 任官会改变整族的门第（寒门 → 世家）。
+            SocialStandingService.MarkDirty();
             pActor.data.set(LineageKeys.COURT_SCHOOL, pSchoolId ?? "");
             pActor.data.set(LineageKeys.COURT_CITY_ID, pCity?.data?.id ?? -1L);
             pActor.data.set(LineageKeys.COURT_COUNTY_ID, pCountyId);
@@ -2734,6 +2736,8 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_KINGDOM_ID, -1L);
             pActor.data.set(LineageKeys.COURT_LAYER, "");
             pActor.data.set(LineageKeys.COURT_OFFICE_ID, "");
+            // 去职同样可能让整族从世家跌回寒门。
+            SocialStandingService.MarkDirty();
             pActor.data.set(LineageKeys.COURT_CITY_ID, -1L);
             pActor.data.set(LineageKeys.COURT_COUNTY_ID, -1L);
 

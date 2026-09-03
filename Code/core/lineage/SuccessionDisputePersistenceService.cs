@@ -138,6 +138,17 @@ namespace AncientWarfare3.core.lineage
             return next;
         }
 
+        /// <summary>
+        ///     小朝廷分裂的入口：首都沦陷后由
+        ///     <see cref="RumpCourtSplitService"/> 直接投递一份已经备好的
+        ///     争议事实，走与「新君即位遭旁支反对」完全相同的落库与推进路径。
+        /// </summary>
+        internal static void QueueRumpCourtSplit(
+            SuccessionDisputePreparationFacts pFacts)
+        {
+            QueueDisputePersistence(pFacts);
+        }
+
         private static void QueueDisputePersistence(
             SuccessionDisputePreparationFacts pFacts)
         {

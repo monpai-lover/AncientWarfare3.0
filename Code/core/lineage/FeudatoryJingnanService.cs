@@ -381,7 +381,9 @@ namespace AncientWarfare3.core.lineage
             {
                 if (pEmpire.king?.data != null && pEmpire.king != victorPrince)
                     pEmpire.kingLeftEvent();
-                pEmpire.setKing(victorPrince);
+                // 靖难得手也是即位:补齐迁都城与世界日志。
+                KingAccessionCeremonyService.Install(pEmpire, victorPrince,
+                    "jingnan");
             }
             catch (Exception exception)
             {

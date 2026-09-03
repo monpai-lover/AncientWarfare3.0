@@ -435,8 +435,9 @@ namespace AncientWarfare3.core.lineage
                     pOriginal.kingLeftEvent();
                 if (!AccessionIdentityService.Prepare(pOriginal, pClaimant))
                     return false;
-                pOriginal.setKing(pClaimant);
-                return pOriginal.king == pClaimant;
+                // 复辟即位同样要有世界日志与迁都城。
+                return KingAccessionCeremonyService.Install(pOriginal,
+                    pClaimant, "coup_restoration");
             }
             catch (Exception exception)
             {

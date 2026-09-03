@@ -70,7 +70,8 @@ namespace AncientWarfare3.patch
             actor.data.get(LineageKeys.CLAN_NAME, out string clan, "");
             actor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
 
-            ShowRawRow(__instance, "aw_identity", IdentityText(status));
+            ShowRawRow(__instance, "aw_identity",
+                SocialStandingText(actor, status));
 
             // 史载真实双亲。放在宗师分支之前 —— 那个分支末尾直接 return,
             // 开国君主与学派宗师都要显示这两行。
@@ -247,7 +248,7 @@ namespace AncientWarfare3.patch
             string grade = AW_L10n.Text(
                 OfficialCareerRankRules.RankNameKey(rank),
                 OfficialCareerRankRules.RankFallbackEnglish(rank));
-            string office = CourtInstitutionService.OfficeName(courtKingdom,
+            string office = ResolveStyleOfficeName(pActor, courtKingdom,
                 officeId);
             if (officeId == CourtOfficeId.Governor &&
                 !string.IsNullOrWhiteSpace(pActor.city?.data?.name))
@@ -318,6 +319,30 @@ namespace AncientWarfare3.patch
             return integrated;
         }
 
+        /// <summary>
+        ///     结衔里那一段官职名。
+        ///
+        ///     君主的 officeId 是 <c>CourtPyramidRules.King</c>（"king"），
+        ///     那是**朝廷金字塔的层级 id，不是真官职** —— 官职表里没有它的
+        ///     定义，本地化里也没有 <c>aw_court_office_king</c>，于是
+        ///     <c>OfficeName</c> 原样把 "king" 吐回来，玩家在结衔里直接看到
+        ///     一个英文 id。君主这一格应当走礼制称呼。
+        /// </summary>
+        private static string ResolveStyleOfficeName(Actor pActor,
+            Kingdom pCourtKingdom, string pOfficeId)
+        {
+            if (!string.Equals(pOfficeId, CourtPyramidRoleId.King,
+                    System.StringComparison.Ordinal))
+                return CourtInstitutionService.OfficeName(pCourtKingdom,
+                    pOfficeId);
+            string ceremonial = null;
+            try { ceremonial = CeremonialTitleResolver.Resolve(pActor); }
+            catch { }
+            return string.IsNullOrWhiteSpace(ceremonial)
+                ? AW_L10n.Text("aw_court_office_king", "King")
+                : ceremonial;
+        }
+
         private static string IdentityText(string pStatus)
         {
             if (pStatus == LineageStatus.NOBLE)
@@ -327,6 +352,33 @@ namespace AncientWarfare3.patch
             if (pStatus == LineageStatus.SLAVE)
                 return AW_L10n.Text("aw_identity_slave", "Slave");
             return AW_L10n.Text("aw_identity_none", "None");
+        }
+
+        /// <summary>
+        ///     人物面板的「身份」行。奴籍优先，其余按门第走与科举名单
+        ///     同一个判定（<see cref="SocialStandingService"/>）—— 早先这行
+        ///     只看 <c>LINEAGE_STATUS</c> 加「有爵位即贵族」，和科举那边对不上，
+        ///     而且几乎人人都显示贵族。
+        /// </summary>
+        private static string SocialStandingText(Actor pActor, string pStatus)
+        {
+            if (pStatus == LineageStatus.SLAVE)
+                return AW_L10n.Text("aw_identity_slave", "Slave");
+            switch (SocialStandingService.Resolve(pActor))
+            {
+                case CivilServiceExamRules.NobleOrigin:
+                    return AW_L10n.Text("aw_civil_service_origin_noble",
+                        "Noble");
+                case CivilServiceExamRules.GentryOrigin:
+                    return AW_L10n.Text("aw_civil_service_origin_gentry",
+                        "Gentry");
+                case CivilServiceExamRules.DeclinedNobleOrigin:
+                    return AW_L10n.Text("aw_civil_service_origin_declined",
+                        "Declined House");
+                default:
+                    return AW_L10n.Text("aw_civil_service_origin_commoner",
+                        "Commoner");
+            }
         }
     }
 }

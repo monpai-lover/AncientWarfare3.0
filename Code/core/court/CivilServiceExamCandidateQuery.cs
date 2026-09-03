@@ -586,15 +586,12 @@ namespace AncientWarfare3.core.court
             catch { return false; }
         }
 
+        // 门第按**宗族**判,不再看个人的谱系状态与爵位。旧判据里
+        // LINEAGE_STATUS=="noble" 加上「有爵位即贵族」,而爵位是随官职发的,
+        // 于是当过官的基本都成了贵族 —— 名单上放眼望去全是贵族。
         private static string ResolveSocialOrigin(Actor pActor)
         {
-            pActor.data.get(LineageKeys.LINEAGE_STATUS,
-                out string currentStatus, LineageStatus.NONE);
-            pActor.data.get(LineageKeys.EVER_NOBLE_BLOOD,
-                out bool everNoble, false);
-            pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
-            return CivilServiceExamRules.ResolveSocialOrigin(currentStatus,
-                everNoble, lineageId);
+            return SocialStandingService.Resolve(pActor);
         }
 
         private static string SafeName(Actor pActor)

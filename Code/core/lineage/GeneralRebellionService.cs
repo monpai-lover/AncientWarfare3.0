@@ -252,8 +252,11 @@ namespace AncientWarfare3.core.lineage
                         oldRuler);
                     pKingdom.kingLeftEvent();
                 }
-                pKingdom.setKing(pChallenger);
-                if (pKingdom.king != pChallenger)
+                // 篡位也是即位:走原版流程,世界日志里该有这一条。
+                // PrepareChallengerForAccession 已做过脱军/卸武职,
+                // 礼仪服务里的同类动作是幂等的。
+                if (!KingAccessionCeremonyService.Install(pKingdom,
+                        pChallenger, "palace_coup"))
                 {
                     RestoreRulerAfterFailedCoup(pKingdom, oldRuler);
                     return false;

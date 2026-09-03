@@ -223,8 +223,12 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.king == null || !pKingdom.king.isAlive())
             {
                 Actor heir = PeekRegisteredHeir(pKingdom);
+                // 走完整的原版即位流程。此前是裸 setKing:继承人不迁都城、
+                // 不卸武职,世界日志里也不出现新君即位 —— 王位换了人而玩家
+                // 收不到任何提示。册立那一侧的 Prepare 只管归化,不含礼仪。
                 if (heir?.data != null && PrepareRegisteredHeirForAccession(pKingdom, heir))
-                    pKingdom.setKing(heir);
+                    KingAccessionCeremonyService.Install(pKingdom, heir,
+                        "annual_heir_fallback");
             }
             // 这三段本来只有 RecentFeatureBenchmark,而它受 _sampling 门控 ——
             // 实测 annual_succession 单次 88.22ms 的那一帧不是采样帧,同区间

@@ -424,6 +424,20 @@ namespace AncientWarfare3.core.lineage
             "aw_mandate_war_participant_capitals";
         public const string MANDATE_CAPITAL_RING_TRANSFERRED_IDS =
             "aw_mandate_capital_ring_transferred_ids";
+        // 盖在**王国**身上的开战快照。首都沦陷级联不能靠遍历 getWars ——
+        // 原版 WarManager.getWars(Kingdom) 过滤掉已结束的战争,而首都常在
+        // 战争判定结束之后才落定,那一刻已经查不到那场战争了。
+        public const string MANDATE_WAR_KINGDOM_CAPITAL_ID =
+            "aw_mandate_war_kingdom_capital_id";
+        public const string MANDATE_WAR_KINGDOM_WAR_ID =
+            "aw_mandate_war_kingdom_war_id";
+        public const string MANDATE_WAR_KINGDOM_IS_DEFENDER =
+            "aw_mandate_war_kingdom_is_defender";
+        // 首都刚丢,等着看要不要裂出小朝廷。破城那一刻原版往往还没另立
+        // 临时都城,而支持度是按都城这个锚点算的 —— 所以只在这里记个待办,
+        // 真正的判定推到年度那一拍。
+        public const string RUMP_SPLIT_PENDING_YEAR =
+            "aw_rump_split_pending_year";
         public const string CITY_TECH_LAST_YEAR = "aw_city_tech_last_year";
         public const string CITY_ECONOMY_LAST_YEAR = "aw_city_economy_last_year";
         public const string CITY_ECONOMY_MAJOR_TAX_YEAR = "aw_city_economy_major_tax_year";

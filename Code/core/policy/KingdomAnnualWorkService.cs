@@ -374,6 +374,9 @@ namespace AncientWarfare3.core.policy
                     MandateService.OnKingdomYear(pKingdom);
                     MandateIslandExileService.OnKingdomYear(pKingdom);
                     RitualDiplomacyOpinionService.OnKingdomYear(pKingdom);
+                    // 首都刚丢的国家在这里结算要不要裂出小朝廷 ——
+                    // 破城当帧临时都城多半还没立,判不了。
+                    RumpCourtSplitService.OnKingdomYear(pKingdom);
                 });
 
             long ageBenchmark = UpdateAgeBenchmark.Begin();
