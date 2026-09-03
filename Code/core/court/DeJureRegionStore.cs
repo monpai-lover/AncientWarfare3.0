@@ -1321,14 +1321,19 @@ namespace AncientWarfare3.core.court
                 {
                     pStateId = profile.StateId;
                     pCommanderyId = profile.CommanderyId;
-                    return profile.StateName;
+                    // 库里的州名自带「州」字（「并州」），而 RegionName 存的是
+                    // 裸名 —— 显示层 AdministrativeLabel 会再拼一次后缀。
+                    // 不剥就会变成「并州州」。
+                    return RegionalGovernmentRules.RegionName(
+                        profile.StateName, "州");
                 }
 
                 XiaHistoricalStateDefinition assigned =
                     SelectUnusedHistoricalStateLocked(pCity);
                 if (assigned == null) return fallback;
                 pStateId = assigned.Id;
-                return assigned.Name;
+                return RegionalGovernmentRules.RegionName(assigned.Name,
+                    "州");
             }
             catch { return fallback; }
         }

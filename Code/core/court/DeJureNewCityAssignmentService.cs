@@ -162,7 +162,9 @@ namespace AncientWarfare3.core.court
                     XiaHistoricalDeJureRules.SelectProfile(
                         XiaHistoricalDeJureCatalogService.Current, memberNames,
                         StableSelector(pCity.data.id));
-                string[] usedNames = memberNames.ToArray();
+                // 去重要看全图,不能只看本 region:历史名在整张地图上唯一,
+                // 否则两个州各自挑走一个「雒阳」,玩家看到的就是两座同名城。
+                string[] usedNames = CollectWorldCityNames();
                 int selector = StableSelector(pCity.data.id);
                 string stateId = string.IsNullOrWhiteSpace(
                         region.HistoricalStateId)
@@ -172,6 +174,10 @@ namespace AncientWarfare3.core.court
                     SelectHistoricalCityName(
                         XiaHistoricalDeJureCatalogService.Current, stateId,
                         usedNames, selector);
+                // 库里的郡名自带「郡」字（「五原郡」），但这是要写进城市名的，
+                // 城市名不带行政级别后缀 —— 否则地图上就出现一座叫「五原郡」
+                // 的城。县名本身不带后缀，剥了也不受影响。
+                candidate = StripAdministrativeSuffix(candidate);
                 if (string.IsNullOrWhiteSpace(candidate) ||
                     string.Equals(candidate, ResolveChineseCityName(pCity),
                         StringComparison.Ordinal)) return;
@@ -187,6 +193,50 @@ namespace AncientWarfare3.core.court
                 ModClass.LogError("Historical city name assignment failed: " +
                     error.Message);
             }
+        }
+
+        /// <summary>
+        ///     全世界所有活着的城市的中文名。历史名在整张地图上唯一,所以
+        ///     去重必须按全图算 —— 只看本 region 会让不同州各自挑走同一个
+        ///     「雒阳」。取不到城市列表时返回空集,调用方会因此拿到一个可能
+        ///     重复的名字,但那远好过整条取名链直接断掉。
+        /// </summary>
+        /// <summary>
+        ///     剥掉行政级别后缀。历史库里郡名是全称（「五原郡」「河东郡」），
+        ///     但写进城市名的必须是裸名 —— 城市名不带级别后缀，界面另有地方
+        ///     显示「郡」「州」这些层级。剥完为空则保留原值（比如某个县就叫
+        ///     单字「郡」），宁可带后缀也不能给出空名。
+        /// </summary>
+        private static string StripAdministrativeSuffix(string pName)
+        {
+            string name = (pName ?? string.Empty).Trim();
+            if (name.Length <= 1) return name;
+            foreach (string suffix in new[] { "郡", "州", "府", "县" })
+            {
+                if (!name.EndsWith(suffix, StringComparison.Ordinal))
+                    continue;
+                string stripped = name
+                    .Substring(0, name.Length - suffix.Length).Trim();
+                return stripped.Length > 0 ? stripped : name;
+            }
+            return name;
+        }
+
+        private static string[] CollectWorldCityNames()
+        {
+            try
+            {
+                if (World.world?.cities == null)
+                    return Array.Empty<string>();
+                return World.world.cities.ToArray()
+                    .Where(p => p?.data != null && !p.isRekt())
+                    .Select(ResolveChineseCityName)
+                    .Select(StripAdministrativeSuffix)
+                    .Where(p => !string.IsNullOrWhiteSpace(p))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+            }
+            catch { return Array.Empty<string>(); }
         }
 
         private static string ResolveChineseCityName(long pCityId)

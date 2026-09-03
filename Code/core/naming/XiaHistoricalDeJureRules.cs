@@ -243,18 +243,40 @@ namespace AncientWarfare3.core.naming
                 : (int)((uint)pSelector % (uint)pCount);
         }
 
+        /// <summary>
+        ///     剥掉行政级别后缀后再比对是否已被占用。库里郡名是全称
+        ///     （「五原郡」），而写进城市名的是裸名（「五原」）—— 不统一
+        ///     就会把已经存在的「五原」当成没用过，再发一次「五原郡」。
+        ///     返回的仍是库里的原名，剥后缀由调用方在落名时做。
+        /// </summary>
         private static string SelectUnusedName(IEnumerable<string> pNames,
             IEnumerable<string> pUsedNames, int pStableSelector)
         {
             var used = new HashSet<string>((pUsedNames ??
-                Array.Empty<string>()).Select(Normalize),
+                Array.Empty<string>()).Select(StripSuffix),
                 StringComparer.Ordinal);
             string[] available = (pNames ?? Array.Empty<string>())
                 .Select(Normalize).Where(p => p.Length > 0 &&
-                    !used.Contains(p)).Distinct(StringComparer.Ordinal)
+                    !used.Contains(StripSuffix(p)))
+                .Distinct(StringComparer.Ordinal)
                 .ToArray();
             return available.Length == 0 ? string.Empty :
                 available[StableIndex(pStableSelector, available.Length)];
+        }
+
+        private static string StripSuffix(string pName)
+        {
+            string name = Normalize(pName);
+            if (name.Length <= 1) return name;
+            foreach (string suffix in new[] { "郡", "州", "府", "县" })
+            {
+                if (!name.EndsWith(suffix, StringComparison.Ordinal))
+                    continue;
+                string stripped = name
+                    .Substring(0, name.Length - suffix.Length).Trim();
+                return stripped.Length > 0 ? stripped : name;
+            }
+            return name;
         }
 
         private static XiaHistoricalDeJureProfile EmptyProfile()
