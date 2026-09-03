@@ -306,6 +306,9 @@ namespace AncientWarfare3.core.court
                     pKingdom, pVacancy.OfficeId), null,
                 pSession.ReservedActorIds, pAllowActing: true,
                 pSession.SelectionCache, pVacancy.Layer);
+            // occupied 是会话开始时的快照,同一轮 Reconcile 会连续补多个席位。
+            // 补上了就同步进去,别让后面的席位拿过期名单做唯一性判断。
+            if (committed) pSession.MarkOfficeOccupied(pVacancy.OfficeId);
             return committed ? CourtVacancyOutcome.Filled :
                 CourtVacancyOutcome.NoCandidate;
         }

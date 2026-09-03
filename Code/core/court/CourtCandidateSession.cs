@@ -75,6 +75,25 @@ namespace AncientWarfare3.core.court
         }
 
         /// <summary>
+        ///     刚补上一个席位后把它记进已占用集合。
+        ///
+        ///     这个集合是会话开始时的一次性快照，而一轮 Reconcile 会在同一个
+        ///     会话里连续补多个席位。补缺前的守卫
+        ///     （TryFillRegisteredCentralVacancy 里的 occupied.Contains）读的
+        ///     就是它 —— 不同步就等于用一份过期名单做唯一性判断。
+        ///
+        ///     正常流程下 MissingSeats 递减会让同一官职不被取第二次，所以这里
+        ///     是纵深防御：官职表上没有唯一约束，真出现重复活跃行时
+        ///     CloseStaleOfficerRows 也不会清（它只关 actor 失效的行），
+        ///     代价就是一个国家同时挂着两个司马。
+        /// </summary>
+        internal void MarkOfficeOccupied(string pOfficeId)
+        {
+            if (string.IsNullOrEmpty(pOfficeId)) return;
+            _activeOfficeIds?.Add(pOfficeId);
+        }
+
+        /// <summary>
         ///     科举资格记录,本轮每人只读一次。
         ///
         ///     <c>LoadOrRepair</c> 的快路径只有在此人**已有**资格时才命中;绝大多数
