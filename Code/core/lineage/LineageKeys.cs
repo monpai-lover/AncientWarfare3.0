@@ -420,6 +420,10 @@ namespace AncientWarfare3.core.lineage
             "aw_mandate_capital_ring_transferred";
         public const string MANDATE_WAR_START_CAPITAL_ID =
             "aw_mandate_war_start_capital_id";
+        public const string MANDATE_WAR_PARTICIPANT_CAPITALS =
+            "aw_mandate_war_participant_capitals";
+        public const string MANDATE_CAPITAL_RING_TRANSFERRED_IDS =
+            "aw_mandate_capital_ring_transferred_ids";
         public const string CITY_TECH_LAST_YEAR = "aw_city_tech_last_year";
         public const string CITY_ECONOMY_LAST_YEAR = "aw_city_economy_last_year";
         public const string CITY_ECONOMY_MAJOR_TAX_YEAR = "aw_city_economy_major_tax_year";

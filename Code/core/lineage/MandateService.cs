@@ -4,6 +4,7 @@ using System.Data.SQLite;
 using System.Linq;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.utils;
@@ -67,6 +68,13 @@ namespace AncientWarfare3.core.lineage
         private static long _pendingFallenMandateKingdomId = -1L;
         private static long _pendingMandateConquerorKingdomId = -1L;
         private static int _lastProjectionResumeYear = int.MinValue;
+
+        private sealed class MandateWarParticipantCapital
+        {
+            public long KingdomId;
+            public long CapitalCityId;
+            public bool IsDefender;
+        }
 
         public static bool Exists => GetCurrentMandateKingdom() != null;
 
@@ -1432,11 +1440,13 @@ namespace AncientWarfare3.core.lineage
             if (pWar?.data == null) return;
             MandateBorderDefenseService.OnMandateWarStarted(pWar);
             string type = GetWarType(pWar);
-            if (type != WAR_TIANMING && type != WAR_TIANMING_REBEL) return;
 
             Kingdom attacker = pWar.getMainAttacker();
             Kingdom defender = pWar.getMainDefender();
             if (attacker?.data == null || defender?.data == null) return;
+            bool mandateWar = type == WAR_TIANMING ||
+                              type == WAR_TIANMING_REBEL;
+            if (!mandateWar && defender != GetCurrentMandateKingdom()) return;
             try
             {
                 long capitalId = defender.capital?.data?.id ?? -1L;
@@ -1445,10 +1455,46 @@ namespace AncientWarfare3.core.lineage
                         capitalId);
             }
             catch { }
+            try
+            {
+                foreach (Kingdom kingdom in pWar.getAttackers())
+                    RegisterMandateWarParticipant(pWar, kingdom, false);
+            }
+            catch { }
+            try
+            {
+                foreach (Kingdom kingdom in pWar.getDefenders())
+                    RegisterMandateWarParticipant(pWar, kingdom, true);
+            }
+            catch { }
+            if (!mandateWar) return;
             RecordEvent("mandate_war_start", defender, defender.king, null, -5, ReadReport().mandate_value,
                 attacker.name + T("aw_hist_mandate_war_declared_mid") + defender.name +
                 T("aw_hist_mandate_war_declared_suffix"));
             ChangeMandate(defender, -5, "mandate_war_start");
+        }
+
+        internal static void OnKingdomJoinedWar(War pWar, Kingdom pKingdom,
+            bool pDefender)
+        {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
+            if (pWar?.data == null || pKingdom?.data == null) return;
+            string type = GetWarType(pWar);
+            if (type != WAR_TIANMING && type != WAR_TIANMING_REBEL &&
+                !IsCurrentMandateDefender(pWar)) return;
+            RegisterMandateWarParticipant(pWar, pKingdom, pDefender);
+        }
+
+        private static bool IsCurrentMandateDefender(War pWar)
+        {
+            if (pWar?.data == null) return false;
+            try
+            {
+                return pWar.getMainDefender() == GetCurrentMandateKingdom();
+            }
+            catch { return false; }
         }
 
         public static void OnWarEnded(War pWar, WarWinner pWinner)
@@ -1462,13 +1508,22 @@ namespace AncientWarfare3.core.lineage
             Kingdom attacker = pWar.getMainAttacker();
             Kingdom defender = pWar.getMainDefender();
             Kingdom mandate = GetCurrentMandateKingdom();
-            if (attacker?.data == null || defender?.data == null || mandate?.data == null) return;
+            if (attacker?.data == null || defender?.data == null) return;
 
             bool mandateWar = type == WAR_TIANMING ||
                               type == WAR_TIANMING_REBEL;
-            bool capitalBreakthrough = defender == mandate &&
-                pWinner == WarWinner.Attackers &&
+            bool mandateCapitalWar = mandateWar ||
+                HasMandateWarParticipantSnapshot(pWar);
+            bool ringProcessed = mandateCapitalWar &&
                 TransferCapitalRingAfterMandateWar(pWar, defender, attacker);
+            bool capitalBreakthrough = !mandateCapitalWar &&
+                defender == mandate && pWinner == WarWinner.Attackers &&
+                TransferCapitalRingAfterMandateWar(pWar, defender, attacker);
+            if (!mandateWar && mandateCapitalWar &&
+                defender == mandate && pWinner == WarWinner.Attackers)
+                capitalBreakthrough = IsCapitalRingTransferred(pWar,
+                    defender.id);
+            if (mandate?.data == null) return;
             if (!mandateWar)
             {
                 if (capitalBreakthrough)
@@ -1490,7 +1545,7 @@ namespace AncientWarfare3.core.lineage
 
             if (defender == mandate && pWinner == WarWinner.Attackers)
             {
-                if (!capitalBreakthrough)
+                if (!ringProcessed)
                     TransferCapitalRingAfterMandateWar(pWar, defender,
                         attacker);
                 bool rebel = MandateRebelService.IsRebelKingdom(attacker) || type == WAR_TIANMING_REBEL;
@@ -1512,49 +1567,94 @@ namespace AncientWarfare3.core.lineage
         private static bool TransferCapitalRingAfterMandateWar(War pWar,
             Kingdom pFormerMandate, Kingdom pVictor)
         {
-            if (pWar?.data == null || pFormerMandate?.data == null ||
-                pVictor?.data == null || pFormerMandate == pVictor ||
-                !Ready) return false;
+            if (pWar?.data == null || !Ready) return false;
             try
             {
-                pWar.data.get(LineageKeys.MANDATE_CAPITAL_RING_TRANSFERRED,
-                    out bool alreadyTransferred, false);
-                pWar.data.get(LineageKeys.MANDATE_WAR_START_CAPITAL_ID,
-                    out long targetCityId, -1L);
-                City capital = targetCityId >= 0L
-                    ? FindCity(targetCityId)
-                    : pFormerMandate.capital;
-                Kingdom capitalOwner = capital?.kingdom;
-                bool capitalCaptured = capital?.data != null &&
-                    (capitalOwner == pVictor ||
-                     VassalService.GetRootSuzerain(capitalOwner) == pVictor);
-                bool capitalOwnedByFormer = capital?.data != null &&
-                    capital.kingdom == pFormerMandate;
-                if (!MandateCoreTransferRules.ShouldTransferCapitalRing(
-                        true, pWar.isAttacker(pVictor), capitalCaptured,
-                        capitalOwnedByFormer, alreadyTransferred))
-                    return alreadyTransferred && capitalCaptured;
+                List<MandateWarParticipantCapital> participants =
+                    ReadMandateWarParticipants(pWar);
+                if (participants.Count == 0)
+                {
+                    try
+                    {
+                        foreach (Kingdom kingdom in pWar.getAttackers())
+                            RegisterMandateWarParticipant(pWar, kingdom, false);
+                        foreach (Kingdom kingdom in pWar.getDefenders())
+                            RegisterMandateWarParticipant(pWar, kingdom, true);
+                        participants = ReadMandateWarParticipants(pWar);
+                        pWar.data.get(LineageKeys.MANDATE_WAR_START_CAPITAL_ID,
+                            out long legacyCapitalId, -1L);
+                        if (legacyCapitalId >= 0L &&
+                            pFormerMandate?.data != null)
+                            foreach (MandateWarParticipantCapital participant in
+                                participants)
+                                if (participant.KingdomId == pFormerMandate.id &&
+                                    participant.IsDefender)
+                                {
+                                    participant.CapitalCityId = legacyCapitalId;
+                                    break;
+                                }
+                    }
+                    catch { }
+                }
+                if (participants.Count == 0 && pFormerMandate?.data != null &&
+                    pVictor?.data != null && pFormerMandate != pVictor)
+                {
+                    pWar.data.get(LineageKeys.MANDATE_WAR_START_CAPITAL_ID,
+                        out long targetCityId, -1L);
+                    participants.Add(new MandateWarParticipantCapital
+                    {
+                        KingdomId = pFormerMandate.id,
+                        CapitalCityId = targetCityId >= 0L
+                            ? targetCityId : pFormerMandate.capital?.data?.id ?? -1L,
+                        IsDefender = true
+                    });
+                }
 
-                var transferIds = new HashSet<long> { capital.id };
-                IEnumerable<City> neighbors = capital.neighbours_cities ??
-                    new HashSet<City>();
-                foreach (City neighbor in neighbors)
+                bool processedAny = false;
+                foreach (MandateWarParticipantCapital participant in participants)
                 {
-                    if (neighbor?.data == null || neighbor.isRekt() ||
-                        !_coreCityIds.Contains(neighbor.id) ||
-                        neighbor.kingdom != pFormerMandate) continue;
-                    transferIds.Add(neighbor.id);
+                    Kingdom formerOwner = FindKingdom(participant.KingdomId);
+                    City capital = FindCity(participant.CapitalCityId);
+                    if (formerOwner?.data == null || capital?.data == null ||
+                        capital.isRekt() ||
+                        PeasantRebelBanditStrongholdService.IsStrongholdCity(
+                            capital)) continue;
+                    if (IsCapitalRingTransferred(pWar, formerOwner.id)) continue;
+
+                    long controllerId = ResolveCapitalController(pWar, capital);
+                    Kingdom victor = FindKingdom(controllerId);
+                    if (!IsEnemyParticipant(pWar, participant, victor)) continue;
+                    processedAny = true;
+
+                    List<long> coreCityIds = new List<long>();
+                    List<long> deJureCityIds = new List<long>();
+                    if (DeJureRegionStore.TryGetForCity(capital.id,
+                            out DeJureRegion region))
+                        deJureCityIds.AddRange(region.MemberCityIds ??
+                            new List<long>());
+
+                    var neighborIds = new List<long>();
+                    IEnumerable<City> neighbors = capital.neighbours_cities ??
+                        new HashSet<City>();
+                    foreach (City neighbor in neighbors)
+                        if (neighbor?.data != null && !neighbor.isRekt() &&
+                            !PeasantRebelBanditStrongholdService.IsStrongholdCity(
+                                neighbor)) neighborIds.Add(neighbor.id);
+
+                    IReadOnlyList<long> transferIds =
+                        MandateCoreTransferRules.MergeCapitalTerritoryIds(
+                            coreCityIds, deJureCityIds, neighborIds, capital.id);
+                    foreach (long cityId in transferIds)
+                    {
+                        City city = FindCity(cityId);
+                        if (city?.data == null || city.isRekt() ||
+                            PeasantRebelBanditStrongholdService.IsStrongholdCity(
+                                city) || city.kingdom != formerOwner) continue;
+                        city.joinAnotherKingdom(victor);
+                    }
+                    MarkCapitalRingTransferred(pWar, formerOwner.id);
                 }
-                foreach (long cityId in transferIds)
-                {
-                    City city = FindCity(cityId);
-                    if (city?.data == null || city.isRekt() ||
-                        city.kingdom != pFormerMandate) continue;
-                    city.joinAnotherKingdom(pVictor);
-                }
-                pWar.data.set(LineageKeys.MANDATE_CAPITAL_RING_TRANSFERRED,
-                    true);
-                return true;
+                return processedAny;
             }
             catch (Exception error)
             {
@@ -1562,6 +1662,139 @@ namespace AncientWarfare3.core.lineage
                                     error.Message);
                 return false;
             }
+        }
+
+        private static void RegisterMandateWarParticipant(War pWar,
+            Kingdom pKingdom, bool pDefender)
+        {
+            if (pWar?.data == null || pKingdom?.data == null) return;
+            long capitalId = pKingdom.capital?.data?.id ?? -1L;
+            if (capitalId < 0L) return;
+
+            pWar.data.get(LineageKeys.MANDATE_WAR_PARTICIPANT_CAPITALS,
+                out string encoded, "");
+            var entries = new List<string>();
+            string prefix = (pDefender ? "d" : "a") + "|" +
+                pKingdom.id + "|";
+            foreach (string entry in (encoded ?? "").Split(';'))
+            {
+                if (string.IsNullOrWhiteSpace(entry)) continue;
+                string[] fields = entry.Split('|');
+                if (fields.Length != 3 || fields[1] == pKingdom.id.ToString())
+                    continue;
+                entries.Add(entry);
+            }
+            entries.Add(prefix + capitalId);
+            pWar.data.set(LineageKeys.MANDATE_WAR_PARTICIPANT_CAPITALS,
+                string.Join(";", entries.ToArray()));
+        }
+
+        private static List<MandateWarParticipantCapital>
+            ReadMandateWarParticipants(War pWar)
+        {
+            var result = new List<MandateWarParticipantCapital>();
+            if (pWar?.data == null) return result;
+            pWar.data.get(LineageKeys.MANDATE_WAR_PARTICIPANT_CAPITALS,
+                out string encoded, "");
+            foreach (string entry in (encoded ?? "").Split(';'))
+            {
+                string[] fields = entry.Split('|');
+                if (fields.Length != 3 || (fields[0] != "a" &&
+                    fields[0] != "d") ||
+                    !long.TryParse(fields[1], out long kingdomId) ||
+                    !long.TryParse(fields[2], out long capitalId) ||
+                    kingdomId < 0L || capitalId < 0L) continue;
+                result.Add(new MandateWarParticipantCapital
+                {
+                    KingdomId = kingdomId,
+                    CapitalCityId = capitalId,
+                    IsDefender = fields[0] == "d"
+                });
+            }
+            return result;
+        }
+
+        private static bool HasMandateWarParticipantSnapshot(War pWar)
+        {
+            return ReadMandateWarParticipants(pWar).Count > 0;
+        }
+
+        private static long ResolveCapitalController(War pWar, City pCapital)
+        {
+            long controllerId = -1L;
+            if (pWar?.data != null && pCapital?.data != null &&
+                WarScoreService.TryGetTerminalFrozenOccupation(pWar.data.id,
+                    pCapital.id, out long terminalController))
+                controllerId = terminalController;
+            else
+                controllerId = pCapital?.kingdom?.data?.id ?? -1L;
+
+            Kingdom controller = FindKingdom(controllerId);
+            Kingdom root = VassalService.GetRootSuzerain(controller);
+            return root?.data != null ? root.id : controllerId;
+        }
+
+        private static bool IsEnemyParticipant(War pWar,
+            MandateWarParticipantCapital pTarget, Kingdom pVictor)
+        {
+            if (pTarget == null || pVictor?.data == null ||
+                pVictor.id == pTarget.KingdomId) return false;
+            List<MandateWarParticipantCapital> participants =
+                ReadMandateWarParticipants(pWar);
+            foreach (MandateWarParticipantCapital participant in participants)
+                if (participant.KingdomId == pVictor.id)
+                    return participant.IsDefender != pTarget.IsDefender;
+            try
+            {
+                // Older ordinary-war records only have the legacy capital
+                // key. Preserve their original two-belligerent behavior.
+                return participants.Count <= 1 &&
+                    (pTarget.IsDefender
+                        ? pWar.isAttacker(pVictor)
+                        : pWar.isDefender(pVictor));
+            }
+            catch { return false; }
+        }
+
+        private static bool IsCapitalRingTransferred(War pWar,
+            long pKingdomId)
+        {
+            if (pWar?.data == null || pKingdomId < 0L) return true;
+            pWar.data.get(LineageKeys.MANDATE_CAPITAL_RING_TRANSFERRED_IDS,
+                out string encoded, "");
+            if (ContainsId(encoded, pKingdomId)) return true;
+            if (!string.IsNullOrWhiteSpace(encoded)) return false;
+            pWar.data.get(LineageKeys.MANDATE_CAPITAL_RING_TRANSFERRED,
+                out bool legacyTransferred, false);
+            return legacyTransferred &&
+                ReadMandateWarParticipants(pWar).Count == 0;
+        }
+
+        private static void MarkCapitalRingTransferred(War pWar,
+            long pKingdomId)
+        {
+            if (pWar?.data == null || pKingdomId < 0L) return;
+            pWar.data.get(LineageKeys.MANDATE_CAPITAL_RING_TRANSFERRED_IDS,
+                out string encoded, "");
+            if (!ContainsId(encoded, pKingdomId))
+            {
+                string token = pKingdomId.ToString();
+                encoded = string.IsNullOrWhiteSpace(encoded)
+                    ? token : encoded + "," + token;
+                pWar.data.set(
+                    LineageKeys.MANDATE_CAPITAL_RING_TRANSFERRED_IDS,
+                    encoded);
+            }
+            pWar.data.set(LineageKeys.MANDATE_CAPITAL_RING_TRANSFERRED, true);
+        }
+
+        private static bool ContainsId(string pEncoded, long pId)
+        {
+            if (string.IsNullOrWhiteSpace(pEncoded)) return false;
+            string token = pId.ToString();
+            foreach (string value in pEncoded.Split(','))
+                if (value == token) return true;
+            return false;
         }
 
         private static int ReadOrdinaryWarDefeatDelta(War pWar,

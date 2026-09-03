@@ -13,6 +13,21 @@ internal static class MandateCapitalTransferRulesTests
         False(MandateCoreTransferRules.ShouldTransferCapitalRing(
                 true, true, true, false, true),
             "an already processed war cannot transfer its ring twice");
+
+        Equal(new long[] { 10L, 20L, 30L, 40L, 50L },
+            MandateCoreTransferRules.MergeCapitalTerritoryIds(
+                new long[] { 10L, 20L },
+                new long[] { 20L, 30L },
+                new long[] { 10L, 40L, 50L },
+                10L),
+            "capital, de jure members, and direct neighbors are merged once");
+        Equal(new long[] { 10L, 20L, 30L },
+            MandateCoreTransferRules.MergeCapitalTerritoryIds(
+                new long[] { 10L },
+                new long[] { 20L },
+                new long[] { 30L },
+                10L),
+            "the merge only consumes the supplied direct-neighbor set");
     }
 
     private static void True(bool value, string message)
@@ -23,5 +38,15 @@ internal static class MandateCapitalTransferRulesTests
     private static void False(bool value, string message)
     {
         if (value) throw new System.InvalidOperationException(message);
+    }
+
+    private static void Equal(long[] expected, System.Collections.Generic.IReadOnlyList<long> actual,
+        string message)
+    {
+        if (actual == null || expected.Length != actual.Count)
+            throw new System.InvalidOperationException(message);
+        for (int i = 0; i < expected.Length; i++)
+            if (expected[i] != actual[i])
+                throw new System.InvalidOperationException(message);
     }
 }

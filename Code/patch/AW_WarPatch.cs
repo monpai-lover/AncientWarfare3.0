@@ -465,6 +465,7 @@ namespace AncientWarfare3.patch
 
         private static void OnKingdomJoinedWar(War pWar, Kingdom pKingdom, bool pDefender)
         {
+            MandateService.OnKingdomJoinedWar(pWar, pKingdom, pDefender);
             WarRefugeeService.OnWarStarted(pWar);
             WarScoreService.RegisterParticipantMobilization(pWar, pKingdom);
             ArmyRtsWarLifecycleService.OnWarParticipantChanged(pWar,

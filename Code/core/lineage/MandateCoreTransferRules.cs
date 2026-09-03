@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -30,6 +31,33 @@ namespace AncientWarfare3.core.lineage
         {
             return pMandateWar && pAttackersWon && pCapitalCaptured &&
                    !pAlreadyTransferred;
+        }
+
+        public static IReadOnlyList<long> MergeCapitalTerritoryIds(
+            IEnumerable<long> pCoreCityIds,
+            IEnumerable<long> pDeJureCityIds,
+            IEnumerable<long> pNeighborCityIds,
+            long pCapitalCityId)
+        {
+            var result = new List<long>();
+            var seen = new HashSet<long>();
+            if (pCapitalCityId >= 0L)
+            {
+                seen.Add(pCapitalCityId);
+                result.Add(pCapitalCityId);
+            }
+            AddIds(pCoreCityIds, result, seen);
+            AddIds(pDeJureCityIds, result, seen);
+            AddIds(pNeighborCityIds, result, seen);
+            return result;
+        }
+
+        private static void AddIds(IEnumerable<long> pIds,
+            List<long> pResult, HashSet<long> pSeen)
+        {
+            if (pIds == null) return;
+            foreach (long id in pIds)
+                if (id >= 0L && pSeen.Add(id)) pResult.Add(id);
         }
     }
 }
