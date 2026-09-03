@@ -1,0 +1,45 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class CityStateRenameRulesTests
+{
+    internal static void Run()
+    {
+        Equal(CityStateRenameValidation.Success,
+            CityStateRenameRules.ValidateFields("  洛阳 ", "  河内州 "),
+            "valid city and state names are accepted");
+        Equal("洛阳", CityStateRenameRules.Normalize("  洛阳 "),
+            "city name is normalized");
+        Equal(CityStateRenameValidation.EmptyCityName,
+            CityStateRenameRules.ValidateFields(" \t", "州"),
+            "empty city name is rejected");
+        Equal(CityStateRenameValidation.EmptyStateName,
+            CityStateRenameRules.ValidateFields("城", " \t"),
+            "empty state name is rejected");
+        True(CityStateRenameRules.ShouldSyncStateName(true, true, true),
+            "tracked locked seat syncs state name");
+        False(CityStateRenameRules.ShouldSyncStateName(true, false, true),
+            "generated rename does not sync state name");
+        False(CityStateRenameRules.ShouldSyncStateName(false, true, true),
+            "non-seat rename does not sync state name");
+        False(CityStateRenameRules.ShouldSyncStateName(true, true, false),
+            "unlocked seat does not sync state name");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue) throw new InvalidOperationException(pMessage);
+    }
+}

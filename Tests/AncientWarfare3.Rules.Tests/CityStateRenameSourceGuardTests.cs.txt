@@ -1,0 +1,23 @@
+using System;
+using System.IO;
+
+internal static class CityStateRenameSourceGuardTests
+{
+    internal static void Run()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "court",
+            "CityStateRenameRules.cs"));
+        Contains(source, "ValidateFields");
+        Contains(source, "ShouldSyncStateName");
+        Contains(source, "EmptyCityName");
+        Contains(source, "EmptyStateName");
+    }
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "missing city-state rename source guard: " + pNeedle);
+    }
+}
