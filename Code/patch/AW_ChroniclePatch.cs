@@ -181,11 +181,27 @@ namespace AncientWarfare3.patch
                 __instance, __state, __instance?.kingdom ?? pKingdom);
         }
 
+        // 旧主 + 是否为占领,留给 Postfix 判首都沦陷用:方法跑完之后
+        // __instance.kingdom 已经是新主,旧主再也取不到。
+        public readonly struct CityJoinState
+        {
+            public CityJoinState(Kingdom pOldKingdom, bool pCaptured)
+            {
+                OldKingdom = pOldKingdom;
+                Captured = pCaptured;
+            }
+
+            public Kingdom OldKingdom { get; }
+            public bool Captured { get; }
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(City), nameof(City.joinAnotherKingdom))]
         public static void CityJoinAnotherKingdom_Prefix(City __instance,
-            Kingdom pNewSetKingdom, bool pCaptured)
+            Kingdom pNewSetKingdom, bool pCaptured,
+            out CityJoinState __state)
         {
+            __state = new CityJoinState(__instance?.kingdom, pCaptured);
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (!CityOwnershipTransferRules.ShouldDisbandLocalArmy(
                     __instance?.kingdom != null,
@@ -201,11 +217,17 @@ namespace AncientWarfare3.patch
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(City), nameof(City.joinAnotherKingdom))]
-        public static void CityJoinAnotherKingdom_Postfix(City __instance)
+        public static void CityJoinAnotherKingdom_Postfix(City __instance,
+            CityJoinState __state)
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             FeudatoryJingnanService.OnCityTransferCompleted(__instance);
             CoupRestorationService.OnCityTransferCompleted(__instance);
+            // 原版占领收尾在此:finishCapture → joinAnotherKingdom 全部跑完,
+            // 首都易主已落定。天命战争里此时把首都圈一并交给占领方。
+            if (__state.Captured)
+                MandateService.OnCityCaptureCompleted(__instance,
+                    __state.OldKingdom, __instance?.kingdom);
         }
 
         [HarmonyPrefix]

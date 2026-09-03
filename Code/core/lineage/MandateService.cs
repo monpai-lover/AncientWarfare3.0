@@ -45,6 +45,11 @@ namespace AncientWarfare3.core.lineage
         public const string WAR_TIANMING_REBEL = "tianmingrebel";
         public const string TRAIT_TIANMING = "aw_tianming";
 
+        // 首都圈级联划转进行中:级联本身会再触发 joinAnotherKingdom,
+        // 必须挡住重入,否则一座城的易主会再去解析一遍首都沦陷。
+        [ThreadStatic]
+        private static bool _capitalRingCascadeActive;
+
         private const long STATE_ID = 1;
         private const int START_VALUE = 30;
         private const int MAX_VALUE = 100;
@@ -1186,8 +1191,109 @@ namespace AncientWarfare3.core.lineage
                 return;
             if (pCity?.data == null || pCity.kingdom != pOldKingdom) return;
             ApplyImmediateCoreCityLoss(pCity, pOldKingdom, pNewKingdom);
-            TrackHostileMandateFinalCityConqueror(pOldKingdom,
-                pNewKingdom);
+            TrackHostileMandateFinalCityConqueror(pOldKingdom, pNewKingdom);
+        }
+
+        /// <summary>
+        ///     原版**完成**占领之后调用：被占城市若是某参战方开战时的首都，
+        ///     把首都的环形区域（接壤城 + 首都所在法理州成员）一并划给占领方。
+        ///
+        ///     挂在 <c>City.joinAnotherKingdom</c> 的 Postfix 上，与原版
+        ///     <c>finishCapture</c> 的收尾时机一致：此时首都本身的易主已经落定
+        ///     （<c>removeFromCurrentKingdom</c> → <c>setKingdom</c> →
+        ///     <c>switchedKingdom</c> 都跑完了），再去动周边城不会踩在原版
+        ///     半完成的状态上。挂 <c>setKingdom</c> 的 Prefix 会在首都自身尚未
+        ///     易主时就递归调用 <c>joinAnotherKingdom</c>，那是错的。
+        ///
+        ///     战争结束时的 <see cref="TransferCapitalRingAfterMandateWar"/>
+        ///     保留作保底，负责没走占领路径的易主（如和谈割让）。
+        /// </summary>
+        public static void OnCityCaptureCompleted(City pCity,
+            Kingdom pOldKingdom, Kingdom pNewKingdom)
+        {
+            if (!MandateAuthorityMutationRules.CanMutate(
+                    AW3MultiplayerReplicaScope.IsReplicaSession))
+                return;
+            if (pCity?.data == null || pOldKingdom?.data == null ||
+                pNewKingdom?.data == null || pNewKingdom == pOldKingdom) return;
+            // 级联划转本身会再触发 joinAnotherKingdom,不能让它反过来
+            // 再进一次首都判定。
+            if (_capitalRingCascadeActive) return;
+            _capitalRingCascadeActive = true;
+            try
+            {
+                // 找一场正在进行中的天命战争（或有参战方快照的战争）
+                // 里，记录 pCity 是参战方首都的条目。
+                foreach (War war in pOldKingdom.getWars())
+                {
+                    if (war?.data == null || war.hasEnded()) continue;
+                    string type = GetWarType(war);
+                    bool mandateWar = type == WAR_TIANMING ||
+                                      type == WAR_TIANMING_REBEL;
+                    if (!mandateWar && !HasMandateWarParticipantSnapshot(war))
+                        continue;
+
+                    EnsureAllParticipantsRegistered(war);
+                    List<MandateWarParticipantCapital> participants =
+                        ReadMandateWarParticipants(war);
+                    foreach (MandateWarParticipantCapital participant in
+                             participants)
+                    {
+                        if (participant.KingdomId != pOldKingdom.id) continue;
+                        if (participant.CapitalCityId != pCity.data.id &&
+                            participant.CapitalCityId != pCity.id) continue;
+                        if (IsCapitalRingTransferred(war, pOldKingdom.id))
+                            break;
+                        if (!IsEnemyParticipant(war, participant, pNewKingdom))
+                            break;
+
+                        List<long> deJureCityIds = new List<long>();
+                        if (DeJureRegionStore.TryGetForCity(pCity.id,
+                                out DeJureRegion region))
+                            deJureCityIds.AddRange(
+                                region.MemberCityIds ?? new List<long>());
+
+                        var neighborIds = new List<long>();
+                        foreach (City neighbor in
+                                 pCity.neighbours_cities ??
+                                 new System.Collections.Generic.HashSet<City>())
+                            if (neighbor?.data != null && !neighbor.isRekt() &&
+                                !PeasantRebelBanditStrongholdService
+                                    .IsStrongholdCity(neighbor))
+                                neighborIds.Add(neighbor.id);
+
+                        IReadOnlyList<long> transferIds =
+                            MandateCoreTransferRules.MergeCapitalTerritoryIds(
+                                new List<long>(), deJureCityIds, neighborIds,
+                                pCity.id);
+                        foreach (long cityId in transferIds)
+                        {
+                            // 首都本身刚刚易主完毕,不再动它。
+                            if (cityId == pCity.data.id || cityId == pCity.id)
+                                continue;
+                            City other = FindCity(cityId);
+                            // 只收仍属于沦陷方的城:法理州里可能混有别国的城,
+                            // 那些不该因为邻国首都被打下来就易主。
+                            if (other?.data == null || other.isRekt() ||
+                                PeasantRebelBanditStrongholdService
+                                    .IsStrongholdCity(other) ||
+                                other.kingdom != pOldKingdom) continue;
+                            other.joinAnotherKingdom(pNewKingdom);
+                        }
+                        MarkCapitalRingTransferred(war, pOldKingdom.id);
+                        break;
+                    }
+                }
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "Mandate capital ring on-capture failed: " + error.Message);
+            }
+            finally
+            {
+                _capitalRingCascadeActive = false;
+            }
         }
 
         private static void ApplyImmediateCoreCityLoss(City pCity,
@@ -1653,9 +1759,12 @@ namespace AncientWarfare3.core.lineage
                     foreach (long cityId in transferIds)
                     {
                         City city = FindCity(cityId);
+                        // 保底路径只收仍属沦陷方的城。占领路径
+                        // (OnCityCaptureCompleted) 已经在城破当时处理过,
+                        // 这里放宽到「非战胜方即收」会把无关国家的城也卷进来。
                         if (city?.data == null || city.isRekt() ||
                             PeasantRebelBanditStrongholdService.IsStrongholdCity(
-                                city) || city.kingdom == victor) continue;
+                                city) || city.kingdom != formerOwner) continue;
                         city.joinAnotherKingdom(victor);
                     }
                     MarkCapitalRingTransferred(pWar, formerOwner.id);
