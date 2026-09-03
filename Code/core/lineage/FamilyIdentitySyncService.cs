@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using AncientWarfare3.core.naming;
 
 namespace AncientWarfare3.core.lineage
@@ -11,6 +12,122 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     internal static class FamilyIdentitySyncService
     {
+        private static readonly object Gate = new object();
+        private static int _lastWorldIdentity;
+        private static bool _completed;
+
+        /// <summary>
+        ///     读档后一次性把全世界现有的小家庭和宗族名对齐到谱系。
+        ///
+        ///     新建事件（<see cref="AncientWarfare3.patch.naming.AW_FamilyIdentityPatch"/>）
+        ///     只能覆盖读档之后新产生的对象，存量的旧随机名需要这里做一趟修复。
+        ///     遍历 FamilyManager 和 ClanManager 各自的列表，全内存，无查询，
+        ///     与 <see cref="ClanMembershipSyncService.RepairAfterWorldLoaded"/> 共用
+        ///     同一套防重入设计。
+        /// </summary>
+        internal static void RepairAfterWorldLoaded()
+        {
+            if (World.world == null) return;
+            int worldIdentity = World.world.GetHashCode();
+            lock (Gate)
+            {
+                if (_completed && _lastWorldIdentity == worldIdentity) return;
+            }
+
+            int families = 0;
+            int clans = 0;
+            try
+            {
+                families = RepairFamilies();
+                clans    = RepairClans();
+                lock (Gate)
+                {
+                    _completed = true;
+                    _lastWorldIdentity = worldIdentity;
+                }
+                if (families > 0 || clans > 0)
+                    ModClass.LogInfo("[AW3] 读档小家庭/宗族名修复: 小家庭 " +
+                        families + " 个, 宗族 " + clans + " 个");
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "[AW3] 读档小家庭/宗族名修复失败: " + error.Message);
+            }
+        }
+
+        internal static void ClearRuntime()
+        {
+            lock (Gate)
+            {
+                _completed = false;
+                _lastWorldIdentity = 0;
+            }
+        }
+
+        private static int RepairFamilies()
+        {
+            FamilyManager mgr;
+            try { mgr = World.world?.families; }
+            catch { return 0; }
+            if (mgr == null) return 0;
+
+            var snapshot = new List<Family>();
+            try { foreach (Family f in mgr) if (f != null) snapshot.Add(f); }
+            catch { return 0; }
+
+            int changed = 0;
+            for (int i = 0; i < snapshot.Count; i++)
+            {
+                Family family = snapshot[i];
+                if (family?.data == null || family.isRekt()) continue;
+                try
+                {
+                    Actor anchor = ResolveAnchor(family);
+                    if (anchor == null) continue;
+                    string before = family.data.name;
+                    SyncFamilyName(family, anchor);
+                    if (!string.Equals(family.data.name, before,
+                            StringComparison.Ordinal))
+                        changed++;
+                }
+                catch { }
+            }
+            return changed;
+        }
+
+        private static int RepairClans()
+        {
+            ClanManager mgr;
+            try { mgr = World.world?.clans; }
+            catch { return 0; }
+            if (mgr == null) return 0;
+
+            var snapshot = new List<Clan>();
+            try { foreach (Clan c in mgr) if (c != null) snapshot.Add(c); }
+            catch { return 0; }
+
+            int changed = 0;
+            for (int i = 0; i < snapshot.Count; i++)
+            {
+                Clan clan = snapshot[i];
+                if (clan?.data == null || clan.isRekt()) continue;
+                try
+                {
+                    Actor chief;
+                    try { chief = clan.getChief(); }
+                    catch { chief = null; }
+                    if (chief?.data == null) continue;
+                    string before = clan.data.name;
+                    SyncClanName(chief);
+                    if (!string.Equals(clan.data.name, before,
+                            StringComparison.Ordinal))
+                        changed++;
+                }
+                catch { }
+            }
+            return changed;
+        }
         /// <summary>
         ///     按某个成员的氏/姓重命名小家庭。<paramref name="pAnchor"/> 一般是
         ///     建家者；取不到氏/姓就什么都不做，让原版随机名留着。
