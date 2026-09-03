@@ -117,6 +117,11 @@ namespace AncientWarfare3.core.lineage
                 ActorManualRenameService.ApplyExplicitSurname(live,
                     pFamilyName);
                 LineageService.ArchiveActor(live, pAlive: live.isAlive());
+                // 改了氏，他所在的小家庭要跟着改 —— 否则「姬」姓的人住在
+                // 一个还叫旧氏的家里。只在他是建家锚点时才生效（见
+                // FamilyIdentitySyncService.ResolveAnchor），所以不会出现
+                // 一个外嫁女把整个夫家改名的情况。
+                SyncFamilyOf(live);
                 try { live.clearGraphicsFully(); } catch { }
                 changed = true;
             }
@@ -150,6 +155,25 @@ namespace AncientWarfare3.core.lineage
                 pRow?.clan_name ?? "",
                 pRow?.status == LineageStatus.NOBLE,
                 pRow?.sex == 0, pRow?.name_integrated != 0);
+        }
+
+        /// <summary>
+        ///     把某人的新氏同步到他的小家庭。只有当他本人就是该家庭的命名锚点
+        ///     （建家者 / 家长 / 第一个有氏的成员）时才改 —— 一个嫁进来的人
+        ///     改氏不应该把整个夫家改名。
+        /// </summary>
+        private static void SyncFamilyOf(Actor pActor)
+        {
+            try
+            {
+                Family family = pActor?.family;
+                if (family?.data == null || family.isRekt()) return;
+                Actor anchor = FamilyIdentitySyncService.ResolveAnchor(family);
+                if (anchor?.data == null ||
+                    anchor.data.id != pActor.data.id) return;
+                FamilyIdentitySyncService.SyncFamilyName(family, pActor);
+            }
+            catch { }
         }
 
         private static Actor FindActor(long pActorId)
