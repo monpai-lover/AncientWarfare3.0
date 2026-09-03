@@ -397,6 +397,7 @@ namespace AncientWarfare3.patch
             ClanMembershipSyncService.ClearRuntime();
             FamilyIdentitySyncService.ClearRuntime();
             SocialStandingService.ClearRuntime();
+            HistoricalFigureDrawWindow.ResetTransientState();
         }
     }
 }

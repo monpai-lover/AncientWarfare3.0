@@ -387,6 +387,8 @@ namespace AncientWarfare3.core.lineage
             if (lastYear == currentYear) return;
             pKingdom.data.set(LineageKeys.MANDATE_LAST_YEAR, currentYear);
             MandateBorderDefenseService.OnKingdomYear(pKingdom);
+            // 清剿前朝：在清剿窗口内优先向还占着法理核心的前朝势力宣战。
+            MandateMopUpService.OnMandateKingdomYear(pKingdom);
 
             MandateReport before = ReadReport();
             int delta = CalculateYearlyDelta(pKingdom, before);
@@ -761,6 +763,9 @@ namespace AncientWarfare3.core.lineage
             MarkDirty();
             MandatePhaseService.OnMandateEstablished(
                 pPending.PreviousPeriodId >= 0L, pPending.CurrentYear);
+            // 新天命立即进入清剿窗口：后续若有前朝势力占着法理核心，
+            // 年度扫描会跳过正常 AI 冷却直接发兵。
+            MandateMopUpService.OnMandateEstablished(pKingdom);
             if (originType == "self_restoration" ||
                 originType == MandateFeudatoryCompletionRules.
                     RestorationOrigin)
@@ -1209,7 +1214,7 @@ namespace AncientWarfare3.core.lineage
         ///     保留作保底，负责没走占领路径的易主（如和谈割让）。
         /// </summary>
         public static void OnCityCaptureCompleted(City pCity,
-            Kingdom pOldKingdom, Kingdom pNewKingdom)
+            Kingdom pOldKingdom, Kingdom pNewKingdom, bool pWasCapital)
         {
             if (!MandateAuthorityMutationRules.CanMutate(
                     AW3MultiplayerReplicaScope.IsReplicaSession))
@@ -1222,16 +1227,33 @@ namespace AncientWarfare3.core.lineage
             _capitalRingCascadeActive = true;
             try
             {
-                // 判据是王国身上的开战快照,不是「还活着的战争」。
-                // 战争常常先判定结束、首都后落定,那时 getWars() 已经查不到
-                // 那场战争了 —— 早先按战争遍历,整段级联就这么被跳过。
+                // 「这座城是不是都城」以易主前的实况为准(Prefix 里取的),
+                // 不再依赖开战时那个戳。戳只在天命战争登记参战方时才落下 ——
+                // 中途参战、旧存档、或那条登记路径没走到,戳就是空的,
+                // 整段级联便永远不触发。戳保留为辅助判据。
                 pOldKingdom.data.get(
                     LineageKeys.MANDATE_WAR_KINGDOM_CAPITAL_ID,
                     out long stampedCapitalId, -1L);
-                if (stampedCapitalId < 0L ||
-                    stampedCapitalId != pCity.data.id) return;
+                bool capitalFell = pWasCapital ||
+                    stampedCapitalId >= 0L &&
+                    stampedCapitalId == pCity.data.id;
+                if (!capitalFell) return;
                 if (!IsHostileCapitalConqueror(pOldKingdom, pNewKingdom))
+                {
+                    ModClass.LogInfo("[AW3] 首都易主但非敌对占领,跳过: " +
+                        (pCity.data.name ?? "?") + " " +
+                        (pOldKingdom.name ?? "?") + "→" +
+                        (pNewKingdom.name ?? "?"));
                     return;
+                }
+                if (!IsMandateWarContext(pOldKingdom, pNewKingdom))
+                {
+                    ModClass.LogInfo("[AW3] 首都沦陷但不在天命战争语境,跳过: " +
+                        (pCity.data.name ?? "?") + " " +
+                        (pOldKingdom.name ?? "?") + "→" +
+                        (pNewKingdom.name ?? "?"));
+                    return;
+                }
 
                 var deJureCityIds = new List<long>();
                 if (DeJureRegionStore.TryGetForCity(pCity.id,
@@ -1251,36 +1273,60 @@ namespace AncientWarfare3.core.lineage
                     MandateCoreTransferRules.MergeCapitalTerritoryIds(
                         new List<long>(), deJureCityIds, neighborIds,
                         pCity.id);
-                int moved = 0;
-                foreach (long cityId in transferIds)
-                {
-                    // 首都本身刚刚易主完毕,不再动它。
-                    if (cityId == pCity.data.id) continue;
-                    City other = FindCity(cityId);
-                    // 只收仍属于沦陷方的城:法理州里可能混有别国的城,
-                    // 那些不该因为邻国首都被打下来就易主。
-                    if (other?.data == null || other.isRekt() ||
-                        PeasantRebelBanditStrongholdService
-                            .IsStrongholdCity(other) ||
-                        other.kingdom != pOldKingdom) continue;
-                    other.joinAnotherKingdom(pNewKingdom);
-                    moved++;
-                }
 
-                // 戳用完就摘,天然一次性。战争侧的已转标记继续维护,
-                // 让战末那条保底路径也认得这次已经处理过。
-                pOldKingdom.data.get(
-                    LineageKeys.MANDATE_WAR_KINGDOM_WAR_ID,
-                    out long stampedWarId, -1L);
-                War stampedWar = FindWar(stampedWarId);
-                if (stampedWar?.data != null)
-                    MarkCapitalRingTransferred(stampedWar, pOldKingdom.id);
-                ClearKingdomMandateWarStamp(pOldKingdom);
-                ModClass.LogInfo("[AW3] 天命首都沦陷: " +
-                    (pCity.data.name ?? "?") + " 归 " +
-                    (pNewKingdom.name ?? "?") + ", 随迁 " + moved + " 城");
-                RumpCourtSplitService.OnCapitalLost(pOldKingdom, pCity,
-                    pNewKingdom);
+                // 分支：随机决定是否把一半首都圈割给旧朝宗族里的候选人。
+                // 触发条件：旧朝有合法的继承候选人（能立国的那种）；
+                // 概率：50 %。这样两轮里有一轮是完整的「天下一统」，
+                // 另一轮是「枭雄割据」—— 随机性让每场天命战争都不一样。
+                Actor rumpCandidate = TryFindRumpClaimant(pOldKingdom);
+                bool doHalfSplit = rumpCandidate != null &&
+                                   UnityEngine.Random.value < 0.5f;
+
+                int moved = 0;
+                if (doHalfSplit)
+                {
+                    var allIds = new List<long>(transferIds);
+                    allIds.RemoveAll(id => id == pCity.data.id);
+                    int half = allIds.Count / 2;
+                    for (int i = 0; i < allIds.Count; i++)
+                    {
+                        City other = FindCity(allIds[i]);
+                        if (other?.data == null || other.isRekt() ||
+                            PeasantRebelBanditStrongholdService
+                                .IsStrongholdCity(other) ||
+                            other.kingdom != pOldKingdom) continue;
+                        if (i < half)
+                        {
+                            other.joinAnotherKingdom(pNewKingdom);
+                            moved++;
+                        }
+                    }
+                    try { WorldLog.logFracturedKingdom(pOldKingdom); }
+                    catch { }
+                    ModClass.LogInfo("[AW3] 天命首都沦陷(一半环绕): " +
+                        (pCity.data.name ?? "?") + " 归 " +
+                        (pNewKingdom.name ?? "?") + ", 随迁 " + moved +
+                        " 城, 候选人 " + rumpCandidate.data.id + " 保留后半段");
+                }
+                else
+                {
+                    foreach (long cityId in transferIds)
+                    {
+                        if (cityId == pCity.data.id) continue;
+                        City other = FindCity(cityId);
+                        if (other?.data == null || other.isRekt() ||
+                            PeasantRebelBanditStrongholdService
+                                .IsStrongholdCity(other) ||
+                            other.kingdom != pOldKingdom) continue;
+                        other.joinAnotherKingdom(pNewKingdom);
+                        moved++;
+                    }
+                    try { WorldLog.logShatteredCrown(pOldKingdom); }
+                    catch { }
+                    ModClass.LogInfo("[AW3] 天命首都沦陷: " +
+                        (pCity.data.name ?? "?") + " 归 " +
+                        (pNewKingdom.name ?? "?") + ", 随迁 " + moved + " 城");
+                }
             }
             catch (Exception error)
             {
@@ -1291,6 +1337,54 @@ namespace AncientWarfare3.core.lineage
             {
                 _capitalRingCascadeActive = false;
             }
+        }
+
+        private static Actor TryFindRumpClaimant(Kingdom pFallenKingdom)
+        {
+            if (pFallenKingdom?.data == null) return null;
+            try
+            {
+                // 找最年轻、综合属性最好的合法成年宗室男性。
+                // 不用派系支持排名——那偏向嫡长子顺序，和「谁有能力在乱局
+                // 里自立」没有关系。属性用 warfare+intelligence+diplomacy，
+                // 年龄相差 2 岁以内时才看属性，否则直接取更年轻的。
+                Actor best = null;
+                float bestAge = float.MaxValue;
+                int bestStats = int.MinValue;
+                Actor king = pFallenKingdom.king;
+                foreach (Actor actor in World.world?.units ??
+                    (System.Collections.Generic.IEnumerable<Actor>)
+                    new Actor[0])
+                {
+                    if (actor?.data == null || actor == king ||
+                        actor.kingdom != pFallenKingdom ||
+                        !actor.isAlive() || actor.isRekt() ||
+                        !actor.isSexMale() || !actor.isAdult() ||
+                        actor.isKing() ||
+                        SlaveService.IsSlave(actor) ||
+                        actor.hasTrait("madness")) continue;
+                    float age;
+                    try { age = actor.getAge(); }
+                    catch { continue; }
+                    int stats;
+                    try
+                    {
+                        stats = actor.warfare + actor.intelligence +
+                                actor.diplomacy;
+                    }
+                    catch { stats = 0; }
+                    bool younger = age < bestAge - 2f;
+                    bool sameAge = !younger && age <= bestAge + 2f;
+                    if (younger || sameAge && stats > bestStats)
+                    {
+                        best = actor;
+                        bestAge = age;
+                        bestStats = stats;
+                    }
+                }
+                return best;
+            }
+            catch { return null; }
         }
 
         private static void ApplyImmediateCoreCityLoss(City pCity,
@@ -3324,6 +3418,52 @@ namespace AncientWarfare3.core.lineage
         ///     （战争已被清理）就退回原版敌对关系 —— 刚打下人家首都的，
         ///     不会是自己人。
         /// </summary>
+        /// <summary>
+        ///     这次首都易主是不是发生在天命战争语境里。
+        ///
+        ///     三条判据依次放宽，任一成立即可：
+        ///     <list type="number">
+        ///     <item>沦陷方身上有开战快照（正常路径）</item>
+        ///     <item>世界里存在一场天命/天命讨逆战争，双方分处敌对阵营 ——
+        ///           **不看战争死活**。首都常常在战争判定结束之后才落定，
+        ///           <c>Kingdom.getWars()</c> 那时已经查不到它了</item>
+        ///     <item>沦陷方就是当今天命所在，占领方是它的敌人</item>
+        ///     </list>
+        ///
+        ///     只在真有一座都城易主时才走到这里，遍历战争表的代价可以忽略。
+        /// </summary>
+        private static bool IsMandateWarContext(Kingdom pFallen,
+            Kingdom pConqueror)
+        {
+            if (pFallen?.data == null || pConqueror?.data == null)
+                return false;
+            pFallen.data.get(LineageKeys.MANDATE_WAR_KINGDOM_CAPITAL_ID,
+                out long stampedCapitalId, -1L);
+            if (stampedCapitalId >= 0L) return true;
+            try
+            {
+                if (World.world?.wars != null)
+                foreach (War war in World.world.wars)
+                {
+                    if (war?.data == null) continue;
+                    string type = GetWarType(war);
+                    if (type != WAR_TIANMING &&
+                        type != WAR_TIANMING_REBEL) continue;
+                    if (war.isAttacker(pConqueror) &&
+                        war.isDefender(pFallen)) return true;
+                    if (war.isDefender(pConqueror) &&
+                        war.isAttacker(pFallen)) return true;
+                }
+            }
+            catch { }
+            try
+            {
+                return pFallen == GetCurrentMandateKingdom() &&
+                       pConqueror.isEnemy(pFallen);
+            }
+            catch { return false; }
+        }
+
         private static bool IsHostileCapitalConqueror(Kingdom pFallen,
             Kingdom pConqueror)
         {

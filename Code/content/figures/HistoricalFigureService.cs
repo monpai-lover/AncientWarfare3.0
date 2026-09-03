@@ -136,6 +136,8 @@ namespace AncientWarfare3.content.figures
             //   → 历史人物**永远不生成**(根因)。改用种族文明标志 asset.civ(对齐 AW2 的 race.civilization,不依赖 kingdom)。
             if (pActor.asset == null || !pActor.asset.civ) { Diag(pSource, "asset 非 civ:" + (pActor.asset?.id ?? "null")); return; }
             if (pActor.hasTrait(TRAIT_FIGURE) || pActor.hasTrait(TRAIT_FIRST)) { Diag(pSource, "已是 figure"); return; }
+            if (HistoricalFigureCardIdentityService.IsCardActor(pActor))
+            { Diag(pSource, "historical card actor"); return; }
             if (!HistoricalFigureSpawnRules.CanEvaluate(FigureStateStore.IsReady))
             {
                 Diag(pSource, "lineage archive unavailable");

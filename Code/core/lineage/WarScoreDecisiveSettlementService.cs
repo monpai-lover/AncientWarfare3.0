@@ -38,6 +38,9 @@ namespace AncientWarfare3.core.lineage
             if (AW3MultiplayerReplicaScope.IsReplicaSession ||
                 pWar?.data == null || pWar.hasEnded() ||
                 ZhuluPeaceGuard.BlocksOrdinarySettlement(pWar) ||
+                // 天命战争不因「攻下都城把分数顶满」而当场收局:
+                // 都城圈移交与小朝廷分裂都需要战争还在。
+                MandateWarPeaceGuard.BlocksScoreAndGoalSettlement(pWar) ||
                 RebellionDirectTerritoryTransferService
                     .BlocksOrdinarySettlement(pWar)) return false;
             Kingdom attacker = MainAttacker(pWar);

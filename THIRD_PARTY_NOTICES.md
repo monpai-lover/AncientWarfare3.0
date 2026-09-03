@@ -20,6 +20,30 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+## Historical figure card audio
+
+The historical figure card reveal audio was derived from the local
+`cs2-case-simulator` reference repository at
+`frontend/assets/audio`. Only the converted WAV files used by this feature are
+included; no frontend source, database, or unrelated assets are bundled.
+
+| Reference asset | Bundled asset |
+| --- | --- |
+| `generic_press_01.mp3` | `GameResources/sounds/historical_cards/aw3_card_button_press.wav` |
+| `itemtile_plastic_rollover_15.mp3` | `GameResources/sounds/historical_cards/aw3_card_item_hover.wav` |
+| `csgo_ui_crate_item_scroll.mp3` | `GameResources/sounds/historical_cards/aw3_card_scroll.wav` |
+| `case_unlock_01.mp3` | `GameResources/sounds/historical_cards/aw3_card_unlock.wav` |
+| `case_unlock_immediate_01.mp3` | `GameResources/sounds/historical_cards/aw3_card_unlock_immediate.wav` |
+| `case_reveal_rare_01.mp3` | `GameResources/sounds/historical_cards/aw3_card_reveal_blue.wav` |
+| `case_reveal_mythical_01.mp3` | `GameResources/sounds/historical_cards/aw3_card_reveal_purple.wav` |
+| `case_reveal_legendary_01.mp3` | `GameResources/sounds/historical_cards/aw3_card_reveal_pink.wav` |
+| `case_reveal_ancient_01.mp3` | `GameResources/sounds/historical_cards/aw3_card_reveal_red.wav` |
+| `case_reveal_ancient_01.mp3` | `GameResources/sounds/historical_cards/aw3_card_reveal_gold.wav` |
+
+The source repository is used only as a local audiovisual reference for this
+feature. The card audio playback is optional and failures disable audio
+without blocking card draws or deployments.
+
 ## Cultiway-Reborn city-wall geometry
 
 AncientWarfare3 includes an adapted implementation of the city-wall geometry

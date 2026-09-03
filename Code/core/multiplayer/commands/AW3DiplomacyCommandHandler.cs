@@ -226,6 +226,15 @@ namespace AncientWarfare3.core.multiplayer.commands
         private static AW3CommandResult DeclareWar(
             AW3CommandRequest request)
         {
+            // 暂停状态下不允许发战书：暂停时模拟停转，战争相关的结算、
+            // 军队行为、天命判定都不推进，此时开战只会让状态机进入一个
+            // 永远无法自行收拾的中间态。
+            try
+            {
+                if (World.world != null && World.world.isPaused())
+                    return Rejected("world_paused");
+            }
+            catch { }
             Kingdom attacker = FindKingdom(request.CountryId);
             Kingdom defender = FindKingdom(request.TargetCountryId);
             if (attacker == null || defender == null) return NotFound();

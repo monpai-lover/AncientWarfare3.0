@@ -796,6 +796,10 @@ namespace AncientWarfare3.core.lineage
                 War war = WarTerritoryService.TryDeclareAutonomousRestorationCoreWar(
                     pRestored, target, pCampaign.claimId, claimant);
                 if (war?.data == null) continue;
+                // 邀请「复国支持者」参战:与被复国方同宗族、
+                // 或有旧领土诉求的他国势力可以加入攻方。
+                TryInviteRestorationSupporters(war, pRestored,
+                    pCampaign.originalKingdomId);
                 int cursor = RestorationCampaignRules.NextCoreCursor(
                     pCampaign.coreCursor, inspected, cores.Count);
                 UpdateCampaignWar(pCampaign.campaignId, war.data.id,
@@ -1531,6 +1535,102 @@ namespace AncientWarfare3.core.lineage
         private static bool IsLiveKingdom(Kingdom pKingdom)
         {
             return pKingdom?.data != null && !pKingdom.isRekt() && !pKingdom.isNeutral();
+        }
+
+        /// <summary>
+        ///     复国战争开打后，邀请有意愿的他国势力加入攻方。
+        ///
+        ///     「支持者」满足以下所有条件：
+        ///     <list type="number">
+        ///     <item>与被复国方同宗族（LINEAGE_ID 相同）或共享原王国 ID</item>
+        ///     <item>与防守方（当前占着那座城的国家）处于敌对状态，
+        ///           或对防守方持有强烈负面看法（opinion ≤ −40）</item>
+        ///     <item>与被复国方之间没有活跃战争</item>
+        ///     <item>没有在别的战争里</item>
+        ///     </list>
+        ///
+        ///     最多邀请 <see cref="MaxRestorationSupporters"/> 个国家，
+        ///     防止一场复国战争变成天下围攻。
+        /// </summary>
+        private static void TryInviteRestorationSupporters(War pWar,
+            Kingdom pRestored, long pOriginalKingdomId)
+        {
+            const int MaxRestorationSupporters = 2;
+            if (pWar?.data == null || !IsLiveKingdom(pRestored)) return;
+            try
+            {
+                Kingdom defender = pWar.getMainDefender();
+                if (defender?.data == null) return;
+
+                // 取被复国方的宗族 ID，用来匹配同宗支持者。
+                pRestored.data.get(LineageKeys.KINGDOM_LEGITIMATE_LINEAGE_ID,
+                    out long restoredLineageId, -1L);
+
+                int invited = 0;
+                foreach (Kingdom candidate in World.world?.kingdoms ??
+                    System.Linq.Enumerable.Empty<Kingdom>())
+                {
+                    if (invited >= MaxRestorationSupporters) break;
+                    if (!IsLiveKingdom(candidate)) continue;
+                    if (candidate == pRestored || candidate == defender) continue;
+                    // 已在这场战争里——跳过。
+                    try { if (pWar.hasKingdom(candidate)) continue; } catch { }
+                    // 不能与被复国方有活跃战争。
+                    try
+                    {
+                        if (World.world.wars.getWar(pRestored, candidate, false) != null)
+                            continue;
+                    }
+                    catch { }
+                    // 正在打别的战争的国家精力有限，不参与。
+                    if (candidate.hasEnemies()) continue;
+
+                    // 同宗族判定。
+                    bool sameLineage = false;
+                    if (restoredLineageId >= 0)
+                    {
+                        candidate.data.get(
+                            LineageKeys.KINGDOM_LEGITIMATE_LINEAGE_ID,
+                            out long candidateLineage, -1L);
+                        sameLineage = candidateLineage == restoredLineageId;
+                    }
+                    if (!sameLineage &&
+                        candidate.id != pOriginalKingdomId) continue;
+
+                    // 需要对防守方有负面立场，或曾与防守方交战。
+                    bool hostile;
+                    try { hostile = candidate.isEnemy(defender); }
+                    catch { hostile = false; }
+                    if (!hostile)
+                    {
+                        try
+                        {
+                            int opinion = World.world.diplomacy
+                                .getOpinion(candidate, defender).total;
+                            hostile = opinion <= -40;
+                        }
+                        catch { hostile = false; }
+                    }
+                    if (!hostile) continue;
+
+                    using (WarParticipantEntrySourceScope.Open(pWar,
+                        candidate, WarParticipantEntrySourceKind.ScriptedJoin,
+                        pRestored))
+                    {
+                        try { pWar.joinAttackers(candidate); }
+                        catch { continue; }
+                    }
+                    invited++;
+                    ModClass.LogInfo("[AW3] 复国支持者参战: " +
+                        (candidate.name ?? "?") + " 支持 " +
+                        (pRestored.name ?? "?") + " 对抗 " +
+                        (defender.name ?? "?"));
+                }
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("[AW3] 复国支持者邀请失败: " + error.Message);
+            }
         }
     }
 }

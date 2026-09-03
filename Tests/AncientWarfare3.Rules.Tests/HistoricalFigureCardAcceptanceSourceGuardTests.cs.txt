@@ -1,0 +1,68 @@
+using System;
+using System.IO;
+
+internal static class HistoricalFigureCardAcceptanceSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Path.Combine(Directory.GetCurrentDirectory(), "Code");
+        string audioPath = Path.Combine(root, "core", "lineage",
+            "HistoricalFigureCardAudioService.cs");
+        True(File.Exists(audioPath), "card audio service exists");
+        string audio = File.ReadAllText(audioPath);
+        Contains(audio, "CustomAudioManager", "optional custom audio manager path exists");
+        Contains(audio, "MusicBox.playSound", "native audio fallback exists");
+        Contains(audio, "aw3_card_scroll", "scroll cue is mapped");
+        Contains(audio, "aw3_card_reveal_gold", "gold reveal cue is mapped");
+
+        string windowPath = Path.Combine(root, "ui", "windows",
+            "HistoricalFigureDrawWindow.cs");
+        string window = File.ReadAllText(windowPath);
+        Contains(window, "DrawAndCommit", "draw commits before animation");
+        Contains(window, "WinnerIndex", "reveal uses fixed winner position");
+        Contains(window, "IsCatalogueAvailable", "invalid catalogue disables draw");
+        Contains(window, "SelectCollectionCard", "owned collection rows are selectable");
+        Contains(window, "ResetTransientState", "window exposes transient reset");
+        Contains(window, "HistoricalFigureCardAudioService.PlayScroll",
+            "rolling crosses play scroll cue");
+
+        string patchPath = Path.Combine(root, "patch",
+            "AW_HistoricalFigureCardPatch.cs");
+        string patch = File.ReadAllText(patchPath);
+        Contains(patch, "MapBox.on_world_loaded", "card state observes world load");
+        Contains(patch, "ResetTransientState", "world load clears card state");
+
+        string storePath = Path.Combine(root, "core", "lineage",
+            "HistoricalFigureCardCollectionStore.cs");
+        string store = File.ReadAllText(storePath);
+        Contains(store, "Application.persistentDataPath",
+            "collection has an independent persistent path");
+        Contains(store, ".tmp", "collection uses a temporary write");
+        Contains(store, "File.Replace", "collection replaces atomically");
+
+        string deploymentPath = Path.Combine(root, "core", "lineage",
+            "HistoricalFigureCardDeploymentService.cs");
+        string deployment = File.ReadAllText(deploymentPath);
+        Contains(deployment, "pAdultAge: true", "deployment creates adults");
+        Contains(deployment, "GetOwnedCount", "deployment requires an owned card");
+        Contains(deployment, "card_deployed", "deployment writes person history");
+        Contains(deployment, "card_kingdom_founded",
+            "deployment writes kingdom history");
+
+        string identityPath = Path.Combine(root, "core", "lineage",
+            "HistoricalFigureCardIdentityService.cs");
+        string identity = File.ReadAllText(identityPath);
+        Contains(identity, "HISTORICAL_CARD_ID", "card identity is persisted");
+    }
+
+    private static void Contains(string source, string value, string message)
+    {
+        if (!source.Contains(value))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+}

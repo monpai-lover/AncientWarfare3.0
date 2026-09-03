@@ -46,6 +46,7 @@ namespace AncientWarfare3.content
             // 历代开国君主降临:注册开关 toggle + 世界日志资产。
             // 依赖 figure/first 特质(XiaTraits 已注册在前),放最后。
             figures.HistoricalFigureService.Init();
+            core.lineage.HistoricalFigureCardRuntimeService.Initialize();
         }
     }
 }

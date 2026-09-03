@@ -1,5 +1,6 @@
 using System;
 using System.Data.SQLite;
+using AncientWarfare3.content.figures;
 using AncientWarfare3.core.db;
 
 namespace AncientWarfare3.core.lineage
@@ -21,6 +22,19 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     internal static class HistoricalAncestorService
     {
+        internal static bool EnsureCardParentage(Actor pActor,
+            HistoricalFigureCardDefinition pDefinition, string pDeploymentId)
+        {
+            if (pActor?.data == null || pDefinition == null ||
+                string.IsNullOrWhiteSpace(pDeploymentId)) return false;
+            var parentage = new HistoricalAncestorParentage(
+                pDefinition.FatherDisplayName, "", pDefinition.MotherDisplayName,
+                "", false);
+            return Ensure(pActor, parentage,
+                CardParentId(pDeploymentId, HistoricalFigureCardParentSlot.Father),
+                CardParentId(pDeploymentId, HistoricalFigureCardParentSlot.Mother));
+        }
+
         internal static bool EnsureFigureParentage(Actor pActor,
             int pRegistryIndex, string pFigureId)
         {
@@ -183,6 +197,25 @@ namespace AncientWarfare3.core.lineage
                 parent._current_children--;
             }
             catch { }
+        }
+
+        private static long CardParentId(string pDeploymentId,
+            HistoricalFigureCardParentSlot pSlot)
+        {
+            unchecked
+            {
+                ulong hash = 14695981039346656037UL;
+                string key = pDeploymentId.Trim() + ":" +
+                    (pSlot == HistoricalFigureCardParentSlot.Father
+                        ? "father" : "mother");
+                for (int i = 0; i < key.Length; i++)
+                {
+                    hash ^= key[i];
+                    hash *= 1099511628211UL;
+                }
+                return HistoricalAncestorRules.SyntheticBase + 200000L +
+                    (long)(hash % 1000000000UL);
+            }
         }
 
         /// <summary>父与本人同姓同氏,所以姓沿用本人的(内容表因此不必重复填)。</summary>

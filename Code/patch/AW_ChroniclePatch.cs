@@ -181,18 +181,22 @@ namespace AncientWarfare3.patch
                 __instance, __state, __instance?.kingdom ?? pKingdom);
         }
 
-        // 旧主 + 是否为占领,留给 Postfix 判首都沦陷用:方法跑完之后
-        // __instance.kingdom 已经是新主,旧主再也取不到。
+        // 旧主 + 是否为占领 + 易主前是不是旧主的都城,留给 Postfix 判
+        // 首都沦陷用:方法跑完之后 __instance.kingdom 已经是新主,
+        // 旧主与「它当时是不是都城」都再也取不到。
         public readonly struct CityJoinState
         {
-            public CityJoinState(Kingdom pOldKingdom, bool pCaptured)
+            public CityJoinState(Kingdom pOldKingdom, bool pCaptured,
+                bool pWasCapital)
             {
                 OldKingdom = pOldKingdom;
                 Captured = pCaptured;
+                WasCapital = pWasCapital;
             }
 
             public Kingdom OldKingdom { get; }
             public bool Captured { get; }
+            public bool WasCapital { get; }
         }
 
         [HarmonyPrefix]
@@ -201,7 +205,15 @@ namespace AncientWarfare3.patch
             Kingdom pNewSetKingdom, bool pCaptured,
             out CityJoinState __state)
         {
-            __state = new CityJoinState(__instance?.kingdom, pCaptured);
+            Kingdom oldKingdom = __instance?.kingdom;
+            bool wasCapital = false;
+            try
+            {
+                wasCapital = __instance?.data != null &&
+                             oldKingdom?.capital == __instance;
+            }
+            catch { }
+            __state = new CityJoinState(oldKingdom, pCaptured, wasCapital);
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (!CityOwnershipTransferRules.ShouldDisbandLocalArmy(
                     __instance?.kingdom != null,
@@ -225,9 +237,12 @@ namespace AncientWarfare3.patch
             CoupRestorationService.OnCityTransferCompleted(__instance);
             // 原版占领收尾在此:finishCapture → joinAnotherKingdom 全部跑完,
             // 首都易主已落定。天命战争里此时把首都圈一并交给占领方。
-            if (__state.Captured)
+            // 割让(和谈)与占领走同一个方法,只是 pCaptured=false —— 都城易主
+            // 就该走沦陷逻辑,不能只认占领那一条路。
+            if (__state.Captured || __state.WasCapital)
                 MandateService.OnCityCaptureCompleted(__instance,
-                    __state.OldKingdom, __instance?.kingdom);
+                    __state.OldKingdom, __instance?.kingdom,
+                    __state.WasCapital);
         }
 
         [HarmonyPrefix]

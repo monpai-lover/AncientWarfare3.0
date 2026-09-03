@@ -144,6 +144,11 @@ namespace AncientWarfare3.core.lineage
             bool guarded = ZhuluPeaceGuard.BlocksOrdinarySettlement(pWar) ||
                 RebellionDirectTerritoryTransferService
                     .BlocksOrdinarySettlement(pWar);
+            // 天命战争只挡「记分板收局」这一路:决定性战功与战争目标兑现。
+            // 全境占领 / 兵力被彻底消灭仍然照常结束 —— 否则天命战争
+            // 永远打不完,拖着一堆军队反过来吃性能。
+            bool scoreGuarded = guarded ||
+                MandateWarPeaceGuard.BlocksScoreAndGoalSettlement(pWar);
             Kingdom attacker = MainAttacker(pWar);
             if (attacker?.data == null ||
                 !WarScoreService.TryGetSnapshot(pWar, attacker,
@@ -169,14 +174,15 @@ namespace AncientWarfare3.core.lineage
             // cannot override a confirmed one-sided military collapse.
             if (!potentialRead)
             {
-                if (guarded || !WarTerminalSettlementRules.IsDecisiveScore(
+                if (scoreGuarded ||
+                    !WarTerminalSettlementRules.IsDecisiveScore(
                         snapshot.Score)) return false;
                 pDecision = WarTerminalSettlementRules.Resolve(
                     new WarTerminalSettlementFacts(false, snapshot.Score,
                         1, 1, false));
                 return true;
             }
-            if (!guarded && WarTerminalSettlementRules.IsDecisiveScore(
+            if (!scoreGuarded && WarTerminalSettlementRules.IsDecisiveScore(
                     snapshot.Score))
             {
                 pDecision = WarTerminalSettlementRules.Resolve(
@@ -184,10 +190,14 @@ namespace AncientWarfare3.core.lineage
                         attackers, defenders, false));
                 return pDecision.IsTerminal;
             }
-            bool affordableGoal = !guarded &&
+            bool affordableGoal = !scoreGuarded &&
                 WarGoalSettlementRuntimeService.HasAffordableGoal(pWar);
+            // 天命战争不整段禁掉收局(那会让它永远打不完),只把「记分板」这一项
+            // 抹平:分数当 0 看,决定性战功与目标兑现都走不到,兵力被打光那条
+            // 判定原样保留。
             pDecision = WarTerminalSettlementRules.Resolve(
-                new WarTerminalSettlementFacts(guarded, snapshot.Score,
+                new WarTerminalSettlementFacts(guarded,
+                    scoreGuarded ? 0 : snapshot.Score,
                     attackers, defenders, affordableGoal));
             if (!pDecision.IsTerminal) return false;
             if (pDecision.Reason ==

@@ -226,23 +226,51 @@ namespace AncientWarfare3.core.court
                 SchoolInstitutionTableItem.GetTableName(),
                 CivilServiceExamCandidateTableItem.GetTableName(),
                 CivilServiceExamSessionTableItem.GetTableName(), pKingdomId,
-                pSocialOrigin ?? CivilServiceExamRules.CommonerOrigin,
+                // null = 不按门第过滤，取回全池由调用方分桶。
+                pSocialOrigin,
                 pYear, pMode == CivilServiceExamMode.Tribute,
-                CivilServiceExamRules.CandidateSourceLimit);
+                // 不分桶取数时四个出身共用一条查询，池子要相应放宽，
+                // 否则排在前面的出身会把名额吃光。
+                string.IsNullOrEmpty(pSocialOrigin)
+                    ? CivilServiceExamRules.CandidateSourceLimit * 3
+                    : CivilServiceExamRules.CandidateSourceLimit);
         }
 
+        /// <summary>
+        ///     取本国应试池，并按门第分桶交错，保证四个出身都能上榜。
+        ///
+        ///     门第一律由 <see cref="SocialStandingService"/> 判定 —— 与人物
+        ///     面板「身份」行、史料归类同一个口径。以前是发三条按 SQL 里那套
+        ///     旧判据（STATUS / EVER_NOBLE_BLOOD / LINEAGE_ID）分桶的查询，
+        ///     取人按旧口径、显示按新口径，名单里于是满屏贵族。现在只发一条
+        ///     不带门第条件的查询，回来在内存里分桶。
+        /// </summary>
         private static IReadOnlyList<long> LoadIndexedLocalActorIds(
             long pKingdomId, int pYear, CivilServiceExamMode pMode)
         {
-            IReadOnlyList<long>[] sources =
+            List<long> pool = LoadIndexedActorIds(pKingdomId, null, pYear,
+                pMode);
+            if (pool.Count == 0) return pool;
+
+            var noble = new List<long>();
+            var gentry = new List<long>();
+            var declined = new List<long>();
+            var commoner = new List<long>();
+            foreach (long actorId in pool)
             {
-                LoadIndexedActorIds(pKingdomId,
-                    CivilServiceExamRules.NobleOrigin, pYear, pMode),
-                LoadIndexedActorIds(pKingdomId,
-                    CivilServiceExamRules.DeclinedNobleOrigin, pYear, pMode),
-                LoadIndexedActorIds(pKingdomId,
-                    CivilServiceExamRules.CommonerOrigin, pYear, pMode)
-            };
+                string origin = ResolveSocialOrigin(FindActor(actorId));
+                if (origin == CivilServiceExamRules.NobleOrigin)
+                    noble.Add(actorId);
+                else if (origin == CivilServiceExamRules.GentryOrigin)
+                    gentry.Add(actorId);
+                else if (origin ==
+                         CivilServiceExamRules.DeclinedNobleOrigin)
+                    declined.Add(actorId);
+                else commoner.Add(actorId);
+            }
+
+            IReadOnlyList<long>[] sources =
+                { noble, gentry, declined, commoner };
             return CivilServiceExamRules.InterleaveCandidateSources(sources,
                 CivilServiceExamRules.CandidateSourceLimit);
         }

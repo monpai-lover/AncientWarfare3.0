@@ -1,0 +1,43 @@
+using System;
+using System.IO;
+
+internal static class HistoricalFigureCardDeploymentServiceSourceGuardTests
+{
+    public static void Run()
+    {
+        string path = Path.Combine(Directory.GetCurrentDirectory(), "Code",
+            "core", "lineage", "HistoricalFigureCardDeploymentService.cs");
+        True(File.Exists(path), "card deployment service exists");
+        string source = File.ReadAllText(path);
+        string identitySource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "HistoricalFigureCardIdentityService.cs"));
+        Contains(source, "HistoricalFigureCardDeploymentRequest",
+            "deployment request contract exists");
+        Contains(source, "HistoricalFigureCardDeploymentResult",
+            "deployment result contract exists");
+        Contains(source, "TryDeploy",
+            "deployment entry point exists");
+        Contains(source, "pAdultAge: true",
+            "deployment creates an adult actor directly");
+        Contains(identitySource, "LineageKeys.HISTORICAL_CARD_ID",
+            "deployment stores card identity");
+        Contains(source, "HistoricalFigureCardDeploymentRules.TryBegin",
+            "deployment is idempotently locked");
+        Contains(source, "card_deployed", "card deployment history event exists");
+        Contains(source, "card_king", "card king history event exists");
+        Contains(source, "card_kingdom_founded",
+            "card kingdom history event exists");
+    }
+
+    private static void Contains(string source, string value, string message)
+    {
+        if (!source.Contains(value))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+}
