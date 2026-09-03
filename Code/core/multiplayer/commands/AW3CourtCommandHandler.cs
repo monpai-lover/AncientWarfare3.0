@@ -32,8 +32,57 @@ namespace AncientWarfare3.core.multiplayer.commands
                     return GrantBanditAmnesty(request);
                 case AW3CommandKind.RenameCounty:
                     return RenameCounty(request);
+                case AW3CommandKind.RenameCityState:
+                    return RenameCityState(request);
                 default:
                     return Invalid();
+            }
+        }
+
+        private static AW3CommandResult RenameCityState(
+            AW3CommandRequest request)
+        {
+            CityStateRenameResult result = CityStateRenameService.TryApply(
+                request.CountryId, request.CityId, request.Text,
+                request.Payload);
+            if (result == CityStateRenameResult.Success)
+                return AW3CommandResult.Success(
+                    "aw_city_state_rename_success", request.CityId,
+                    (int)result);
+            AW3CommandError error = result ==
+                    CityStateRenameResult.CityNotFound
+                ? AW3CommandError.NotFound
+                : result == CityStateRenameResult.Unauthorized
+                    ? AW3CommandError.Unauthorized
+                    : result == CityStateRenameResult.NoChange
+                        ? AW3CommandError.Conflict
+                        : result == CityStateRenameResult.CommitFailed
+                            ? AW3CommandError.ExecutionFailed
+                            : AW3CommandError.IllegalTarget;
+            return AW3CommandResult.Rejected(error,
+                CityStateRenameErrorKey(result), request.CityId,
+                (int)result);
+        }
+
+        private static string CityStateRenameErrorKey(
+            CityStateRenameResult pResult)
+        {
+            switch (pResult)
+            {
+                case CityStateRenameResult.CityNotFound:
+                    return "aw_city_state_rename_city_missing";
+                case CityStateRenameResult.Unauthorized:
+                    return "aw_city_state_rename_unauthorized";
+                case CityStateRenameResult.EmptyCityName:
+                    return "aw_city_state_rename_empty_city";
+                case CityStateRenameResult.EmptyStateName:
+                    return "aw_city_state_rename_empty_state";
+                case CityStateRenameResult.InvalidRegion:
+                    return "aw_city_state_rename_invalid_region";
+                case CityStateRenameResult.NoChange:
+                    return "aw_city_state_rename_no_change";
+                default:
+                    return "aw_city_state_rename_failed";
             }
         }
 

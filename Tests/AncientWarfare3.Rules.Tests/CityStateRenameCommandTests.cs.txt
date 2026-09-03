@@ -1,0 +1,54 @@
+using System;
+using System.IO;
+using System.Linq;
+using AncientWarfare3.api.multiplayer;
+
+internal static class CityStateRenameCommandTests
+{
+    internal static void Run()
+    {
+        AW3CommandRequest request = AW3CommandRequest.RenameCityState(
+            1L, 2L, "洛阳", "司州");
+        Equal(AW3CommandKind.RenameCityState, request.Kind,
+            "dual rename request uses its own command kind");
+        Equal(2L, request.CityId, "request keeps city id");
+        Equal("洛阳", request.Text, "request keeps city name");
+        Equal("司州", request.Payload, "request keeps state name");
+        True(AW3MultiplayerCatalog.Commands.Any(item =>
+                item.Kind == AW3CommandKind.RenameCityState),
+            "dual rename command is registered");
+
+        string router = Read(
+            "Code/core/multiplayer/commands/AW3AuthoritativeCommandRouter.cs");
+        string handler = Read(
+            "Code/core/multiplayer/commands/AW3CourtCommandHandler.cs");
+        string service = Read("Code/core/court/CityStateRenameService.cs");
+        Contains(router, "case AW3CommandKind.RenameCityState:");
+        Contains(router, "AW3CourtCommandHandler.Dispatch(request)");
+        Contains(handler, "CityStateRenameService.TryApply");
+        Contains(service, "SuppressNativeSeatSync");
+        Contains(service, "TryRenameRegion");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(Path.Combine(
+        Directory.GetCurrentDirectory(),
+        pPath.Replace('/', Path.DirectorySeparatorChar)));
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException("missing command source: " +
+                pNeedle);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage);
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+}

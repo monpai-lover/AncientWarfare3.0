@@ -26,6 +26,7 @@ namespace AncientWarfare3.core.multiplayer.commands
                 case AW3CommandKind.MergeDeJureRegions:
                     return AW3PolicyCommandHandler.Dispatch(request);
                 case AW3CommandKind.RenameCounty:
+                case AW3CommandKind.RenameCityState:
                     return AW3CourtCommandHandler.Dispatch(request);
                 case AW3CommandKind.AppointCourtOfficer:
                 case AW3CommandKind.FillCentralCourtVacancies:

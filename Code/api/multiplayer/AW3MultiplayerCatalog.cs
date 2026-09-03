@@ -170,6 +170,9 @@ namespace AncientWarfare3.api.multiplayer
                     AW3WindowCategory.Domestic, Country()),
                 Command(AW3CommandKind.RenameCounty,
                     AW3WindowCategory.Domestic, Country()),
+                Command(AW3CommandKind.RenameCityState,
+                    AW3WindowCategory.Domestic, Country() |
+                    AW3WindowContextRequirement.City),
                 Command(AW3CommandKind.AppointCourtOfficer,
                     AW3WindowCategory.Domestic, Country() |
                     AW3WindowContextRequirement.Actor |
