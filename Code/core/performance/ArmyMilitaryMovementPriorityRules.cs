@@ -106,6 +106,22 @@ namespace AncientWarfare3.core.performance
                    !intentionalTransportOwned;
         }
 
+        /// <summary>
+        ///     搁浅在水里的陆生单位必须留在 P0 里，哪怕军事目标已经没了。
+        ///
+        ///     自救上岸(<c>TryRunSelfLandingP0</c>)只在 P0 通道里跑，而 P0 入口
+        ///     原先只认「有进行中的 RTS 任务」或「正在回城」。任务一结束，人还
+        ///     泡在水里就被摘出索引 —— 自救逻辑再也不会被调用，士兵就一直漂着。
+        ///
+        ///     水生生物、船上的人、被运输接管的人不在此列：他们本来就该待在水里，
+        ///     或者已经有别的所有者在管。
+        /// </summary>
+        internal static bool ShouldRetainP0ForSelfLanding(bool inLiquid,
+            bool insideBoat, bool waterCreature)
+        {
+            return inLiquid && !insideBoat && !waterCreature;
+        }
+
         internal static bool ShouldAdvanceSelfLandingInSameP0(
             bool isSelfLandingTask, int actionIndexBeforeAi,
             int actionIndexAfterAi, bool hasBehaviourTileTarget,

@@ -1034,9 +1034,24 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         if (ArmyMilitaryMovementPriorityRules.ShouldRetainCombatP0(
                 AWPerformanceSettings.Mode == AWSimulationMode.Large,
                 militaryOwnerActive, immediateCombat)) return true;
+        if (IsStrandedInLiquid(actor)) return true;
         return kind == ArmyMilitaryMovementPriorityKind.RtsMember
             ? militaryOwnerActive
             : RoyalGuardService.HasMilitaryP0Objective(actor);
+    }
+
+    // 搁浅判定单独抽出来:任务结束不代表人已经上岸,摘索引前要先问一句。
+    private static bool IsStrandedInLiquid(Actor actor)
+    {
+        try
+        {
+            return ArmyMilitaryMovementPriorityRules
+                .ShouldRetainP0ForSelfLanding(
+                    actor?.current_tile?.Type?.liquid == true,
+                    actor?.is_inside_boat == true,
+                    actor?.isWaterCreature() == true);
+        }
+        catch { return false; }
     }
 
     public bool WaitingForBackgroundWork =>

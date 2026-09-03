@@ -1570,6 +1570,12 @@ namespace AncientWarfare3.core.lineage
             if (pWar?.data == null || !Ready) return false;
             try
             {
+                // 天命战争里**每一个**参战方都要走首都沦陷判定,不只主攻主守。
+                // 快照只在加入战争时写入,中途参战、或早期版本存档里会缺人;
+                // 早先只在快照整个为空时才回补,于是「有一条记录」就足以让其余
+                // 参战方永远不被检查。这里按缺失补齐,已有记录一律不动 ——
+                // 记的是**开战时**的首都,战末现取会取到迁都后的新都。
+                EnsureAllParticipantsRegistered(pWar);
                 List<MandateWarParticipantCapital> participants =
                     ReadMandateWarParticipants(pWar);
                 if (participants.Count == 0)
@@ -1664,6 +1670,37 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        /// <summary>
+        ///     把当前所有参战方补进首都快照，已登记的一律保持原样。
+        ///
+        ///     只补缺是关键：快照里记的是**开战时**的首都，重新登记会把它
+        ///     覆盖成迁都后的新都，首都沦陷判定就会去看一座根本没被打下来的城。
+        /// </summary>
+        private static void EnsureAllParticipantsRegistered(War pWar)
+        {
+            if (pWar?.data == null) return;
+            try
+            {
+                var known = new HashSet<long>();
+                foreach (MandateWarParticipantCapital participant in
+                         ReadMandateWarParticipants(pWar))
+                    known.Add(participant.KingdomId);
+                foreach (Kingdom kingdom in pWar.getAttackers())
+                    if (kingdom?.data != null && !known.Contains(kingdom.id))
+                    {
+                        RegisterMandateWarParticipant(pWar, kingdom, false);
+                        known.Add(kingdom.id);
+                    }
+                foreach (Kingdom kingdom in pWar.getDefenders())
+                    if (kingdom?.data != null && !known.Contains(kingdom.id))
+                    {
+                        RegisterMandateWarParticipant(pWar, kingdom, true);
+                        known.Add(kingdom.id);
+                    }
+            }
+            catch { }
+        }
+
         private static void RegisterMandateWarParticipant(War pWar,
             Kingdom pKingdom, bool pDefender)
         {
@@ -1726,6 +1763,13 @@ namespace AncientWarfare3.core.lineage
                 WarScoreService.TryGetTerminalFrozenOccupation(pWar.data.id,
                     pCapital.id, out long terminalController))
                 controllerId = terminalController;
+            // 占领 ≠ 易主。首都被敌军占着但还没走正式易主时,capital.kingdom
+            // 仍是原主,控制者就被判成它自己 —— IsEnemyParticipant 返回 false,
+            // 整个首都沦陷分支被跳过,周边城与法理州一座都不划转。
+            else if (pWar?.data != null && pCapital?.data != null &&
+                     WarScoreService.TryGetFrozenOccupation(pWar.data.id,
+                         pCapital.id, out long occupier) && occupier >= 0L)
+                controllerId = occupier;
             else
                 controllerId = pCapital?.kingdom?.data?.id ?? -1L;
 

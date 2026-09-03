@@ -57,13 +57,20 @@ namespace AncientWarfare3.core.lineage
             return pImmediateAttackTarget || pValidBehaviourTarget;
         }
 
+        // 锚点仍是将领的交战状态,但**触发者可以是任何成员**。
+        // 早先额外要求 contactActorIsCaptain:将领已经打起来了,成员撞见敌人
+        // 却因为「我不是将领」而不能请求野战释放,只能等将领自己那一格 P0
+        // 跑到。将领忙于战斗时那一格常常当帧不跑,FieldCombatReleased 一直是
+        // false,于是 TrySetMemberCombatTask 不给成员派战斗任务 —— 将领在打,
+        // 士兵在原地排队。参数保留以维持既有调用与用例签名。
         public static bool ShouldRequestFieldCombatFromP0(
             bool missionActive, bool alreadyReleased,
             bool contactActorIsCaptain,
             bool captainHasValidCombatTarget)
         {
+            _ = contactActorIsCaptain;
             return missionActive && !alreadyReleased &&
-                   contactActorIsCaptain && captainHasValidCombatTarget;
+                   captainHasValidCombatTarget;
         }
     }
 }

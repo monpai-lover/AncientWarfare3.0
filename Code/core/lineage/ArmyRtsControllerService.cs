@@ -4909,9 +4909,16 @@ namespace AncientWarfare3.core.lineage
                     ? IsValidCaptainCombatTarget(pContactActor, combatTarget)
                     : IsValidMemberCombatTarget(pContactActor, combatTarget);
             }
+            // 野战锚点是将领在不在打,不是「谁撞见的敌人」。成员撞见敌人时
+            // 也要能拉起野战释放,否则将领开打、成员却拿不到战斗任务。
+            bool captainEngagedNow = contactIsCaptain
+                ? validContactTarget
+                : HasImmediateCombatPriority(captain) ||
+                  IsValidCaptainCombatTarget(captain,
+                      captain?.beh_actor_target?.a);
             if (!ArmyRtsFieldCombatRules.ShouldRequestFieldCombatFromP0(
                     missionActive, runtime.FieldCombatReleased,
-                    contactIsCaptain, validContactTarget))
+                    contactIsCaptain, captainEngagedNow))
                 return runtime.FieldCombatReleased;
             if (runtime.SiegeCombatActive ||
                 ArmyRtsTransportService.HasActiveVoyage(army) ||
