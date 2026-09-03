@@ -35,6 +35,28 @@ if (args.Length == 1 && args[0] == "--history-api-subscriptions")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--city-state-rename-rules")
+{
+    CityStateRenameRulesTests.Run();
+    CityStateRenameSourceGuardTests.Run();
+    Console.WriteLine("City and state rename rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--city-state-rename-command")
+{
+    CityStateRenameCommandTests.Run();
+    Console.WriteLine("City and state rename command passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--city-state-rename-integration")
+{
+    CityStateRenameIntegrationSourceGuardTests.Run();
+    Console.WriteLine("City and state rename integration guards passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--legacy-deferred-work-removal")
 {
     LegacyDeferredWorkRemovalSourceGuardTests.Run();

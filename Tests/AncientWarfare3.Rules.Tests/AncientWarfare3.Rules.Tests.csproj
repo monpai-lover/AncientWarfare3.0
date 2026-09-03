@@ -13,6 +13,11 @@
 		<Compile Include="HistoryApiCursorRulesTests.cs.txt" />
 		<Compile Include="HistoryApiDiplomacyCareerTests.cs.txt" />
 		<Compile Include="HistoryApiSubscriptionRulesTests.cs.txt" />
+		<Compile Include="CityStateRenameRulesTests.cs.txt" />
+		<Compile Include="CityStateRenameSourceGuardTests.cs.txt" />
+		<Compile Include="CityStateRenameCommandTests.cs.txt" />
+		<Compile Include="CityStateRenameIntegrationSourceGuardTests.cs.txt" />
+		<Compile Include="..\..\Code\core\court\CityStateRenameRules.cs" Link="Production\CityStateRenameRules.cs" />
 		<Compile Include="..\..\Code\api\history\AW3HistoryContracts.cs" Link="Production\AW3HistoryContracts.cs" />
 		<Compile Include="..\..\Code\api\history\AW3HistoryQuery.cs" Link="Production\AW3HistoryQuery.cs" />
 		<Compile Include="..\..\Code\api\history\AW3HistoryPage.cs" Link="Production\AW3HistoryPage.cs" />

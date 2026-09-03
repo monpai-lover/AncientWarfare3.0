@@ -1,0 +1,70 @@
+using System;
+using System.IO;
+
+internal static class CityStateRenameIntegrationSourceGuardTests
+{
+    internal static void Run()
+    {
+        string rules   = Read("Code/core/court/CityStateRenameRules.cs");
+        string store   = Read("Code/core/court/DeJureRegionStore.cs");
+        string service = Read("Code/core/court/CityStateRenameService.cs");
+        string models  = Read("Code/api/multiplayer/AW3MultiplayerCatalogModels.cs");
+        string router  = Read("Code/core/multiplayer/commands/AW3AuthoritativeCommandRouter.cs");
+        string handler = Read("Code/core/multiplayer/commands/AW3CourtCommandHandler.cs");
+        string patch   = Read("Code/patch/AW_KingdomRenamePatch.cs");
+        string window  = Read("Code/ui/windows/CityStateRenameWindow.cs");
+
+        // 创建路径：RegionName 在创建/迁移时初始化一次
+        Contains(store, "RegionName =");
+
+        // 持久化读路径：仅读 RegionName，不推导
+        Contains(store, "return pRegion?.RegionName ?? string.Empty;");
+
+        // 托管 seat 桥接：只有 tracked + locked seat 才同步
+        Contains(store, "ShouldSyncStateName");
+        Contains(store, "pTrackedRename");
+
+        // 修复/赋值路径不得再推导名称
+        NotContains(store, "SyncRegionNameFromSeatLocked(current);");
+        NotContains(store, "SyncRegionNameFromSeatLocked(target);");
+        NotContains(store, "SyncAllRegionNamesLocked();");
+
+        // 双字段命令工厂
+        Contains(models, "RenameCityState");
+
+        // 路由 → handler → service 链路
+        Contains(router, "case AW3CommandKind.RenameCityState:");
+        Contains(handler, "CityStateRenameService.TryApply");
+
+        // service 原子性：rollback + suppress native sync
+        Contains(service, "RollBackCityName");
+        Contains(service, "SuppressNativeSeatSync");
+        Contains(service, "TryRenameRegion");
+
+        // patch 传 pTrack
+        Contains(patch, "DeJureRegionStore.SyncSeatName(city, committedCityName,");
+
+        // UI：两个输入框
+        Contains(window, "_cityInput");
+        Contains(window, "_stateInput");
+        Contains(window, "AW3CommandRequest.RenameCityState");
+    }
+
+    private static string Read(string pPath) => File.ReadAllText(
+        Path.Combine(Directory.GetCurrentDirectory(),
+            pPath.Replace('/', Path.DirectorySeparatorChar)));
+
+    private static void Contains(string pText, string pNeedle)
+    {
+        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "missing city-state rename integration guard: " + pNeedle);
+    }
+
+    private static void NotContains(string pText, string pNeedle)
+    {
+        if (pText.Contains(pNeedle, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "unexpected city-state rename source: " + pNeedle);
+    }
+}
