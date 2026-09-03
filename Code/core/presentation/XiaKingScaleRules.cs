@@ -46,8 +46,12 @@ namespace AncientWarfare3.core.presentation
         /// </summary>
         public const float ItemAnchorOffsetX = -1f;
 
-        /// <summary>见 <see cref="ItemAnchorOffsetX"/>。</summary>
-        public const float ItemAnchorOffsetY = -2f;
+        /// <summary>
+        ///     见 <see cref="ItemAnchorOffsetX"/>。+y 朝上:原版把 pos_item.y
+        ///     直接加进世界坐标(ActorManager.cs:236),面板里也是加进
+        ///     anchoredPosition.y,两边同向。
+        /// </summary>
+        public const float ItemAnchorOffsetY = 0f;
 
         /// <summary>
         ///     只有成年夏人国王走高分辨率身体,其余单位保持原分辨率。
