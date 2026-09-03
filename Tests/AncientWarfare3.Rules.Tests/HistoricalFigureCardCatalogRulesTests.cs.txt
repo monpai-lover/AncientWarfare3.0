@@ -1,0 +1,52 @@
+using System;
+using System.Linq;
+using AncientWarfare3.content.figures;
+
+internal static class HistoricalFigureCardCatalogRulesTests
+{
+    public static void Run()
+    {
+        Equal(0.0026f, HistoricalFigureCardRarity.Gold.Probability,
+            "gold probability is stable");
+        Equal(0.0064f, HistoricalFigureCardRarity.Red.Probability,
+            "red probability is stable");
+        Equal(1f, HistoricalFigureCardRarity.TotalProbability,
+            "rarity probabilities total one");
+
+        var all = HistoricalFigureCardCatalog.All;
+        Equal(all.Count, all.Select(p => p.CardId).Distinct(StringComparer.Ordinal).Count(),
+            "card ids are unique");
+        True(all.All(p => p.FameScore >= 0 && p.FameScore <= 100),
+            "fame scores are bounded");
+        True(all.All(p => p.ParentReferencesAreValid(all)),
+            "parent references point at cards or are empty");
+        True(all.All(p => !HistoricalFigureCardCatalog.HasGeographicPrefix(
+            p.HistoricalKingdomName)), "historical names are short kingdom names");
+        Equal(HistoricalFigureDef.All.Length, all.Count(p => p.LegacyFigureId != null),
+            "every registered historical figure has one card");
+        True(all.Any(p => p.CardId == "qin_shihuang") &&
+             all.Any(p => p.CardId == "han_wudi") &&
+             all.Any(p => p.CardId == "tang_taizong") &&
+             all.Any(p => p.CardId == "ming_taizu") &&
+             all.Any(p => p.CardId == "qing_xuantong"),
+            "emperor catalogue contains snapshot anchors");
+
+        var sorted = HistoricalFigureCardCatalog.SortForDisplay(all);
+        True(sorted[0].FameScore >= sorted[1].FameScore,
+            "catalogue display order starts with highest fame");
+        Equal("史料不详", HistoricalFigureCardCatalog.ParentDisplayName(""),
+            "unknown parent has explicit display text");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected=" + expected +
+                                                ", actual=" + actual);
+    }
+}

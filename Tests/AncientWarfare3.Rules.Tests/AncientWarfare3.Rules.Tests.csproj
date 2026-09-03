@@ -9,6 +9,9 @@
     <WorldBoxManaged Condition="'$(WorldBoxManaged)' == ''">D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed</WorldBoxManaged>
   </PropertyGroup>
 	<ItemGroup>
+		<Compile Include="HistoricalFigureCardCatalogRulesTests.cs.txt" />
+		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardModels.cs" Link="Production\HistoricalFigureCardModels.cs" />
+		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardCatalog.cs" Link="Production\HistoricalFigureCardCatalog.cs" />
 		<Compile Include="HistoryApiContractTests.cs.txt" />
 		<Compile Include="HistoryApiCursorRulesTests.cs.txt" />
 		<Compile Include="HistoryApiDiplomacyCareerTests.cs.txt" />

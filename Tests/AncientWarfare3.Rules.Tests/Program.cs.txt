@@ -35,6 +35,13 @@ if (args.Length == 1 && args[0] == "--history-api-subscriptions")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--historical-figure-card-catalog")
+{
+    HistoricalFigureCardCatalogRulesTests.Run();
+    Console.WriteLine("Historical figure card catalogue rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--city-state-rename-rules")
 {
     CityStateRenameRulesTests.Run();
