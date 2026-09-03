@@ -232,6 +232,7 @@ namespace AncientWarfare3.core.multiplayer
                     CourtVacancyReconciliationService
                         .InitializeCountyVacancies();
                     SocialIdentityMigrationService.RepairAfterWorldLoaded();
+                    ClanMembershipSyncService.RepairAfterWorldLoaded();
                     return;
                 }
                 if (result.Success)
@@ -252,6 +253,7 @@ namespace AncientWarfare3.core.multiplayer
                             CourtVacancyReconciliationService
                                 .InitializeCountyVacancies();
                             SocialIdentityMigrationService.RepairAfterWorldLoaded();
+                            ClanMembershipSyncService.RepairAfterWorldLoaded();
                             return;
                         }
                         try
@@ -278,6 +280,7 @@ namespace AncientWarfare3.core.multiplayer
                 CourtVacancyReconciliationService
                     .InitializeCountyVacancies();
                 SocialIdentityMigrationService.RepairAfterWorldLoaded();
+                ClanMembershipSyncService.RepairAfterWorldLoaded();
                 return;
             }
 
@@ -298,6 +301,7 @@ namespace AncientWarfare3.core.multiplayer
                 CourtVacancyReconciliationService
                     .InitializeCountyVacancies();
                 SocialIdentityMigrationService.RepairAfterWorldLoaded();
+                ClanMembershipSyncService.RepairAfterWorldLoaded();
                 return;
             }
 
@@ -331,6 +335,7 @@ namespace AncientWarfare3.core.multiplayer
             CourtVacancyReconciliationService
                 .InitializeCountyVacancies();
             SocialIdentityMigrationService.RepairAfterWorldLoaded();
+            ClanMembershipSyncService.RepairAfterWorldLoaded();
         }
 
         private static void LogNormalFailure(string context,

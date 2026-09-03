@@ -394,6 +394,7 @@ namespace AncientWarfare3.patch
             DeJureRegionStore.ClearForNewWorld();
             CountyAdministrationStore.ClearForNewWorld();
             SocialIdentityMigrationService.ResetForNewWorld();
+            ClanMembershipSyncService.ClearRuntime();
         }
     }
 }

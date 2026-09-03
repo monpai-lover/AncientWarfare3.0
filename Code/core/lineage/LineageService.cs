@@ -1112,8 +1112,12 @@ namespace AncientWarfare3.core.lineage
             }
             else if (pActor.clan?.data == null)
             {
-                try { World.world?.clans?.newClan(pActor, pAddDefaultTraits: true); }
-                catch { }
+                // 建新族之前先看这个氏是不是已经有族了 —— 父亲不同氏、或者
+                // 父亲本人还没入族,不代表整个氏无族。不看就建,同一个氏会
+                // 裂成一堆只有一个人的原版 Clan。
+                if (!ClanMembershipSyncService.AlignActor(pActor))
+                    try { World.world?.clans?.newClan(pActor, pAddDefaultTraits: true); }
+                    catch { }
             }
 
             RenameClanByLeader(pActor.clan, pActor);
