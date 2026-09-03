@@ -118,7 +118,6 @@ namespace AncientWarfare3.core.court
                     }
                     continuityChanged = RepairDisconnectedRegionsLocked();
                     if (continuityChanged) _store.StoreRevision++;
-                    SyncAllRegionNamesLocked();
                     MigrateHistoricalMetadataLocked();
                     _worldLoadRepairCompleted = true;
                 }
@@ -189,20 +188,11 @@ namespace AncientWarfare3.core.court
 
         internal static string ResolveDisplayName(DeJureRegion pRegion)
         {
-            if (pRegion == null) return string.Empty;
-            try
-            {
-                City seat = World.world?.cities?.get(pRegion.SeatCityId);
-                string derived = RegionalGovernmentRules.RegionName(
-                    ResolveCountyNameForPresentation(seat), string.Empty);
-                return string.IsNullOrWhiteSpace(derived)
-                    ? (pRegion.RegionName ?? string.Empty)
-                    : derived;
-            }
-            catch { return pRegion.RegionName ?? string.Empty; }
+            return pRegion?.RegionName ?? string.Empty;
         }
 
-        internal static bool SyncSeatName(City pCity, string pCommittedName)
+        internal static bool SyncSeatName(City pCity, string pCommittedName,
+            bool pTrackedRename)
         {
             if (pCity?.data == null || pCity.isRekt() ||
                 string.IsNullOrWhiteSpace(pCommittedName)) return false;
@@ -217,9 +207,14 @@ namespace AncientWarfare3.core.court
                     p != null && p.Active &&
                     p.SeatCityId == pCity.data.id);
                 if (region == null) return false;
+                if (!CityStateRenameRules.ShouldSyncStateName(
+                        pIsSeat: true, pTrackedRename, region.SeatLocked))
+                    return false;
                 if (string.Equals(region.RegionName, regionName,
                         StringComparison.Ordinal)) return false;
                 region.RegionName = regionName;
+                region.RegionNameSource =
+                    DeJureHistoricalProfileRules.ManualSeatRename;
                 region.Version++;
                 AddChange(region.RegionId, pCity.data.id, region.RegionId,
                     region.RegionId, "DeJureRegionRenamedFromSeat");
@@ -228,6 +223,53 @@ namespace AncientWarfare3.core.court
                     region.RegionId, DeJureDirtyReason.Name);
             }
             RegionalGovernmentAggregationService.Clear();
+            return true;
+        }
+
+        internal static bool TryRenameRegion(long pRegionId, long pCityId,
+            string pRequestedName, out string pError)
+        {
+            pError = string.Empty;
+            string regionName = CityStateRenameRules.Normalize(
+                pRequestedName);
+            if (pRegionId < 0L || pCityId < 0L || regionName.Length == 0)
+            {
+                pError = "invalid_region_name";
+                return false;
+            }
+
+            EnsureInitialized();
+            bool changed = false;
+            lock (Gate)
+            {
+                DeJureRegion region = _store?.Regions?.FirstOrDefault(p =>
+                    p != null && p.Active && p.RegionId == pRegionId);
+                if (region == null || region.MemberCityIds == null ||
+                    !region.MemberCityIds.Contains(pCityId))
+                {
+                    pError = "invalid_region";
+                    return false;
+                }
+                if (string.Equals(region.RegionName, regionName,
+                        StringComparison.Ordinal)) return true;
+                region.RegionName = regionName;
+                region.RegionNameSource =
+                    DeJureHistoricalProfileRules.ManualSeatRename;
+                region.Version++;
+                AddChange(region.RegionId, pCityId, region.RegionId,
+                    region.RegionId, "DeJureRegionRenamedByPlayer");
+                _store.StoreRevision++;
+                DeJureRegionMaintenanceService.MarkRegionDirty(
+                    region.RegionId, DeJureDirtyReason.Name);
+                changed = true;
+            }
+            if (changed)
+            {
+                RegionalGovernmentAggregationService.Clear();
+                HierarchicalVassalMapModeService.MarkHierarchyDirty();
+                HierarchicalVassalMapModeService.
+                    RefreshAfterDeJureMutation();
+            }
             return true;
         }
 
@@ -284,6 +326,9 @@ namespace AncientWarfare3.core.court
                         RegionName = RegionalGovernmentRules.RegionName(
                             ResolveCountyNameForPresentation(pCity), "州"),
                         SeatCityId = pCity.data.id,
+                        SeatLocked = true,
+                        RegionNameSource =
+                            DeJureHistoricalProfileRules.LegacyPreserved,
                         CreatedYear = year,
                         CreatedByKind = pReason ?? "power_create",
                         CreatedByKingdomId = pCity.kingdom?.data?.id ?? -1L,
@@ -337,7 +382,6 @@ namespace AncientWarfare3.core.court
                     target.MemberCityIds = target.MemberCityIds.Distinct().ToList();
                     if (pCity.kingdom?.capital == pCity)
                         target.SeatCityId = pCity.data.id;
-                    SyncRegionNameFromSeatLocked(target);
                     AddChange(target.RegionId, pCity.data.id, fromRegionId,
                         target.RegionId, "DeJureCityTransferred");
                     _store.StoreRevision++;
@@ -418,7 +462,6 @@ namespace AncientWarfare3.core.court
                     target.MemberCityIds = target.MemberCityIds.Distinct().ToList();
                     if (pCity.kingdom?.capital == pCity)
                         target.SeatCityId = pCity.data.id;
-                    SyncRegionNameFromSeatLocked(target);
                     target.Version++;
                     AddChange(target.RegionId, pCity.data.id, -1L,
                         target.RegionId, pReason ?? "city_created_auto_assign");
@@ -727,8 +770,6 @@ namespace AncientWarfare3.core.court
                         changed = true;
                     }
                 }
-                if (region.Active && SyncRegionNameFromSeatLocked(region))
-                    changed = true;
                 if (changed) _store.StoreRevision++;
                 }
                 catch
@@ -802,7 +843,6 @@ namespace AncientWarfare3.core.court
                 if (current.SeatCityId != capital.data.id)
                 {
                     current.SeatCityId = capital.data.id;
-                    SyncRegionNameFromSeatLocked(current);
                     current.Version++;
                     AddChange(current.RegionId, capital.data.id,
                         current.RegionId, current.RegionId,
@@ -822,6 +862,9 @@ namespace AncientWarfare3.core.court
                 RegionName = RegionalGovernmentRules.RegionName(
                     ResolveCountyNameForPresentation(capital), "州"),
                 SeatCityId = capital.data.id,
+                SeatLocked = true,
+                RegionNameSource =
+                    DeJureHistoricalProfileRules.LegacyPreserved,
                 CreatedYear = SafeYear(),
                 CreatedByKind = pReason ?? "capital_region_repaired",
                 CreatedByKingdomId = pKingdom.id,
@@ -1188,7 +1231,6 @@ namespace AncientWarfare3.core.court
             if (current.SeatCityId == pCityId && current.MemberCityIds.Count > 0)
             {
                 current.SeatCityId = ChooseSeat(current.MemberCityIds);
-                SyncRegionNameFromSeatLocked(current);
                 current.Version++;
                 AddChange(current.RegionId, pCityId, current.RegionId,
                     current.RegionId, "DeJureSeatChanged");
@@ -1298,23 +1340,6 @@ namespace AncientWarfare3.core.court
             }
         }
 
-        private static bool SyncRegionNameFromSeatLocked(DeJureRegion pRegion)
-        {
-            if (pRegion == null || !pRegion.Active) return false;
-            City seat = World.world?.cities?.get(pRegion.SeatCityId);
-            if (!IsLiveCity(seat)) return false;
-            string derived = RegionalGovernmentRules.RegionName(
-                ResolveCountyNameForPresentation(seat), string.Empty);
-            if (string.IsNullOrWhiteSpace(derived) ||
-                string.Equals(pRegion.RegionName, derived,
-                    StringComparison.Ordinal)) return false;
-            pRegion.RegionName = derived;
-            pRegion.Version++;
-            AddChange(pRegion.RegionId, seat.data.id, pRegion.RegionId,
-                pRegion.RegionId, "DeJureRegionRenamedFromSeat");
-            return true;
-        }
-
         /// <summary>
         /// Resolves a county/lowest-level administrative name for display.
         /// Chinese presentation uses the persisted historical JSON name;
@@ -1345,20 +1370,6 @@ namespace AncientWarfare3.core.court
             {
                 return pCity.data.name ?? string.Empty;
             }
-        }
-
-        private static bool SyncAllRegionNamesLocked()
-        {
-            if (_store?.Regions == null) return false;
-            bool changed = false;
-            foreach (DeJureRegion region in _store.Regions)
-                changed |= SyncRegionNameFromSeatLocked(region);
-            if (!changed) return false;
-            _store.StoreRevision++;
-            RegionalGovernmentAggregationService.Clear();
-            HierarchicalVassalMapModeService.MarkHierarchyDirty();
-            HierarchicalVassalMapModeService.RefreshAfterDeJureMutation();
-            return true;
         }
 
         private static void AddChange(long pRegionId, long pCityId,
