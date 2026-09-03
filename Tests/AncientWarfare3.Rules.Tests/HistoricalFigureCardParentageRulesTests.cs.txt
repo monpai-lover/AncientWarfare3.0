@@ -1,0 +1,28 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class HistoricalFigureCardParentageRulesTests
+{
+    public static void Run()
+    {
+        Equal("deployment-1:father",
+            HistoricalFigureCardParentageService.SyntheticParentId(
+                "deployment-1", HistoricalFigureCardParentSlot.Father),
+            "father synthetic id is stable");
+        Equal(false, HistoricalFigureCardParentageService.ShouldCreateSyntheticParent(""),
+            "unknown parent does not create an ancestor");
+        True(HistoricalFigureCardParentageService.ShouldCreateSyntheticParent("刘邦"),
+            "known display-only parent creates an archive identity");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message);
+    }
+}

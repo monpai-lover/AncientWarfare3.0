@@ -12,6 +12,9 @@
 		<Compile Include="HistoricalFigureCardCatalogRulesTests.cs.txt" />
 		<Compile Include="HistoricalFigureCardCollectionRulesTests.cs.txt" />
 		<Compile Include="HistoricalFigureCardDrawRulesTests.cs.txt" />
+		<Compile Include="HistoricalFigureCardDeploymentRulesTests.cs.txt" />
+		<Compile Include="HistoricalFigureCardParentageRulesTests.cs.txt" />
+		<Compile Include="HistoricalFigureCardSourceGuardTests.cs.txt" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardModels.cs" Link="Production\HistoricalFigureCardModels.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardCatalog.cs" Link="Production\HistoricalFigureCardCatalog.cs" />
 		<Compile Include="HistoryApiContractTests.cs.txt" />

@@ -13,9 +13,14 @@
     <Compile Include="..\..\Code\content\figures\HistoricalFigureCardCatalog.cs" Link="Production\HistoricalFigureCardCatalog.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoricalFigureCardCollectionStore.cs" Link="Production\HistoricalFigureCardCollectionStore.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoricalFigureCardDrawService.cs" Link="Production\HistoricalFigureCardDrawService.cs" />
+    <Compile Include="..\..\Code\core\lineage\HistoricalFigureCardDeploymentRules.cs" Link="Production\HistoricalFigureCardDeploymentRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HistoricalFigureCardParentageService.cs" Link="Production\HistoricalFigureCardParentageService.cs" />
     <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardCatalogRulesTests.cs.txt" Link="HistoricalFigureCardCatalogRulesTests.cs" />
     <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardCollectionRulesTests.cs.txt" Link="HistoricalFigureCardCollectionRulesTests.cs" />
     <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardDrawRulesTests.cs.txt" Link="HistoricalFigureCardDrawRulesTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardDeploymentRulesTests.cs.txt" Link="HistoricalFigureCardDeploymentRulesTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardParentageRulesTests.cs.txt" Link="HistoricalFigureCardParentageRulesTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardSourceGuardTests.cs.txt" Link="HistoricalFigureCardSourceGuardTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Newtonsoft.Json">

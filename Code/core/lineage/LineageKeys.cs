@@ -73,6 +73,11 @@ namespace AncientWarfare3.core.lineage
         public const string HISTORICAL_MOTHER_NAME =
             "aw_historical_mother_name";
 
+        public const string HISTORICAL_CARD_ID = "aw_historical_card_id";
+        public const string HISTORICAL_CARD_DRAW_ID = "aw_historical_card_draw_id";
+        public const string HISTORICAL_CARD_DEPLOYMENT_ID =
+            "aw_historical_card_deployment_id";
+
         public const string MATRILOCAL_IN_LAW = "aw_matrilocal_in_law";
         public const string MATRILOCAL_WIFE_ID = "aw_matrilocal_wife_id";
         public const string VASSAL_SUZERAIN_ID = "aw_vassal_suzerain_id";
@@ -433,6 +438,10 @@ namespace AncientWarfare3.core.lineage
             "aw_mandate_war_kingdom_war_id";
         public const string MANDATE_WAR_KINGDOM_IS_DEFENDER =
             "aw_mandate_war_kingdom_is_defender";
+        // 新朝刚立，清剿前朝残余的待办年份。
+        // 在此 MOPUP_WINDOW 年内每年检查是否仍有前朝残余占据天命法理核心，
+        // 若有则跳过正常的 ACTION_COOLDOWN 直接开战。
+        public const string MANDATE_MOPUP_YEAR = "aw_mandate_mopup_year";
         // 首都刚丢,等着看要不要裂出小朝廷。破城那一刻原版往往还没另立
         // 临时都城,而支持度是按都城这个锚点算的 —— 所以只在这里记个待办,
         // 真正的判定推到年度那一拍。

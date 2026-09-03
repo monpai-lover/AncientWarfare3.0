@@ -56,6 +56,15 @@ if (args.Length == 1 && args[0] == "--historical-figure-card-draw")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--historical-figure-card-deployment")
+{
+    HistoricalFigureCardDeploymentRulesTests.Run();
+    HistoricalFigureCardParentageRulesTests.Run();
+    HistoricalFigureCardSourceGuardTests.Run();
+    Console.WriteLine("Historical figure card deployment rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--city-state-rename-rules")
 {
     CityStateRenameRulesTests.Run();

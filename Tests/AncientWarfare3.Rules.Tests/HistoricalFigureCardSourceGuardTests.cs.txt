@@ -1,0 +1,24 @@
+using System;
+using System.IO;
+
+internal static class HistoricalFigureCardSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Path.Combine(Directory.GetCurrentDirectory(), "Code");
+        foreach (string path in Directory.GetFiles(root, "HistoricalFigureCard*.cs",
+                     SearchOption.AllDirectories))
+        {
+            string source = File.ReadAllText(path);
+            True(!source.Contains("FigureStateStore."),
+                "card source does not write FigureStateStore: " + path);
+            True(!source.Contains("Task.Run"),
+                "card source does not schedule Unity work on a worker: " + path);
+        }
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+}

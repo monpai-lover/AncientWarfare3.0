@@ -4,3 +4,8 @@ HistoricalFigureCardCollectionRulesTests.Run();
 Console.WriteLine("Historical figure card collection rules passed.");
 HistoricalFigureCardDrawRulesTests.Run();
 Console.WriteLine("Historical figure card draw rules passed.");
+HistoricalFigureCardDeploymentRulesTests.Run();
+HistoricalFigureCardParentageRulesTests.Run();
+Console.WriteLine("Historical figure card deployment rules passed.");
+HistoricalFigureCardSourceGuardTests.Run();
+Console.WriteLine("Historical figure card source guards passed.");

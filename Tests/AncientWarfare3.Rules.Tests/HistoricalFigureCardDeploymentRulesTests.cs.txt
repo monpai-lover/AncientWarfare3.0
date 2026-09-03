@@ -1,0 +1,40 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class HistoricalFigureCardDeploymentRulesTests
+{
+    public static void Run()
+    {
+        True(HistoricalFigureCardDeploymentRules.CanDeploy(
+            new HistoricalFigureCardDeploymentFacts(true, true, true, true, true,
+                false, "汉")), "valid city can be deployed");
+        Equal(false, HistoricalFigureCardDeploymentRules.CanDeploy(
+            new HistoricalFigureCardDeploymentFacts(false, true, true, true, true,
+                false, "汉")), "unowned city is rejected");
+        Equal(false, HistoricalFigureCardDeploymentRules.CanDeploy(
+            new HistoricalFigureCardDeploymentFacts(true, false, true, true, true,
+                false, "汉")), "deleted city is rejected");
+        Equal(false, HistoricalFigureCardDeploymentRules.CanDeploy(
+            new HistoricalFigureCardDeploymentFacts(true, true, false, true, true,
+                false, "汉")), "baby actor plan is rejected");
+        Equal(false, HistoricalFigureCardDeploymentRules.CanDeploy(
+            new HistoricalFigureCardDeploymentFacts(true, true, true, true, true,
+                true, "前汉")), "geographic prefix is rejected");
+        True(HistoricalFigureCardDeploymentRules.TryBegin("deployment-1"),
+            "first deployment starts");
+        Equal(false, HistoricalFigureCardDeploymentRules.TryBegin("deployment-1"),
+            "duplicate deployment is rejected");
+        HistoricalFigureCardDeploymentRules.End("deployment-1");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message);
+    }
+}
