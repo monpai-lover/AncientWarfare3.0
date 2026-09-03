@@ -182,7 +182,13 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool ShouldSuppressCombatPreemption(Actor pActor)
         {
-            return TryGetTarget(pActor, out _);
+            if (!TryGetTarget(pActor, out _)) return false;
+            // 只有 captain 还在行军途中才压制战斗反应，避免整支军队
+            // 因「有回城目标」而永久跳过 b2/b3，卡在跟随任务里不交战。
+            // Captain 已停止行军（到达或等待）时放行战斗，成员照常应战。
+            Actor captain = SafeCaptain(pActor?.army);
+            return captain?.data != null && captain.is_moving &&
+                   !captain.has_attack_target;
         }
 
         internal static void SuppressCombatForReturn(Actor pActor)
