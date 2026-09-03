@@ -165,7 +165,8 @@ namespace AncientWarfare3.patch
                 ModClass.LogWarning("Xia contact birth processing failed: " +
                                     e.Message);
             }
-            SuccessionRelationshipIndex.OnBorn(pBaby, pParent1, pParent2);
+            if (!SyntheticLevyService.SuppressPersonalHistory(pBaby))
+                SuccessionRelationshipIndex.OnBorn(pBaby, pParent1, pParent2);
         }
     }
 }

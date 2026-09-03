@@ -20,6 +20,9 @@ namespace AncientWarfare3.patch
                 !FamilyExpansionService.ShouldDeliverCivilianImmediately(
                     mother, out Actor father)) return true;
 
+            // 合成兵不参与生育，跳过时仍然返回 false（拦截 pregnant 状态本身）。
+            if (SyntheticLevyService.IsSynthetic(mother) ||
+                SyntheticLevyService.IsSynthetic(father)) return false;
             mother.birthEvent();
             BabyMaker.makeBaby(mother, father, ActorSex.None,
                 pCloneTraits: false, 0, null, pAddToFamily: true);
