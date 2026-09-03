@@ -47,6 +47,7 @@ namespace AncientWarfare3.ui
         public const string DE_JURE_REGION_MERGE =
             "aw_de_jure_region_merge";
         public const string COUNTY_RENAME = "aw_county_rename";
+        public const string CITY_STATE_RENAME = "aw_city_state_rename";
 
         public static void SafeShow(string pWindowId, System.Action pRefreshIfCurrent = null)
         {
