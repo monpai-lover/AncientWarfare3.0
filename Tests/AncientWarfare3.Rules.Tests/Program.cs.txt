@@ -56,6 +56,15 @@ if (args.Length == 1 && args[0] == "--historical-figure-card-draw")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--historical-figure-card-crates")
+{
+    HistoricalFigureCardCrateRulesTests.Run();
+    HistoricalFigureCardInventoryRulesTests.Run();
+    HistoricalFigureCardRecycleRulesTests.Run();
+    Console.WriteLine("Historical figure card crate rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--historical-figure-card-deployment")
 {
     HistoricalFigureCardDeploymentRulesTests.Run();

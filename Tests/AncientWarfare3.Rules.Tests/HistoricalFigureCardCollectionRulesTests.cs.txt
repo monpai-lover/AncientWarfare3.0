@@ -21,11 +21,22 @@ internal static class HistoricalFigureCardCollectionRulesTests
             Equal(2, store.GetOwnedCount("qin_shihuang"),
                 "duplicate draws increment owned count");
             Equal("draw-2", store.LastDraw.DrawId, "last draw is retained");
+            True(store.TryConsume("qin_shihuang", "2026-09-04T00:00:02Z"),
+                "owned card can be consumed");
+            Equal(1, store.GetOwnedCount("qin_shihuang"),
+                "consume removes exactly one owned card");
 
             var reloaded = new HistoricalFigureCardCollectionStore(path);
             reloaded.Load();
-            Equal(2, reloaded.GetOwnedCount("qin_shihuang"),
-                "collection survives a new store instance");
+            Equal(1, reloaded.GetOwnedCount("qin_shihuang"),
+                "consumed collection survives a new store instance");
+            True(reloaded.TryConsume("qin_shihuang", "2026-09-04T00:00:03Z"),
+                "last owned card can be consumed");
+            Equal(0, reloaded.GetOwnedCount("qin_shihuang"),
+                "last consume removes the card entry");
+            Equal(false, reloaded.TryConsume("qin_shihuang",
+                "2026-09-04T00:00:04Z"),
+                "unowned card cannot be consumed");
 
             File.WriteAllText(path, "not-json");
             var damaged = new HistoricalFigureCardCollectionStore(path);

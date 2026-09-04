@@ -26,6 +26,16 @@ namespace AncientWarfare3.core.lineage
             HistoricalFigureCardDefinition pWinner,
             IReadOnlyList<HistoricalFigureCardDefinition> pRollingCards,
             int pWinnerIndex, string pDrawId, bool pCommitted, string pError)
+            : this(pWinner, pRollingCards, pWinnerIndex, pDrawId, pCommitted,
+                pError, "")
+        {
+        }
+
+        internal HistoricalFigureCardRevealResult(
+            HistoricalFigureCardDefinition pWinner,
+            IReadOnlyList<HistoricalFigureCardDefinition> pRollingCards,
+            int pWinnerIndex, string pDrawId, bool pCommitted, string pError,
+            string pCrateId)
         {
             Winner = pWinner;
             RollingCards = pRollingCards ?? Array.Empty<HistoricalFigureCardDefinition>();
@@ -33,6 +43,7 @@ namespace AncientWarfare3.core.lineage
             DrawId = pDrawId ?? "";
             IsCommitted = pCommitted;
             Error = pError ?? "";
+            CrateId = pCrateId ?? "";
         }
 
         public HistoricalFigureCardDefinition Winner { get; }
@@ -41,6 +52,7 @@ namespace AncientWarfare3.core.lineage
         public string DrawId { get; }
         public bool IsCommitted { get; }
         public string Error { get; }
+        public string CrateId { get; }
         public bool Succeeded => Winner != null && string.IsNullOrEmpty(Error);
     }
 
@@ -63,26 +75,71 @@ namespace AncientWarfare3.core.lineage
             return HistoricalFigureCardRarity.Blue;
         }
 
+        public static HistoricalFigureCardRarity RarityForRoll(int pRoll,
+            IReadOnlyList<HistoricalFigureCardDefinition> pLocalCards,
+            IReadOnlyList<HistoricalFigureCardDefinition> pSharedGoldCards)
+        {
+            IReadOnlyDictionary<HistoricalFigureCardRarity,
+                HistoricalFigureCardDefinition[]> pools = BuildPools(pLocalCards,
+                    pSharedGoldCards);
+            int totalWeight = HistoricalFigureCardRarity.All
+                .Where(p => pools[p].Length > 0).Sum(RarityWeight);
+            if (totalWeight <= 0) return null;
+            int roll = Math.Max(0, Math.Min(totalWeight - 1, pRoll));
+            int boundary = 0;
+            foreach (HistoricalFigureCardRarity rarity in
+                     HistoricalFigureCardRarity.All)
+            {
+                if (pools[rarity].Length == 0) continue;
+                boundary += RarityWeight(rarity);
+                if (roll < boundary) return rarity;
+            }
+            return pools[HistoricalFigureCardRarity.Blue].Length > 0
+                ? HistoricalFigureCardRarity.Blue
+                : HistoricalFigureCardRarity.All.Last(p => pools[p].Length > 0);
+        }
+
         public static HistoricalFigureCardRevealResult BuildReveal(
             IReadOnlyList<HistoricalFigureCardDefinition> pCards,
             IHistoricalFigureCardRandom pRandom)
+        {
+            return BuildReveal(pCards, pRandom, "");
+        }
+
+        public static HistoricalFigureCardRevealResult BuildReveal(
+            IReadOnlyList<HistoricalFigureCardDefinition> pCards,
+            IHistoricalFigureCardRandom pRandom, string pCrateId)
         {
             if (pCards == null || pCards.Count == 0)
                 return Failure("card catalogue is empty");
             if (pRandom == null) return Failure("random source is missing");
 
-            var candidates = pCards.Where(p => p != null).ToArray();
+            HistoricalFigureCardDefinition[] candidates = pCards
+                .Where(p => p != null).ToArray();
             if (candidates.Length == 0) return Failure("card catalogue is empty");
+            HistoricalFigureCardDefinition[] sharedGold =
+                string.IsNullOrEmpty(pCrateId)
+                    ? candidates.Where(p => p.Rarity != null &&
+                        p.Rarity.Equals(HistoricalFigureCardRarity.Gold)).ToArray()
+                    : HistoricalFigureCardCatalog.All.Where(p => p != null &&
+                        p.Rarity != null &&
+                        p.Rarity.Equals(HistoricalFigureCardRarity.Gold)).ToArray();
+            IReadOnlyDictionary<HistoricalFigureCardRarity,
+                HistoricalFigureCardDefinition[]> pools = BuildPools(candidates,
+                    sharedGold);
+            int totalWeight = HistoricalFigureCardRarity.All
+                .Where(p => pools[p].Length > 0).Sum(RarityWeight);
             HistoricalFigureCardRarity rarity = RarityForRoll(
-                pRandom.Next(ProbabilityScale));
-            HistoricalFigureCardDefinition[] rarityCards = candidates
-                .Where(p => p.Rarity != null && p.Rarity.Equals(rarity)).ToArray();
-            if (rarityCards.Length == 0)
-                return Failure("selected rarity has no cards: " + rarity.Id);
+                pRandom.Next(totalWeight), candidates, sharedGold);
+            if (rarity == null) return Failure("selected crate has no cards");
+            HistoricalFigureCardDefinition[] rarityCards = pools[rarity];
 
             HistoricalFigureCardDefinition winner = rarityCards[
                 pRandom.Next(rarityCards.Length)];
-            HistoricalFigureCardDefinition[] alternatives = candidates
+            HistoricalFigureCardDefinition[] allTrackCards = pools.Values
+                .SelectMany(p => p).GroupBy(p => p.CardId,
+                    StringComparer.Ordinal).Select(p => p.First()).ToArray();
+            HistoricalFigureCardDefinition[] alternatives = allTrackCards
                 .Where(p => !string.Equals(p.CardId, winner.CardId,
                     StringComparison.Ordinal)).ToArray();
             if (alternatives.Length == 0)
@@ -90,11 +147,24 @@ namespace AncientWarfare3.core.lineage
 
             var rolling = new HistoricalFigureCardDefinition[RollingCardCount];
             for (int i = 0; i < rolling.Length; i++)
-                rolling[i] = i == WinnerIndex
-                    ? winner
-                    : alternatives[pRandom.Next(alternatives.Length)];
+            {
+                if (i == WinnerIndex)
+                {
+                    rolling[i] = winner;
+                    continue;
+                }
+                HistoricalFigureCardRarity trackRarity = RarityForRoll(
+                    pRandom.Next(totalWeight), candidates, sharedGold);
+                HistoricalFigureCardDefinition[] trackPool = pools[trackRarity];
+                HistoricalFigureCardDefinition card = trackPool[
+                    pRandom.Next(trackPool.Length)];
+                rolling[i] = string.Equals(card.CardId, winner.CardId,
+                    StringComparison.Ordinal)
+                    ? alternatives[pRandom.Next(alternatives.Length)]
+                    : card;
+            }
             return new HistoricalFigureCardRevealResult(winner, rolling,
-                WinnerIndex, "", false, "");
+                WinnerIndex, "", false, "", pCrateId);
         }
 
         public static HistoricalFigureCardRevealResult DrawAndCommit(
@@ -103,19 +173,30 @@ namespace AncientWarfare3.core.lineage
             IHistoricalFigureCardRandom pRandom = null,
             string pUtc = null)
         {
+            return DrawAndCommit(pCards, "", pStore, pRandom, pUtc);
+        }
+
+        public static HistoricalFigureCardRevealResult DrawAndCommit(
+            IReadOnlyList<HistoricalFigureCardDefinition> pCards,
+            string pCrateId,
+            HistoricalFigureCardCollectionStore pStore,
+            IHistoricalFigureCardRandom pRandom = null,
+            string pUtc = null)
+        {
             if (pStore == null) return Failure("collection store is missing");
             HistoricalFigureCardRevealResult reveal = BuildReveal(pCards,
-                pRandom ?? new HistoricalFigureCardRandom());
+                pRandom ?? new HistoricalFigureCardRandom(), pCrateId);
             if (!reveal.Succeeded) return reveal;
             string drawId = Guid.NewGuid().ToString("N");
             string utc = string.IsNullOrEmpty(pUtc)
                 ? DateTime.UtcNow.ToString("o")
                 : pUtc;
             bool committed = pStore.RecordDraw(drawId, reveal.Winner.CardId,
-                reveal.Winner.Rarity.Id, utc);
+                reveal.Winner.Rarity.Id, utc, pCrateId);
             return committed
                 ? new HistoricalFigureCardRevealResult(reveal.Winner,
-                    reveal.RollingCards, reveal.WinnerIndex, drawId, true, "")
+                    reveal.RollingCards, reveal.WinnerIndex, drawId, true, "",
+                    pCrateId)
                 : Failure("collection store rejected draw");
         }
 
@@ -129,7 +210,31 @@ namespace AncientWarfare3.core.lineage
         {
             return new HistoricalFigureCardRevealResult(null,
                 Array.Empty<HistoricalFigureCardDefinition>(), -1, "", false,
-                pError);
+                pError, "");
+        }
+
+        private static IReadOnlyDictionary<HistoricalFigureCardRarity,
+            HistoricalFigureCardDefinition[]> BuildPools(
+            IReadOnlyList<HistoricalFigureCardDefinition> pLocalCards,
+            IReadOnlyList<HistoricalFigureCardDefinition> pSharedGoldCards)
+        {
+            HistoricalFigureCardDefinition[] local = (pLocalCards ??
+                Array.Empty<HistoricalFigureCardDefinition>())
+                .Where(p => p != null && p.Rarity != null).ToArray();
+            HistoricalFigureCardDefinition[] sharedGold = (pSharedGoldCards ??
+                Array.Empty<HistoricalFigureCardDefinition>())
+                .Where(p => p != null && p.Rarity != null &&
+                    p.Rarity.Equals(HistoricalFigureCardRarity.Gold)).ToArray();
+            return HistoricalFigureCardRarity.All.ToDictionary(p => p, p =>
+                p.Equals(HistoricalFigureCardRarity.Gold)
+                    ? sharedGold
+                    : local.Where(c => c.Rarity.Equals(p)).ToArray());
+        }
+
+        private static int RarityWeight(HistoricalFigureCardRarity pRarity)
+        {
+            return (int)Math.Round(pRarity.Probability * ProbabilityScale,
+                MidpointRounding.AwayFromZero);
         }
     }
 }

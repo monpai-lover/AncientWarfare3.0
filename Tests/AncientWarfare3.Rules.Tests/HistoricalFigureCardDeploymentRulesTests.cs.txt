@@ -6,6 +6,14 @@ internal static class HistoricalFigureCardDeploymentRulesTests
     public static void Run()
     {
         True(HistoricalFigureCardDeploymentRules.CanDeploy(
+            new HistoricalFigureCardDeploymentFacts(false, false, true, false,
+                true, false, "\u6c49", true, true, true)),
+            "buildable unowned tile can be deployed");
+        Equal(false, HistoricalFigureCardDeploymentRules.CanDeploy(
+            new HistoricalFigureCardDeploymentFacts(false, false, true, false,
+                true, false, "\u6c49", true, true, false)),
+            "unbuildable unowned tile is rejected");
+        True(HistoricalFigureCardDeploymentRules.CanDeploy(
             new HistoricalFigureCardDeploymentFacts(true, true, true, true, true,
                 false, "汉")), "valid city can be deployed");
         Equal(false, HistoricalFigureCardDeploymentRules.CanDeploy(

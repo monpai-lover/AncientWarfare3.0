@@ -1,0 +1,89 @@
+using System;
+using System.Linq;
+using AncientWarfare3.content.figures;
+using AncientWarfare3.core.lineage;
+
+internal static class HistoricalFigureCardCrateRulesTests
+{
+    public static void Run()
+    {
+        Equal(6, HistoricalFigureCardCrates.All.Count,
+            "six historical period crates are available");
+        Equal(HistoricalFigureCardCrates.All.Count,
+            HistoricalFigureCardCrates.All.Select(p => p.Id)
+                .Distinct(StringComparer.Ordinal).Count(),
+            "crate ids are unique");
+
+        foreach (HistoricalFigureCardCrate crate in HistoricalFigureCardCrates.All)
+        {
+            var cards = HistoricalFigureCardCatalog.GetCards(crate.Id);
+            True(cards.Count >= 40, "crate contains at least forty cards: " + crate.Id);
+            Equal(cards.Count, crate.CardCount,
+                "crate count matches its catalogue: " + crate.Id);
+            Equal("ui/historical_cards/crates/" + crate.Id, crate.ImagePath,
+                "crate artwork path is stable: " + crate.Id);
+            True(cards.All(p => crate.ContainsYear(p.HistoricalYear)),
+                "crate does not contain a card outside its period: " + crate.Id);
+        }
+
+        Equal("pre_qin_qin", HistoricalFigureCardCrates.ForYear(-221).Id,
+            "qin belongs to the first crate");
+        Equal("han", HistoricalFigureCardCrates.ForYear(-202).Id,
+            "early Han belongs to the Han crate");
+        Equal("three_six_dynasties", HistoricalFigureCardCrates.ForYear(317).Id,
+            "Eastern Jin belongs to the third crate");
+        Equal("sui_tang", HistoricalFigureCardCrates.ForYear(618).Id,
+            "Tang belongs to the fourth crate");
+        Equal("five_song", HistoricalFigureCardCrates.ForYear(960).Id,
+            "Song belongs to the fifth crate");
+        Equal("five_song", HistoricalFigureCardCrates.ForYear(907).Id,
+            "the founding of Later Liang belongs to the fifth crate");
+        Equal("yuan_ming_qing", HistoricalFigureCardCrates.ForYear(1644).Id,
+            "late imperial period belongs to the sixth crate");
+
+        IReadOnlyList<HistoricalFigureCardDefinition> dividedCards =
+            HistoricalFigureCardCatalog.GetCards("three_six_dynasties");
+        IReadOnlyList<HistoricalFigureCardDefinition> globalGold =
+            HistoricalFigureCardCatalog.All.Where(p =>
+                p.Rarity.Equals(HistoricalFigureCardRarity.Gold)).ToArray();
+        Equal(HistoricalFigureCardRarity.Gold,
+            HistoricalFigureCardDrawService.RarityForRoll(0, dividedCards,
+                globalGold),
+            "every crate uses the shared gold grand-prize pool");
+        Equal(HistoricalFigureCardRarity.Pink,
+            HistoricalFigureCardDrawService.RarityForRoll(26, dividedCards,
+                globalGold),
+            "an unavailable local red bucket is skipped");
+        var reveal = HistoricalFigureCardDrawService.BuildReveal(dividedCards,
+            new FixedRandom(0, 0, 0), "three_six_dynasties");
+        True(reveal.Succeeded, "a sparse crate still produces a reveal");
+        Equal(HistoricalFigureCardRarity.Gold, reveal.Winner.Rarity,
+            "gold winner comes from the shared grand-prize pool");
+        Equal("three_six_dynasties", reveal.CrateId,
+            "reveal retains its source crate");
+    }
+
+    private sealed class FixedRandom : IHistoricalFigureCardRandom
+    {
+        public FixedRandom(params int[] pValues) { _values = pValues; }
+        private readonly int[] _values;
+        private int _index;
+        public int Next(int pMaximumExclusive)
+        {
+            return _values[Math.Min(_index++, _values.Length - 1)] %
+                pMaximumExclusive;
+        }
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected=" + expected +
+                                                ", actual=" + actual);
+    }
+}

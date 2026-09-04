@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.content;
 using AncientWarfare3.content.figures;
 using AncientWarfare3.core.db;
 
@@ -8,16 +9,26 @@ namespace AncientWarfare3.core.lineage
     {
         public HistoricalFigureCardDeploymentRequest(string pCardId,
             string pDrawId, string pDeploymentId, City pTargetCity)
+            : this(pCardId, pDrawId, pDeploymentId,
+                pTargetCity?.getTile(), pTargetCity)
+        {
+        }
+
+        public HistoricalFigureCardDeploymentRequest(string pCardId,
+            string pDrawId, string pDeploymentId, WorldTile pTargetTile,
+            City pTargetCity = null)
         {
             CardId = pCardId ?? "";
             DrawId = pDrawId ?? "";
             DeploymentId = pDeploymentId ?? "";
+            TargetTile = pTargetTile;
             TargetCity = pTargetCity;
         }
 
         public string CardId { get; }
         public string DrawId { get; }
         public string DeploymentId { get; }
+        public WorldTile TargetTile { get; }
         public City TargetCity { get; }
     }
 
@@ -76,10 +87,16 @@ namespace AncientWarfare3.core.lineage
             Actor actor = null;
             Kingdom newKingdom = null;
             City city = pRequest.TargetCity;
+            WorldTile targetTile = pRequest.TargetTile ?? city?.getTile();
+            if (city == null)
+                city = targetTile?.zone_city;
             Kingdom oldKingdom = city?.kingdom;
             Actor oldLeader = city?.leader;
             City oldCapital = oldKingdom?.capital;
             bool kingdomCreated = false;
+            bool cityCreated = false;
+            long lineageId = -1L;
+            long shiId = -1L;
             try
             {
                 HistoricalFigureCardDefinition definition =
@@ -89,20 +106,26 @@ namespace AncientWarfare3.core.lineage
                 HistoricalFigureCardCollectionStore collection =
                     HistoricalFigureCardRuntimeService.Collection;
                 bool cardOwned = collection.GetOwnedCount(definition.CardId) > 0;
+                bool hasLivingKingdom = oldKingdom?.data != null &&
+                    !oldKingdom.isRekt() && oldKingdom.isCiv() &&
+                    !oldKingdom.isNeutral();
 
                 var facts = new HistoricalFigureCardDeploymentFacts(
-                    city?.data != null, city != null && !city.isRekt(), true,
-                    oldKingdom?.data != null && !oldKingdom.isRekt(),
+                    city?.data != null, city != null && !city.isRekt() &&
+                    city.isAlive(), true,
+                    hasLivingKingdom,
                     LineageArchiveManager.Instance?.InitializeSuccessful == true,
-                    false, definition.HistoricalKingdomName, cardOwned);
+                    false, definition.HistoricalKingdomName, cardOwned,
+                    targetTile?.data != null,
+                    IsBuildableUnownedTile(targetTile));
                 if (!HistoricalFigureCardDeploymentRules.CanDeploy(facts))
                     return HistoricalFigureCardDeploymentResult.Failure(
                         "deployment_precondition_failed");
-                if (World.world?.units == null || city.getTile() == null)
+                if (World.world?.units == null || World.world.kingdoms == null ||
+                    World.world.cities == null || targetTile == null)
                     return HistoricalFigureCardDeploymentResult.Failure("world_unavailable");
 
-                ActorAsset asset = AssetManager.actor_library.get("Xia") ??
-                    city.getActorAsset();
+                ActorAsset asset = ResolveDeploymentAsset(city);
                 if (asset == null || string.IsNullOrEmpty(asset.id))
                     return HistoricalFigureCardDeploymentResult.Failure(
                         "actor_asset_missing");
@@ -110,19 +133,55 @@ namespace AncientWarfare3.core.lineage
                 using (OpenScope())
                 {
                     actor = World.world.units.createNewUnit(asset.id,
-                        city.getTile(), pMiracleSpawn: false, 0f,
+                        targetTile, pMiracleSpawn: city == null, 0f,
                         FindXiaSubspecies(city), null,
                         pSpawnWithItems: true, pAdultAge: true);
                     if (actor?.data == null || actor.isRekt())
                         throw new InvalidOperationException("actor_creation_failed");
                     HistoricalFigureCardIdentityService.Apply(actor, definition,
                         pRequest.DrawId, pRequest.DeploymentId);
-                    actor.joinCity(city);
-                    newKingdom = city.makeOwnKingdom(actor,
-                        pRebellion: true, pFellApart: false);
-                    kingdomCreated = newKingdom?.data != null;
-                    if (!kingdomCreated)
-                        throw new InvalidOperationException("kingdom_creation_failed");
+                    // 谱系 id 必须在任何 setKing 之前落到 actor.data 上。
+                    // makeOwnKingdom / makeNewCivKingdom / setKing 都会触发
+                    // AW_PromotionPatch.SetKing_Postfix → OnActorPromoted →
+                    // EnsureLineageForNoble;后者以 HasCompleteLineageData
+                    // (LINEAGE_ID + SHI_ID + CLAN_NAME)判定是否已有谱系,
+                    // 见空就 LineageNamePool.RandomSurname() 随机改姓。
+                    // 之前 CommitLineage 排在建国之后,卡片人物于是被连改两次姓
+                    // (每次称王一次),预设的姓与国号一并被随机氏名冲掉。
+                    // 这里只做预留(分配 id + 写 actor.data),入库与晋升仍留在
+                    // 建国之后,好让 ResolveOriginIds 能取到国/城。
+                    ReserveLineageIdentity(actor, out lineageId, out shiId);
+                    if (city?.data != null)
+                    {
+                        actor.joinCity(city);
+                        newKingdom = city.makeOwnKingdom(actor,
+                            pRebellion: true, pFellApart: false);
+                        kingdomCreated = newKingdom?.data != null;
+                        if (!kingdomCreated)
+                            throw new InvalidOperationException(
+                                "kingdom_creation_failed");
+                        actor.spawnOn(targetTile);
+                    }
+                    else
+                    {
+                        newKingdom = World.world.kingdoms.makeNewCivKingdom(
+                            actor, pID: null, pLog: true);
+                        kingdomCreated = newKingdom?.data != null;
+                        if (!kingdomCreated)
+                            throw new InvalidOperationException(
+                                "kingdom_creation_failed");
+                        city = World.world.cities.newCity(newKingdom,
+                            targetTile.zone, actor);
+                        cityCreated = city?.data != null;
+                        if (!cityCreated)
+                            throw new InvalidOperationException(
+                                "city_creation_failed");
+                        city.setUnitMetas(actor);
+                        city.newCityEvent(actor);
+                        actor.joinCity(city);
+                        actor.spawnOn(targetTile);
+                        newKingdom.setCityMetas(city);
+                    }
                     newKingdom.setCapital(city);
                     if (newKingdom.king != actor) newKingdom.setKing(actor);
                     newKingdom.setName(definition.HistoricalKingdomName,
@@ -131,12 +190,15 @@ namespace AncientWarfare3.core.lineage
 
                 if (newKingdom.capital != city || newKingdom.king != actor)
                     throw new InvalidOperationException("kingdom_projection_failed");
-                CommitLineage(actor, definition);
+                CommitLineage(actor, definition, lineageId, shiId);
                 if (!HistoricalAncestorService.EnsureCardParentage(actor,
                         definition, pRequest.DeploymentId))
                     throw new InvalidOperationException("parentage_commit_failed");
                 RecordHistory(actor, newKingdom, city, definition,
                     pRequest.DeploymentId);
+                if (!collection.TryConsume(definition.CardId,
+                        DateTime.UtcNow.ToString("O")))
+                    throw new InvalidOperationException("card_consume_failed");
                 return HistoricalFigureCardDeploymentResult.Success(actor,
                     newKingdom, city);
             }
@@ -145,7 +207,7 @@ namespace AncientWarfare3.core.lineage
                 ModClass.LogWarning("Historical card deployment failed: " +
                     error.Message);
                 Rollback(actor, newKingdom, oldKingdom, oldCapital, oldLeader,
-                    city, kingdomCreated);
+                    city, kingdomCreated, cityCreated);
                 return HistoricalFigureCardDeploymentResult.Failure(error.Message);
             }
             finally
@@ -154,20 +216,38 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private static void CommitLineage(Actor pActor,
-            HistoricalFigureCardDefinition pDefinition)
+        /// <summary>
+        ///     只分配谱系 id 并写回 actor.data,不入库。
+        ///
+        ///     <para>
+        ///     目的是让称王链路上的 <c>EnsureLineageForNoble</c> 立刻看到
+        ///     「已有完整谱系」(LINEAGE_ID ≥ 0 且 SHI_ID ≥ 0 且 CLAN_NAME 非空,
+        ///     见 <c>LineageService.HasCompleteLineageData</c>),从而跳过
+        ///     <c>LineageNamePool.RandomSurname()</c> 那条随机改姓分支。
+        ///     姓/氏字段本身已由 <c>HistoricalFigureCardIdentityService.Apply</c>
+        ///     按卡面预设写好。
+        ///     </para>
+        /// </summary>
+        private static void ReserveLineageIdentity(Actor pActor,
+            out long pLineageId, out long pShiId)
         {
-            long lineageId = LineageIdAllocator.NextLineageId();
-            long shiId = LineageIdAllocator.NextShiId();
-            if (lineageId < 0L || shiId < 0L)
+            pLineageId = LineageIdAllocator.NextLineageId();
+            pShiId = LineageIdAllocator.NextShiId();
+            if (pLineageId < 0L || pShiId < 0L)
                 throw new InvalidOperationException("lineage_id_unavailable");
-            LineageService.InsertLineageGroup(lineageId,
-                pDefinition.FamilyName, pActor);
-            LineageService.InsertShiBranch(shiId, lineageId,
-                pDefinition.ClanName, pActor, ShiSourceType.SPECIAL_FIGURE);
-            pActor.data.set(LineageKeys.LINEAGE_ID, lineageId);
-            pActor.data.set(LineageKeys.SHI_ID, shiId);
+            pActor.data.set(LineageKeys.LINEAGE_ID, pLineageId);
+            pActor.data.set(LineageKeys.SHI_ID, pShiId);
             pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
+        }
+
+        private static void CommitLineage(Actor pActor,
+            HistoricalFigureCardDefinition pDefinition, long pLineageId,
+            long pShiId)
+        {
+            LineageService.InsertLineageGroup(pLineageId,
+                pDefinition.FamilyName, pActor);
+            LineageService.InsertShiBranch(pShiId, pLineageId,
+                pDefinition.ClanName, pActor, ShiSourceType.SPECIAL_FIGURE);
             LineageService.OnActorPromoted(pActor, NobleTrigger.Figure);
         }
 
@@ -176,18 +256,27 @@ namespace AncientWarfare3.core.lineage
             string pDeploymentId)
         {
             string name = pActor.getName();
-            HistoryText text = HistoryText.PlainText(name + " / " +
-                pDefinition.HistoricalKingdomName + " / " + pDeploymentId);
+            // 正文以前是 "名 / 国号 / 部署GUID",编年史里直接显示成一串
+            // 十六进制乱码。DeploymentId 只是幂等键,不该出现在文本里。
+            HistoryText actorText = HistoryText.Actor(pActor, name);
+            HistoryText kingdomText = HistoryText.Kingdom(pKingdom,
+                pDefinition.HistoricalKingdomName);
+            HistoryText deployed = actorText +
+                HistoryLocalizationRules.H("aw_hist_card_deployed") +
+                kingdomText;
+            HistoryText founded = actorText +
+                HistoryLocalizationRules.H("aw_hist_card_kingdom_founded") +
+                kingdomText;
             HistoryWriter.RecordPerson(pActor.data.id, pKingdom, name,
-                "card_deployed", text, ChronicleCategory.HONOR,
+                "card_deployed", deployed, ChronicleCategory.HONOR,
                 HistoryTarget.City(pCity));
             HistoryWriter.RecordPerson(pActor.data.id, pKingdom, name,
-                "card_king", text, ChronicleCategory.HONOR,
+                "card_king", founded, ChronicleCategory.HONOR,
                 HistoryTarget.Kingdom(pKingdom));
             HistoryWriter.RecordKingdom(pKingdom, "card_kingdom_founded",
-                text, HistoryTarget.Actor(pActor));
-            HistoryWriter.RecordCity(pCity, pKingdom, "card_deployed", text,
-                HistoryTarget.Actor(pActor));
+                founded, HistoryTarget.Actor(pActor));
+            HistoryWriter.RecordCity(pCity, pKingdom, "card_deployed",
+                deployed, HistoryTarget.Actor(pActor));
             KingdomArchiveWriter.Upsert(pKingdom);
         }
 
@@ -203,22 +292,49 @@ namespace AncientWarfare3.core.lineage
             return null;
         }
 
+        private static bool IsBuildableUnownedTile(WorldTile pTile)
+        {
+            return pTile?.data != null && pTile.zone != null &&
+                pTile.zone_city == null &&
+                pTile.Type?.ground == true && !pTile.Type.liquid &&
+                !pTile.Type.lava && !pTile.Type.block && !pTile.hasBuilding();
+        }
+
+        private static ActorAsset ResolveDeploymentAsset(City pCity)
+        {
+            return pCity?.getActorAsset() ?? ResolveSpawnXiaAsset();
+        }
+
+        private static ActorAsset ResolveSpawnXiaAsset()
+        {
+            GodPower spawnPower = AssetManager.powers?.get(
+                GodPowerLibrary.SPAWN_XIA);
+            string assetId = spawnPower?.actor_asset_id ?? XiaRace.ID;
+            return AssetManager.actor_library.get(assetId) ??
+                AssetManager.actor_library.get(XiaRace.ID) ?? XiaRace.asset;
+        }
+
         private static void Rollback(Actor pActor, Kingdom pNewKingdom,
             Kingdom pOldKingdom, City pOldCapital, Actor pOldLeader,
-            City pCity, bool pKingdomCreated)
+            City pCity, bool pKingdomCreated, bool pCityCreated)
         {
             try
             {
-                if (pCity?.data != null && pOldKingdom?.data != null &&
+                if (pCityCreated && pCity?.data != null &&
+                    World.world?.cities?.get(pCity.id) != null)
+                    World.world.cities.removeObject(pCity);
+                else if (pCity?.data != null && pOldKingdom?.data != null &&
                     pCity.kingdom != pOldKingdom)
                     pCity.setKingdom(pOldKingdom);
             }
             catch { }
             try
             {
-                if (pOldCapital?.data != null && pOldKingdom?.data != null)
+                if (!pCityCreated && pOldCapital?.data != null &&
+                    pOldKingdom?.data != null)
                     pOldKingdom.setCapital(pOldCapital);
-                if (pOldLeader?.data != null && pCity?.data != null)
+                if (!pCityCreated && pOldLeader?.data != null &&
+                    pCity?.data != null)
                     pCity.setLeader(pOldLeader, pNew: true);
             }
             catch { }

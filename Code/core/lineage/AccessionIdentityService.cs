@@ -665,6 +665,14 @@ namespace AncientWarfare3.core.lineage
             }
             LineageService.ArchiveActor(pActor, pAlive: true);
             CitySchoolSnapshotService.MarkActorDirty(pActor);
+            // 用原版行为让新王回到首都城内:不是瞬移,而是清掉当前 AI 任务、
+            // 让 actor 以首都归属重新走任务分配(getNextJob→nextJobActor)。
+            // 原版 nextJobActor 明确:hasCity() 的 sapient → job_citizen(市民任务),
+            // 市民任务的行为会引导 actor 走回所在城市。此前 Prepare 已在
+            // joinCity 之前 cancelAllBeh 过一次,那会儿 city 还是旧归属;这里在
+            // joinCity 落定后(Commit 已确认 pActor.city==capital)再触发一次,
+            // 才能以首都归属拿到市民任务、真正走回城内。
+            pActor.cancelAllBeh();
             pActor.clearGraphicsFully();
             return true;
         }

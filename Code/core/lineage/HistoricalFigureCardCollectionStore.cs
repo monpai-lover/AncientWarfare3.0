@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json;
 using UnityEngine;
+using AncientWarfare3.content.figures;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -14,6 +15,7 @@ namespace AncientWarfare3.core.lineage
         public string cardId;
         public string rarity;
         public string utc;
+        public string crateId;
 
         [JsonIgnore]
         public string DrawId => drawId ?? "";
@@ -23,13 +25,17 @@ namespace AncientWarfare3.core.lineage
         public string Rarity => rarity ?? "";
         [JsonIgnore]
         public string Utc => utc ?? "";
+        [JsonIgnore]
+        public string CrateId => crateId ?? "";
     }
 
     public sealed class HistoricalFigureCardCollectionSnapshot
     {
-        public int schemaVersion = 1;
+        public int schemaVersion = 2;
         public Dictionary<string, int> ownedCounts =
             new Dictionary<string, int>(StringComparer.Ordinal);
+        public Dictionary<string, Dictionary<string, int>> ownedCrateCounts =
+            new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
         public List<HistoricalFigureCardDrawRecord> draws =
             new List<HistoricalFigureCardDrawRecord>();
         public string lastUpdatedUtc = "";
@@ -41,7 +47,7 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     public sealed class HistoricalFigureCardCollectionStore
     {
-        private const int SchemaVersion = 1;
+        private const int SchemaVersion = 2;
         private const int MaximumDrawHistory = 100;
         private static readonly object Gate = new object();
         private readonly string _path;
@@ -98,6 +104,50 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        public int GetOwnedCrateCount(string pCardId, string pCrateId)
+        {
+            EnsureLoaded();
+            if (string.IsNullOrEmpty(pCardId) || pCrateId == null) return 0;
+            lock (Gate)
+            {
+                return _snapshot.ownedCrateCounts.TryGetValue(pCardId,
+                        out Dictionary<string, int> sources) &&
+                    sources.TryGetValue(pCrateId, out int count)
+                    ? Math.Max(0, count) : 0;
+            }
+        }
+
+        public IReadOnlyDictionary<string, int> GetRecycleSourceCounts(
+            IReadOnlyList<string> pCardIds)
+        {
+            EnsureLoaded();
+            var result = new Dictionary<string, int>(StringComparer.Ordinal);
+            lock (Gate)
+            {
+                var remainingSources = new Dictionary<string,
+                    Dictionary<string, int>>(StringComparer.Ordinal);
+                foreach (string cardId in pCardIds ?? Array.Empty<string>())
+                {
+                    HistoricalFigureCardDefinition card =
+                        HistoricalFigureCardCatalog.Get(cardId);
+                    if (card == null || GetOwnedCount(cardId) <= 0) continue;
+                    if (!remainingSources.TryGetValue(cardId,
+                            out Dictionary<string, int> available))
+                    {
+                        available = SourcesForCard(_snapshot, card,
+                            GetOwnedCount(cardId));
+                        remainingSources[cardId] = available;
+                    }
+                    string source = TakeSource(available);
+                    if (source == null) continue;
+                    available[source]--;
+                    result[source] = result.TryGetValue(source, out int count)
+                        ? count + 1 : 1;
+                }
+            }
+            return result;
+        }
+
         public IReadOnlyDictionary<string, int> OwnedCounts
         {
             get
@@ -129,6 +179,12 @@ namespace AncientWarfare3.core.lineage
         public bool RecordDraw(string pDrawId, string pCardId, string pRarity,
             string pUtc)
         {
+            return RecordDraw(pDrawId, pCardId, pRarity, pUtc, "");
+        }
+
+        public bool RecordDraw(string pDrawId, string pCardId, string pRarity,
+            string pUtc, string pCrateId)
+        {
             if (string.IsNullOrWhiteSpace(pDrawId) ||
                 string.IsNullOrWhiteSpace(pCardId) ||
                 string.IsNullOrWhiteSpace(pRarity)) return false;
@@ -141,12 +197,14 @@ namespace AncientWarfare3.core.lineage
                 if (!_snapshot.ownedCounts.TryGetValue(pCardId, out int count))
                     count = 0;
                 _snapshot.ownedCounts[pCardId] = checked(count + 1);
+                AddSource(_snapshot, pCardId, pCrateId ?? "", 1);
                 _snapshot.draws.Add(new HistoricalFigureCardDrawRecord
                 {
                     drawId = pDrawId,
                     cardId = pCardId,
                     rarity = pRarity,
-                    utc = pUtc ?? ""
+                    utc = pUtc ?? "",
+                    crateId = pCrateId ?? ""
                 });
                 while (_snapshot.draws.Count > MaximumDrawHistory)
                     _snapshot.draws.RemoveAt(0);
@@ -156,11 +214,114 @@ namespace AncientWarfare3.core.lineage
                     _snapshot.ownedCounts[pCardId] = count;
                     if (_snapshot.ownedCounts[pCardId] <= 0)
                         _snapshot.ownedCounts.Remove(pCardId);
+                    RemoveSource(_snapshot, pCardId, pCrateId ?? "", 1);
                     _snapshot.draws.RemoveAll(p => p != null &&
                         string.Equals(p.DrawId, pDrawId, StringComparison.Ordinal));
                     return false;
                 }
                 return true;
+            }
+        }
+
+        public bool TryConsume(string pCardId, string pUtc = null)
+        {
+            if (string.IsNullOrWhiteSpace(pCardId)) return false;
+            EnsureLoaded();
+            lock (Gate)
+            {
+                if (!_snapshot.ownedCounts.TryGetValue(pCardId, out int count) ||
+                    count <= 0) return false;
+                if (count == 1) _snapshot.ownedCounts.Remove(pCardId);
+                else _snapshot.ownedCounts[pCardId] = count - 1;
+                string source = SelectAnySource(_snapshot, pCardId);
+                RemoveSource(_snapshot, pCardId, source, 1);
+                string previousUpdatedUtc = _snapshot.lastUpdatedUtc;
+                _snapshot.lastUpdatedUtc = pUtc ?? DateTime.UtcNow.ToString("O");
+                if (TryWriteSnapshot(_snapshot)) return true;
+                _snapshot.ownedCounts[pCardId] = count;
+                AddSource(_snapshot, pCardId, source, 1);
+                _snapshot.lastUpdatedUtc = previousUpdatedUtc;
+                return false;
+            }
+        }
+
+        public bool TryRecycle(IReadOnlyList<string> pCardIds,
+            string pOutputCardId, string pOutputRarity, string pOutputCrateId,
+            string pRecycleId, string pUtc = null)
+        {
+            if (pCardIds == null || string.IsNullOrWhiteSpace(pOutputCardId) ||
+                string.IsNullOrWhiteSpace(pOutputRarity) ||
+                string.IsNullOrWhiteSpace(pOutputCrateId) ||
+                string.IsNullOrWhiteSpace(pRecycleId)) return false;
+            EnsureLoaded();
+            lock (Gate)
+            {
+                if (_snapshot.draws.Any(p => p != null &&
+                        string.Equals(p.DrawId, pRecycleId,
+                            StringComparison.Ordinal))) return false;
+                var inputs = new List<HistoricalFigureCardRecycleInput>();
+                var remainingSources = new Dictionary<string,
+                    Dictionary<string, int>>(StringComparer.Ordinal);
+                foreach (string cardId in pCardIds)
+                {
+                    HistoricalFigureCardDefinition card =
+                        HistoricalFigureCardCatalog.Get(cardId);
+                    if (card == null || card.Rarity == null ||
+                        GetOwnedCount(cardId) <= 0) return false;
+                    if (!remainingSources.TryGetValue(cardId,
+                            out Dictionary<string, int> available))
+                    {
+                        available = SourcesForCard(_snapshot, card,
+                            GetOwnedCount(cardId));
+                        remainingSources[cardId] = available;
+                    }
+                    string source = TakeSource(available);
+                    if (source == null) return false;
+                    inputs.Add(new HistoricalFigureCardRecycleInput(cardId,
+                        card.Rarity, source));
+                    available[source]--;
+                }
+                if (!HistoricalFigureCardRecycleRules.TryCreatePlan(inputs,
+                        out HistoricalFigureCardRecyclePlan plan,
+                        out string _)) return false;
+                HistoricalFigureCardDefinition output =
+                    HistoricalFigureCardCatalog.Get(pOutputCardId);
+                if (output?.Rarity == null ||
+                    !output.Rarity.Equals(plan.OutputRarity)) return false;
+                string outputCrateId = pOutputCrateId == "*"
+                    ? HistoricalFigureCardRecycleRules.SelectWeightedCrate(
+                        plan.SourceCounts, Environment.TickCount)
+                    : pOutputCrateId;
+                if (HistoricalFigureCardCrates.Get(outputCrateId) == null)
+                    return false;
+
+                HistoricalFigureCardCollectionSnapshot before = Clone(_snapshot);
+                foreach (HistoricalFigureCardRecycleInput input in inputs)
+                {
+                    int owned = _snapshot.ownedCounts[input.CardId];
+                    if (owned == 1) _snapshot.ownedCounts.Remove(input.CardId);
+                    else _snapshot.ownedCounts[input.CardId] = owned - 1;
+                    RemoveSource(_snapshot, input.CardId, input.CrateId, 1);
+                }
+                _snapshot.ownedCounts[pOutputCardId] =
+                    _snapshot.ownedCounts.TryGetValue(pOutputCardId,
+                        out int outputCount) ? outputCount + 1 : 1;
+                AddSource(_snapshot, pOutputCardId, outputCrateId, 1);
+                string utc = pUtc ?? DateTime.UtcNow.ToString("O");
+                _snapshot.draws.Add(new HistoricalFigureCardDrawRecord
+                {
+                    drawId = pRecycleId,
+                    cardId = pOutputCardId,
+                    rarity = pOutputRarity,
+                    utc = utc,
+                    crateId = outputCrateId
+                });
+                while (_snapshot.draws.Count > MaximumDrawHistory)
+                    _snapshot.draws.RemoveAt(0);
+                _snapshot.lastUpdatedUtc = utc;
+                if (TryWriteSnapshot(_snapshot)) return true;
+                _snapshot = before;
+                return false;
             }
         }
 
@@ -182,7 +343,8 @@ namespace AncientWarfare3.core.lineage
             {
                 var loaded = JsonConvert.DeserializeObject<
                     HistoricalFigureCardCollectionSnapshot>(File.ReadAllText(_path));
-                if (loaded == null || loaded.schemaVersion != SchemaVersion)
+                if (loaded == null || (loaded.schemaVersion != 1 &&
+                    loaded.schemaVersion != SchemaVersion))
                     throw new InvalidDataException("unsupported card collection schema");
                 Normalize(loaded);
                 return loaded;
@@ -249,6 +411,8 @@ namespace AncientWarfare3.core.lineage
             {
                 schemaVersion = SchemaVersion,
                 ownedCounts = new Dictionary<string, int>(StringComparer.Ordinal),
+                ownedCrateCounts = new Dictionary<string, Dictionary<string, int>>(
+                    StringComparer.Ordinal),
                 draws = new List<HistoricalFigureCardDrawRecord>(),
                 lastUpdatedUtc = ""
             };
@@ -262,12 +426,32 @@ namespace AncientWarfare3.core.lineage
                 : new Dictionary<string, int>(pSnapshot.ownedCounts
                     .Where(p => !string.IsNullOrEmpty(p.Key) && p.Value > 0)
                     .ToDictionary(p => p.Key, p => p.Value), StringComparer.Ordinal);
+            var normalizedSources = new Dictionary<string, Dictionary<string, int>>(
+                StringComparer.Ordinal);
+            foreach (var pair in pSnapshot.ownedCrateCounts ??
+                     new Dictionary<string, Dictionary<string, int>>())
+            {
+                if (string.IsNullOrEmpty(pair.Key)) continue;
+                Dictionary<string, int> sources = (pair.Value ??
+                        new Dictionary<string, int>())
+                    .Where(p => p.Key != null && p.Value > 0)
+                    .ToDictionary(p => p.Key, p => p.Value,
+                        StringComparer.Ordinal);
+                if (sources.Count > 0) normalizedSources[pair.Key] = sources;
+            }
+            bool needsSourceMigration = normalizedSources.Count == 0;
+            pSnapshot.ownedCrateCounts = normalizedSources;
             var validDraws = (pSnapshot.draws ?? new List<HistoricalFigureCardDrawRecord>())
                 .Where(p => p != null && !string.IsNullOrEmpty(p.DrawId) &&
                             !string.IsNullOrEmpty(p.CardId))
                 .Select(Clone).ToList();
             int firstDraw = Math.Max(0, validDraws.Count - MaximumDrawHistory);
             pSnapshot.draws = validDraws.Skip(firstDraw).ToList();
+            if (needsSourceMigration)
+                foreach (HistoricalFigureCardDrawRecord draw in pSnapshot.draws)
+                    if (!string.IsNullOrEmpty(draw.CrateId))
+                        AddSource(pSnapshot, draw.CardId, draw.CrateId, 1);
+            TrimSourcesToOwnedCounts(pSnapshot);
             pSnapshot.lastUpdatedUtc = pSnapshot.lastUpdatedUtc ?? "";
         }
 
@@ -281,6 +465,12 @@ namespace AncientWarfare3.core.lineage
                      new Dictionary<string, int>())
                 if (!string.IsNullOrEmpty(pair.Key) && pair.Value > 0)
                     copy.ownedCounts[pair.Key] = pair.Value;
+            foreach (var pair in pSnapshot.ownedCrateCounts ??
+                     new Dictionary<string, Dictionary<string, int>>())
+                if (!string.IsNullOrEmpty(pair.Key))
+                    copy.ownedCrateCounts[pair.Key] = new Dictionary<string, int>(
+                        pair.Value ?? new Dictionary<string, int>(),
+                        StringComparer.Ordinal);
             copy.draws = (pSnapshot.draws ?? new List<HistoricalFigureCardDrawRecord>())
                 .Where(p => p != null).Select(Clone).ToList();
             return copy;
@@ -294,8 +484,103 @@ namespace AncientWarfare3.core.lineage
                 drawId = pRecord.DrawId,
                 cardId = pRecord.CardId,
                 rarity = pRecord.Rarity,
-                utc = pRecord.Utc
+                utc = pRecord.Utc,
+                crateId = pRecord.CrateId
             };
+        }
+
+        private static void AddSource(HistoricalFigureCardCollectionSnapshot pSnapshot,
+            string pCardId, string pCrateId, int pAmount)
+        {
+            if (pSnapshot == null || string.IsNullOrEmpty(pCardId) ||
+                pAmount <= 0) return;
+            if (pSnapshot.ownedCrateCounts == null)
+                pSnapshot.ownedCrateCounts = new Dictionary<string,
+                    Dictionary<string, int>>(StringComparer.Ordinal);
+            if (!pSnapshot.ownedCrateCounts.TryGetValue(pCardId,
+                    out Dictionary<string, int> sources))
+                pSnapshot.ownedCrateCounts[pCardId] = sources =
+                    new Dictionary<string, int>(StringComparer.Ordinal);
+            string source = pCrateId ?? "";
+            sources[source] = sources.TryGetValue(source, out int count)
+                ? checked(count + pAmount) : pAmount;
+        }
+
+        private static void RemoveSource(HistoricalFigureCardCollectionSnapshot pSnapshot,
+            string pCardId, string pCrateId, int pAmount)
+        {
+            if (pSnapshot?.ownedCrateCounts == null ||
+                string.IsNullOrEmpty(pCardId) ||
+                !pSnapshot.ownedCrateCounts.TryGetValue(pCardId,
+                    out Dictionary<string, int> sources)) return;
+            string source = pCrateId ?? "";
+            if (!sources.TryGetValue(source, out int count)) return;
+            count -= pAmount;
+            if (count > 0) sources[source] = count;
+            else sources.Remove(source);
+            if (sources.Count == 0) pSnapshot.ownedCrateCounts.Remove(pCardId);
+        }
+
+        private static string SelectAnySource(
+            HistoricalFigureCardCollectionSnapshot pSnapshot, string pCardId)
+        {
+            if (pSnapshot?.ownedCrateCounts == null ||
+                !pSnapshot.ownedCrateCounts.TryGetValue(pCardId,
+                    out Dictionary<string, int> sources)) return "";
+            return sources.Where(p => p.Value > 0).OrderBy(p => p.Key,
+                StringComparer.Ordinal).Select(p => p.Key).FirstOrDefault() ?? "";
+        }
+
+        private static Dictionary<string, int> SourcesForCard(
+            HistoricalFigureCardCollectionSnapshot pSnapshot,
+            HistoricalFigureCardDefinition pCard, int pOwnedCount)
+        {
+            var sources = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (pCard == null) return sources;
+            if (pSnapshot?.ownedCrateCounts != null &&
+                pSnapshot.ownedCrateCounts.TryGetValue(pCard.CardId,
+                    out Dictionary<string, int> saved))
+                foreach (KeyValuePair<string, int> pair in saved)
+                    if (pair.Value > 0) sources[pair.Key] = pair.Value;
+            int savedCount = sources.Values.Sum();
+            int missing = Math.Max(0, pOwnedCount - savedCount);
+            if (missing > 0)
+            {
+                HistoricalFigureCardCrate crate = HistoricalFigureCardCrates.ForYear(
+                    pCard.HistoricalYear);
+                string fallback = crate?.Id ??
+                    HistoricalFigureCardCrates.All.FirstOrDefault()?.Id ?? "";
+                sources[fallback] = sources.TryGetValue(fallback,
+                    out int count) ? count + missing : missing;
+            }
+            return sources;
+        }
+
+        private static string TakeSource(Dictionary<string, int> pSources)
+        {
+            return pSources?.Where(p => p.Value > 0).OrderBy(p => p.Key,
+                StringComparer.Ordinal).Select(p => p.Key).FirstOrDefault();
+        }
+
+        private static void TrimSourcesToOwnedCounts(
+            HistoricalFigureCardCollectionSnapshot pSnapshot)
+        {
+            if (pSnapshot?.ownedCrateCounts == null) return;
+            foreach (string cardId in pSnapshot.ownedCrateCounts.Keys.ToArray())
+            {
+                int remaining = pSnapshot.ownedCounts.TryGetValue(cardId,
+                    out int owned) ? owned : 0;
+                Dictionary<string, int> sources = pSnapshot.ownedCrateCounts[cardId];
+                foreach (string source in sources.Keys.OrderBy(p => p,
+                    StringComparer.Ordinal).ToArray())
+                {
+                    int keep = Math.Min(remaining, Math.Max(0, sources[source]));
+                    remaining -= keep;
+                    if (keep == 0) sources.Remove(source);
+                    else sources[source] = keep;
+                }
+                if (sources.Count == 0) pSnapshot.ownedCrateCounts.Remove(cardId);
+            }
         }
 
         private static void TryDelete(string pPath)

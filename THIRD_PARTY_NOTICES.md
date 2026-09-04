@@ -44,6 +44,15 @@ The source repository is used only as a local audiovisual reference for this
 feature. The card audio playback is optional and failures disable audio
 without blocking card draws or deployments.
 
+## Historical card stage and crate artwork
+
+The historical card opening stage and crate artwork are adapted from the
+local `cs2-case-simulator` reference repository. The stage source is
+`frontend/public/backgrounds/de_ancient.webp`; the bundled PNG is resized and
+slightly softened for the WorldBox UI. The crate source is
+`frontend/assets/images/souvenir.webp`; the six bundled crate PNGs are
+recolored variants used only to distinguish the historical periods.
+
 ## Cultiway-Reborn city-wall geometry
 
 AncientWarfare3 includes an adapted implementation of the city-wall geometry

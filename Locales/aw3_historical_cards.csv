@@ -1,0 +1,90 @@
+key,cz,en,ch
+aw_historical_figure_cards_title,历史人物抽卡,Historical Figure Cards,歷史人物抽卡
+aw_historical_figure_cards Title,历史人物抽卡,Historical Figure Cards,歷史人物抽卡
+aw_historical_figure_cards_btn,历史人物抽卡,Historical Figure Cards,歷史人物抽卡
+aw_historical_figure_cards_btn Description,打开历史人物抽卡、仓库和部署界面,Open historical figure cards inventory and deployment,打開歷史人物抽卡、倉庫和部署介面
+aw_historical_figure_cards_draw,抽取,Draw,抽取
+aw_historical_figure_cards_skip,跳过,Skip,跳過
+aw_historical_figure_cards_deploy,部署到城市,Deploy,部署到城市
+aw_historical_figure_cards_confirm,确认部署,Confirm,確認部署
+aw_historical_figure_cards_idle,抽取一名历史人物,Draw a historical figure,抽取一名歷史人物
+aw_historical_figure_cards_rarity,帝统 0.26% | 雄主 0.64% | 显赫 3.20% | 名世 15.98% | 史载 79.92%,Emperor 0.26% | Warlord 0.64% | Eminent 3.20% | Renowned 15.98% | Recorded 79.92%,帝統 0.26% | 雄主 0.64% | 顯赫 3.20% | 名世 15.98% | 史載 79.92%
+aw_historical_figure_cards_collection_hint,目录按名气排序；点击已拥有的人物查看详情。,Collection sorted by fame. Select an owned card for details.,目錄按名氣排序；點擊已擁有的人物查看詳情。
+aw_historical_figure_cards_crates_hint,选择一个历史时期箱子。,Choose a historical period crate.,選擇一個歷史時期箱子。
+aw_historical_figure_cards_crate_body,{0} · {1} · {2},{0} · {1} · {2},{0} · {1} · {2}
+aw_historical_figure_cards_crate_item,{0}\n{1},{0}\n{1},{0}\n{1}
+aw_historical_figure_cards_crate_count,{0} 人物,{0} figures,{0} 人物
+aw_historical_figure_cards_inventory,仓库,Inventory,倉庫
+aw_historical_figure_cards_inventory_hint,已拥有的历史人物。,Owned historical figures.,已擁有的歷史人物。
+aw_historical_figure_cards_inventory_empty,仓库为空。,The inventory is empty.,倉庫為空。
+aw_historical_figure_cards_inventory_summary,共拥有 {0} 张人物卡 · 按{1}排序,{0} figure cards owned · sorted by {1},共擁有 {0} 張人物卡 · 按{1}排序
+aw_historical_figure_cards_inventory_stat,{0} {1} · {2:0.0}%,{0} {1} · {2:0.0}%,{0} {1} · {2:0.0}%
+aw_historical_figure_cards_sort_latest,最新,Latest,最新
+aw_historical_figure_cards_sort_rarity,稀有度,Rarity,稀有度
+aw_historical_figure_cards_sort_name,姓名,Name,姓名
+aw_historical_figure_cards_sort_fame,名气,Fame,名氣
+aw_historical_figure_cards_back,返回箱子,Back to crates,返回箱子
+aw_historical_figure_cards_crates_title,历史人物箱子,Historical Figure Crates,歷史人物箱子
+aw_historical_figure_cards_crate_title,历史时期箱子,Historical Period Crate,歷史時期箱子
+aw_historical_figure_cards_inventory_title,历史人物仓库,Historical Figure Inventory,歷史人物倉庫
+aw_historical_figure_cards_crate_card_item,{0} [{1}],{0} [{1}],{0} [{1}]
+aw_historical_figure_cards_crate_pre_qin_qin_name,先秦·秦,Pre-Qin and Qin,先秦·秦
+aw_historical_figure_cards_crate_pre_qin_qin_description,从周代到秦帝国的历史人物,Figures from Zhou through the Qin Empire,從周代到秦帝國的歷史人物
+aw_historical_figure_cards_crate_han_name,汉,Han,漢
+aw_historical_figure_cards_crate_han_description,西汉、新朝与东汉的历史人物,Figures from Western Han Xin and Eastern Han,西漢、新朝與東漢的歷史人物
+aw_historical_figure_cards_crate_three_six_dynasties_name,三国·两晋·南北朝,Three Kingdoms Jin and Northern and Southern Dynasties,三國·兩晉·南北朝
+aw_historical_figure_cards_crate_three_six_dynasties_description,分裂时代的历史人物,Figures from the age of division,分裂時代的歷史人物
+aw_historical_figure_cards_crate_sui_tang_name,隋唐,Sui and Tang,隋唐
+aw_historical_figure_cards_crate_sui_tang_description,隋帝国与唐帝国的历史人物,Figures from the Sui and Tang empires,隋帝國與唐帝國的歷史人物
+aw_historical_figure_cards_crate_five_song_name,五代·宋·辽·金,Five Dynasties Song Liao and Jin,五代·宋·遼·金
+aw_historical_figure_cards_crate_five_song_description,五代十国至宋辽金的历史人物,Figures from the Five Dynasties through Song Liao and Jin,五代十國至宋遼金的歷史人物
+aw_historical_figure_cards_crate_yuan_ming_qing_name,元·明·清,Yuan Ming and Qing,元·明·清
+aw_historical_figure_cards_crate_yuan_ming_qing_description,元、明、清三代的历史人物,Figures from the Yuan Ming and Qing,元、明、清三代的歷史人物
+aw_historical_figure_cards_shared_gold,含神秘金色人物（所有箱子共享）,Contains a mysterious gold figure shared by every crate,含神秘金色人物（所有箱子共享）
+aw_historical_figure_cards_mystery_gold,神秘人物,Mysterious figure,神秘人物
+aw_historical_figure_cards_mystery_gold_meta,金色 · 共享大奖池,Gold · Shared grand prize,金色 · 共享大獎池
+aw_historical_figure_cards_year_unknown,史料不详,Unknown,史料不詳
+aw_historical_figure_cards_year_bce,公元前{0}年,{0} BCE,公元前{0}年
+aw_historical_figure_cards_year_ce,公元{0}年,{0} CE,公元{0}年
+aw_historical_figure_cards_rolling,滚动中 {0}/{1}：{2},Rolling {0}/{1}: {2},滾動中 {0}/{1}：{2}
+aw_historical_figure_cards_rolling_body,开箱轨道正在滚动……\n当前：{0}\n中奖位置：{1},The case track is moving...\nCurrent: {0}\nWinner position: {1},開箱軌道正在滾動……\n目前：{0}\n中獎位置：{1}
+aw_historical_figure_cards_reveal,揭示：{0} 位置 {1},Reveal: {0}  index {1},揭示：{0} 位置 {1}
+aw_historical_figure_cards_reveal_result,{0} · {1:0.00}%,{0} · {1:0.00}%,{0} · {1:0.00}%
+aw_historical_figure_cards_details_title,{0} [{1}],{0} [{1}],{0} [{1}]
+aw_historical_figure_cards_owned,已拥有：{0},Owned: {0},已擁有：{0}
+aw_historical_figure_cards_select_city,请选择文明城市或无主陆地,Select a civilization city or unowned land,請選擇文明城市或無主陸地
+aw_historical_figure_cards_target,目标：{0},Target: {0},目標：{0}
+aw_historical_figure_cards_confirm_city_hint,确认后将在此部署；无主地会建立其历史国家。,Deploy here after confirmation; unowned land will found the figure's historical kingdom.,確認後將在此部署；無主地會建立其歷史國家。
+aw_historical_figure_cards_deployed,已部署 {0}，国号为{1},Deployed {0} as {1},已部署 {0}，國號為{1}
+aw_historical_figure_cards_draw_failed,抽取失败：{0},Draw failed: {0},抽取失敗：{0}
+aw_historical_figure_cards_deploy_failed,部署失败：{0},Deployment failed: {0},部署失敗：{0}
+aw_historical_figure_cards_no_card,未选择卡片。,No card selected.,未選擇卡片。
+aw_historical_figure_cards_details,姓名：{0}\n姓：{1}  氏：{2}\n朝代：{3}  时期：{4}\n生卒：{5} - {6}  名气：{7}\n历史国号：{8}\n父：{9}\n母：{10}\n\n背景：{11}\n\n详细介绍：{12},Name: {0}\nFamily: {1}  Clan: {2}\nDynasty: {3}  Era: {4}\nYears: {5} - {6}  Fame: {7}\nHistorical kingdom: {8}\nFather: {9}\nMother: {10}\n\nBackground: {11}\n\nBiography: {12},姓名：{0}\n姓：{1}  氏：{2}\n朝代：{3}  時期：{4}\n生卒：{5} - {6}  名氣：{7}\n歷史國號：{8}\n父：{9}\n母：{10}\n\n背景：{11}\n\n詳細介紹：{12}
+aw_historical_figure_cards_collection_item,{0} [{1}] x{2},{0} [{1}] x{2},{0} [{1}] x{2}
+aw_historical_figure_cards_shared_gold_badge,神秘金色人物,Mysterious gold figure,神秘金色人物
+aw_historical_figure_cards_close,关闭,Close,關閉
+aw_historical_figure_cards_open_again,再开一次,Open again,再開一次
+aw_historical_figure_cards_quick_on,快速：开,Quick: on,快速：開
+aw_historical_figure_cards_quick_off,快速：关,Quick: off,快速：關
+aw_historical_figure_cards_auto_open,自动连开,Auto open,自動連開
+aw_historical_figure_cards_auto_stop,停止连开,Stop auto,停止連開
+aw_historical_figure_cards_sound_on,声音：开,Sound: on,聲音：開
+aw_historical_figure_cards_sound_off,声音：关,Sound: off,聲音：關
+aw_historical_figure_cards_reveal_meta,国号：{0}\n朝代：{1}\n名气：{2},Kingdom: {0}\nDynasty: {1}\nFame: {2},國號：{0}\n朝代：{1}\n名氣：{2}
+aw_historical_figure_cards_reveal_identity,生卒：{0} - {1}\n父：{2}\n母：{3}\n背景：{4}\n\n详细介绍：{5},Life: {0} - {1}\nFather: {2}\nMother: {3}\nBackground: {4}\n\nBiography: {5},生卒：{0} - {1}\n父：{2}\n母：{3}\n背景：{4}\n\n詳細介紹：{5}
+aw_historical_figure_cards_rarity_gold,帝统,Imperial,帝統
+aw_historical_figure_cards_rarity_red,雄主,Warlord,雄主
+aw_historical_figure_cards_rarity_pink,显赫,Eminent,顯赫
+aw_historical_figure_cards_rarity_purple,名世,Renowned,名世
+aw_historical_figure_cards_rarity_blue,史载,Recorded,史載
+aw_historical_figure_cards_recycle_mode,汰换,Trade Up,汰換
+aw_historical_figure_cards_recycle_mode_on,汰换中,Trade Up,汰換中
+aw_historical_figure_cards_recycle_cancel,取消,Cancel,取消
+aw_historical_figure_cards_recycle_submit,汰换 {0}/{1},Trade Up {0}/{1},汰換 {0}/{1}
+aw_historical_figure_cards_recycle_selection,已选择：{0},Selected: {0},已選擇：{0}
+aw_historical_figure_cards_recycle_requirement,需要：{0}张,Required: {0},需要：{0}
+aw_historical_figure_cards_recycle_same_rarity,汰换卡片必须使用同品质,All trade-up cards must share a rarity,汰換卡片必須使用同品質
+aw_historical_figure_cards_recycle_incomplete,请按要求数量选择同品质卡片,Select the required number of cards with the same rarity,請按要求數量選擇同品質卡片
+aw_historical_figure_cards_recycle_failed,汰换失败,Trade-up failed,汰換失敗
+aw_historical_figure_cards_recycle_gold_locked,金色卡不可汰换,Gold cards cannot be traded up,金色卡不可汰換
+aw_historical_figure_cards_placement_hint,请先在下方选中「放置夏人」神力，再点击地图选择部署位置,Select the Spawn Xia power on the toolbar and then click the map to choose a deployment tile,請先在下方選中「放置夏人」神力，再點擊地圖選擇部署位置

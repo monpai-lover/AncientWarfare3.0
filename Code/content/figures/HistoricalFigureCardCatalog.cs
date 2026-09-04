@@ -10,6 +10,8 @@ namespace AncientWarfare3.content.figures
     /// </summary>
     public static class HistoricalFigureCardCatalog
     {
+        public const int UnknownYear = int.MinValue;
+
         private static readonly Dictionary<string, string> LegacyCardIds =
             new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -104,6 +106,12 @@ namespace AncientWarfare3.content.figures
                 ["qing_taizu"] = 87
             };
 
+        private static readonly Dictionary<string, string> PortraitPathByCardId =
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["ming_taizu"] = "ui/historical_cards/ming_taizu"
+            };
+
         public static readonly IReadOnlyList<HistoricalFigureCardDefinition> All =
             BuildAll();
 
@@ -117,6 +125,15 @@ namespace AncientWarfare3.content.figures
             if (string.IsNullOrWhiteSpace(pCardId)) return null;
             return All.FirstOrDefault(p => p != null &&
                 string.Equals(p.CardId, pCardId.Trim(), StringComparison.Ordinal));
+        }
+
+        public static IReadOnlyList<HistoricalFigureCardDefinition> GetCards(
+            string pCrateId)
+        {
+            HistoricalFigureCardCrate crate = HistoricalFigureCardCrates.Get(pCrateId);
+            if (crate == null) return Array.Empty<HistoricalFigureCardDefinition>();
+            return SortForDisplay(All.Where(p => p != null &&
+                crate.ContainsYear(p.HistoricalYear))).ToArray();
         }
 
         public static IReadOnlyList<HistoricalFigureCardDefinition> SortForDisplay(
@@ -184,11 +201,18 @@ namespace AncientWarfare3.content.figures
                     cardId, figure.Key, figure.FamilyName, figure.ClanName,
                     figure.GivenName, figure.DynastyName,
                     NormalizeShortKingdomName(figure.KingdomName),
-                    figure.DynastyName, -1, -1, figure.FoundingYear, fame,
+                    figure.DynastyName, UnknownYear, UnknownYear,
+                    figure.FoundingYear, fame,
                     RarityForFame(fame), figure.Sex,
                     figure.Key + "，历史人物。", "", ParentAt(parents, 0), "",
                     ParentAt(parents, 1), "", figure.Id, figure.RegistryIndex,
-                    figure.CombatHealth, figure.CombatTraits);
+                    figure.CombatHealth, figure.CombatTraits,
+                    BuildBackgroundSummary(figure.Key, figure.DynastyName,
+                        NormalizeShortKingdomName(figure.KingdomName),
+                        figure.FoundingYear),
+                    BuildDetailedBiography(figure.Key, figure.DynastyName,
+                        NormalizeShortKingdomName(figure.KingdomName),
+                        figure.FoundingYear, figure.Key + "\uff0c\u5386\u53f2\u4eba\u7269\u3002"));
             }
 
             foreach (EmperorSeed seed in EmperorSeeds())
@@ -218,6 +242,32 @@ namespace AncientWarfare3.content.figures
             if (pFigure.Id == "aw_figure_liu_bei") return 86;
             if (pFigure.Id == "aw_figure_zhu_wen") return 78;
             return 45;
+        }
+
+        private static string BuildBackgroundSummary(string pName,
+            string pDynasty, string pKingdom, int pHistoricalYear)
+        {
+            string era = string.IsNullOrWhiteSpace(pDynasty)
+                ? "\u5386\u53f2\u65f6\u671f" : pDynasty;
+            string kingdom = string.IsNullOrWhiteSpace(pKingdom)
+                ? "\u5176\u5386\u53f2\u653f\u6743" : pKingdom;
+            return pName + "\u662f" + era + "\u7684\u91cd\u8981\u5386\u53f2\u4eba\u7269\uff0c\u6d3b\u52a8\u4e8e" +
+                kingdom + "\u7684\u653f\u6cbb\u4e0e\u793e\u4f1a\u80cc\u666f\u4e4b\u4e2d\u3002";
+        }
+
+        private static string BuildDetailedBiography(string pName,
+            string pDynasty, string pKingdom, int pHistoricalYear,
+            string pBiography)
+        {
+            string detail = string.IsNullOrWhiteSpace(pBiography)
+                ? pName + "\u7684\u751f\u5e73\u4e0e\u5386\u53f2\u6d3b\u52a8\u89c1\u4e8e" +
+                    pDynasty + "\u76f8\u5173\u53f2\u6599\u3002"
+                : pBiography.Trim();
+            string year = pHistoricalYear == UnknownYear
+                ? "\u5e74\u4ee3\u672a\u8be6" : "\u91cd\u8981\u6d3b\u52a8\u5e74\u4ee3\u7ea6\u4e3a" +
+                    pHistoricalYear + "\u5e74";
+            return detail + "\n" + year + "\uff1b\u5386\u53f2\u56fd\u53f7\u4e3a" +
+                pKingdom + "\u3002\u8be5\u4eba\u7269\u5361\u4ee5\u73b0\u6709\u5386\u53f2\u76ee\u5f55\u7684\u8eab\u4efd\u3001\u4eb2\u7f18\u4e0e\u65f6\u4ee3\u5b57\u6bb5\u4e3a\u51c6\u3002";
         }
 
         private static HistoricalFigureCardRarity RarityForFame(int pFame)
@@ -267,10 +317,29 @@ namespace AncientWarfare3.content.figures
                     issues.Add("invalid fame score: " + card.CardId);
                 if (!card.ParentReferencesAreValid(pCards))
                     issues.Add("invalid parent reference: " + card.CardId);
+                if (string.Equals(card.DisplayName, card.FatherDisplayName,
+                        StringComparison.Ordinal) ||
+                    string.Equals(card.DisplayName, card.MotherDisplayName,
+                        StringComparison.Ordinal))
+                    issues.Add("self parent reference: " + card.CardId);
+                if (IsKnownYear(card.BirthYear) && IsKnownYear(card.DeathYear) &&
+                    card.BirthYear > card.DeathYear)
+                    issues.Add("invalid life span: " + card.CardId);
+                if (IsKnownYear(card.BirthYear) &&
+                    card.HistoricalYear < card.BirthYear)
+                    issues.Add("historical year before birth: " + card.CardId);
+                if (IsKnownYear(card.DeathYear) &&
+                    card.HistoricalYear > card.DeathYear)
+                    issues.Add("historical year after death: " + card.CardId);
             }
             if (Math.Abs(HistoricalFigureCardRarity.TotalProbability - 1f) > 0.00001f)
                 issues.Add("rarity probabilities do not total one");
             return issues;
+        }
+
+        private static bool IsKnownYear(int pYear)
+        {
+            return pYear != UnknownYear;
         }
 
         private sealed class EmperorSeed
@@ -286,14 +355,22 @@ namespace AncientWarfare3.content.figures
             public readonly string FatherDisplayName;
             public readonly string MotherDisplayName;
             public readonly string Biography;
+            public readonly string BackgroundSummary;
+            public readonly string DetailedBiography;
             public readonly HistoricalFigureSex Sex;
+            public readonly string FamilyName;
+            public readonly string ClanName;
+            public readonly string GivenName;
+            public readonly string HistoricalEra;
 
             public EmperorSeed(string pCardId, string pDisplayName,
                 string pDynastyName, string pHistoricalKingdomName,
                 int pBirthYear, int pDeathYear, int pHistoricalYear,
                 int pFameScore, string pFatherDisplayName,
                 string pMotherDisplayName, string pBiography = "",
-                HistoricalFigureSex pSex = HistoricalFigureSex.Male)
+                HistoricalFigureSex pSex = HistoricalFigureSex.Male,
+                string pFamilyName = "", string pClanName = "",
+                string pGivenName = "", string pHistoricalEra = "")
             {
                 CardId = pCardId;
                 DisplayName = pDisplayName;
@@ -309,6 +386,17 @@ namespace AncientWarfare3.content.figures
                     ? pDisplayName + "，" + pDynastyName + "君主。"
                     : pBiography;
                 Sex = pSex;
+                FamilyName = pFamilyName ?? "";
+                ClanName = pClanName ?? "";
+                GivenName = pGivenName ?? "";
+                HistoricalEra = string.IsNullOrEmpty(pHistoricalEra)
+                    ? pDynastyName
+                    : pHistoricalEra;
+                BackgroundSummary = BuildBackgroundSummary(pDisplayName,
+                    HistoricalEra, HistoricalKingdomName, pHistoricalYear);
+                DetailedBiography = BuildDetailedBiography(pDisplayName,
+                    HistoricalEra, HistoricalKingdomName, pHistoricalYear,
+                    string.IsNullOrEmpty(pBiography) ? "" : Biography);
                 FatherDisplayName = UnknownParent(FatherDisplayName);
                 MotherDisplayName = UnknownParent(MotherDisplayName);
             }
@@ -317,15 +405,22 @@ namespace AncientWarfare3.content.figures
                 HistoricalFigureCardDefinition pLegacy)
             {
                 NameParts(DisplayName, out string family, out string given);
+                if (!string.IsNullOrEmpty(FamilyName)) family = FamilyName;
+                string clan = string.IsNullOrEmpty(ClanName) ? family : ClanName;
+                if (!string.IsNullOrEmpty(GivenName)) given = GivenName;
                 return new HistoricalFigureCardDefinition(
-                    CardId, DisplayName, family, family, given, DynastyName,
-                    HistoricalKingdomName, DynastyName, BirthYear, DeathYear,
+                    CardId, DisplayName, family, clan, given, DynastyName,
+                    HistoricalKingdomName, HistoricalEra, BirthYear, DeathYear,
                     HistoricalYear, FameScore, RarityForFame(FameScore),
                     Sex, Biography, "", FatherDisplayName,
-                    "", MotherDisplayName, pLegacy?.PortraitPath ?? "",
+                    "", MotherDisplayName,
+                    PortraitPathByCardId.TryGetValue(CardId,
+                        out string portraitPath)
+                        ? portraitPath : pLegacy?.PortraitPath ?? "",
                     pLegacy?.LegacyFigureId, pLegacy?.LegacyRegistryIndex ?? -1,
                     pLegacy?.CombatHealth ?? 1500,
-                    pLegacy?.CombatTraits ?? Enumerable.Empty<string>());
+                    pLegacy?.CombatTraits ?? Enumerable.Empty<string>(),
+                    BackgroundSummary, DetailedBiography);
             }
         }
 
@@ -348,11 +443,14 @@ namespace AncientWarfare3.content.figures
             string pDynasty, string pKingdom, int pBirth, int pDeath,
             int pHistoricalYear, int pFame, string pFather = "",
             string pMother = "", string pBiography = "",
-            HistoricalFigureSex pSex = HistoricalFigureSex.Male)
+            HistoricalFigureSex pSex = HistoricalFigureSex.Male,
+            string pFamilyName = "", string pClanName = "",
+            string pGivenName = "", string pHistoricalEra = "")
         {
             return new EmperorSeed(pCardId, pName, pDynasty, pKingdom,
                 pBirth, pDeath, pHistoricalYear, pFame, pFather, pMother,
-                pBiography, pSex);
+                pBiography, pSex, pFamilyName, pClanName, pGivenName,
+                pHistoricalEra);
         }
 
         private static string UnknownParent(string pName)
@@ -367,10 +465,258 @@ namespace AncientWarfare3.content.figures
 
         private static IEnumerable<EmperorSeed> EmperorSeeds()
         {
+            // Xia and Shang dates follow the conventional chronology where the
+            // exact birth and death years are not preserved in reliable records.
+            yield return E("xia_yu", "禹", "夏", "夏", UnknownYear,
+                UnknownYear, -2070, 94, "鲧", "修己",
+                "传世文献中的治水领袖和夏代奠基者。",
+                pFamilyName: "姒", pClanName: "夏后", pGivenName: "文命");
+            yield return E("xia_qi", "启", "夏", "夏", UnknownYear,
+                UnknownYear, -1970, 66, "禹", "涂山氏",
+                "传世文献记载的夏代君主，承继禹的政治权力。",
+                pFamilyName: "姒", pClanName: "夏后", pGivenName: "启");
+            yield return E("xia_taikang", "太康", "夏", "夏", UnknownYear,
+                UnknownYear, -1955, 42, "启", "",
+                "夏代早期君主，相关事迹主要见于传世文献。",
+                pFamilyName: "姒", pClanName: "夏后", pGivenName: "太康");
+            yield return E("xia_shaokang", "少康", "夏", "夏", UnknownYear,
+                UnknownYear, -1875, 61, "相", "后缗",
+                "传世文献称其复兴夏室，后世称少康中兴。",
+                pFamilyName: "姒", pClanName: "夏后", pGivenName: "少康");
+            yield return E("xia_jie", "履癸", "夏", "夏", UnknownYear,
+                UnknownYear, -1600, 73, "发", "",
+                "传世文献中的夏末君主，后世通常称夏桀。",
+                pFamilyName: "姒", pClanName: "夏后", pGivenName: "履癸");
+
+            yield return E("shang_tang", "子履", "商", "商", UnknownYear,
+                UnknownYear, -1600, 94, "主癸", "扶都",
+                "推翻夏末统治并建立商朝，后世称商汤。",
+                pFamilyName: "子", pClanName: "商", pGivenName: "履");
+            yield return E("shang_taijia", "子至", "商", "商", UnknownYear,
+                UnknownYear, -1580, 48, "太丁", "",
+                "商代早期君主，传世文献记有伊尹辅政事迹。",
+                pFamilyName: "子", pClanName: "商", pGivenName: "至");
+            yield return E("shang_pangeng", "子旬", "商", "商", UnknownYear,
+                UnknownYear, -1300, 72, "祖丁", "",
+                "商代君主，迁都于殷并稳定王朝统治。",
+                pFamilyName: "子", pClanName: "商", pGivenName: "旬");
+            yield return E("shang_wuding", "子昭", "商", "商", UnknownYear,
+                UnknownYear, -1250, 88, "小乙", "",
+                "商代重要君主，其时代留下大量甲骨卜辞。",
+                pFamilyName: "子", pClanName: "商", pGivenName: "昭");
+            yield return E("shang_diyi", "子羡", "商", "商", UnknownYear,
+                UnknownYear, -1101, 45, "文丁", "",
+                "商代晚期君主，帝辛之父。",
+                pFamilyName: "子", pClanName: "商", pGivenName: "羡");
+            yield return E("shang_dixin", "子受", "商", "商", UnknownYear,
+                -1046, -1075, 82, "帝乙", "",
+                "商代末代君主，周人文献称其为纣王。",
+                pFamilyName: "子", pClanName: "商", pGivenName: "受");
+
+            yield return E("ji_fa", "姬发", "周", "周", UnknownYear,
+                -1043, -1046, 88, "姬昌", "太姒",
+                "灭商建立西周，后世称周武王。",
+                pFamilyName: "姬", pClanName: "周", pGivenName: "发",
+                pHistoricalEra: "西周");
+            yield return E("zhou_chengwang", "姬诵", "周", "周", UnknownYear,
+                UnknownYear, -1042, 62, "姬发", "邑姜",
+                "西周君主，在周公辅政后亲政。",
+                pFamilyName: "姬", pClanName: "周", pGivenName: "诵",
+                pHistoricalEra: "西周");
+            yield return E("zhou_kangwang", "姬钊", "周", "周", UnknownYear,
+                UnknownYear, -1020, 56, "姬诵", "王姒",
+                "西周君主，成康时期以政局稳定著称。",
+                pFamilyName: "姬", pClanName: "周", pGivenName: "钊",
+                pHistoricalEra: "西周");
+            yield return E("zhou_zhaowang", "姬瑕", "周", "周", UnknownYear,
+                UnknownYear, -995, 43, "姬钊", "",
+                "西周君主，曾多次向南方用兵。",
+                pFamilyName: "姬", pClanName: "周", pGivenName: "瑕",
+                pHistoricalEra: "西周");
+            yield return E("zhou_muwang", "姬满", "周", "周", UnknownYear,
+                UnknownYear, -976, 65, "姬瑕", "",
+                "西周君主，在位时间较长，传世文献事迹丰富。",
+                pFamilyName: "姬", pClanName: "周", pGivenName: "满",
+                pHistoricalEra: "西周");
+            yield return E("zhou_liwang", "姬胡", "周", "周", UnknownYear,
+                -828, -877, 58, "姬夷", "",
+                "西周君主，其统治末期发生国人暴动。",
+                pFamilyName: "姬", pClanName: "周", pGivenName: "胡",
+                pHistoricalEra: "西周");
+            yield return E("zhou_xuanwang", "姬静", "周", "周", UnknownYear,
+                -782, -827, 64, "姬胡", "姜后",
+                "西周君主，史称宣王中兴。",
+                pFamilyName: "姬", pClanName: "周", pGivenName: "静",
+                pHistoricalEra: "西周");
+            yield return E("zhou_youwang", "姬宫湦", "周", "周", UnknownYear,
+                -771, -781, 68, "姬静", "姜后",
+                "西周末代君主，犬戎攻破镐京后身亡。",
+                pFamilyName: "姬", pClanName: "周", pGivenName: "宫湦",
+                pHistoricalEra: "西周");
+            yield return E("zhou_pingwang", "姬宜臼", "周", "周", UnknownYear,
+                -720, -770, 62, "姬宫湦", "申后",
+                "迁都洛邑，开启东周时期。",
+                pFamilyName: "姬", pClanName: "周", pGivenName: "宜臼",
+                pHistoricalEra: "东周");
+            yield return E("zhou_huanwang", "姬林", "周", "周", UnknownYear,
+                -697, -719, 40, "姬泄父", "",
+                "东周君主，其时周王室与诸侯关系进一步变化。",
+                pFamilyName: "姬", pClanName: "周", pGivenName: "林",
+                pHistoricalEra: "东周");
+
+            yield return E("qi_huangong", "姜小白", "齐", "齐", UnknownYear,
+                -643, -685, 91, "姜禄甫", "",
+                "任用管仲改革齐国，成为春秋时期的重要霸主。",
+                pFamilyName: "姜", pClanName: "吕", pGivenName: "小白",
+                pHistoricalEra: "春秋");
+            yield return E("jin_wengong", "姬重耳", "晋", "晋", -697,
+                -628, -636, 90, "姬诡诸", "狐姬",
+                "长期流亡后即位，使晋国成为春秋霸主。",
+                pFamilyName: "姬", pClanName: "晋", pGivenName: "重耳",
+                pHistoricalEra: "春秋");
+            yield return E("qin_mugong", "嬴任好", "秦", "秦", UnknownYear,
+                -621, -659, 86, "嬴德", "",
+                "经营关中并向西拓展，是春秋时期秦国重要君主。",
+                pFamilyName: "嬴", pClanName: "赵", pGivenName: "任好",
+                pHistoricalEra: "春秋");
+            yield return E("chu_zhuangwang", "芈旅", "楚", "楚", UnknownYear,
+                -591, -613, 89, "芈商臣", "",
+                "整顿楚国内政并北上争霸，是春秋重要霸主。",
+                pFamilyName: "芈", pClanName: "熊", pGivenName: "旅",
+                pHistoricalEra: "春秋");
+            yield return E("wu_helv", "姬光", "吴", "吴", UnknownYear,
+                -496, -514, 83, "姬诸樊", "",
+                "任用伍子胥、孙武，使吴国一度攻入楚都。",
+                pFamilyName: "姬", pClanName: "吴", pGivenName: "光",
+                pHistoricalEra: "春秋");
+            yield return E("yue_goujian", "姒鸠浅", "越", "越", UnknownYear,
+                -464, -496, 90, "姒允常", "",
+                "卧薪尝胆、灭吴称霸，是春秋末期越国君主。",
+                pFamilyName: "姒", pClanName: "越", pGivenName: "鸠浅",
+                pHistoricalEra: "春秋");
+
+            yield return E("wei_wenhou", "姬斯", "魏", "魏", UnknownYear,
+                -396, -445, 79, "姬驹", "",
+                "任用李悝等人变法，使魏国率先强盛。",
+                pFamilyName: "姬", pClanName: "魏", pGivenName: "斯",
+                pHistoricalEra: "战国");
+            yield return E("qi_weiwang", "妫因齐", "齐", "齐", -378,
+                -320, -356, 80, "妫午", "",
+                "整顿吏治并任用贤能，使田齐国势强盛。",
+                pFamilyName: "妫", pClanName: "田", pGivenName: "因齐",
+                pHistoricalEra: "战国");
+            yield return E("chu_weiwang", "芈商", "楚", "楚", UnknownYear,
+                -329, -339, 65, "芈良夫", "",
+                "战国时期楚国君主，楚国在其时保持强盛。",
+                pFamilyName: "芈", pClanName: "熊", pGivenName: "商",
+                pHistoricalEra: "战国");
+            yield return E("zhao_wulingwang", "嬴雍", "赵", "赵", -340,
+                -295, -325, 88, "嬴语", "",
+                "推行胡服骑射改革，增强赵国军事实力。",
+                pFamilyName: "嬴", pClanName: "赵", pGivenName: "雍",
+                pHistoricalEra: "战国");
+            yield return E("yan_zhaowang", "姬职", "燕", "燕", UnknownYear,
+                -279, -311, 78, "姬哙", "",
+                "筑黄金台招贤，任用乐毅振兴燕国。",
+                pFamilyName: "姬", pClanName: "燕", pGivenName: "职",
+                pHistoricalEra: "战国");
+            yield return E("qin_xiaogong", "嬴渠梁", "秦", "秦", -381,
+                -338, -361, 87, "嬴师隰", "",
+                "任用商鞅变法，为秦国统一奠定制度基础。",
+                pFamilyName: "嬴", pClanName: "赵", pGivenName: "渠梁",
+                pHistoricalEra: "战国");
+            yield return E("qin_huiwenwang", "嬴驷", "秦", "秦", -356,
+                -311, -338, 82, "嬴渠梁", "",
+                "承接商鞅变法成果并称王，继续扩张秦国。",
+                pFamilyName: "嬴", pClanName: "赵", pGivenName: "驷",
+                pHistoricalEra: "战国");
+            yield return E("qin_wuwang", "嬴荡", "秦", "秦", -329,
+                -307, -310, 55, "嬴驷", "魏纾",
+                "战国时期秦国君主，在位时间较短。",
+                pFamilyName: "嬴", pClanName: "赵", pGivenName: "荡",
+                pHistoricalEra: "战国");
+            yield return E("qin_zhaoxiangwang", "嬴稷", "秦", "秦", -325,
+                -251, -306, 89, "嬴驷", "芈八子",
+                "长期执政并持续东进，使秦国形成统一优势。",
+                pFamilyName: "嬴", pClanName: "赵", pGivenName: "稷",
+                pHistoricalEra: "战国");
+            yield return E("qin_xiaowenwang", "嬴柱", "秦", "秦", -302,
+                -250, -250, 40, "嬴稷", "唐八子",
+                "秦国君主，正式在位时间很短。",
+                pFamilyName: "嬴", pClanName: "赵", pGivenName: "柱",
+                pHistoricalEra: "战国");
+            yield return E("qin_zhuangxiangwang", "嬴异人", "秦", "秦", -281,
+                -247, -249, 67, "嬴柱", "夏姬",
+                "在吕不韦支持下即位，是秦王政之父。",
+                pFamilyName: "嬴", pClanName: "赵", pGivenName: "异人",
+                pHistoricalEra: "战国");
+            yield return E("chu_huaiwang", "芈槐", "楚", "楚", UnknownYear,
+                -296, -328, 72, "芈商", "",
+                "战国时期楚国君主，后被秦国扣留并死于秦地。",
+                pFamilyName: "芈", pClanName: "熊", pGivenName: "槐",
+                pHistoricalEra: "战国");
+
             yield return E("qin_shihuang", "嬴政", "秦", "秦", -259, -210, -221, 100,
-                "嬴异人", "赵姬", "统一六国，建立中国历史上第一个中央集权帝国。");
-            yield return E("qin_er_shi", "胡亥", "秦", "秦", -230, -207, -209, 55, "嬴政", "胡姬");
-            yield return E("qin_ziying", "子婴", "秦", "秦", -215, -206, -207, 40, "扶苏", "史氏");
+                "嬴异人", "赵姬", "统一六国，建立中国历史上第一个中央集权帝国。",
+                pFamilyName: "嬴", pClanName: "赵", pGivenName: "政");
+            yield return E("qin_er_shi", "胡亥", "秦", "秦", -230, -207,
+                -209, 55, "嬴政", "胡姬", "秦朝第二位皇帝。",
+                pFamilyName: "嬴", pClanName: "赵", pGivenName: "胡亥");
+            yield return E("qin_ziying", "子婴", "秦", "秦", UnknownYear,
+                -206, -207, 40, "", "",
+                "秦朝末代统治者，其与秦宗室的具体亲缘关系存在争议。",
+                pFamilyName: "嬴", pClanName: "赵", pGivenName: "子婴");
+
+            yield return E("chu_xiang_ji", "项籍", "秦汉之际", "楚", -232,
+                -202, -206, 93, "", "",
+                "秦末起兵反秦，号西楚霸王，与刘邦争夺天下。",
+                pFamilyName: "姬", pClanName: "项", pGivenName: "籍",
+                pHistoricalEra: "楚汉争霸");
+            yield return E("han_han_xin", "韩信", "汉", "汉", -231,
+                -196, -206, 92, "", "",
+                "汉初军事家，统兵平定诸国，为汉朝统一建立重要功绩。",
+                pFamilyName: "韩", pClanName: "韩", pGivenName: "信",
+                pHistoricalEra: "西汉");
+            yield return E("han_xiao_he", "萧何", "汉", "汉", UnknownYear,
+                -193, -206, 88, "", "",
+                "汉初丞相，主持制度建设并保障楚汉战争后方。",
+                pFamilyName: "萧", pClanName: "萧", pGivenName: "何",
+                pHistoricalEra: "西汉");
+            yield return E("han_zhang_liang", "张良", "汉", "汉", -250,
+                -186, -206, 90, "张平", "",
+                "辅佐刘邦夺取天下，是汉初重要谋臣。",
+                pFamilyName: "张", pClanName: "张", pGivenName: "良",
+                pHistoricalEra: "西汉");
+            yield return E("han_lu_zhi", "吕雉", "汉", "汉", -241,
+                -180, -195, 86, "吕文", "",
+                "汉高祖皇后，刘邦死后长期掌握西汉最高政治权力。",
+                HistoricalFigureSex.Female, pFamilyName: "吕",
+                pClanName: "吕", pGivenName: "雉", pHistoricalEra: "西汉");
+            yield return E("han_wei_qing", "卫青", "汉", "汉", UnknownYear,
+                -106, -129, 86, "郑季", "卫媪",
+                "西汉名将，多次出击匈奴并收复河套地区。",
+                pFamilyName: "卫", pClanName: "卫", pGivenName: "青",
+                pHistoricalEra: "西汉");
+            yield return E("han_huo_qubing", "霍去病", "汉", "汉", -140,
+                -117, -121, 90, "霍仲孺", "卫少儿",
+                "西汉名将，深入河西与漠北打击匈奴。",
+                pFamilyName: "霍", pClanName: "霍", pGivenName: "去病",
+                pHistoricalEra: "西汉");
+            yield return E("han_sima_qian", "司马迁", "汉", "汉", -145,
+                -86, -104, 95, "司马谈", "",
+                "西汉史学家，撰写纪传体通史《史记》。",
+                pFamilyName: "司马", pClanName: "司马", pGivenName: "迁",
+                pHistoricalEra: "西汉");
+            yield return E("han_huo_guang", "霍光", "汉", "汉", UnknownYear,
+                -68, -87, 82, "霍仲孺", "",
+                "西汉辅政大臣，历事武帝、昭帝和宣帝。",
+                pFamilyName: "霍", pClanName: "霍", pGivenName: "光",
+                pHistoricalEra: "西汉");
+            yield return E("han_ban_chao", "班超", "汉", "汉", 32,
+                102, 73, 84, "班彪", "",
+                "东汉将领与外交家，经营西域三十余年。",
+                pFamilyName: "班", pClanName: "班", pGivenName: "超",
+                pHistoricalEra: "东汉");
 
             yield return E("han_gaozu", "刘邦", "汉", "汉", -256, -195, -202, 96, "刘煓", "刘媪", "击败群雄建立汉朝，奠定汉帝国制度。");
             yield return E("han_huidi", "刘盈", "汉", "汉", -210, -188, -195, 58, "刘邦", "吕雉");
@@ -394,13 +740,18 @@ namespace AncientWarfare3.content.figures
             yield return E("han_hedi", "刘肇", "汉", "汉", 79, 106, 88, 68, "刘炟", "梁贵人");
             yield return E("han_shangdi", "刘隆", "汉", "汉", 105, 106, 106, 25, "刘肇", "邓绥");
             yield return E("han_andi", "刘祜", "汉", "汉", 94, 125, 106, 45, "刘庆", "左小娥");
-            yield return E("han_shundi", "刘保", "汉", "汉", 115, 144, 125, 53, "刘保", "李氏");
+            yield return E("han_shundi", "刘保", "汉", "汉", 115, 144, 125, 53, "刘庆", "李氏");
             yield return E("han_chongdi", "刘炳", "汉", "汉", 143, 145, 144, 20, "刘保", "梁妠");
             yield return E("han_zhidi", "刘缵", "汉", "汉", 138, 146, 145, 20, "刘翼", "不详");
             yield return E("han_huandi", "刘志", "汉", "汉", 132, 168, 146, 38, "刘翼", "匽明");
             yield return E("han_lingdi", "刘宏", "汉", "汉", 156, 189, 168, 48, "刘苌", "董氏");
             yield return E("han_shaodi", "刘辩", "汉", "汉", 173, 190, 189, 26, "刘宏", "何皇后");
             yield return E("han_xiandi", "刘协", "汉", "汉", 181, 234, 190, 70, "刘宏", "王美人");
+            yield return E("zhong_hou_shu", "袁术", "东汉", "仲", 155,
+                199, 197, 65, "袁逢", "",
+                "东汉末年军阀，197年称帝并建立仲氏政权。",
+                pFamilyName: "袁", pClanName: "袁", pGivenName: "术",
+                pHistoricalEra: "仲氏政权");
 
             yield return E("wei_wendi", "曹丕", "魏", "魏", 187, 226, 220, 82, "曹操", "卞氏");
             yield return E("wei_mingdi", "曹叡", "魏", "魏", 204, 239, 226, 64, "曹丕", "甄氏");

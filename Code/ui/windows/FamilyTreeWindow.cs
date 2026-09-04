@@ -36,6 +36,9 @@ namespace AncientWarfare3.ui.windows
         private const float SIDE_RIGHT_INSET = 80f;
         private static readonly float SIDE_RIGHT = FamilyTreeToolbarLayoutRules.RightAlignedX(SIDE_RIGHT_INSET);
         private const float RENAME_TOP = -164f;
+        // 「复位」在小树模式下与「改姓」上下相邻,-152 时两者只差 12px、
+        // 视觉上贴死。抬到 -132 与「收缩」(-128) 保持同样的 24px 步距。
+        private const float RESET_TOP_BIG_TREE = -132f;
         private static readonly Vector2 SIDE_BUTTON_SIZE = new Vector2(78, 20);
 
         private enum Mode { Family, BigTree }
@@ -295,7 +298,7 @@ namespace AncientWarfare3.ui.windows
 
             _expandButton = MakeToolbarButton("ExpandLiveBranches", AW_L10n.Text("aw_tree_expand", "展开"), new Vector2(SIDE_RIGHT, -104), ExpandAllLiveBranches, SIDE_BUTTON_SIZE);
             _collapseButton = MakeToolbarButton("CollapseBranches", AW_L10n.Text("aw_tree_collapse", "收缩"), new Vector2(SIDE_RIGHT, -128), CollapseAllBranches, SIDE_BUTTON_SIZE);
-            _resetViewButton = MakeToolbarButton("ResetTreeView", AW_L10n.Text("aw_tree_reset_view", "复位"), new Vector2(SIDE_RIGHT, -152), ResetViewToAnchor, SIDE_BUTTON_SIZE);
+            _resetViewButton = MakeToolbarButton("ResetTreeView", AW_L10n.Text("aw_tree_reset_view", "复位"), new Vector2(SIDE_RIGHT, RESET_TOP_BIG_TREE), ResetViewToAnchor, SIDE_BUTTON_SIZE);
             _halfSiblingButton = MakeToolbarButton("HalfSiblingRelations", "", new Vector2(SIDE_RIGHT, -54), ToggleHalfSiblingRelations, SIDE_BUTTON_SIZE);
             _renameClanButton = MakeToolbarButton("RenameVisibleClan", AW_L10n.Text("aw_rename_visible_clan", "\u6539\u6C0F"), new Vector2(SIDE_RIGHT, RENAME_TOP), ToggleRenameClanPanel, SIDE_BUTTON_SIZE);
             _renameSurnameButton = MakeToolbarButton("RenamePatrilinealSurname",

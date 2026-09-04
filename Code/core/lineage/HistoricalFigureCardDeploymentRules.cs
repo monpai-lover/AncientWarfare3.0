@@ -9,7 +9,8 @@ namespace AncientWarfare3.core.lineage
         public HistoricalFigureCardDeploymentFacts(bool pHasCity,
             bool pCityIsLiving, bool pActorIsAdult, bool pHasKingdom,
             bool pArchiveAvailable, bool pTransactionActive,
-            string pHistoricalKingdomName, bool pCardOwned = true)
+            string pHistoricalKingdomName, bool pCardOwned = true,
+            bool pHasTargetTile = false, bool pTileIsBuildable = false)
         {
             HasCity = pHasCity;
             CityIsLiving = pCityIsLiving;
@@ -19,6 +20,8 @@ namespace AncientWarfare3.core.lineage
             TransactionActive = pTransactionActive;
             HistoricalKingdomName = pHistoricalKingdomName ?? "";
             CardOwned = pCardOwned;
+            HasTargetTile = pHasTargetTile;
+            TileIsBuildable = pTileIsBuildable;
         }
 
         public bool HasCity { get; }
@@ -29,6 +32,8 @@ namespace AncientWarfare3.core.lineage
         public bool TransactionActive { get; }
         public string HistoricalKingdomName { get; }
         public bool CardOwned { get; }
+        public bool HasTargetTile { get; }
+        public bool TileIsBuildable { get; }
     }
 
     public static class HistoricalFigureCardDeploymentRules
@@ -39,12 +44,16 @@ namespace AncientWarfare3.core.lineage
 
         public static bool CanDeploy(HistoricalFigureCardDeploymentFacts pFacts)
         {
-            if (pFacts == null || !pFacts.HasCity || !pFacts.CityIsLiving ||
-                !pFacts.ActorIsAdult || !pFacts.HasKingdom ||
+            if (pFacts == null || !pFacts.ActorIsAdult ||
                 !pFacts.ArchiveAvailable || pFacts.TransactionActive ||
                 !pFacts.CardOwned ||
                 string.IsNullOrWhiteSpace(pFacts.HistoricalKingdomName))
                 return false;
+            bool existingCity = pFacts.HasCity && pFacts.CityIsLiving &&
+                pFacts.HasKingdom;
+            bool unownedTile = pFacts.HasTargetTile && pFacts.TileIsBuildable &&
+                !pFacts.HasCity && !pFacts.HasKingdom;
+            if (!existingCity && !unownedTile) return false;
             return !HistoricalFigureCardCatalog.HasGeographicPrefix(
                 pFacts.HistoricalKingdomName);
         }

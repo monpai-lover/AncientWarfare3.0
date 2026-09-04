@@ -1,0 +1,58 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.content.figures;
+
+internal static class HistoricalFigureCardInventoryRulesTests
+{
+    public static void Run()
+    {
+        HistoricalFigureCardDefinition gold = Card("gold", "周", 100,
+            HistoricalFigureCardRarity.Gold);
+        HistoricalFigureCardDefinition blue = Card("blue", "秦", 20,
+            HistoricalFigureCardRarity.Blue);
+        HistoricalFigureCardDefinition pink = Card("pink", "汉", 70,
+            HistoricalFigureCardRarity.Pink);
+        var cards = new[] { blue, gold, pink };
+        var latest = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["pink"] = 0,
+            ["blue"] = 1,
+            ["gold"] = 2
+        };
+
+        Equal("pink,blue,gold", Ids(HistoricalFigureCardInventoryRules.Sort(
+            cards, HistoricalFigureCardInventorySort.Latest, latest)),
+            "latest order follows draw recency");
+        Equal("gold,pink,blue", Ids(HistoricalFigureCardInventoryRules.Sort(
+            cards, HistoricalFigureCardInventorySort.Rarity, latest)),
+            "rarity order starts with gold");
+        Equal("gold,pink,blue", Ids(HistoricalFigureCardInventoryRules.Sort(
+            cards, HistoricalFigureCardInventorySort.Fame, latest)),
+            "fame order is descending");
+        Equal("gold,pink,blue", Ids(HistoricalFigureCardInventoryRules.Sort(
+            cards, HistoricalFigureCardInventorySort.Name, latest)),
+            "name order is stable ordinal order");
+    }
+
+    private static HistoricalFigureCardDefinition Card(string pId, string pName,
+        int pFame, HistoricalFigureCardRarity pRarity)
+    {
+        return new HistoricalFigureCardDefinition(pId, pName, "", "", "",
+            "", "国", "", 0, 0, 0, pFame, pRarity,
+            HistoricalFigureSex.Male, "", "", "", "", "", "", null,
+            -1, 1, Array.Empty<string>());
+    }
+
+    private static string Ids(IEnumerable<HistoricalFigureCardDefinition> pCards)
+    {
+        return string.Join(",", pCards.Select(p => p.CardId));
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected=" + expected +
+                                                ", actual=" + actual);
+    }
+}

@@ -85,7 +85,8 @@ namespace AncientWarfare3.content.figures
             string pBiography, string pFatherCardId, string pFatherDisplayName,
             string pMotherCardId, string pMotherDisplayName, string pPortraitPath,
             string pLegacyFigureId, int pLegacyRegistryIndex, int pCombatHealth,
-            IEnumerable<string> pCombatTraits)
+            IEnumerable<string> pCombatTraits, string pBackgroundSummary = "",
+            string pDetailedBiography = "")
         {
             CardId = pCardId ?? "";
             DisplayName = pDisplayName ?? "";
@@ -102,6 +103,9 @@ namespace AncientWarfare3.content.figures
             Rarity = pRarity;
             Sex = pSex;
             Biography = pBiography ?? "";
+            BackgroundSummary = pBackgroundSummary ?? "";
+            DetailedBiography = string.IsNullOrWhiteSpace(pDetailedBiography)
+                ? Biography : pDetailedBiography;
             FatherCardId = pFatherCardId ?? "";
             FatherDisplayName = pFatherDisplayName ?? "";
             MotherCardId = pMotherCardId ?? "";
@@ -129,6 +133,8 @@ namespace AncientWarfare3.content.figures
         public HistoricalFigureCardRarity Rarity { get; }
         public HistoricalFigureSex Sex { get; }
         public string Biography { get; }
+        public string BackgroundSummary { get; }
+        public string DetailedBiography { get; }
         public string FatherCardId { get; }
         public string FatherDisplayName { get; }
         public string MotherCardId { get; }

@@ -14,6 +14,8 @@ internal static class HistoricalFigureCardDeploymentServiceSourceGuardTests
             "HistoricalFigureCardIdentityService.cs"));
         Contains(source, "HistoricalFigureCardDeploymentRequest",
             "deployment request contract exists");
+        Contains(source, "WorldTile TargetTile",
+            "deployment request retains the clicked world tile");
         Contains(source, "HistoricalFigureCardDeploymentResult",
             "deployment result contract exists");
         Contains(source, "TryDeploy",
@@ -24,10 +26,30 @@ internal static class HistoricalFigureCardDeploymentServiceSourceGuardTests
             "deployment stores card identity");
         Contains(source, "HistoricalFigureCardDeploymentRules.TryBegin",
             "deployment is idempotently locked");
+        Contains(source, "makeNewCivKingdom",
+            "unowned tile deployment creates a historical kingdom");
+        Contains(source, "World.world.cities.newCity",
+            "unowned tile deployment creates a city");
         Contains(source, "card_deployed", "card deployment history event exists");
         Contains(source, "card_king", "card king history event exists");
         Contains(source, "card_kingdom_founded",
             "card kingdom history event exists");
+        Contains(source, "collection.TryConsume",
+            "successful deployment consumes one owned card");
+        True(source.IndexOf("RecordHistory", StringComparison.Ordinal) <
+             source.LastIndexOf("collection.TryConsume", StringComparison.Ordinal),
+            "card consumption happens after history is committed");
+
+        string windowSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ui", "windows",
+            "HistoricalFigureDrawWindow.cs"));
+        string patchSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_HistoricalFigureCardPatch.cs"));
+        Contains(windowSource, "SelectMapTile",
+            "placement window accepts a clicked tile");
+        Contains(patchSource, "SelectMapTile(tile)",
+            "map click forwards the clicked tile");
     }
 
     private static void Contains(string source, string value, string message)

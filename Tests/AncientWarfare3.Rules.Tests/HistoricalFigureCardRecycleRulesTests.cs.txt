@@ -1,0 +1,95 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using AncientWarfare3.content.figures;
+using AncientWarfare3.core.lineage;
+
+internal static class HistoricalFigureCardRecycleRulesTests
+{
+    public static void Run()
+    {
+        var blueInputs = Inputs("blue", HistoricalFigureCardRarity.Blue, "han", 10);
+        True(HistoricalFigureCardRecycleRules.TryCreatePlan(blueInputs,
+            out HistoricalFigureCardRecyclePlan bluePlan, out string blueError),
+            blueError);
+        Equal(HistoricalFigureCardRarity.Purple, bluePlan.OutputRarity,
+            "ten blue cards produce one purple card");
+
+        var redInputs = Inputs("red", HistoricalFigureCardRarity.Red, "han", 5);
+        True(HistoricalFigureCardRecycleRules.TryCreatePlan(redInputs,
+            out HistoricalFigureCardRecyclePlan redPlan, out string redError),
+            redError);
+        Equal(HistoricalFigureCardRarity.Gold, redPlan.OutputRarity,
+            "five red cards produce one gold card");
+
+        var mixedSources = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["han"] = 2,
+            ["sui_tang"] = 8
+        };
+        Equal("han", HistoricalFigureCardRecycleRules.SelectWeightedCrate(
+            mixedSources, 0), "weighted source uses the first bucket");
+        Equal("sui_tang", HistoricalFigureCardRecycleRules.SelectWeightedCrate(
+            mixedSources, 2), "weighted source crosses the first bucket");
+        Equal("sui_tang", HistoricalFigureCardRecycleRules.SelectWeightedCrate(
+            mixedSources, 9), "weighted source uses the final bucket");
+
+        string root = Path.Combine(Path.GetTempPath(),
+            "aw3-card-recycle-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var store = new HistoricalFigureCardCollectionStore(
+                Path.Combine(root, "cards.json"));
+            string blueCard = HistoricalFigureCardCatalog.All.First(p =>
+                p.Rarity.Equals(HistoricalFigureCardRarity.Blue)).CardId;
+            string purpleCard = HistoricalFigureCardCatalog.All.First(p =>
+                p.Rarity.Equals(HistoricalFigureCardRarity.Purple)).CardId;
+            for (int i = 0; i < 10; i++)
+                True(store.RecordDraw("draw-" + i, blueCard, "blue",
+                    "2026-09-04T00:00:00Z", i < 2 ? "han" : "sui_tang"),
+                    "draw source is committed");
+            True(store.TryRecycle(new[] { blueCard, blueCard, blueCard, blueCard,
+                blueCard, blueCard, blueCard, blueCard, blueCard, blueCard },
+                purpleCard,
+                "purple", "sui_tang", "recycle-1", "2026-09-04T00:00:01Z"),
+                "recycle commits atomically");
+            Equal(0, store.GetOwnedCount(blueCard), "inputs are consumed");
+            Equal(1, store.GetOwnedCount(purpleCard), "output is added");
+            Equal(1, store.GetOwnedCrateCount(purpleCard, "sui_tang"),
+                "output keeps its selected collection source");
+            Equal(0, store.GetOwnedCrateCount(blueCard, "han"),
+                "consumed source entries are removed");
+            Equal("sui_tang", store.LastDraw.CrateId,
+                "recycle draw retains output collection source");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    private static IReadOnlyList<HistoricalFigureCardRecycleInput> Inputs(
+        string pCardId, HistoricalFigureCardRarity pRarity, string pCrateId,
+        int pCount)
+    {
+        var inputs = new List<HistoricalFigureCardRecycleInput>();
+        for (int i = 0; i < pCount; i++)
+            inputs.Add(new HistoricalFigureCardRecycleInput(pCardId, pRarity,
+                pCrateId));
+        return inputs;
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected=" + expected +
+                                                ", actual=" + actual);
+    }
+}

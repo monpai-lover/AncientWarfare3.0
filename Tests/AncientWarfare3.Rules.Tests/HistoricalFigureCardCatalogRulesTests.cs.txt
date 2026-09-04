@@ -20,6 +20,17 @@ internal static class HistoricalFigureCardCatalogRulesTests
             "fame scores are bounded");
         True(all.All(p => p.ParentReferencesAreValid(all)),
             "parent references point at cards or are empty");
+        True(all.All(p => p.BirthYear != -1 && p.DeathYear != -1),
+            "unknown years use an explicit sentinel instead of minus one");
+        True(all.All(p => p.DisplayName != p.FatherDisplayName &&
+                          p.DisplayName != p.MotherDisplayName),
+            "no historical figure is recorded as their own parent");
+        True(all.All(p => !string.IsNullOrWhiteSpace(p.BackgroundSummary) &&
+                          p.BackgroundSummary.Length >= 8),
+            "every historical figure has a background summary");
+        True(all.All(p => !string.IsNullOrWhiteSpace(p.DetailedBiography) &&
+                          p.DetailedBiography.Length >= 20),
+            "every historical figure has a detailed biography");
         True(all.All(p => !HistoricalFigureCardCatalog.HasGeographicPrefix(
             p.HistoricalKingdomName)), "historical names are short kingdom names");
         Equal(HistoricalFigureDef.All.Length, all.Count(p => p.LegacyFigureId != null),
@@ -36,6 +47,17 @@ internal static class HistoricalFigureCardCatalogRulesTests
             "catalogue display order starts with highest fame");
         Equal("史料不详", HistoricalFigureCardCatalog.ParentDisplayName(""),
             "unknown parent has explicit display text");
+        HistoricalFigureCardDefinition yuanShu =
+            HistoricalFigureCardCatalog.Get("zhong_hou_shu");
+        Equal(155, yuanShu.BirthYear, "Yuan Shu birth year is recorded");
+        Equal(199, yuanShu.DeathYear, "Yuan Shu death year is recorded");
+        Equal("东汉", yuanShu.DynastyName, "Yuan Shu belongs to late Han");
+        Equal("仲", yuanShu.HistoricalKingdomName,
+            "Yuan Shu founds Zhong");
+        HistoricalFigureCardDefinition ziying =
+            HistoricalFigureCardCatalog.Get("qin_ziying");
+        Equal("嬴", ziying.FamilyName, "Ziying uses the Ying surname");
+        Equal("赵", ziying.ClanName, "Ziying uses the Zhao clan");
     }
 
     private static void True(bool value, string message)

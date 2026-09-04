@@ -12,6 +12,9 @@
 		<Compile Include="HistoricalFigureCardCatalogRulesTests.cs.txt" />
 		<Compile Include="HistoricalFigureCardCollectionRulesTests.cs.txt" />
 		<Compile Include="HistoricalFigureCardDrawRulesTests.cs.txt" />
+		<Compile Include="HistoricalFigureCardCrateRulesTests.cs.txt" />
+		<Compile Include="HistoricalFigureCardInventoryRulesTests.cs.txt" />
+		<Compile Include="HistoricalFigureCardRecycleRulesTests.cs.txt" />
 		<Compile Include="HistoricalFigureCardDeploymentRulesTests.cs.txt" />
 		<Compile Include="HistoricalFigureCardParentageRulesTests.cs.txt" />
     <Compile Include="HistoricalFigureCardSourceGuardTests.cs.txt" />
@@ -19,6 +22,9 @@
     <Compile Include="HistoricalFigureCardAcceptanceSourceGuardTests.cs.txt" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardModels.cs" Link="Production\HistoricalFigureCardModels.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardCatalog.cs" Link="Production\HistoricalFigureCardCatalog.cs" />
+		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardCrates.cs" Link="Production\HistoricalFigureCardCrates.cs" />
+		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardInventoryRules.cs" Link="Production\HistoricalFigureCardInventoryRules.cs" />
+		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardRecycleRules.cs" Link="Production\HistoricalFigureCardRecycleRules.cs" />
 		<Compile Include="..\..\Code\core\lineage\HistoricalFigureCardDrawService.cs" Link="Production\HistoricalFigureCardDrawService.cs" />
 		<Compile Include="..\..\Code\core\lineage\HistoricalFigureCardCollectionStore.cs" Link="Production\HistoricalFigureCardCollectionStore.cs" />
 		<Compile Include="..\..\Code\core\lineage\HistoricalFigureCardDeploymentRules.cs" Link="Production\HistoricalFigureCardDeploymentRules.cs" />

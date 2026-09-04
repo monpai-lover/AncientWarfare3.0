@@ -31,6 +31,38 @@ foreach (HistoricalFigureCardDefinition card in
 probability, are `Gold`, `Red`, `Pink`, `Purple`, and `Blue`. Unknown parents
 remain `史料不详` in the player-facing data and are not invented at runtime.
 
+## Historical Crates
+
+The player UI presents six period crates. Their item counts are calculated from
+the catalogue. Blue, Purple, Pink, and Red cards are drawn from the selected
+period crate; Gold cards are drawn from one shared grand-prize pool containing
+all Gold cards in the catalogue. If a period has no cards in a rarity bucket,
+the available bucket weights are renormalized, matching the reference case
+opening behavior:
+
+```csharp
+foreach (HistoricalFigureCardCrate crate in HistoricalFigureCardCrates.All)
+{
+    IReadOnlyList<HistoricalFigureCardDefinition> cards =
+        HistoricalFigureCardCatalog.GetCards(crate.Id);
+    string id = crate.Id;
+    int itemCount = crate.CardCount;
+}
+```
+
+The stable crate IDs are `pre_qin_qin`, `han`, `three_six_dynasties`, `sui_tang`,
+`five_song`, and `yuan_ming_qing`. A draw can record its source crate while
+remaining compatible with the older overload:
+
+```csharp
+HistoricalFigureCardRevealResult reveal =
+    HistoricalFigureCardDrawService.DrawAndCommit(
+        HistoricalFigureCardCatalog.GetCards("han"),
+        "han",
+        new HistoricalFigureCardCollectionStore());
+string sourceCrate = reveal.CrateId;
+```
+
 ## Collection
 
 The collection is separate from the world save and automatic
@@ -50,12 +82,19 @@ The game UI uses the same store under
 Draws are committed before the reveal animation starts and writes are atomic.
 Other mods should not write this file directly.
 
+The in-game `仓库` view reads `OwnedCounts` from this same store, filters out
+zero-count cards, and shows each owned count. It supports sorting by latest
+draw, rarity, name, or fame. Selecting a row opens the full card details;
+deployment consumes one owned copy after a successful deployment transaction.
+
 ## Deploying A Card
 
-Deployment is a main-thread WorldBox operation. The caller supplies a living
-civilization city selected from the map. A deployment creates an adult actor,
-creates a new kingdom at that city, makes the actor its king, and uses the
-card's historical kingdom name. The collection count is not decremented.
+Deployment is a main-thread WorldBox operation. The caller supplies either a
+living civilization city or buildable unowned land selected from the map. A
+deployment creates an adult actor, creates a new kingdom at that location,
+makes the actor its king, and uses the card's historical kingdom name. The
+deployment consumes one owned card only after the actor, kingdom, lineage,
+parentage, and history writes succeed.
 
 ```csharp
 using AncientWarfare3.core.lineage;
@@ -83,6 +122,39 @@ Rollback restores the original city ownership when the transaction fails.
 Card identities are stored under `HISTORICAL_CARD_ID` and are excluded from the
 automatic historical figure spawn pipeline. Deployment writes lineage,
 parentage, biography, chronicle, city history, and kingdom history entries.
+
+## Trading Up Cards
+
+The collection supports CS2-style trade-up contracts. Inputs must be cards of
+one rarity: ten Blue, Purple, or Pink cards, or five Red cards. The next rarity
+is produced; Gold cards cannot be traded up. The output crate is selected with
+source-count weighting from the input cards, while Gold output cards come from
+the shared Gold pool. The store consumes inputs and records the output in one
+atomic write:
+
+```csharp
+using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
+
+var collection = new HistoricalFigureCardCollectionStore();
+IReadOnlyList<string> inputs = new[]
+{
+    "card_a", "card_b", "card_c", "card_d", "card_e",
+    "card_f", "card_g", "card_h", "card_i", "card_j"
+};
+
+bool committed = collection.TryRecycle(
+    inputs,
+    "output_card_id",
+    "purple",
+    "han",
+    System.Guid.NewGuid().ToString("N"));
+```
+
+Use `GetRecycleSourceCounts` and
+`HistoricalFigureCardRecycleRules.SelectWeightedCrate` when building a custom
+UI. The in-game UI already performs this selection and validates the required
+count before submitting the transaction.
 
 ## History Events
 

@@ -18,19 +18,112 @@ internal static class HistoricalFigureCardAcceptanceSourceGuardTests
         string windowPath = Path.Combine(root, "ui", "windows",
             "HistoricalFigureDrawWindow.cs");
         string window = File.ReadAllText(windowPath);
+        Contains(window, "AW_L10n.Text(\"aw_historical_figure_cards_title\"",
+            "card window localizes its title");
+        Contains(window, "AW_L10n.Text(\"aw_historical_figure_cards_draw\"",
+            "card window localizes its draw button");
+        Contains(window, "AW_L10n.Text(\"aw_historical_figure_cards_deploy\"",
+            "card window localizes its deploy button");
+        string localePath = Path.Combine(Directory.GetCurrentDirectory(),
+            "Locales", "aw3_historical_cards.csv");
+        True(File.Exists(localePath), "card window locale file exists");
+        string locale = File.ReadAllText(localePath);
+        Contains(locale, "aw_historical_figure_cards_title,",
+            "card title locale entry exists");
+        Contains(locale, "aw_historical_figure_cards_rarity,",
+            "card rarity locale entry exists");
+        Contains(locale, "aw_historical_figure_cards_collection_hint,",
+            "card collection locale entry exists");
         Contains(window, "DrawAndCommit", "draw commits before animation");
         Contains(window, "WinnerIndex", "reveal uses fixed winner position");
+        string drawMethod = Between(window, "private void Draw()", "private void Skip()");
+        Contains(drawMethod, "Refresh();", "draw visibly enters the rolling layout");
         Contains(window, "IsCatalogueAvailable", "invalid catalogue disables draw");
         Contains(window, "SelectCollectionCard", "owned collection rows are selectable");
+        Contains(window, "HistoricalFigureCardCrates", "historical period crates are available");
+        Contains(window, "MysteryPortraitPath", "mystery card portrait key is centralized");
+        Contains(window, "mysteryMark.gameObject.SetActive(false)",
+            "mystery card does not overlay a second question mark");
+        Contains(window, "UpdateInventory", "owned cards have an inventory view");
+        Contains(window, "GetCards(_selectedCrateId)", "draw uses the selected crate pool");
         Contains(window, "ResetTransientState", "window exposes transient reset");
         Contains(window, "HistoricalFigureCardAudioService.PlayScroll",
             "rolling crosses play scroll cue");
+        Contains(window, "EnsureCrateVisual", "crate selection uses image cards");
+        Contains(window, "EnsureCardVisual", "crate contents and inventory use card tiles");
+        Contains(window, "BackgroundSummary", "reveal includes a background summary");
+        Contains(window, "DetailedBiography", "reveal includes a detailed biography");
+        Contains(window, "bool showRevealPanel = _state == DrawState.Reveal || _state == DrawState.Details",
+            "details state activates the reveal panel");
+        Contains(window, "bool revealMode = _state == DrawState.Reveal || _state == DrawState.Details",
+            "details state uses the reveal layout");
+        Contains(window, "City city = pTile.zone_city;",
+            "map placement only treats the clicked city tile as a city target");
+        Contains(window, "private Button _openAgain", "reveal exposes open-again action");
+        Contains(window, "private Button _quickOpen", "reveal exposes quick-open action");
+        Contains(window, "private Button _sound", "reveal exposes sound action");
+        Contains(window, "private Button _recycleModeButton",
+            "inventory exposes recycle mode");
+        Contains(window, "private Button _recycleSubmitButton",
+            "inventory exposes recycle submit action");
+        Contains(window, "GetRecycleSourceCounts",
+            "recycle uses persisted crate source counts");
+        Contains(window, "SelectWeightedCrate",
+            "recycle selects its output crate by source weight");
+        Contains(window, "TryRecycle",
+            "recycle commits through the collection transaction");
+        Contains(window, "HistoricalFigureCardCatalog.GetCards(outputCrateId)",
+            "recycle draws the output card from the selected crate");
+        Contains(window, "BuildRecycleInputIds",
+            "recycle expands selected card quantities into input instances");
+        Contains(window, "private void CloseReveal()", "reveal can return to its crate");
+        Contains(window, "QuickRollDuration", "quick opening uses a separate duration");
+        True(!window.Contains("_state = DrawState.Details;\n                    Refresh();"),
+            "reveal result remains visible until the player acts");
+        Contains(locale, "aw_historical_figure_cards_open_again,",
+            "open-again action is localized");
+        Contains(locale, "aw_historical_figure_cards_close,",
+            "close action is localized");
+        Contains(locale, "aw_historical_figure_cards_collection_item,",
+            "inventory card rows have a locale entry");
+        Contains(locale, "aw_historical_figure_cards_recycle_mode,",
+            "recycle mode has a locale entry");
+        Contains(locale, "aw_historical_figure_cards_recycle_submit,",
+            "recycle submit has a locale entry");
+
+        string mysteryPortraitPath = Path.Combine(Directory.GetCurrentDirectory(),
+            "GameResources", "ui", "historical_cards", "rare_special.png");
+        True(File.Exists(mysteryPortraitPath),
+            "mystery card portrait asset exists");
+        string cardItemPath = Path.Combine(root, "ui", "items",
+            "HistoricalFigureCardListItem.cs");
+        string cardItem = File.ReadAllText(cardItemPath);
+        Contains(cardItem, "ui/historical_cards/rare_special",
+            "concealed rolling cards use the mystery portrait asset");
+
+        string cataloguePath = Path.Combine(root, "content", "figures",
+            "HistoricalFigureCardCatalog.cs");
+        string catalogue = File.ReadAllText(cataloguePath);
+        Contains(catalogue, "[\"ming_taizu\"] = \"ui/historical_cards/ming_taizu\"",
+            "Zhu Yuanzhang has a dedicated card portrait asset");
+        string zhuPortraitPath = Path.Combine(Directory.GetCurrentDirectory(),
+            "GameResources", "ui", "historical_cards", "ming_taizu.png");
+        True(File.Exists(zhuPortraitPath),
+            "Zhu Yuanzhang card portrait asset exists");
+
+        string runtimePath = Path.Combine(root, "core", "lineage",
+            "HistoricalFigureCardRuntimeService.cs");
+        string runtime = File.ReadAllText(runtimePath);
+        Contains(runtime, "EnsureLocalization", "card runtime checks locale registration");
+        Contains(runtime, "LM.ApplyLocale(false)", "card runtime can reapply locale data");
 
         string patchPath = Path.Combine(root, "patch",
             "AW_HistoricalFigureCardPatch.cs");
         string patch = File.ReadAllText(patchPath);
         Contains(patch, "MapBox.on_world_loaded", "card state observes world load");
         Contains(patch, "ResetTransientState", "world load clears card state");
+        Contains(patch, "SelectMapTile(tile)",
+            "map placement passes the clicked tile to the card window");
 
         string storePath = Path.Combine(root, "core", "lineage",
             "HistoricalFigureCardCollectionStore.cs");
@@ -43,6 +136,14 @@ internal static class HistoricalFigureCardAcceptanceSourceGuardTests
         string deploymentPath = Path.Combine(root, "core", "lineage",
             "HistoricalFigureCardDeploymentService.cs");
         string deployment = File.ReadAllText(deploymentPath);
+        Contains(deployment, "GodPowerLibrary.SPAWN_XIA",
+            "card deployment resolves the spawn_xia power");
+        Contains(deployment, "spawnPower?.actor_asset_id ?? XiaRace.ID",
+            "card deployment uses the spawn_xia actor asset");
+        Contains(deployment, "ResolveDeploymentAsset(city)",
+            "card deployment resolves the species from the selected target");
+        Contains(deployment, "pCity?.getActorAsset() ?? ResolveSpawnXiaAsset()",
+            "city deployments use the city species and empty land uses Xia");
         Contains(deployment, "pAdultAge: true", "deployment creates adults");
         Contains(deployment, "GetOwnedCount", "deployment requires an owned card");
         Contains(deployment, "card_deployed", "deployment writes person history");
@@ -64,5 +165,13 @@ internal static class HistoricalFigureCardAcceptanceSourceGuardTests
     private static void True(bool value, string message)
     {
         if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static string Between(string source, string start, string end)
+    {
+        int startIndex = source.IndexOf(start, StringComparison.Ordinal);
+        int endIndex = source.IndexOf(end, StringComparison.Ordinal);
+        if (startIndex < 0 || endIndex <= startIndex) return "";
+        return source.Substring(startIndex, endIndex - startIndex);
     }
 }
