@@ -58,6 +58,17 @@ namespace AncientWarfare3.core.lineage
                 pFacts.HistoricalKingdomName);
         }
 
+        public static bool IsKingdomFoundingRole(HistoricalFigureCardRole pRole)
+        {
+            return HistoricalFigureCardRoleRules.IsKingdomFoundingRole(pRole);
+        }
+
+        public static bool CanDeployMilitaryGeneral(bool pHasValidCity,
+            bool pHasLivingKingdom, bool pTargetIsCivilKingdom)
+        {
+            return pHasValidCity && pHasLivingKingdom && pTargetIsCivilKingdom;
+        }
+
         public static bool TryBegin(string pDeploymentId)
         {
             if (string.IsNullOrWhiteSpace(pDeploymentId)) return false;

@@ -1,0 +1,64 @@
+using System;
+using System.IO;
+
+internal static class HistoricalFigureCardRecycleWindowSourceGuardTests
+{
+    public static void Run()
+    {
+        string root = Path.Combine(Directory.GetCurrentDirectory(), "Code",
+            "ui", "windows");
+        string draw = File.ReadAllText(Path.Combine(root,
+            "HistoricalFigureDrawWindow.cs"));
+        string recycle = File.ReadAllText(Path.Combine(root,
+            "HistoricalFigureRecycleWindow.cs"));
+        string activeDraw = StripBlockComments(draw);
+
+        Contains(recycle, "HistoricalFigureCardRecycleSelectionRules.FilterVisible",
+            "recycle window owns quality filtering");
+        Contains(recycle, "ScrollRect",
+            "recycle window has a real scroll list");
+        Contains(recycle, "TryRecycle",
+            "recycle window owns the collection transaction");
+        Contains(recycle, "GetRecycleSourceCounts",
+            "recycle window uses persisted source metadata");
+        Contains(recycle, "SelectWeightedCrate",
+            "recycle window uses source weighting");
+        Contains(recycle, "HistoricalFigureCardCatalog.GetCards(crateId)",
+            "recycle output uses the selected source crate");
+
+        Contains(draw, "HistoricalFigureRecycleWindow.Open",
+            "draw window exposes the dedicated recycle entry");
+        False(activeDraw.Contains("TryRecycle"),
+            "draw window does not commit recycle transactions");
+        False(activeDraw.Contains("ToggleRecycleCard"),
+            "draw window does not own recycle selection");
+        False(activeDraw.Contains("BuildRecycleInputIds"),
+            "draw window does not expand recycle inputs");
+        False(activeDraw.Contains("SelectedRecycleRarity"),
+            "draw window does not track recycle rarity");
+    }
+
+    private static void Contains(string source, string value, string message)
+    {
+        if (!source.Contains(value))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static string StripBlockComments(string source)
+    {
+        int start;
+        while ((start = source.IndexOf("/*", StringComparison.Ordinal)) >= 0)
+        {
+            int end = source.IndexOf("*/", start + 2,
+                StringComparison.Ordinal);
+            if (end < 0) return source.Substring(0, start);
+            source = source.Remove(start, end + 2 - start);
+        }
+        return source;
+    }
+}

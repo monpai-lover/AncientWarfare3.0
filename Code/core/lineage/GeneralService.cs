@@ -250,6 +250,12 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.GENERAL_FIEF_CITY_ID, -1L);
         }
 
+        internal static void RetireForCardDeployment(Actor pActor)
+        {
+            if (pActor?.data == null || !IsGeneral(pActor)) return;
+            EndGeneral(pActor, "card_deployment_failed");
+        }
+
         public static List<Actor> GetActiveGenerals(Kingdom pKingdom)
         {
             var result = new List<Actor>();

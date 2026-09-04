@@ -5,12 +5,38 @@ namespace AncientWarfare3.core.lineage
 {
     public static class HistoricalFigureCardIdentityService
     {
+        public const string MinisterRole = "minister";
+
         public static bool IsCardActor(Actor pActor)
         {
             if (pActor?.data == null) return false;
             pActor.data.get(LineageKeys.HISTORICAL_CARD_ID,
                 out string cardId, "");
             return !string.IsNullOrWhiteSpace(cardId);
+        }
+
+        public static bool IsMinisterCardActor(Actor pActor)
+        {
+            if (!IsCardActor(pActor)) return false;
+            pActor.data.get(LineageKeys.HISTORICAL_CARD_ROLE,
+                out string role, "");
+            return string.Equals(role, MinisterRole,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static string CourtDisplayName(Actor pActor)
+        {
+            string name = pActor?.getName() ?? "";
+            if (!IsMinisterCardActor(pActor)) return name;
+            pActor.data.get(LineageKeys.HISTORICAL_CARD_ID,
+                out string cardId, "");
+            HistoricalFigureCardDefinition card =
+                HistoricalFigureCardCatalog.Get(cardId);
+            string historicalKingdom = card?.HistoricalKingdomName?.Trim() ?? "";
+            return string.IsNullOrEmpty(historicalKingdom) ||
+                   string.IsNullOrEmpty(name)
+                ? name
+                : name + "\uff08" + historicalKingdom + "\uff09";
         }
 
         internal static void Apply(Actor pActor,
@@ -39,6 +65,9 @@ namespace AncientWarfare3.core.lineage
                 pDrawId ?? "");
             pActor.data.set(LineageKeys.HISTORICAL_CARD_DEPLOYMENT_ID,
                 pDeploymentId ?? "");
+            pActor.data.set(LineageKeys.HISTORICAL_CARD_ROLE,
+                pDefinition.Role == HistoricalFigureCardRole.Minister
+                    ? MinisterRole : "monarch");
         }
     }
 }

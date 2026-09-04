@@ -15,6 +15,14 @@ internal static class HistoricalFigureCardMinisterPoolTests
             hanXin?.MinisterType, "Han Xin is a military minister");
         Equal(HistoricalFigureCardMinisterType.CivilOfficial,
             xiaoHe?.MinisterType, "Xiao He is a civil minister");
+        True(HistoricalFigureCardRoleRules.IsMilitaryGeneral(hanXin),
+            "military subtype is recognized by role rules");
+        True(HistoricalFigureCardRoleRules.IsCivilOfficial(xiaoHe),
+            "civil subtype is recognized by role rules");
+        False(HistoricalFigureCardRoleRules.IsCivilOfficial(hanXin),
+            "military minister is not a civil official");
+        False(HistoricalFigureCardRoleRules.IsMilitaryGeneral(xiaoHe),
+            "civil minister is not a military general");
 
         True(HistoricalFigureCardCrates.All.All(crate =>
             HistoricalFigureCardCatalog.GetCards(crate.Id,
@@ -53,6 +61,14 @@ internal static class HistoricalFigureCardMinisterPoolTests
         False(HistoricalFigureCardRoleRules.IsKingdomFoundingRole(
             HistoricalFigureCardRole.Minister),
             "minister cards do not found kingdoms");
+        True(HistoricalFigureCardDeploymentRules.CanDeployMilitaryGeneral(
+            true, true, true), "military deployment accepts a civil kingdom");
+        False(HistoricalFigureCardDeploymentRules.CanDeployMilitaryGeneral(
+            false, true, true), "military deployment requires a city");
+        False(HistoricalFigureCardDeploymentRules.CanDeployMilitaryGeneral(
+            true, false, true), "military deployment requires a kingdom");
+        False(HistoricalFigureCardDeploymentRules.CanDeployMilitaryGeneral(
+            true, true, false), "military deployment requires a civil kingdom");
     }
 
     private static void True(bool pValue, string pMessage)

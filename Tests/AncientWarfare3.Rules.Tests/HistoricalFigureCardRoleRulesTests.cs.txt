@@ -1,0 +1,63 @@
+using System;
+using System.Linq;
+using AncientWarfare3.content.figures;
+using AncientWarfare3.core.lineage;
+
+internal static class HistoricalFigureCardRoleRulesTests
+{
+    public static void Run()
+    {
+        Equal(HistoricalFigureCardRole.Monarch,
+            HistoricalFigureCardCatalog.Get("han_gaozu").Role,
+            "emperor card is a monarch card");
+        Equal(HistoricalFigureCardRole.Minister,
+            HistoricalFigureCardCatalog.Get("han_xiao_he").Role,
+            "court figure is a minister card");
+        True(HistoricalFigureCardCatalog.GetCards("han",
+            HistoricalFigureCardRole.Monarch).All(p =>
+                p.Role == HistoricalFigureCardRole.Monarch),
+            "monarch category filters cards");
+        True(HistoricalFigureCardCatalog.GetCards("han",
+            HistoricalFigureCardRole.Minister).All(p =>
+                p.Role == HistoricalFigureCardRole.Minister),
+            "minister category filters cards");
+        True(HistoricalFigureCardCatalog.GetCards("han",
+            HistoricalFigureCardRole.Minister).Count > 0,
+            "minister category has cards");
+        Equal(50, HistoricalFigureCardRoleRules.MinisterCandidateBonus,
+            "minister bonus is stable and positive");
+        Equal(50, HistoricalFigureCardRoleRules.ApplyCandidateBonus(10,
+            HistoricalFigureCardRole.Minister),
+            "minister receives the fixed candidate bonus");
+        Equal(10, HistoricalFigureCardRoleRules.ApplyCandidateBonus(10,
+            HistoricalFigureCardRole.Monarch),
+            "monarch receives no minister bonus");
+        True(HistoricalFigureCardDeploymentRules.IsKingdomFoundingRole(
+            HistoricalFigureCardRole.Monarch),
+            "monarch cards found kingdoms");
+        False(HistoricalFigureCardDeploymentRules.IsKingdomFoundingRole(
+            HistoricalFigureCardRole.Minister),
+            "minister cards never found kingdoms");
+        True(HistoricalFigureCardRoleRules.CanDeployMinister(true, true),
+            "minister requires an existing civil city");
+        False(HistoricalFigureCardRoleRules.CanDeployMinister(false, false),
+            "minister cannot deploy to unowned land");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        True(!pValue, pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage + ": expected=" +
+                pExpected + ", actual=" + pActual);
+    }
+}

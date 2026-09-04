@@ -147,7 +147,7 @@ namespace AncientWarfare3.content.figures
             M(cards, "three_ren_fang", "任昉", "梁", "南朝", 500, 73, false, crate);
             M(cards, "three_xiao_ziyun", "萧子云", "梁", "南朝", 520, 69, false, crate);
             M(cards, "three_yuan_zan", "元赞", "魏", "北朝", 480, 67, false, crate);
-            M(cards, "three_chen_baoxu", "陈宝徐", "陈", "南朝", 560, 65, false, crate);
+            M(cards, "three_wu_mingche", "吴明彻", "陈", "南朝", 560, 65, true, crate);
         }
 
         private static void AddSuiTang(List<HistoricalFigureCardDefinition> cards)
@@ -237,6 +237,7 @@ namespace AncientWarfare3.content.figures
             M(cards, "song_zhang_jun", "张浚", "宋", "南宋", 1140, 74, false, crate);
             M(cards, "song_yao_lin", "姚麟", "宋", "南宋", 1160, 67, true, crate);
             M(cards, "song_wang_dan", "王旦", "宋", "北宋", 1010, 75, false, crate);
+            M(cards, "song_chen_liang", "陈亮", "宋", "南宋", 1190, 74, false, crate);
         }
 
         private static void AddYuanMingQing(List<HistoricalFigureCardDefinition> cards)

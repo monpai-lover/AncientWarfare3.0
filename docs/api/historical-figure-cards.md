@@ -63,6 +63,38 @@ HistoricalFigureCardRevealResult reveal =
 string sourceCrate = reveal.CrateId;
 ```
 
+Each card also has a stable `Role`: `HistoricalFigureCardRole.Monarch` or
+`HistoricalFigureCardRole.Minister`. The UI presents these as separate
+top-level crate categories while retaining the period IDs used by saved
+collection records:
+
+```csharp
+IReadOnlyList<HistoricalFigureCardDefinition> ministers =
+    HistoricalFigureCardCatalog.GetCards(
+        "han", HistoricalFigureCardRole.Minister);
+IReadOnlyList<HistoricalFigureCardDefinition> monarchs =
+    HistoricalFigureCardCatalog.GetCards(
+        "han", HistoricalFigureCardRole.Monarch);
+```
+
+Minister cards are historical officials and receive a fixed
+`HistoricalFigureCardRoleRules.MinisterCandidateBonus` of 50 when candidate
+scores are built or repositioned. The bonus affects ordering only; ordinary
+eligibility, office, king, heir, adult, slave, and affiliation gates still
+apply.
+
+Minister cards expose a second classification:
+
+```csharp
+HistoricalFigureCardMinisterType.CivilOfficial
+HistoricalFigureCardMinisterType.MilitaryGeneral
+```
+
+`CollectionId` identifies the period crate that supplied the card and
+`HistoricalKingdomName` identifies the historical source label. The in-game
+court presentation formats that source as `姓名（历史朝代）`; it does not
+replace the current host kingdom's name.
+
 ## Collection
 
 The collection is separate from the world save and automatic
@@ -89,12 +121,31 @@ deployment consumes one owned copy after a successful deployment transaction.
 
 ## Deploying A Card
 
-Deployment is a main-thread WorldBox operation. The caller supplies either a
-living civilization city or buildable unowned land selected from the map. A
-deployment creates an adult actor, creates a new kingdom at that location,
-makes the actor its king, and uses the card's historical kingdom name. The
-deployment consumes one owned card only after the actor, kingdom, lineage,
-parentage, and history writes succeed.
+Deployment is a main-thread WorldBox operation. Monarch cards use the existing
+kingdom-founding flow: the caller supplies either a living civilization city
+or buildable unowned land selected from the map. The service creates an adult
+actor, creates or takes the historical kingdom at that location, makes the
+actor its king, and uses the card's historical kingdom name.
+
+Minister cards use a separate existing-city flow. The caller must supply a
+living city in an existing civil kingdom. The service uses that city's species,
+joins the new adult actor to the city, leaves kingdom ownership, capital, king,
+and kingdom name unchanged, and registers the actor in the normal official
+candidate catalogue. A minister never creates a kingdom and cannot deploy to
+unowned land.
+
+Civil-official ministers enter the official candidate catalogue without an
+army. Military-general ministers are first made warriors, promoted through
+`GeneralService`, and immediately assigned to an ordinary army. An existing
+ordinary city army without a live captain is reused; otherwise an ordinary army
+is created with `newArmy(actor, city)`. The historical figure is added as the
+captain and up to five available city residents are enlisted immediately.
+
+Neither minister subtype changes the current kingdom name. Only monarch cards
+use the historical kingdom name when founding a new kingdom.
+
+Both paths consume one owned card only after the actor, kingdom/affiliation,
+lineage, parentage, candidate registration, and history writes succeed.
 
 ```csharp
 using AncientWarfare3.core.lineage;
@@ -112,6 +163,19 @@ if (result.Succeeded)
     long actorId = result.ActorId;
     long kingdomId = result.KingdomId;
 }
+```
+
+For a minister, use the same request type with a city target:
+
+```csharp
+var ministerRequest = new HistoricalFigureCardDeploymentRequest(
+    "han_xiao_he",
+    drawId,
+    System.Guid.NewGuid().ToString("N"),
+    targetCity);
+
+HistoricalFigureCardDeploymentResult ministerResult =
+    HistoricalFigureCardDeploymentService.TryDeploy(ministerRequest);
 ```
 
 `DeploymentId` is an idempotency key. Reuse it only when retrying the same

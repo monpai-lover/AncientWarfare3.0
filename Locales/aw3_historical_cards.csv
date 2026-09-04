@@ -88,3 +88,23 @@ aw_historical_figure_cards_recycle_incomplete,请按要求数量选择同品质�
 aw_historical_figure_cards_recycle_failed,汰换失败,Trade-up failed,汰換失敗
 aw_historical_figure_cards_recycle_gold_locked,金色卡不可汰换,Gold cards cannot be traded up,金色卡不可汰換
 aw_historical_figure_cards_placement_hint,请先在下方选中「放置夏人」神力，再点击地图选择部署位置,Select the Spawn Xia power on the toolbar and then click the map to choose a deployment tile,請先在下方選中「放置夏人」神力，再點擊地圖選擇部署位置
+aw_historical_figure_cards_role_monarch,君主箱,Monarch Crate,君主箱
+aw_historical_figure_cards_role_minister,大臣箱,Minister Crate,大臣箱
+aw_historical_figure_cards_recycle_title,历史人物汰换,Historical Figure Trade Up,歷史人物汰換
+aw_historical_figure_cards_recycle_summary,已选择 {0}/{1},Selected {0}/{1},已選擇 {0}/{1}
+aw_historical_figure_cards_recycle_next,下一品质：{0},Next rarity: {0},下一品質：{0}
+aw_historical_figure_cards_recycle_next_empty,选择同品质卡片,Select cards of one rarity,選擇同品質卡片
+aw_historical_figure_cards_recycle_reset,重置,Reset,重置
+aw_historical_figure_cards_recycle_back,返回仓库,Back to inventory,返回倉庫
+aw_historical_figure_cards_recycle_insufficient,持有数量不足,Insufficient owned quantity,持有數量不足
+aw_historical_figure_cards_recycle_success,获得：{0}  来源：{1},Received: {0}  Source: {1},獲得：{0}  來源：{1}
+aw_historical_figure_cards_recycle_source_missing,没有可用的收藏品来源,No collection source available,沒有可用的收藏品來源
+aw_historical_figure_cards_recycle_output_missing,没有可用的输出卡,No output card available,沒有可用的輸出卡
+aw_historical_figure_cards_recycle_persistence_failed,仓库保存失败,Inventory save failed,倉庫儲存失敗
+aw_historical_figure_cards_recycle_result_details,{0} [{1}]  {2}\n{3},{0} [{1}]  {2}\n{3},{0} [{1}]  {2}\n{3}
+aw_hist_card_minister_deployed,进入官场候选池,Entered the official candidate pool,進入官場候選池
+aw_hist_card_military_deployed,任命为大将并统领军队,Appointed as a general and assigned an army,任命為大將並統領軍隊
+aw_historical_figure_cards_type_civil,文臣,Civil Official,文臣
+aw_historical_figure_cards_type_general,武将,Military General,武將
+aw_historical_figure_cards_type_monarch,君主,Monarch,君主
+aw_historical_figure_cards_reveal_meta_extended,国号：{0}\n朝代：{1}\n名气：{2}\n类型：{3}\n来源：{4},Kingdom: {0}\nDynasty: {1}\nFame: {2}\nType: {3}\nSource: {4},國號：{0}\n朝代：{1}\n名氣：{2}\n類型：{3}\n來源：{4}
