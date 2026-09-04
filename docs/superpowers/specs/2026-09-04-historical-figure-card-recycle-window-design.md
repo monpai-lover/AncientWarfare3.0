@@ -15,6 +15,11 @@ The existing recycle rules, collection store, source tracking, and dynasty-crate
 weighting remain the source of truth. The UI must not duplicate inventory
 mutation logic.
 
+The card catalogue also distinguishes two top-level card roles: Monarch and
+Minister. The role controls which broad crate category can draw the card and
+which deployment path is available. Existing period crate IDs remain stable so
+saved source counts continue to load.
+
 ## 2. User-visible behavior
 
 ### 2.1 Window layout
@@ -31,7 +36,31 @@ The left list must use a real scroll container so the full eligible collection
 can be browsed. Card dimensions are fixed so changing names or counts cannot
 move neighboring cards.
 
-### 2.2 Quality filter
+### 2.2 Card crate categories
+
+The crate browser exposes two top-level categories:
+
+- Monarch crates: contain monarch-role cards. Deploying one to a valid target
+  city creates a new kingdom using the card's historical kingdom name and makes
+  the deployed actor its ruler.
+- Minister crates: contain minister-role cards. Deploying one requires a valid
+  city with a living civil kingdom, adds the actor to that kingdom's official
+  candidate pool, and never creates or renames a kingdom.
+
+The six existing historical-period crate IDs remain the persisted source IDs.
+The category is a catalogue/UI filter over those period crates, so old
+`ownedCrateCounts` entries and recycle source weights remain compatible.
+
+Minister deployment uses the target city's species and joins that city. It
+does not deploy to an unowned tile because an unowned tile has no court. The
+actor remains subject to the normal adult, alive, non-king, non-heir, non-slave,
+and no-existing-office checks. Historical minister eligibility may satisfy the
+normal qualification gate, but it does not bypass those identity and safety
+checks. A positive fixed candidate-score bonus makes the minister more likely
+to be selected when an office vacancy is evaluated; it is not an immediate
+appointment and does not guarantee a specific office.
+
+### 2.3 Quality filter
 
 When the window opens, the left list contains every non-gold card with an owned
 count greater than zero.
@@ -47,7 +76,7 @@ quality and restores the complete eligible list.
 Cards cannot be mixed across qualities. Gold cards are never eligible for
 recycling.
 
-### 2.3 Slot and quantity behavior
+### 2.4 Slot and quantity behavior
 
 The UI uses one slot per consumed card. The same card definition may occupy
 multiple slots, limited by the owned count. A card cannot be added after the
@@ -61,6 +90,10 @@ The required counts are taken from `HistoricalFigureCardRecycleRules`:
 The selected card list, slot contents, and counts are refreshed after every
 add/remove operation. Removing a slot returns that card to the available count
 without changing the quality lock unless it removes the final input.
+
+Recycling remains quality-only: the UI does not mix qualities, and the two
+crate categories do not add a second hidden input constraint. Output source
+selection continues to use the existing period-crate source weights.
 
 ## 3. Components and responsibilities
 

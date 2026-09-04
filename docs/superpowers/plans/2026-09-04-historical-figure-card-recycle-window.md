@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (\`- [ ]\`) syntax for tracking.
 
-**Goal:** Move historical figure card recycling into a dedicated window where selecting one card filters the left list to that card's rarity, while preserving existing inventory transactions and dynasty-crate weighting.
+**Goal:** Move historical figure card recycling into a dedicated window where selecting one card filters the left list to that card's rarity, and separate card crates into Monarch and Minister deployment roles without breaking existing inventory transactions or dynasty-crate weighting.
 
-**Architecture:** Add a small pure selection-state rules class for quality locking, owned-count limits, and visible-card filtering. Add a dedicated Unity window that owns only transient UI selection and delegates validation and persistence to \`HistoricalFigureCardRecycleRules\` and \`HistoricalFigureCardCollectionStore\`. Change the existing draw/inventory window to expose an entry point and remove its embedded recycle controls.
+**Architecture:** Add a small pure selection-state rules class for quality locking, owned-count limits, and visible-card filtering. Add a role field and top-level crate category filter for Monarch and Minister cards. Add a dedicated Unity window that owns only transient UI selection and delegates validation and persistence to \`HistoricalFigureCardRecycleRules\` and \`HistoricalFigureCardCollectionStore\`. Change the existing draw/inventory window to expose an entry point and remove its embedded recycle controls; route deployment by card role into either kingdom founding or official-candidate registration.
 
 **Tech Stack:** C#, Unity UI (\`AbstractWindow\`, \`ScrollRect\`, \`Button\`, \`Image\`, \`Text\`), Newtonsoft.Json-backed collection store, the existing AW3 localization CSV, and the console-style rules test executable.
 
@@ -18,9 +18,21 @@
 - Modify \`Code/ui/AW_LineageWindowIds.cs\`: add a unique window ID.
 - Modify \`Code/ui/windows/HistoricalFigureDrawWindow.cs\`: replace embedded recycle mode with an entry button and navigation to the dedicated window.
 - Modify \`Code/ui/items/HistoricalFigureCardListItem.cs\`: expose an optional owned-count label while preserving existing callers.
+- Modify \`Code/core/lineage/HistoricalFigureCardDeploymentService.cs\`: branch deployment by card role.
+- Modify \`Code/core/lineage/HistoricalFigureCardDeploymentRules.cs\`: validate Monarch and Minister target requirements.
+- Create \`Code/core/lineage/HistoricalFigureCardRoleRules.cs\`: define role-filter and minister candidate-bonus rules.
+- Modify \`Code/core/court/CivilServiceQualificationService.cs\`: allow a valid deployed minister through the qualification gate without bypassing identity safety checks.
+- Modify \`Code/core/court/LocalCourtAppointmentService.cs\`: apply the minister candidate score bonus consistently in build and reposition paths.
+- Modify \`Code/core/court/OfficerCandidateCatalog.cs\`: register deployed ministers in the kingdom candidate catalogue.
+- Modify \`Code/core/lineage/LineageKeys.cs\`: add the stable card-role marker used by court scoring.
+- Modify \`Code/content/figures/HistoricalFigureCardModels.cs\`: add the Monarch/Minister role value to card definitions.
+- Modify \`Code/content/figures/HistoricalFigureCardCatalog.cs\`: assign every card to a role and expose role-filtered period pools.
+- Modify \`Code/content/figures/HistoricalFigureCardCrates.cs\`: expose the two top-level crate categories while preserving period IDs.
+- Modify \`Code/ui/windows/HistoricalFigureDrawWindow.cs\`: show the two crate categories and role-specific card pools.
 - Modify \`Locales/aw3_historical_cards.csv\`: add localized text for the recycle window, slots, preview, reset, errors, and result details.
 - Modify \`Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj\`: compile the new pure rules source and test source.
 - Modify \`Tests/AncientWarfare3.Rules.Tests/Program.cs.txt\`: run the new selection-rule test suite.
+- Create \`Tests/AncientWarfare3.Rules.Tests/HistoricalFigureCardRoleRulesTests.cs.txt\`: test role filtering, deployment branches, and candidate-score bonus rules.
 
 ### Task 1: Add the pure selection-state rules
 
@@ -318,10 +330,236 @@ git add -- Locales/aw3_historical_cards.csv Tests/AncientWarfare3.Rules.Tests/Hi
 git commit -m "Localize and guard standalone card recycling"
 \`\`\`
 
-### Task 6: Build and manual acceptance
+### Task 6: Add Monarch and Minister card roles
 
 **Files:**
-- Verify all files from Tasks 1-5.
+- Create: \`Code/core/lineage/HistoricalFigureCardRoleRules.cs\`
+- Modify: \`Code/content/figures/HistoricalFigureCardModels.cs\`
+- Modify: \`Code/content/figures/HistoricalFigureCardCatalog.cs\`
+- Modify: \`Code/content/figures/HistoricalFigureCardCrates.cs\`
+- Modify: \`Code/ui/windows/HistoricalFigureDrawWindow.cs\`
+- Create: \`Tests/AncientWarfare3.Rules.Tests/HistoricalFigureCardRoleRulesTests.cs.txt\`
+- Modify: \`Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj\`
+- Modify: \`Tests/AncientWarfare3.Rules.Tests/Program.cs.txt\`
+
+- [ ] **Step 1: Write failing role and crate-category tests.**
+
+Add a stable role value to each card and verify both top-level categories use
+the existing period IDs:
+
+\`\`\`csharp
+Equal(HistoricalFigureCardRole.Monarch,
+    HistoricalFigureCardCatalog.Get("han_liu_bang").Role,
+    "monarch card has monarch role");
+Equal(HistoricalFigureCardRole.Minister,
+    HistoricalFigureCardCatalog.Get("han_xiao_he").Role,
+    "minister card has minister role");
+True(HistoricalFigureCardCatalog.GetCards(
+    "han", HistoricalFigureCardRole.Monarch).All(
+        p => p.Role == HistoricalFigureCardRole.Monarch),
+    "monarch crate category filters cards");
+True(HistoricalFigureCardCatalog.GetCards(
+    "han", HistoricalFigureCardRole.Minister).All(
+        p => p.Role == HistoricalFigureCardRole.Minister),
+    "minister crate category filters cards");
+Equal(50, HistoricalFigureCardRoleRules.MinisterCandidateBonus,
+    "minister bonus is stable and positive");
+\`\`\`
+
+- [ ] **Step 2: Run the rules executable and verify the role tests fail.**
+
+\`\`\`powershell
+dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj --no-restore
+\`\`\`
+
+Expected: the role property, role-filtered catalog overload, or role rules are
+missing. Keep unrelated baseline errors separate.
+
+- [ ] **Step 3: Implement the role model and role-filtered catalog.**
+
+Add \`HistoricalFigureCardRole.Monarch\` and
+\`HistoricalFigureCardRole.Minister\`, store the role in
+\`HistoricalFigureCardDefinition.Role\`, and assign every catalogue definition
+explicitly. Preserve the constructor's existing call compatibility by adding
+the role parameter after existing optional biography parameters.
+
+Keep each old period crate ID unchanged. Add the role overload:
+
+\`\`\`csharp
+public static IReadOnlyList<HistoricalFigureCardDefinition> GetCards(
+    string pCrateId, HistoricalFigureCardRole pRole)
+{
+    return GetCards(pCrateId).Where(p => p != null && p.Role == pRole).ToArray();
+}
+\`\`\`
+
+The crate browser renders two top-level category buttons, then the existing
+period crates under the selected category. Existing saved source IDs remain
+period IDs, not role-prefixed IDs.
+
+- [ ] **Step 4: Implement role rules and register tests.**
+
+Implement explicit role predicates and a fixed positive bonus:
+
+\`\`\`csharp
+public static bool IsMonarch(HistoricalFigureCardDefinition pCard);
+public static bool IsMinister(HistoricalFigureCardDefinition pCard);
+public static int CandidateScoreBonus(HistoricalFigureCardDefinition pCard);
+public const int MinisterCandidateBonus = 50;
+\`\`\`
+
+Register the production and test files and call
+\`HistoricalFigureCardRoleRulesTests.Run()\`. Rerun the command from Step 2 and
+expect the new tests to pass.
+
+- [ ] **Step 5: Bind the two categories to the draw window.**
+
+Add a transient selected role to \`HistoricalFigureDrawWindow\`, render Monarch
+and Minister category buttons before the period crate list, and pass the
+selected role to \`HistoricalFigureCardCatalog.GetCards(crateId, role)\` when
+building a crate's draw pool. Keep the role out of persisted period source IDs.
+Reset the selected role when returning to the top-level crate list. The shared
+gold behavior remains explicit in the catalogue and is not revealed as a
+visible gold entry.
+
+- [ ] **Step 6: Commit the role model and crate categories.**
+
+\`\`\`powershell
+git add -- Code/core/lineage/HistoricalFigureCardRoleRules.cs Code/content/figures/HistoricalFigureCardModels.cs Code/content/figures/HistoricalFigureCardCatalog.cs Code/content/figures/HistoricalFigureCardCrates.cs Tests/AncientWarfare3.Rules.Tests/HistoricalFigureCardRoleRulesTests.cs.txt Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj Tests/AncientWarfare3.Rules.Tests/Program.cs.txt
+git commit -m "Separate historical card monarch and minister roles"
+\`\`\`
+
+### Task 7: Route deployment by card role
+
+**Files:**
+- Modify: \`Code/core/lineage/HistoricalFigureCardDeploymentRules.cs\`
+- Modify: \`Code/core/lineage/HistoricalFigureCardDeploymentService.cs\`
+- Modify: \`Code/core/court/OfficerCandidateCatalog.cs\`
+- Modify: \`Code/core/court/CivilServiceQualificationService.cs\`
+- Modify: \`Tests/AncientWarfare3.Rules.Tests/HistoricalFigureCardDeploymentRulesTests.cs.txt\`
+- Modify: \`Tests/AncientWarfare3.Rules.Tests/HistoricalFigureCardRoleRulesTests.cs.txt\`
+
+- [ ] **Step 1: Add failing deployment-branch tests.**
+
+Cover these exact facts:
+
+\`\`\`csharp
+True(HistoricalFigureCardDeploymentRules.CanDeployMinister(
+    hasValidCity: true, hasLivingKingdom: true),
+    "minister requires an existing civil city");
+False(HistoricalFigureCardDeploymentRules.CanDeployMinister(
+    hasValidCity: false, hasLivingKingdom: false),
+    "minister cannot deploy to unowned land");
+True(HistoricalFigureCardDeploymentRules.IsKingdomFoundingRole(
+    HistoricalFigureCardRole.Monarch),
+    "monarch founds a kingdom");
+False(HistoricalFigureCardDeploymentRules.IsKingdomFoundingRole(
+    HistoricalFigureCardRole.Minister),
+    "minister never founds a kingdom");
+\`\`\`
+
+- [ ] **Step 2: Run the focused rules tests and verify the new assertions fail.**
+
+\`\`\`powershell
+dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj --no-restore
+\`\`\`
+
+Expected: the new role-aware deployment methods are absent or fail.
+
+- [ ] **Step 3: Add role-aware deployment facts and guards.**
+
+Read the card role from the catalogue in
+\`HistoricalFigureCardDeploymentService.TryDeploy\`. Monarch cards keep the
+current city/unowned-tile kingdom-founding flow. Minister cards require a
+living civil kingdom and a valid target city; they use the target city's actor
+asset, join the city, and do not call \`makeOwnKingdom\`,
+\`makeNewCivKingdom\`, \`newCity\`, \`setCapital\`, or \`setName\`.
+
+Keep minister deployment adult, alive, non-slave, non-king, non-heir, and
+no-existing-office. Add the stable role marker before candidate registration.
+
+- [ ] **Step 4: Register ministers in the normal candidate catalogue.**
+
+After the minister actor joins the target city, call the existing lineage
+promotion/history path, \`OfficerCandidateCatalog.EnsurePresent\`, and the
+event-driven candidate-pool invalidation/request path for the target kingdom.
+The operation must be idempotent for the deployment ID. A minister is a
+candidate for later vacancy selection, not an automatic appointment.
+
+- [ ] **Step 5: Add role-aware rollback and history.**
+
+For a failed minister deployment, remove only the new actor and restore no
+kingdom state because none was created. Record minister deployment and
+candidate-registration history using the existing history writer, including
+card ID, deployment ID, kingdom ID, and city ID. Consume the card only after
+actor, lineage, history, and candidate registration succeed.
+
+- [ ] **Step 6: Make minister qualification eligible without bypassing safety.**
+
+In \`CivilServiceQualificationService\`, allow the card-minister marker to
+satisfy the qualification portion of the appointment gate. Continue to reject
+dead, underage, slave, king, heir, already-appointed, invalid-affiliation, or
+otherwise unsafe actors. Do not change the gate for ordinary actors.
+
+- [ ] **Step 7: Run tests and commit deployment branching.**
+
+\`\`\`powershell
+dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj --no-restore
+git add -- Code/core/lineage/HistoricalFigureCardDeploymentRules.cs Code/core/lineage/HistoricalFigureCardDeploymentService.cs Code/core/court/OfficerCandidateCatalog.cs Code/core/court/CivilServiceQualificationService.cs Tests/AncientWarfare3.Rules.Tests/HistoricalFigureCardDeploymentRulesTests.cs.txt Tests/AncientWarfare3.Rules.Tests/HistoricalFigureCardRoleRulesTests.cs.txt
+git commit -m "Deploy minister cards into official candidate pools"
+\`\`\`
+
+### Task 8: Apply the minister candidate bonus consistently
+
+**Files:**
+- Modify: \`Code/core/court/LocalCourtAppointmentService.cs\`
+- Modify: \`Code/core/lineage/LineageKeys.cs\`
+- Create or modify: \`Tests/AncientWarfare3.Rules.Tests/HistoricalFigureCardRoleRulesTests.cs.txt\`
+- Modify: \`Tests/AncientWarfare3.Rules.Tests/Program.cs.txt\`
+
+- [ ] **Step 1: Write failing score tests.**
+
+\`\`\`csharp
+int ordinary = LocalOfficialCandidateRules.Score(60, 20, false);
+int minister = HistoricalFigureCardRoleRules.ApplyCandidateBonus(
+    ordinary, HistoricalFigureCardRole.Minister);
+Equal(ordinary + 50, minister,
+    "minister receives the fixed candidate score bonus");
+Equal(ordinary, HistoricalFigureCardRoleRules.ApplyCandidateBonus(
+    ordinary, HistoricalFigureCardRole.Monarch),
+    "monarch receives no minister bonus");
+\`\`\`
+
+- [ ] **Step 2: Implement the marker and score adjustment.**
+
+Add a stable \`LineageKeys\` key and a helper that reads it without scanning the
+catalogue. In both \`BuildCityCandidates\` and \`RankForBehavior\`, apply the
+same role bonus immediately after the existing ability/merit score and before
+sorting:
+
+\`\`\`csharp
+int score = LocalOfficialCandidateRules.Score(
+    MainAbility(actor), (int)Math.Max(0f, merit),
+    sameNativeCity: false);
+score = HistoricalFigureCardRoleRules.ApplyCandidateBonus(
+    score, HistoricalFigureCardRoleRules.ReadRole(actor));
+\`\`\`
+
+The bonus changes ordering among otherwise eligible candidates. It does not
+override office grade, vacancy rules, heir/king exclusion, or an invalid actor.
+
+- [ ] **Step 3: Run the role and court checks, then commit.**
+
+\`\`\`powershell
+dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj --no-restore
+git add -- Code/core/court/LocalCourtAppointmentService.cs Code/core/lineage/LineageKeys.cs Code/core/lineage/HistoricalFigureCardRoleRules.cs Tests/AncientWarfare3.Rules.Tests/HistoricalFigureCardRoleRulesTests.cs.txt Tests/AncientWarfare3.Rules.Tests/Program.cs.txt
+git commit -m "Increase deployed minister court candidate priority"
+\`\`\`
+
+### Task 9: Build and manual acceptance
+
+**Files:**
+- Verify all files from Tasks 1-8.
 
 - [ ] **Step 1: Run source checks and build.**
 
@@ -356,7 +594,19 @@ biography. Close or reopen before submit and verify no card is consumed. Trigger
 an incomplete or stale selection and verify the localized error leaves selection
 intact.
 
-- [ ] **Step 5: Run final verification.**
+- [ ] **Step 5: Verify Monarch and Minister crate/deployment behavior in game.**
+
+Open the crate browser and verify Monarch and Minister are separate top-level
+categories while the existing period crate names remain available beneath each
+category. Draw or inspect a Monarch card and deploy it to a city; verify its
+historical kingdom is founded and the actor becomes king. Deploy a Minister
+card to a city already owned by a civil kingdom; verify no kingdom, capital,
+city ownership, or kingdom name changes and the actor appears in that kingdom's
+official candidate list. Verify an unowned-tile Minister deployment is
+rejected. After a vacancy trigger, verify the Minister ranks with the configured
+positive candidate bonus but still respects the normal eligibility gates.
+
+- [ ] **Step 6: Run final verification.**
 
 \`\`\`powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File Tests/WindowUiRegressionTests.ps1
