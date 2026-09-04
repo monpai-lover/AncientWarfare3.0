@@ -116,6 +116,16 @@ namespace AncientWarfare3.core.court
             if (pActor?.data == null || pKingdom?.data == null) return false;
             // 继承人不得出任官员，避免即位前已被任命导致卸任延迟或继承人身份混乱。
             if (HeirService.IsCurrentHeir(pKingdom, pActor)) return false;
+            if (HistoricalFigureCardIdentityService.IsMinisterCardActor(pActor))
+            {
+                pActor.data.get(LineageKeys.COURT_OFFICE_ID,
+                    out string currentOffice, "");
+                bool safeMinister = pActor.kingdom == pKingdom &&
+                    pActor.isAlive() && !pActor.isRekt() && !pActor.isKing() &&
+                    !pActor.isCityLeader() && !SlaveService.IsSlave(pActor) &&
+                    string.IsNullOrEmpty(currentOffice);
+                if (safeMinister) return true;
+            }
             // 与候选人无关的四问由调用方在循环外算好传进来。没传就现算,
             // 单点调用的老路径行为不变。
             bool examinationSystem = pContext.Valid

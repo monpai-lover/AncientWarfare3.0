@@ -1,0 +1,101 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.content.figures;
+
+internal static class HistoricalFigureCardRecycleSelectionRulesTests
+{
+    public static void Run()
+    {
+        HistoricalFigureCardDefinition blue = Card("blue", "蓝卡", HistoricalFigureCardRarity.Blue);
+        HistoricalFigureCardDefinition blueTwo = Card("blue-two", "蓝卡二", HistoricalFigureCardRarity.Blue);
+        HistoricalFigureCardDefinition purple = Card("purple", "紫卡", HistoricalFigureCardRarity.Purple);
+        HistoricalFigureCardDefinition red = Card("red", "红卡", HistoricalFigureCardRarity.Red);
+        HistoricalFigureCardDefinition gold = Card("gold", "金卡", HistoricalFigureCardRarity.Gold);
+        var cards = new[] { blue, blueTwo, purple, red, gold };
+        var owned = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["blue"] = 2,
+            ["blue-two"] = 1,
+            ["purple"] = 1,
+            ["red"] = 1,
+            ["gold"] = 1
+        };
+
+        Equal("blue,blue-two,purple,red", Ids(
+            HistoricalFigureCardRecycleSelectionRules.FilterVisible(cards, owned, null)),
+            "initial list excludes gold and cards with zero ownership");
+
+        var state = new HistoricalFigureCardRecycleSelectionState();
+        True(HistoricalFigureCardRecycleSelectionRules.TryAdd(state, blue, owned,
+            out string error), error);
+        Equal(HistoricalFigureCardRarity.Blue, state.LockedRarity,
+            "first selected card locks its rarity");
+        Equal("blue,blue-two", Ids(HistoricalFigureCardRecycleSelectionRules.FilterVisible(
+            cards, owned, state.LockedRarity)),
+            "locked list contains only the selected rarity");
+
+        True(HistoricalFigureCardRecycleSelectionRules.TryAdd(state, blue, owned,
+            out error), error);
+        False(HistoricalFigureCardRecycleSelectionRules.TryAdd(state, purple, owned,
+            out error), "mixed rarity is rejected");
+        Equal("recycle_same_rarity", error, "mixed rarity uses localized error key");
+        False(HistoricalFigureCardRecycleSelectionRules.TryAdd(state, blue, owned,
+            out error), "owned count limits repeated selection");
+        Equal("recycle_insufficient_owned", error, "owned count is enforced");
+
+        HistoricalFigureCardRecycleSelectionRules.RemoveOne(state, "blue");
+        True(state.HasInputs, "removing one slot keeps the lock while inputs remain");
+        HistoricalFigureCardRecycleSelectionRules.RemoveOne(state, "blue");
+        Null(state.LockedRarity, "removing the final slot unlocks the rarity");
+        True(!state.HasInputs, "removing the final slot clears inputs");
+
+        True(HistoricalFigureCardRecycleSelectionRules.TryAdd(state, purple, owned,
+            out error), error);
+        HistoricalFigureCardRecycleSelectionRules.Clear(state);
+        Null(state.LockedRarity, "clear unlocks the rarity");
+        True(!state.HasInputs, "clear removes all slots");
+
+        Equal(5, HistoricalFigureCardRecycleSelectionRules.RequiredCount(
+            HistoricalFigureCardRarity.Red), "red uses five inputs");
+        Equal(10, HistoricalFigureCardRecycleSelectionRules.RequiredCount(
+            HistoricalFigureCardRarity.Blue), "blue uses ten inputs");
+        Equal(0, HistoricalFigureCardRecycleSelectionRules.RequiredCount(
+            HistoricalFigureCardRarity.Gold), "gold cannot be recycled");
+    }
+
+    private static HistoricalFigureCardDefinition Card(string pId, string pName,
+        HistoricalFigureCardRarity pRarity)
+    {
+        return new HistoricalFigureCardDefinition(pId, pName, "", "", "", "",
+            "汉", "", 0, 0, 0, 50, pRarity, HistoricalFigureSex.Male, "", "",
+            "", "", "", "", null, -1, 1, Array.Empty<string>());
+    }
+
+    private static string Ids(IEnumerable<HistoricalFigureCardDefinition> pCards)
+    {
+        return string.Join(",", pCards.Select(p => p.CardId));
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        True(!pValue, pMessage);
+    }
+
+    private static void Null(object pValue, string pMessage)
+    {
+        True(pValue == null, pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage + ": expected=" +
+                pExpected + ", actual=" + pActual);
+    }
+}

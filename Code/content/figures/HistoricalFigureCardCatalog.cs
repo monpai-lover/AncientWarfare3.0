@@ -133,7 +133,17 @@ namespace AncientWarfare3.content.figures
             HistoricalFigureCardCrate crate = HistoricalFigureCardCrates.Get(pCrateId);
             if (crate == null) return Array.Empty<HistoricalFigureCardDefinition>();
             return SortForDisplay(All.Where(p => p != null &&
-                crate.ContainsYear(p.HistoricalYear))).ToArray();
+                (string.Equals(p.CollectionId, crate.Id,
+                    StringComparison.Ordinal) ||
+                 string.IsNullOrEmpty(p.CollectionId) &&
+                    crate.ContainsYear(p.HistoricalYear)))).ToArray();
+        }
+
+        public static IReadOnlyList<HistoricalFigureCardDefinition> GetCards(
+            string pCrateId, HistoricalFigureCardRole pRole)
+        {
+            return GetCards(pCrateId).Where(p => p != null &&
+                p.Role == pRole).ToArray();
         }
 
         public static IReadOnlyList<HistoricalFigureCardDefinition> SortForDisplay(
@@ -212,7 +222,8 @@ namespace AncientWarfare3.content.figures
                         figure.FoundingYear),
                     BuildDetailedBiography(figure.Key, figure.DynastyName,
                         NormalizeShortKingdomName(figure.KingdomName),
-                        figure.FoundingYear, figure.Key + "\uff0c\u5386\u53f2\u4eba\u7269\u3002"));
+                        figure.FoundingYear, figure.Key + "\uff0c\u5386\u53f2\u4eba\u7269\u3002"),
+                    RoleForCard(cardId));
             }
 
             foreach (EmperorSeed seed in EmperorSeeds())
@@ -220,6 +231,11 @@ namespace AncientWarfare3.content.figures
                 HistoricalFigureCardDefinition legacy;
                 cards.TryGetValue(seed.CardId, out legacy);
                 cards[seed.CardId] = seed.ToDefinition(legacy);
+            }
+            foreach (HistoricalFigureCardDefinition minister in
+                     HistoricalFigureCardMinisterSeeds.All)
+            {
+                cards[minister.CardId] = minister;
             }
             return SortForDisplay(cards.Values).ToArray();
         }
@@ -315,6 +331,22 @@ namespace AncientWarfare3.content.figures
                     issues.Add("invalid rarity: " + card.CardId);
                 if (card.FameScore < 0 || card.FameScore > 100)
                     issues.Add("invalid fame score: " + card.CardId);
+                if (card.Role == HistoricalFigureCardRole.Minister)
+                {
+                    if (card.MinisterType == HistoricalFigureCardMinisterType.None)
+                        issues.Add("minister has no subtype: " + card.CardId);
+                    HistoricalFigureCardCrate collection =
+                        HistoricalFigureCardCrates.Get(card.CollectionId);
+                    if (collection == null)
+                        issues.Add("invalid minister collection: " + card.CardId);
+                    if (string.IsNullOrWhiteSpace(card.BackgroundSummary) ||
+                        string.IsNullOrWhiteSpace(card.DetailedBiography))
+                        issues.Add("incomplete minister biography: " + card.CardId);
+                }
+                else if (card.MinisterType != HistoricalFigureCardMinisterType.None)
+                {
+                    issues.Add("non-minister has minister subtype: " + card.CardId);
+                }
                 if (!card.ParentReferencesAreValid(pCards))
                     issues.Add("invalid parent reference: " + card.CardId);
                 if (string.Equals(card.DisplayName, card.FatherDisplayName,
@@ -331,6 +363,21 @@ namespace AncientWarfare3.content.figures
                 if (IsKnownYear(card.DeathYear) &&
                     card.HistoricalYear > card.DeathYear)
                     issues.Add("historical year after death: " + card.CardId);
+            }
+            foreach (HistoricalFigureCardCrate crate in
+                     HistoricalFigureCardCrates.All)
+            {
+                HistoricalFigureCardDefinition[] ministers = pCards.Where(card =>
+                    card != null && card.Role == HistoricalFigureCardRole.Minister &&
+                    crate.ContainsYear(card.HistoricalYear)).ToArray();
+                if (ministers.Length < 40)
+                    issues.Add("minister pool below minimum: " + crate.Id);
+                if (!ministers.Any(card => card.MinisterType ==
+                        HistoricalFigureCardMinisterType.CivilOfficial))
+                    issues.Add("minister pool has no civil officials: " + crate.Id);
+                if (!ministers.Any(card => card.MinisterType ==
+                        HistoricalFigureCardMinisterType.MilitaryGeneral))
+                    issues.Add("minister pool has no military generals: " + crate.Id);
             }
             if (Math.Abs(HistoricalFigureCardRarity.TotalProbability - 1f) > 0.00001f)
                 issues.Add("rarity probabilities do not total one");
@@ -420,7 +467,9 @@ namespace AncientWarfare3.content.figures
                     pLegacy?.LegacyFigureId, pLegacy?.LegacyRegistryIndex ?? -1,
                     pLegacy?.CombatHealth ?? 1500,
                     pLegacy?.CombatTraits ?? Enumerable.Empty<string>(),
-                    BackgroundSummary, DetailedBiography);
+                    BackgroundSummary, DetailedBiography,
+                    RoleForCard(CardId), MinisterTypeForCard(CardId),
+                    HistoricalFigureCardCrates.ForYear(HistoricalYear)?.Id ?? "");
             }
         }
 
@@ -461,6 +510,32 @@ namespace AncientWarfare3.content.figures
                    value == "史料不详" || value == "史料不詳"
                 ? ""
                 : value;
+        }
+
+        private static HistoricalFigureCardRole RoleForCard(string pCardId)
+        {
+            return MinisterTypeForCard(pCardId) !=
+                   HistoricalFigureCardMinisterType.None
+                ? HistoricalFigureCardRole.Minister
+                : HistoricalFigureCardRole.Monarch;
+        }
+
+        public static HistoricalFigureCardMinisterType MinisterTypeForCard(
+            string pCardId)
+        {
+            switch (pCardId ?? "")
+            {
+                case "han_han_xin":
+                case "han_ban_chao":
+                    return HistoricalFigureCardMinisterType.MilitaryGeneral;
+                case "han_xiao_he":
+                case "han_zhang_liang":
+                case "han_sima_qian":
+                case "han_huo_guang":
+                    return HistoricalFigureCardMinisterType.CivilOfficial;
+                default:
+                    return HistoricalFigureCardMinisterType.None;
+            }
         }
 
         private static IEnumerable<EmperorSeed> EmperorSeeds()

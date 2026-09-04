@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using AncientWarfare3.content;
 using AncientWarfare3.content.figures;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 
 namespace AncientWarfare3.core.lineage
@@ -95,6 +97,12 @@ namespace AncientWarfare3.core.lineage
             City oldCapital = oldKingdom?.capital;
             bool kingdomCreated = false;
             bool cityCreated = false;
+            Army militaryArmy = null;
+            bool militaryArmyCreated = false;
+            bool militaryGeneralPromoted = false;
+            bool militaryActorWasWarrior = false;
+            List<Actor> militaryAddedSoldiers = new List<Actor>();
+            List<Actor> militaryConvertedSoldiers = new List<Actor>();
             long lineageId = -1L;
             long shiId = -1L;
             try
@@ -118,6 +126,21 @@ namespace AncientWarfare3.core.lineage
                     false, definition.HistoricalKingdomName, cardOwned,
                     targetTile?.data != null,
                     IsBuildableUnownedTile(targetTile));
+                if (HistoricalFigureCardRoleRules.IsMinister(definition) &&
+                    !HistoricalFigureCardRoleRules.CanDeployMinister(
+                        city?.data != null && city.isAlive() && !city.isRekt(),
+                        hasLivingKingdom))
+                    return HistoricalFigureCardDeploymentResult.Failure(
+                        "minister_requires_existing_city");
+                if (HistoricalFigureCardRoleRules.IsMilitaryGeneral(
+                        definition) &&
+                    !HistoricalFigureCardDeploymentRules.
+                        CanDeployMilitaryGeneral(
+                            city?.data != null && city.isAlive() &&
+                            !city.isRekt(), hasLivingKingdom,
+                            oldKingdom?.isCiv() == true))
+                    return HistoricalFigureCardDeploymentResult.Failure(
+                        "military_general_requires_civil_kingdom");
                 if (!HistoricalFigureCardDeploymentRules.CanDeploy(facts))
                     return HistoricalFigureCardDeploymentResult.Failure(
                         "deployment_precondition_failed");
@@ -151,7 +174,51 @@ namespace AncientWarfare3.core.lineage
                     // 这里只做预留(分配 id + 写 actor.data),入库与晋升仍留在
                     // 建国之后,好让 ResolveOriginIds 能取到国/城。
                     ReserveLineageIdentity(actor, out lineageId, out shiId);
-                    if (city?.data != null)
+                    if (HistoricalFigureCardRoleRules.IsMinister(definition))
+                    {
+                        if (city?.data == null || oldKingdom?.data == null)
+                            throw new InvalidOperationException(
+                                "minister_requires_existing_city");
+                        actor.joinCity(city);
+                        actor.spawnOn(targetTile);
+                        newKingdom = oldKingdom;
+                        if (HistoricalFigureCardRoleRules.IsMilitaryGeneral(
+                                definition))
+                        {
+                            militaryActorWasWarrior = actor.isWarrior();
+                            EnsureMilitaryGeneralWarrior(actor, city);
+                            if (!GeneralService.PromoteToGeneral(actor))
+                                throw new InvalidOperationException(
+                                    "military_general_promotion_failed");
+                            militaryGeneralPromoted = true;
+                            militaryArmy = ResolveMilitaryArmy(city,
+                                oldKingdom);
+                            if (militaryArmy == null)
+                            {
+                                using (MilitaryRecruitmentScope.Open(
+                                           MilitaryRecruitmentKind.StandingArmy))
+                                {
+                                    militaryArmy = World.world.armies.
+                                        newArmy(actor, city);
+                                }
+                                militaryArmyCreated = true;
+                            }
+                            if (militaryArmy?.data == null)
+                                throw new InvalidOperationException(
+                                    "military_general_army_creation_failed");
+                            AWArmyService.AddToArmy(actor, militaryArmy);
+                            AWArmyService.SetCaptainIfChanged(militaryArmy,
+                                actor);
+                            if (actor.army != militaryArmy ||
+                                militaryArmy.getCaptain() != actor)
+                                throw new InvalidOperationException(
+                                    "military_general_captain_assignment_failed");
+                            AddInitialMilitarySoldiers(city, oldKingdom,
+                                militaryArmy, actor, militaryAddedSoldiers,
+                                militaryConvertedSoldiers);
+                        }
+                    }
+                    else if (city?.data != null)
                     {
                         actor.joinCity(city);
                         newKingdom = city.makeOwnKingdom(actor,
@@ -182,13 +249,17 @@ namespace AncientWarfare3.core.lineage
                         actor.spawnOn(targetTile);
                         newKingdom.setCityMetas(city);
                     }
-                    newKingdom.setCapital(city);
-                    if (newKingdom.king != actor) newKingdom.setKing(actor);
-                    newKingdom.setName(definition.HistoricalKingdomName,
-                        pTrack: false);
+                    if (HistoricalFigureCardRoleRules.IsMonarch(definition))
+                    {
+                        newKingdom.setCapital(city);
+                        if (newKingdom.king != actor) newKingdom.setKing(actor);
+                        newKingdom.setName(definition.HistoricalKingdomName,
+                            pTrack: false);
+                    }
                 }
 
-                if (newKingdom.capital != city || newKingdom.king != actor)
+                if (HistoricalFigureCardRoleRules.IsMonarch(definition) &&
+                    (newKingdom.capital != city || newKingdom.king != actor))
                     throw new InvalidOperationException("kingdom_projection_failed");
                 CommitLineage(actor, definition, lineageId, shiId);
                 if (!HistoricalAncestorService.EnsureCardParentage(actor,
@@ -196,6 +267,11 @@ namespace AncientWarfare3.core.lineage
                     throw new InvalidOperationException("parentage_commit_failed");
                 RecordHistory(actor, newKingdom, city, definition,
                     pRequest.DeploymentId);
+                if (HistoricalFigureCardRoleRules.IsMinister(definition))
+                {
+                    OfficerCandidateCatalog.GetOrBuild(newKingdom);
+                    OfficerCandidateCatalog.EnsurePresent(newKingdom, actor);
+                }
                 if (!collection.TryConsume(definition.CardId,
                         DateTime.UtcNow.ToString("O")))
                     throw new InvalidOperationException("card_consume_failed");
@@ -207,7 +283,10 @@ namespace AncientWarfare3.core.lineage
                 ModClass.LogWarning("Historical card deployment failed: " +
                     error.Message);
                 Rollback(actor, newKingdom, oldKingdom, oldCapital, oldLeader,
-                    city, kingdomCreated, cityCreated);
+                    city, kingdomCreated, cityCreated, militaryArmy,
+                    militaryArmyCreated, militaryGeneralPromoted,
+                    militaryActorWasWarrior, militaryAddedSoldiers,
+                    militaryConvertedSoldiers);
                 return HistoricalFigureCardDeploymentResult.Failure(error.Message);
             }
             finally
@@ -256,6 +335,28 @@ namespace AncientWarfare3.core.lineage
             string pDeploymentId)
         {
             string name = pActor.getName();
+            if (HistoricalFigureCardRoleRules.IsMinister(pDefinition))
+            {
+                string historyKey = HistoricalFigureCardRoleRules.
+                    IsMilitaryGeneral(pDefinition)
+                    ? "aw_hist_card_military_deployed"
+                    : "aw_hist_card_minister_deployed";
+                HistoryText ministerActorText = HistoryText.Actor(pActor, name);
+                HistoryText ministerKingdomText = HistoryText.Kingdom(pKingdom,
+                    pKingdom?.name ?? pDefinition.HistoricalKingdomName);
+                HistoryText appointed = ministerActorText +
+                    HistoryLocalizationRules.H(historyKey) +
+                    ministerKingdomText;
+                HistoryWriter.RecordPerson(pActor.data.id, pKingdom, name,
+                    "card_minister_deployed", appointed, ChronicleCategory.HONOR,
+                    HistoryTarget.City(pCity));
+                HistoryWriter.RecordKingdom(pKingdom, historyKey,
+                    appointed, HistoryTarget.Actor(pActor));
+                HistoryWriter.RecordCity(pCity, pKingdom, historyKey,
+                    appointed, HistoryTarget.Actor(pActor));
+                KingdomArchiveWriter.Upsert(pKingdom);
+                return;
+            }
             // 正文以前是 "名 / 国号 / 部署GUID",编年史里直接显示成一串
             // 十六进制乱码。DeploymentId 只是幂等键,不该出现在文本里。
             HistoryText actorText = HistoryText.Actor(pActor, name);
@@ -316,8 +417,16 @@ namespace AncientWarfare3.core.lineage
 
         private static void Rollback(Actor pActor, Kingdom pNewKingdom,
             Kingdom pOldKingdom, City pOldCapital, Actor pOldLeader,
-            City pCity, bool pKingdomCreated, bool pCityCreated)
+            City pCity, bool pKingdomCreated, bool pCityCreated,
+            Army pMilitaryArmy, bool pMilitaryArmyCreated,
+            bool pMilitaryGeneralPromoted, bool pMilitaryActorWasWarrior,
+            List<Actor> pMilitaryAddedSoldiers,
+            List<Actor> pMilitaryConvertedSoldiers)
         {
+            RollbackMilitaryState(pActor, pMilitaryArmy,
+                pMilitaryArmyCreated, pMilitaryGeneralPromoted,
+                pMilitaryActorWasWarrior, pMilitaryAddedSoldiers,
+                pMilitaryConvertedSoldiers, pCity, pOldKingdom);
             try
             {
                 if (pCityCreated && pCity?.data != null &&
@@ -367,6 +476,152 @@ namespace AncientWarfare3.core.lineage
                 if (_disposed) return;
                 _disposed = true;
                 if (_scopeDepth > 0) _scopeDepth--;
+            }
+        }
+
+        private static void EnsureMilitaryGeneralWarrior(Actor pActor,
+            City pCity)
+        {
+            if (pActor?.data == null || pCity?.data == null)
+                throw new InvalidOperationException(
+                    "military_general_city_missing");
+            if (pActor.isWarrior()) return;
+            using (MilitaryRecruitmentScope.Open(
+                       MilitaryRecruitmentKind.StandingArmy))
+            {
+                if (!pCity.checkCanMakeWarrior(pActor))
+                    throw new InvalidOperationException(
+                        "military_general_warrior_conversion_failed");
+                pCity.makeWarrior(pActor);
+            }
+            if (!pActor.isWarrior())
+                throw new InvalidOperationException(
+                    "military_general_warrior_conversion_failed");
+        }
+
+        private static Army ResolveMilitaryArmy(City pCity,
+            Kingdom pKingdom)
+        {
+            Army army = null;
+            try
+            {
+                if (pCity?.hasArmy() == true) army = pCity.getArmy();
+            }
+            catch { army = null; }
+            if (army?.data == null || !army.isAlive() ||
+                AWArmyService.IsSpecialArmy(army) ||
+                AWArmyService.GetIntendedKingdom(army) != pKingdom)
+                return null;
+            Actor captain = null;
+            try { captain = army.getCaptain(); }
+            catch { }
+            if (captain?.data != null && captain.isAlive() &&
+                !captain.isRekt()) return null;
+            return army;
+        }
+
+        private static int AddInitialMilitarySoldiers(City pCity,
+            Kingdom pKingdom, Army pArmy, Actor pCaptain,
+            List<Actor> pAddedSoldiers, List<Actor> pConvertedSoldiers)
+        {
+            if (pCity?.data == null || pKingdom?.data == null ||
+                pArmy?.data == null || pCaptain?.data == null) return 0;
+            int added = 0;
+            const int targetAdditionalSoldiers = 5;
+            List<Actor> residents;
+            try { residents = new List<Actor>(pCity.units); }
+            catch { return 0; }
+            for (int i = 0; i < residents.Count &&
+                 added < targetAdditionalSoldiers; i++)
+            {
+                Actor candidate = residents[i];
+                if (candidate?.data == null || candidate == pCaptain ||
+                    candidate.kingdom != pKingdom || candidate.isRekt() ||
+                    !candidate.isAlive() || candidate.isKing() ||
+                    candidate.isCityLeader() || GeneralService.IsGeneral(candidate) ||
+                    candidate.army?.data != null) continue;
+                try
+                {
+                    bool wasWarrior = candidate.isWarrior();
+                    if (!wasWarrior)
+                    {
+                        using (MilitaryRecruitmentScope.Open(
+                                   MilitaryRecruitmentKind.StandingArmy))
+                        {
+                            if (!pCity.checkCanMakeWarrior(candidate)) continue;
+                            pCity.makeWarrior(candidate);
+                        }
+                        if (candidate.isWarrior() && !wasWarrior)
+                            pConvertedSoldiers?.Add(candidate);
+                    }
+                    if (!candidate.isWarrior()) continue;
+                    AWArmyService.AddToArmy(candidate, pArmy);
+                    if (candidate.army == pArmy)
+                    {
+                        pAddedSoldiers?.Add(candidate);
+                        added++;
+                    }
+                }
+                catch { }
+            }
+            return added;
+        }
+
+        private static void RollbackMilitaryState(Actor pActor,
+            Army pArmy, bool pArmyCreated, bool pGeneralPromoted,
+            bool pActorWasWarrior, List<Actor> pAddedSoldiers,
+            List<Actor> pConvertedSoldiers, City pCity, Kingdom pKingdom)
+        {
+            if (pAddedSoldiers != null)
+            {
+                for (int i = 0; i < pAddedSoldiers.Count; i++)
+                {
+                    Actor soldier = pAddedSoldiers[i];
+                    try
+                    {
+                        if (soldier?.army == pArmy) soldier.removeFromArmy();
+                    }
+                    catch { }
+                }
+            }
+            if (pArmy?.data != null && pActor?.data != null)
+            {
+                try
+                {
+                    using (ArmyCaptainDisposalScope.Open(pArmy))
+                    {
+                        if (pArmy.getCaptain() == pActor)
+                            pArmy.setCaptain(null);
+                        if (pActor.army == pArmy) pActor.removeFromArmy();
+                    }
+                }
+                catch
+                {
+                    try { pActor.setArmy(null); } catch { }
+                }
+                if (pArmyCreated)
+                    ArmyInvalidCleanupQueue.ScheduleShell(pArmy, pCity,
+                        pKingdom);
+            }
+            if (pGeneralPromoted)
+                GeneralService.RetireForCardDeployment(pActor);
+            if (pConvertedSoldiers != null)
+            {
+                for (int i = 0; i < pConvertedSoldiers.Count; i++)
+                {
+                    Actor soldier = pConvertedSoldiers[i];
+                    try
+                    {
+                        if (soldier?.data != null && soldier.isWarrior())
+                            soldier.stopBeingWarrior();
+                    }
+                    catch { }
+                }
+            }
+            if (pActor?.data != null && !pActorWasWarrior &&
+                pActor.isWarrior())
+            {
+                try { pActor.stopBeingWarrior(); } catch { }
             }
         }
     }

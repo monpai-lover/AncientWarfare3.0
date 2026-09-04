@@ -4,6 +4,19 @@ using System.Linq;
 
 namespace AncientWarfare3.content.figures
 {
+    public enum HistoricalFigureCardRole
+    {
+        Monarch,
+        Minister
+    }
+
+    public enum HistoricalFigureCardMinisterType
+    {
+        None,
+        CivilOfficial,
+        MilitaryGeneral
+    }
+
     /// <summary>
     /// Stable card rarity. The values are data objects rather than enum values so
     /// the UI and persistence layer can share the same probability/color metadata.
@@ -86,7 +99,11 @@ namespace AncientWarfare3.content.figures
             string pMotherCardId, string pMotherDisplayName, string pPortraitPath,
             string pLegacyFigureId, int pLegacyRegistryIndex, int pCombatHealth,
             IEnumerable<string> pCombatTraits, string pBackgroundSummary = "",
-            string pDetailedBiography = "")
+            string pDetailedBiography = "",
+            HistoricalFigureCardRole pRole = HistoricalFigureCardRole.Monarch,
+            HistoricalFigureCardMinisterType pMinisterType =
+                HistoricalFigureCardMinisterType.None,
+            string pCollectionId = "")
         {
             CardId = pCardId ?? "";
             DisplayName = pDisplayName ?? "";
@@ -106,6 +123,9 @@ namespace AncientWarfare3.content.figures
             BackgroundSummary = pBackgroundSummary ?? "";
             DetailedBiography = string.IsNullOrWhiteSpace(pDetailedBiography)
                 ? Biography : pDetailedBiography;
+            Role = pRole;
+            MinisterType = pMinisterType;
+            CollectionId = pCollectionId ?? "";
             FatherCardId = pFatherCardId ?? "";
             FatherDisplayName = pFatherDisplayName ?? "";
             MotherCardId = pMotherCardId ?? "";
@@ -135,6 +155,12 @@ namespace AncientWarfare3.content.figures
         public string Biography { get; }
         public string BackgroundSummary { get; }
         public string DetailedBiography { get; }
+        public HistoricalFigureCardRole Role { get; }
+        public HistoricalFigureCardMinisterType MinisterType { get; }
+        public string CollectionId { get; }
+        public bool IsMilitaryGeneral =>
+            Role == HistoricalFigureCardRole.Minister &&
+            MinisterType == HistoricalFigureCardMinisterType.MilitaryGeneral;
         public string FatherCardId { get; }
         public string FatherDisplayName { get; }
         public string MotherCardId { get; }

@@ -686,6 +686,8 @@ namespace AncientWarfare3.core.court
                 int score = LocalOfficialCandidateRules.Score(
                     MainAbility(actor), (int)Math.Max(0f, merit),
                     sameNativeCity: false);
+                score += HistoricalFigureCardIdentityService.IsMinisterCardActor(actor)
+                    ? HistoricalFigureCardRoleRules.MinisterCandidateBonus : 0;
                 int tier = lowOffice
                     ? (int)LocalLowOfficeVacancyRules.CandidateTier(
                         formalLocalQualification,
@@ -760,6 +762,8 @@ namespace AncientWarfare3.core.court
                 pActor, pKingdom);
             int score = LocalOfficialCandidateRules.Score(MainAbility(pActor),
                 (int)Math.Max(0f, merit), sameNativeCity: false);
+            score += HistoricalFigureCardIdentityService.IsMinisterCardActor(pActor)
+                ? HistoricalFigureCardRoleRules.MinisterCandidateBonus : 0;
             bool lowOffice = LocalLowOfficeVacancyRules.IsLowestLocalGrade(
                 pBehavior.OfficeGrade);
             int tier = lowOffice

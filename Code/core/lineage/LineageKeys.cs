@@ -77,6 +77,7 @@ namespace AncientWarfare3.core.lineage
         public const string HISTORICAL_CARD_DRAW_ID = "aw_historical_card_draw_id";
         public const string HISTORICAL_CARD_DEPLOYMENT_ID =
             "aw_historical_card_deployment_id";
+        public const string HISTORICAL_CARD_ROLE = "aw_historical_card_role";
 
         public const string MATRILOCAL_IN_LAW = "aw_matrilocal_in_law";
         public const string MATRILOCAL_WIFE_ID = "aw_matrilocal_wife_id";

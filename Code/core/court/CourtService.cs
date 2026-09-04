@@ -1628,7 +1628,8 @@ namespace AncientWarfare3.core.court
             pCandidate = new CourtAppointmentCandidateView
             {
                 actor_id = actorId,
-                actor_name = SafeActorName(actor),
+                actor_name = HistoricalFigureCardIdentityService.CourtDisplayName(
+                    actor),
                 school_id = school,
                 age = SafeActorAge(actor),
                 stewardship = SafeStat(actor, "stewardship"),

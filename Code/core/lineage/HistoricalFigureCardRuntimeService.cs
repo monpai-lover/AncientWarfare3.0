@@ -47,6 +47,27 @@ namespace AncientWarfare3.core.lineage
                 AddFallback("aw_historical_figure_cards_btn Description",
                     "打开历史人物抽卡、仓库和部署界面");
                 AddFallback(titleKey, "历史人物抽卡");
+                AddFallback("aw_historical_figure_cards_role_monarch", "君主箱");
+                AddFallback("aw_historical_figure_cards_role_minister", "大臣箱");
+                AddFallback("aw_historical_figure_cards_recycle_title", "历史人物汰换");
+                AddFallback("aw_historical_figure_cards_recycle_summary", "已选择 {0}/{1}");
+                AddFallback("aw_historical_figure_cards_recycle_next", "下一品质：{0}");
+                AddFallback("aw_historical_figure_cards_recycle_next_empty", "选择同品质卡片");
+                AddFallback("aw_historical_figure_cards_recycle_reset", "重置");
+                AddFallback("aw_historical_figure_cards_recycle_back", "返回仓库");
+                AddFallback("aw_historical_figure_cards_recycle_insufficient", "持有数量不足");
+                AddFallback("aw_historical_figure_cards_recycle_success", "获得：{0}  来源：{1}");
+                AddFallback("aw_historical_figure_cards_recycle_source_missing", "没有可用的收藏品来源");
+                AddFallback("aw_historical_figure_cards_recycle_output_missing", "没有可用的输出卡");
+                AddFallback("aw_historical_figure_cards_recycle_persistence_failed", "仓库保存失败");
+                AddFallback("aw_hist_card_minister_deployed", "进入官场候选池");
+                AddFallback("aw_hist_card_military_deployed",
+                    "\u4efb\u547d\u4e3a\u5927\u5c06\u5e76\u7edf\u9886\u519b\u961f");
+                AddFallback("aw_historical_figure_cards_type_civil", "\u6587\u81e3");
+                AddFallback("aw_historical_figure_cards_type_general", "\u6b66\u5c06");
+                AddFallback("aw_historical_figure_cards_type_monarch", "\u541b\u4e3b");
+                AddFallback("aw_historical_figure_cards_reveal_meta_extended",
+                    "\u56fd\u53f7\uff1a{0}\n\u671d\u4ee3\uff1a{1}\n\u540d\u6c14\uff1a{2}\n\u7c7b\u578b\uff1a{3}\n\u6765\u6e90\uff1a{4}");
                 LM.ApplyLocale();
             }
             catch (System.Exception error)

@@ -61,6 +61,9 @@ if (args.Length == 1 && args[0] == "--historical-figure-card-crates")
     HistoricalFigureCardCrateRulesTests.Run();
     HistoricalFigureCardInventoryRulesTests.Run();
     HistoricalFigureCardRecycleRulesTests.Run();
+    HistoricalFigureCardRecycleSelectionRulesTests.Run();
+    HistoricalFigureCardRoleRulesTests.Run();
+    HistoricalFigureCardMinisterPoolTests.Run();
     Console.WriteLine("Historical figure card crate rules passed.");
     return;
 }
@@ -78,6 +81,7 @@ if (args.Length == 1 && args[0] == "--historical-figure-card-deployment")
 if (args.Length == 1 && args[0] == "--historical-figure-card-acceptance")
 {
     HistoricalFigureCardAcceptanceSourceGuardTests.Run();
+    HistoricalFigureCardRecycleWindowSourceGuardTests.Run();
     Console.WriteLine("Historical figure card acceptance guards passed.");
     return;
 }

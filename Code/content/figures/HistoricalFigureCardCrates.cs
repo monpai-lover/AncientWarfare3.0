@@ -33,6 +33,11 @@ namespace AncientWarfare3.content.figures
 
         public int CardCount => HistoricalFigureCardCatalog.GetCards(Id).Count;
 
+        public int CardCountFor(HistoricalFigureCardRole pRole)
+        {
+            return HistoricalFigureCardCatalog.GetCards(Id, pRole).Count;
+        }
+
         public bool ContainsYear(int pYear)
         {
             return pYear >= StartYear && pYear <= EndYear;

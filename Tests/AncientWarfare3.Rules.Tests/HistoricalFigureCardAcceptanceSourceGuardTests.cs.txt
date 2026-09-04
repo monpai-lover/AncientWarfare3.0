@@ -34,6 +34,10 @@ internal static class HistoricalFigureCardAcceptanceSourceGuardTests
             "card rarity locale entry exists");
         Contains(locale, "aw_historical_figure_cards_collection_hint,",
             "card collection locale entry exists");
+        Contains(locale, "aw_historical_figure_cards_type_civil,",
+            "civil minister type locale entry exists");
+        Contains(locale, "aw_historical_figure_cards_type_general,",
+            "military minister type locale entry exists");
         Contains(window, "DrawAndCommit", "draw commits before animation");
         Contains(window, "WinnerIndex", "reveal uses fixed winner position");
         string drawMethod = Between(window, "private void Draw()", "private void Skip()");
@@ -45,7 +49,7 @@ internal static class HistoricalFigureCardAcceptanceSourceGuardTests
         Contains(window, "mysteryMark.gameObject.SetActive(false)",
             "mystery card does not overlay a second question mark");
         Contains(window, "UpdateInventory", "owned cards have an inventory view");
-        Contains(window, "GetCards(_selectedCrateId)", "draw uses the selected crate pool");
+        Contains(window, "GetCards(_selectedCrateId,", "draw uses the selected role crate pool");
         Contains(window, "ResetTransientState", "window exposes transient reset");
         Contains(window, "HistoricalFigureCardAudioService.PlayScroll",
             "rolling crosses play scroll cue");
@@ -62,20 +66,12 @@ internal static class HistoricalFigureCardAcceptanceSourceGuardTests
         Contains(window, "private Button _openAgain", "reveal exposes open-again action");
         Contains(window, "private Button _quickOpen", "reveal exposes quick-open action");
         Contains(window, "private Button _sound", "reveal exposes sound action");
-        Contains(window, "private Button _recycleModeButton",
-            "inventory exposes recycle mode");
-        Contains(window, "private Button _recycleSubmitButton",
-            "inventory exposes recycle submit action");
-        Contains(window, "GetRecycleSourceCounts",
-            "recycle uses persisted crate source counts");
-        Contains(window, "SelectWeightedCrate",
-            "recycle selects its output crate by source weight");
-        Contains(window, "TryRecycle",
-            "recycle commits through the collection transaction");
-        Contains(window, "HistoricalFigureCardCatalog.GetCards(outputCrateId)",
-            "recycle draws the output card from the selected crate");
-        Contains(window, "BuildRecycleInputIds",
-            "recycle expands selected card quantities into input instances");
+        Contains(window, "HistoricalFigureRecycleWindow.Open",
+            "inventory opens the dedicated recycle window");
+        False(window.Contains("TryRecycle"),
+            "draw window does not own the recycle transaction");
+        False(window.Contains("ToggleRecycleCard"),
+            "inventory is not a recycle selection mode");
         Contains(window, "private void CloseReveal()", "reveal can return to its crate");
         Contains(window, "QuickRollDuration", "quick opening uses a separate duration");
         True(!window.Contains("_state = DrawState.Details;\n                    Refresh();"),
@@ -149,17 +145,48 @@ internal static class HistoricalFigureCardAcceptanceSourceGuardTests
         Contains(deployment, "card_deployed", "deployment writes person history");
         Contains(deployment, "card_kingdom_founded",
             "deployment writes kingdom history");
+        Contains(deployment, "GeneralService.PromoteToGeneral",
+            "military ministers become formal generals");
+        Contains(deployment, "AWArmyService.AddToArmy",
+            "military ministers join an ordinary army");
+        Contains(deployment, "AWArmyService.SetCaptainIfChanged",
+            "military ministers become army captains");
+        Contains(deployment, "newArmy(actor, city)",
+            "military deployment can create an ordinary army");
+        Contains(deployment, "RetireForCardDeployment",
+            "military deployment rolls back general state");
+        Contains(deployment, "CanDeployMilitaryGeneral",
+            "military deployment requires an existing civil kingdom");
+
+        string modelPath = Path.Combine(root, "content", "figures",
+            "HistoricalFigureCardModels.cs");
+        string model = File.ReadAllText(modelPath);
+        Contains(model, "HistoricalFigureCardMinisterType",
+            "card model exposes minister subtype");
+        Contains(model, "CollectionId",
+            "card model exposes collection source");
 
         string identityPath = Path.Combine(root, "core", "lineage",
             "HistoricalFigureCardIdentityService.cs");
         string identity = File.ReadAllText(identityPath);
         Contains(identity, "HISTORICAL_CARD_ID", "card identity is persisted");
+        Contains(identity, "CourtDisplayName",
+            "minister court names include their historical source");
+        string courtPath = Path.Combine(root, "core", "court", "CourtService.cs");
+        string court = File.ReadAllText(courtPath);
+        Contains(court, "HistoricalFigureCardIdentityService.CourtDisplayName",
+            "court candidate projection uses the historical minister name");
     }
 
     private static void Contains(string source, string value, string message)
     {
         if (!source.Contains(value))
             throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
     }
 
     private static void True(bool value, string message)

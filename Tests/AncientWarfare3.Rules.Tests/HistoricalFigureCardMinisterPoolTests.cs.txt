@@ -1,0 +1,90 @@
+using System;
+using System.Linq;
+using AncientWarfare3.content.figures;
+using AncientWarfare3.core.lineage;
+
+internal static class HistoricalFigureCardMinisterPoolTests
+{
+    public static void Run()
+    {
+        HistoricalFigureCardDefinition hanXin =
+            HistoricalFigureCardCatalog.Get("han_han_xin");
+        HistoricalFigureCardDefinition xiaoHe =
+            HistoricalFigureCardCatalog.Get("han_xiao_he");
+        Equal(HistoricalFigureCardMinisterType.MilitaryGeneral,
+            hanXin?.MinisterType, "Han Xin is a military minister");
+        Equal(HistoricalFigureCardMinisterType.CivilOfficial,
+            xiaoHe?.MinisterType, "Xiao He is a civil minister");
+        True(HistoricalFigureCardRoleRules.IsMilitaryGeneral(hanXin),
+            "military subtype is recognized by role rules");
+        True(HistoricalFigureCardRoleRules.IsCivilOfficial(xiaoHe),
+            "civil subtype is recognized by role rules");
+        False(HistoricalFigureCardRoleRules.IsCivilOfficial(hanXin),
+            "military minister is not a civil official");
+        False(HistoricalFigureCardRoleRules.IsMilitaryGeneral(xiaoHe),
+            "civil minister is not a military general");
+
+        True(HistoricalFigureCardCrates.All.All(crate =>
+            HistoricalFigureCardCatalog.GetCards(crate.Id,
+                HistoricalFigureCardRole.Minister).Count >= 40),
+            "each period has at least forty ministers");
+        True(HistoricalFigureCardCrates.All.All(crate =>
+        {
+            var cards = HistoricalFigureCardCatalog.GetCards(crate.Id,
+                HistoricalFigureCardRole.Minister);
+            return cards.Any(card => card.MinisterType ==
+                       HistoricalFigureCardMinisterType.CivilOfficial) &&
+                   cards.Any(card => card.MinisterType ==
+                       HistoricalFigureCardMinisterType.MilitaryGeneral);
+        }), "each period contains both minister types");
+
+        foreach (HistoricalFigureCardDefinition card in
+                 HistoricalFigureCardCatalog.All.Where(card =>
+                     card.Role == HistoricalFigureCardRole.Minister))
+        {
+            True(!string.IsNullOrWhiteSpace(card.CollectionId),
+                "minister has a collection source: " + card.CardId);
+            True(!string.IsNullOrWhiteSpace(card.HistoricalKingdomName),
+                "minister has a historical kingdom: " + card.CardId);
+            True(!string.IsNullOrWhiteSpace(card.HistoricalEra),
+                "minister has a historical era: " + card.CardId);
+            True(!string.IsNullOrWhiteSpace(card.BackgroundSummary),
+                "minister has a background: " + card.CardId);
+            True(!string.IsNullOrWhiteSpace(card.DetailedBiography),
+                "minister has a detailed biography: " + card.CardId);
+            True(card.MinisterType != HistoricalFigureCardMinisterType.None,
+                "minister has an explicit subtype: " + card.CardId);
+        }
+
+        False(HistoricalFigureCardRoleRules.MinisterChangesKingdomName,
+            "minister deployment never renames the host kingdom");
+        False(HistoricalFigureCardRoleRules.IsKingdomFoundingRole(
+            HistoricalFigureCardRole.Minister),
+            "minister cards do not found kingdoms");
+        True(HistoricalFigureCardDeploymentRules.CanDeployMilitaryGeneral(
+            true, true, true), "military deployment accepts a civil kingdom");
+        False(HistoricalFigureCardDeploymentRules.CanDeployMilitaryGeneral(
+            false, true, true), "military deployment requires a city");
+        False(HistoricalFigureCardDeploymentRules.CanDeployMilitaryGeneral(
+            true, false, true), "military deployment requires a kingdom");
+        False(HistoricalFigureCardDeploymentRules.CanDeployMilitaryGeneral(
+            true, true, false), "military deployment requires a civil kingdom");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue) throw new InvalidOperationException(pMessage);
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        True(!pValue, pMessage);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pMessage + ": expected=" +
+                pExpected + ", actual=" + pActual);
+    }
+}

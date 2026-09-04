@@ -43,7 +43,8 @@ namespace AncientWarfare3.ui.windows
         private static bool _pendingConfirmWindow;
         private static string _selectedCrateId = "";
         private static bool _inventoryMode;
-        private static bool _recycleMode;
+        private static HistoricalFigureCardRole _selectedRole =
+            HistoricalFigureCardRole.Monarch;
         private static float _rollStartedAt;
         private static float _revealStartedAt;
         private static int _rollingIndex;
@@ -87,6 +88,7 @@ namespace AncientWarfare3.ui.windows
         private ScrollRect _collectionScroll;
         private Scrollbar _collectionScrollbar;
         private readonly List<Button> _crateButtons = new List<Button>();
+        private readonly List<Button> _roleButtons = new List<Button>();
         private readonly List<Button> _crateCardButtons = new List<Button>();
         private readonly List<Button> _inventoryButtons = new List<Button>();
         private Button _mysteryGoldButton;
@@ -96,8 +98,6 @@ namespace AncientWarfare3.ui.windows
             new List<HistoricalFigureCardListItem>();
         private readonly List<Button> _sortButtons = new List<Button>();
         private readonly List<Text> _rarityStats = new List<Text>();
-        private readonly Dictionary<string, int> _recycleSelection =
-            new Dictionary<string, int>(StringComparer.Ordinal);
         private Button _draw;
         private Button _skip;
         private Button _deploy;
@@ -111,8 +111,6 @@ namespace AncientWarfare3.ui.windows
         private Button _autoOpen;
         private Button _sound;
         private Button _recycleModeButton;
-        private Button _recycleSubmitButton;
-        private Button _recycleCancelButton;
         private WideWindowChrome _chrome;
         private bool _built;
         private float _cardLayoutWidth = -1f;
@@ -182,8 +180,8 @@ namespace AncientWarfare3.ui.windows
             _selectedCard = null;
             _lastReveal = null;
             _selectedCrateId = "";
+            _selectedRole = HistoricalFigureCardRole.Monarch;
             _inventoryMode = false;
-            _recycleMode = false;
             _selectedTile = null;
             _selectedCity = null;
             _deploymentId = "";
@@ -194,7 +192,6 @@ namespace AncientWarfare3.ui.windows
             _rollingIndex = 0;
             _lastAudioIndex = -1;
             _autoOpening = false;
-            Instance?._recycleSelection.Clear();
             Instance?.UpdateTrack(null, -1);
             if (Instance != null && Instance.isActiveAndEnabled)
                 Instance.Refresh();
@@ -256,7 +253,6 @@ namespace AncientWarfare3.ui.windows
                 HistoricalFigureCardCatalog.Get(pCardId);
             if (_state != DrawState.Idle || card == null ||
                 Store.GetOwnedCount(card.CardId) <= 0) return;
-            if (_inventoryMode && _recycleSelection.Count > 0) return;
             _selectedCard = card;
             _lastReveal = null;
             _state = DrawState.Details;
@@ -272,8 +268,15 @@ namespace AncientWarfare3.ui.windows
             _lastReveal = null;
             _selectedCrateId = crate.Id;
             _inventoryMode = false;
-            _recycleMode = false;
-            _recycleSelection.Clear();
+            Refresh();
+        }
+
+        private void SelectRole(HistoricalFigureCardRole pRole)
+        {
+            if (_state != DrawState.Idle) return;
+            _selectedRole = pRole;
+            _selectedCrateId = "";
+            _selectedCard = null;
             Refresh();
         }
 
@@ -284,10 +287,21 @@ namespace AncientWarfare3.ui.windows
             _lastReveal = null;
             _selectedCrateId = "";
             _inventoryMode = true;
-            _recycleMode = false;
-            _recycleSelection.Clear();
             _state = DrawState.Idle;
             Refresh();
+        }
+
+        internal static void OpenInventoryView()
+        {
+            Open();
+            Instance?.OpenInventory();
+        }
+
+        private void OpenDedicatedRecycle()
+        {
+            if (!_inventoryMode || _state != DrawState.Idle) return;
+            GetComponent<ScrollWindow>()?.clickHide();
+            HistoricalFigureRecycleWindow.Open();
         }
 
         private void BackToCrates()
@@ -297,8 +311,6 @@ namespace AncientWarfare3.ui.windows
             _lastReveal = null;
             _selectedCrateId = "";
             _inventoryMode = false;
-            _recycleMode = false;
-            _recycleSelection.Clear();
             _state = DrawState.Idle;
             Refresh();
         }
@@ -546,11 +558,15 @@ namespace AncientWarfare3.ui.windows
             _autoOpen = MakeButton("AutoOpen", _root, "", ToggleAutoOpening);
             _sound = MakeButton("Sound", _root, "", ToggleSound);
             _recycleModeButton = MakeButton("RecycleMode", _root, "",
-                ToggleRecycleMode);
-            _recycleSubmitButton = MakeButton("RecycleSubmit", _root, "",
-                SubmitRecycle);
-            _recycleCancelButton = MakeButton("RecycleCancel", _root, "",
-                CancelRecycle);
+                OpenDedicatedRecycle);
+            Button monarch = MakeButton("MonarchCategory", _root,
+                Text("aw_historical_figure_cards_role_monarch", "君主箱"),
+                () => SelectRole(HistoricalFigureCardRole.Monarch));
+            Button minister = MakeButton("MinisterCategory", _root,
+                Text("aw_historical_figure_cards_role_minister", "大臣箱"),
+                () => SelectRole(HistoricalFigureCardRole.Minister));
+            _roleButtons.Add(monarch);
+            _roleButtons.Add(minister);
             CreateInventoryControls();
         }
 
@@ -642,12 +658,8 @@ namespace AncientWarfare3.ui.windows
                     : Text("aw_historical_figure_cards_crate_title", "\u5386\u53f2\u65f6\u671f\u7bb1\u5b50"));
             if (_inventoryMode)
             {
-                _body.text = _recycleSelection.Count > 0
-                    ? Format("aw_historical_figure_cards_recycle_selection",
-                        "\u5df2\u9009\u62e9\uff1a{0}",
-                        _recycleSelection.Values.Sum())
-                    : Text("aw_historical_figure_cards_inventory_hint",
-                        "\u5df2\u62e5\u6709\u7684\u5386\u53f2\u4eba\u7269\u3002");
+                _body.text = Text("aw_historical_figure_cards_inventory_hint",
+                    "\u5df2\u62e5\u6709\u7684\u5386\u53f2\u4eba\u7269\u3002");
                 UpdateInventory();
             }
             else if (_selectedCrateId.Length == 0)
@@ -661,7 +673,8 @@ namespace AncientWarfare3.ui.windows
                 HistoricalFigureCardCrate crate =
                     HistoricalFigureCardCrates.Get(_selectedCrateId);
                 IReadOnlyList<HistoricalFigureCardDefinition> cards =
-                    HistoricalFigureCardCatalog.GetCards(_selectedCrateId);
+                    HistoricalFigureCardCatalog.GetCards(_selectedCrateId,
+                        _selectedRole);
                 // \u7bb1\u5b50\u62ac\u5934\u538b\u6210\u4e00\u884c:\u540d\u53f7 \u00b7 \u63cf\u8ff0,\u91d1\u8272\u6c60\u7684\u8bf4\u660e\u5e76\u8fdb\u540c\u4e00\u884c\u3002
                 _body.text = Format("aw_historical_figure_cards_crate_body",
                     "{0} \u00b7 {1} \u00b7 {2}", CrateName(crate),
@@ -676,7 +689,8 @@ namespace AncientWarfare3.ui.windows
         {
             if (_state != DrawState.Idle || _selectedCrateId.Length == 0) return;
             _lastReveal = HistoricalFigureCardDrawService.DrawAndCommit(
-                HistoricalFigureCardCatalog.GetCards(_selectedCrateId),
+                HistoricalFigureCardCatalog.GetCards(_selectedCrateId,
+                    _selectedRole),
                 _selectedCrateId, Store);
             if (!_lastReveal.Succeeded)
             {
@@ -973,6 +987,15 @@ namespace AncientWarfare3.ui.windows
             if (_collectionRoot == null) return;
             ShowOnlyPool(_crateButtons);
             HideMysteryGoldCard();
+            for (int i = 0; i < _roleButtons.Count; i++)
+            {
+                _roleButtons[i].gameObject.SetActive(true);
+                Image roleImage = _roleButtons[i].GetComponent<Image>();
+                if (roleImage != null)
+                    roleImage.color = i == (int)_selectedRole
+                        ? new Color(.44f, .35f, .16f, 1f)
+                        : new Color(.16f, .16f, .18f, .96f);
+            }
             IReadOnlyList<HistoricalFigureCardCrate> crates =
                 HistoricalFigureCardCrates.All;
             // Grid metrics are shared by every tile: compute once per refresh.
@@ -1017,7 +1040,7 @@ namespace AncientWarfare3.ui.windows
                 if (title != null) title.text = CrateName(crate);
                 if (count != null)
                     count.text = Format("aw_historical_figure_cards_crate_count",
-                        "{0} \u4eba\u7269", crate.CardCount);
+                        "{0} \u4eba\u7269", crate.CardCountFor(_selectedRole));
                 if (gold != null)
                     gold.text = Text("aw_historical_figure_cards_shared_gold_badge",
                         "\u5171\u4eab\u91d1\u6c60");
@@ -1039,6 +1062,7 @@ namespace AncientWarfare3.ui.windows
         {
             // Pool mutual exclusion happens in UpdateCardList/ShowOnlyPool.
             HideMysteryGoldCard();
+            SetRoleButtonsVisible(false);
             int drawCount = Store.Draws.Count;
             int ownedCount = Store.OwnedCounts.Count;
             if (_inventoryCache == null ||
@@ -1069,12 +1093,7 @@ namespace AncientWarfare3.ui.windows
             }
             IReadOnlyList<HistoricalFigureCardDefinition> cards = _inventoryCache;
             int totalOwned = _inventoryCacheTotalOwned;
-            if (_recycleSelection.Count > 0)
-                _body.text = Format("aw_historical_figure_cards_recycle_selection",
-                    "\u5df2\u9009\u62e9\uff1a{0}",
-                    _recycleSelection.Values.Sum()) + "\n" +
-                    RecycleRequirementText();
-            else if (cards.Count == 0)
+            if (cards.Count == 0)
                 _body.text = Text("aw_historical_figure_cards_inventory_empty",
                     "\u4ed3\u5e93\u4e3a\u7a7a\u3002");
             else
@@ -1084,145 +1103,11 @@ namespace AncientWarfare3.ui.windows
             UpdateCardList(cards, true, _inventoryButtons);
         }
 
-        private void ToggleRecycleMode()
-        {
-            if (!_inventoryMode || _state != DrawState.Idle) return;
-            _recycleSelection.Clear();
-            _recycleMode = true;
-            Refresh();
-        }
-
-        private void CancelRecycle()
-        {
-            if (!_inventoryMode || _state != DrawState.Idle) return;
-            _recycleSelection.Clear();
-            _recycleMode = false;
-            Refresh();
-        }
-
-        private void ToggleRecycleCard(string pCardId)
-        {
-            if (!_inventoryMode || _state != DrawState.Idle ||
-                string.IsNullOrEmpty(pCardId)) return;
-            HistoricalFigureCardDefinition card =
-                HistoricalFigureCardCatalog.Get(pCardId);
-            if (card?.Rarity == null) return;
-            if (card.Rarity.Equals(HistoricalFigureCardRarity.Gold))
-            {
-                _body.text = Text("aw_historical_figure_cards_recycle_gold_locked",
-                    "\u91d1\u8272\u5361\u4e0d\u53ef\u6c70\u6362");
-                return;
-            }
-            HistoricalFigureCardRarity selectedRarity = SelectedRecycleRarity();
-            if (selectedRarity != null && !selectedRarity.Equals(card.Rarity))
-            {
-                _body.text = Text("aw_historical_figure_cards_recycle_same_rarity",
-                    "\u6c70\u6362\u5361\u7247\u5fc5\u987b\u4f7f\u7528\u540c\u54c1\u8d28");
-                return;
-            }
-            int required = RecycleRequired(card.Rarity);
-            int selected = _recycleSelection.TryGetValue(pCardId,
-                out int current) ? current : 0;
-            selected = selected >= Store.GetOwnedCount(pCardId) ? 0 : selected + 1;
-            if (selected == 0) _recycleSelection.Remove(pCardId);
-            else _recycleSelection[pCardId] = selected;
-            if (_recycleSelection.Values.Sum() > required)
-            {
-                if (selected <= 1) _recycleSelection.Remove(pCardId);
-                else _recycleSelection[pCardId] = selected - 1;
-            }
-            Refresh();
-        }
-
-        private void SubmitRecycle()
-        {
-            if (!_inventoryMode || _state != DrawState.Idle) return;
-            List<string> inputs = BuildRecycleInputIds();
-            HistoricalFigureCardRarity rarity = SelectedRecycleRarity();
-            int required = RecycleRequired(rarity);
-            if (rarity == null || inputs.Count != required)
-            {
-                _body.text = Text("aw_historical_figure_cards_recycle_incomplete",
-                    "\u8bf7\u6309\u8981\u6c42\u6570\u91cf\u9009\u62e9\u540c\u54c1\u8d28\u5361\u7247");
-                return;
-            }
-            IReadOnlyDictionary<string, int> sources =
-                Store.GetRecycleSourceCounts(inputs);
-            string outputCrateId = HistoricalFigureCardRecycleRules.SelectWeightedCrate(
-                sources, UnityEngine.Random.Range(0, int.MaxValue));
-            if (string.IsNullOrEmpty(outputCrateId))
-            {
-                _body.text = Text("aw_historical_figure_cards_recycle_failed",
-                    "\u6c70\u6362\u5931\u8d25");
-                return;
-            }
-            HistoricalFigureCardRarity outputRarity =
-                HistoricalFigureCardRecycleRules.NextRarity(rarity);
-            IReadOnlyList<HistoricalFigureCardDefinition> outputPool =
-                outputRarity.Equals(HistoricalFigureCardRarity.Gold)
-                    ? HistoricalFigureCardCatalog.All
-                    : HistoricalFigureCardCatalog.GetCards(outputCrateId);
-            HistoricalFigureCardDefinition[] eligible = outputPool
-                .Where(p => p?.Rarity != null && p.Rarity.Equals(outputRarity))
-                .ToArray();
-            if (eligible.Length == 0)
-            {
-                _body.text = Text("aw_historical_figure_cards_recycle_failed",
-                    "\u6c70\u6362\u5931\u8d25\uff1a\u5956\u6c60\u65e0\u53ef\u7528\u5361");
-                return;
-            }
-            HistoricalFigureCardDefinition output = eligible[
-                UnityEngine.Random.Range(0, eligible.Length)];
-            bool committed = Store.TryRecycle(inputs, output.CardId,
-                output.Rarity.Id, outputCrateId,
-                Guid.NewGuid().ToString("N"));
-            if (!committed)
-            {
-                _body.text = Text("aw_historical_figure_cards_recycle_failed",
-                    "\u6c70\u6362\u5931\u8d25\uff1a\u4ed3\u5e93\u72b6\u6001\u5df2\u6539\u53d8");
-                return;
-            }
-            _recycleSelection.Clear();
-            _selectedCard = output;
-            _selectedCrateId = outputCrateId;
-            _inventoryMode = false;
-            _state = DrawState.Details;
-            HistoricalFigureCardAudioService.PlayReveal(output.Rarity);
-            Refresh();
-        }
-
-        private List<string> BuildRecycleInputIds()
-        {
-            var result = new List<string>();
-            foreach (KeyValuePair<string, int> pair in _recycleSelection)
-                for (int i = 0; i < pair.Value; i++) result.Add(pair.Key);
-            return result;
-        }
-
-        private HistoricalFigureCardRarity SelectedRecycleRarity()
-        {
-            string first = _recycleSelection.Keys.FirstOrDefault();
-            return first == null ? null :
-                HistoricalFigureCardCatalog.Get(first)?.Rarity;
-        }
-
-        private static int RecycleRequired(HistoricalFigureCardRarity pRarity)
-        {
-            return pRarity == null || pRarity.Equals(HistoricalFigureCardRarity.Gold) ? 0 :
-                pRarity.Equals(HistoricalFigureCardRarity.Red) ? 5 : 10;
-        }
-
-        private string RecycleRequirementText()
-        {
-            HistoricalFigureCardRarity rarity = SelectedRecycleRarity();
-            return Format("aw_historical_figure_cards_recycle_requirement",
-                "\u9700\u8981：{0}\u5f20", RecycleRequired(rarity));
-        }
-
         private void UpdateCrateContents(
             IReadOnlyList<HistoricalFigureCardDefinition> pCards)
         {
             // Pool mutual exclusion happens in UpdateCardList/ShowOnlyPool.
+            SetRoleButtonsVisible(false);
             HistoricalFigureCardDefinition[] visibleCards =
                 (pCards ?? Array.Empty<HistoricalFigureCardDefinition>())
                 .Where(p => p?.Rarity != null &&
@@ -1402,8 +1287,7 @@ namespace AncientWarfare3.ui.windows
                 Color rarityColor = ParseColor(card.Rarity?.ColorHex,
                     new Color(.25f, .22f, .18f, .95f));
                 image.sprite = CardGradientSprite(rarityColor);
-                image.color = _recycleSelection.ContainsKey(card.CardId)
-                    ? new Color(1f, .9f, .62f, 1f) : Color.white;
+                image.color = Color.white;
                 Image rarityBar = ChildImage(pButton.transform, "RarityBar");
                 if (rarityBar != null) rarityBar.color = rarityColor;
             }
@@ -1418,12 +1302,7 @@ namespace AncientWarfare3.ui.windows
             if (owned != null)
             {
                 owned.gameObject.SetActive(_virtualOwnedOnly);
-                int selected = _recycleSelection.TryGetValue(card.CardId,
-                    out int selectedCount) ? selectedCount : 0;
-                owned.text = _recycleModeButton != null &&
-                    _recycleSelection.Count > 0
-                    ? "x" + Store.GetOwnedCount(card.CardId) + " / " + selected
-                    : "x" + Store.GetOwnedCount(card.CardId);
+                owned.text = "x" + Store.GetOwnedCount(card.CardId);
             }
             if (portrait != null)
             {
@@ -1460,10 +1339,7 @@ namespace AncientWarfare3.ui.windows
             pButton.onClick.AddListener(() =>
             {
                 HistoricalFigureCardAudioService.PlayButtonPress();
-                if (_recycleMode)
-                    ToggleRecycleCard(pCardId);
-                else
-                    SelectCollectionCard(pCardId);
+                SelectCollectionCard(pCardId);
             });
         }
 
@@ -1536,6 +1412,12 @@ namespace AncientWarfare3.ui.windows
         private void HideMysteryGoldCard()
         {
             _mysteryGoldButton?.gameObject.SetActive(false);
+        }
+
+        private void SetRoleButtonsVisible(bool pVisible)
+        {
+            foreach (Button button in _roleButtons)
+                button.gameObject.SetActive(pVisible);
         }
 
         private void CreateInventoryControls()
@@ -1633,29 +1515,9 @@ namespace AncientWarfare3.ui.windows
             if (_recycleModeButton != null)
             {
                 _recycleModeButton.gameObject.SetActive(pVisible);
-                SetButtonText(_recycleModeButton, _recycleMode
-                    ? Text("aw_historical_figure_cards_recycle_mode_on",
-                        "\u6c70\u6362\u4e2d")
-                    : Text("aw_historical_figure_cards_recycle_mode",
+                SetButtonText(_recycleModeButton,
+                    Text("aw_historical_figure_cards_recycle_mode",
                         "\u6c70\u6362"));
-            }
-            if (_recycleSubmitButton != null)
-            {
-                _recycleSubmitButton.gameObject.SetActive(pVisible && _recycleMode);
-                int selected = _recycleSelection.Values.Sum();
-                int required = RecycleRequired(SelectedRecycleRarity());
-                SetButtonText(_recycleSubmitButton, Format(
-                    "aw_historical_figure_cards_recycle_submit",
-                    "\u6c70\u6362 {0}/{1}", selected, required));
-                _recycleSubmitButton.interactable = required > 0 &&
-                    selected == required;
-            }
-            if (_recycleCancelButton != null)
-            {
-                _recycleCancelButton.gameObject.SetActive(pVisible && _recycleMode);
-                SetButtonText(_recycleCancelButton,
-                    Text("aw_historical_figure_cards_recycle_cancel",
-                        "\u53d6\u6d88"));
             }
         }
 
@@ -1700,10 +1562,14 @@ namespace AncientWarfare3.ui.windows
                 (_selectedCard.Rarity?.Probability ?? 0f) * 100f);
             _revealRarity.color = rarityColor;
             _revealBar.color = rarityColor;
-            _revealMeta.text = Format("aw_historical_figure_cards_reveal_meta",
-                "\u56fd\u53f7\uff1a{0}\n\u671d\u4ee3\uff1a{1}\n\u540d\u6c14\uff1a{2}",
+            _revealMeta.text = Format(
+                "aw_historical_figure_cards_reveal_meta_extended",
+                "\u56fd\u53f7\uff1a{0}\n\u671d\u4ee3\uff1a{1}\n\u540d\u6c14\uff1a{2}\n\u7c7b\u578b\uff1a{3}\n\u6765\u6e90\uff1a{4}",
                 _selectedCard.HistoricalKingdomName,
-                _selectedCard.DynastyName, _selectedCard.FameScore);
+                _selectedCard.DynastyName, _selectedCard.FameScore,
+                CardRoleName(_selectedCard),
+                string.IsNullOrEmpty(_selectedCard.CollectionId)
+                    ? "-" : _selectedCard.CollectionId);
             _revealBiography.text = Format(
                 "aw_historical_figure_cards_reveal_identity",
                 "\u751f\u5352\uff1a{0} - {1}\n\u7236\uff1a{2}\n\u6bcd\uff1a{3}\n\u80cc\u666f\uff1a{4}\n\n\u8be6\u7ec6\u4ecb\u7ecd\uff1a{5}",
@@ -1869,6 +1735,16 @@ namespace AncientWarfare3.ui.windows
             if (pRarity == null) return "-";
             return Text("aw_historical_figure_cards_rarity_" + pRarity.Id,
                 pRarity.DisplayName ?? pRarity.Id);
+        }
+
+        private static string CardRoleName(
+            HistoricalFigureCardDefinition pCard)
+        {
+            if (pCard?.Role == HistoricalFigureCardRole.Minister)
+                return pCard.IsMilitaryGeneral
+                    ? Text("aw_historical_figure_cards_type_general", "武将")
+                    : Text("aw_historical_figure_cards_type_civil", "文臣");
+            return Text("aw_historical_figure_cards_type_monarch", "君主");
         }
 
         private static float LensRadiusForViewport(float pViewportWidth)
@@ -2313,12 +2189,11 @@ namespace AncientWarfare3.ui.windows
             for (int i = 0; i < _sortButtons.Count; i++)
                 Position(_sortButtons[i].GetComponent<RectTransform>(),
                     14f + i * 67f, sortTop, 63f, 20f);
+            for (int i = 0; i < _roleButtons.Count; i++)
+                Position(_roleButtons[i].GetComponent<RectTransform>(),
+                    14f + i * 92f, sortTop, 86f, 20f);
             Position(_recycleModeButton?.GetComponent<RectTransform>(),
                 286f, sortTop, 72f, 20f);
-            Position(_recycleSubmitButton?.GetComponent<RectTransform>(),
-                364f, sortTop, 96f, 20f);
-            Position(_recycleCancelButton?.GetComponent<RectTransform>(),
-                466f, sortTop, 64f, 20f);
             float buttonTop = -height + 28f;
             Position(_draw.GetComponent<RectTransform>(), 14f, buttonTop,
                 100f, 28f);
