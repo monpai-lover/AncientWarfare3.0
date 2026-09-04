@@ -156,8 +156,26 @@ namespace AncientWarfare3.ui.windows
                 () => Instance?.Refresh());
         }
 
+        /// <summary>
+        ///     是否处于「部署流程中」——用于按钮显隐等 UI 判断。
+        ///     包含选点(Placement)和确认(PlacementConfirm)两个阶段。
+        /// </summary>
         internal static bool IsPlacementActive =>
             _state == DrawState.Placement || _state == DrawState.PlacementConfirm;
+
+        /// <summary>
+        ///     是否应该接管地图点击。**只在真正选点期间为真。**
+        ///
+        ///     <para>
+        ///     确认窗打开后状态是 <c>PlacementConfirm</c>,这时玩家的点击目标是
+        ///     窗口上的按钮,不是去选新格子。若此时仍然接管地图点击,「取消」/
+        ///     「关闭」那一次点击的 mouse-up 会先关窗(<c>isWindowActive()</c>
+        ///     随即变 false),接着被 <c>checkEmptyClick</c> 前缀捞走 →
+        ///     <c>SelectMapTile</c> 选中光标下的格子 → <c>_pendingConfirmWindow</c>
+        ///     置真 → 下一帧窗口又被开回来,表现就是「关掉马上又弹出来」。
+        ///     </para>
+        /// </summary>
+        internal static bool IsPickingTile => _state == DrawState.Placement;
 
         internal static void ResetTransientState()
         {
@@ -184,7 +202,7 @@ namespace AncientWarfare3.ui.windows
 
         internal static void SelectMapTile(WorldTile pTile)
         {
-            if (!IsPlacementActive || pTile?.data == null) return;
+            if (!IsPickingTile || pTile?.data == null) return;
             City city = pTile.zone_city;
             bool validCity = city?.data != null && !city.isRekt() &&
                 city.isAlive() && city.kingdom?.data != null &&
@@ -207,9 +225,6 @@ namespace AncientWarfare3.ui.windows
                     " building=" + pTile.hasBuilding());
                 return;
             }
-            ModClass.LogInfo("[AW3 cards deploy] tile accepted " +
-                pTile.x + "," + pTile.y + " city=" +
-                (validCity ? city.name : "unowned"));
             _selectedTile = pTile;
             _selectedCity = validCity ? city : null;
             _state = DrawState.PlacementConfirm;
@@ -783,10 +798,14 @@ namespace AncientWarfare3.ui.windows
             _deploymentId = Guid.NewGuid().ToString("N");
             _state = DrawState.Placement;
             GetComponent<ScrollWindow>()?.clickHide();
-            // 提示必须在关窗之后:clickHide 会走原版的关窗流程,
-            // 期间 WorldTip 会被收起,先弹的提示会被一起吃掉。
-            // 没有选中神力时原版不会走 clickedFinal,选点前缀收不到点击,
-            // 所以这条提示是玩家能否完成部署的关键。
+            // clickHide 会把 controls_lock_timer 设为 0.3s,该 timer 归零前
+            // updateControls 的整个点击分支都被跳过 —— 表现就是点完「部署」
+            // 还要等约 0.3 秒才能点图。选点已有 IsPickingTile 状态机把关,
+            // 不需要这道防误触延迟,直接清零。
+            if (World.world?.player_control != null)
+                World.world.player_control.controls_lock_timer = 0f;
+            // 提示必须在关窗之后:clickHide 走原版关窗流程,期间 WorldTip 会被
+            // 收起,先弹的提示会被一起吃掉。
             HistoricalFigureCardPlacementPowerService.ShowPlacementHint();
         }
 
@@ -835,6 +854,9 @@ namespace AncientWarfare3.ui.windows
             if (!IsPlacementActive) return;
             _selectedTile = null;
             _selectedCity = null;
+            // 未消费的开窗请求必须一并清掉,否则下一帧 TickPendingConfirmWindow
+            // 还会把确认窗开回来。
+            _pendingConfirmWindow = false;
             _state = DrawState.Details;
             Refresh();
         }

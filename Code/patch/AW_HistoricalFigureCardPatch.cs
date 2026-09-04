@@ -29,12 +29,9 @@ namespace AncientWarfare3.patch
         private static bool ClickedFinal_Prefix(Vector2Int pPos, GodPower pPower,
             bool pTrack)
         {
-            if (!HistoricalFigureDrawWindow.IsPlacementActive) return true;
+            if (!HistoricalFigureDrawWindow.IsPickingTile) return true;
             if (MapBox.isRenderMiniMap()) return true;
             WorldTile tile = World.world?.GetTile(pPos.x, pPos.y);
-            ModClass.LogInfo("[AW3 cards deploy] clickedFinal intercepted pos=" +
-                pPos.x + "," + pPos.y + " power=" + (pPower?.id ?? "null") +
-                " tile=" + (tile == null ? "null" : "ok"));
             HistoricalFigureDrawWindow.SelectMapTile(tile);
             return false;
         }
@@ -56,15 +53,40 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(PlayerControl), "clickedStart")]
         private static bool ClickedStart_Prefix()
         {
-            if (!HistoricalFigureDrawWindow.IsPlacementActive) return true;
+            if (!HistoricalFigureDrawWindow.IsPickingTile) return true;
             if (MapBox.isRenderMiniMap()) return true;
             if (!PixelDetector.GetSpritePixelColorUnderMousePointer(
                     World.world, out Vector2Int pos) || pos.x == -1)
                 return false;
             WorldTile tile = World.world?.GetTile(pos.x, pos.y);
-            ModClass.LogInfo("[AW3 cards deploy] clickedStart intercepted pos=" +
-                pos.x + "," + pos.y +
-                " tile=" + (tile == null ? "null" : "ok"));
+            HistoricalFigureDrawWindow.SelectMapTile(tile);
+            return false;
+        }
+
+        /// <summary>
+        ///     没选中任何神力时的兜底兜底。
+        ///
+        ///     <para>
+        ///     原版 <c>PlayerControl.Update</c> 分支是
+        ///     <c>if (!isAnyPowerSelected()) checkEmptyClick(); else … clickedStart()</c>。
+        ///     之前只挂了 <c>clickedStart</c> / <c>clickedFinal</c> 前缀,覆盖「已选神力」
+        ///     的那条路;没选神力时点击走 <c>checkEmptyClick</c>,既不拦也不放,
+        ///     玩家点图无任何反馈 —— 这正是在部署选点状态下「点了没反应、没弹窗」的
+        ///     主因。这里把 <c>checkEmptyClick</c> 也拦截:选点期间无论是否选了神力,
+        ///     点地图都路由到 <c>SelectMapTile</c>。
+        ///     </para>
+        /// </summary>
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(PlayerControl), "checkEmptyClick")]
+        private static bool CheckEmptyClick_Prefix()
+        {
+            if (!HistoricalFigureDrawWindow.IsPickingTile) return true;
+            if (MapBox.isRenderMiniMap()) return true;
+            if (!PixelDetector.GetSpritePixelColorUnderMousePointer(
+                    World.world, out Vector2Int pos) || pos.x == -1)
+                return false;
+            WorldTile tile = World.world?.GetTile(pos.x, pos.y);
             HistoricalFigureDrawWindow.SelectMapTile(tile);
             return false;
         }
@@ -100,7 +122,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(PlayerControl), nameof(PlayerControl.isOverUI))]
         private static void IsOverUI_Postfix(ref bool __result)
         {
-            if (!HistoricalFigureDrawWindow.IsPlacementActive) return;
+            if (!HistoricalFigureDrawWindow.IsPickingTile) return;
             if (ScrollWindow.isWindowActive()) return;
             __result = false;
         }

@@ -87,4 +87,4 @@ aw_historical_figure_cards_recycle_same_rarity,汰换卡片必须使用同品质
 aw_historical_figure_cards_recycle_incomplete,请按要求数量选择同品质卡片,Select the required number of cards with the same rarity,請按要求數量選擇同品質卡片
 aw_historical_figure_cards_recycle_failed,汰换失败,Trade-up failed,汰換失敗
 aw_historical_figure_cards_recycle_gold_locked,金色卡不可汰换,Gold cards cannot be traded up,金色卡不可汰換
-aw_historical_figure_cards_placement_hint,请先在下方选中「放置夏人」神力，再点击地图选择部署位置,Select the Spawn Xia power on the toolbar and then click the map to choose a deployment tile,請先在下方選中「放置夏人」神力，再點擊地圖選擇部署位置
+aw_historical_figure_cards_placement_hint,请点击地图选择部署位置（文明城市或无主陆地）,Click the map to choose a deployment tile (a civilised city or unclaimed land),請點擊地圖選擇部署位置（文明城市或無主陸地）
