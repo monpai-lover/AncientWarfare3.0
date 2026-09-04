@@ -798,10 +798,15 @@ namespace AncientWarfare3.ui.windows
             _deploymentId = Guid.NewGuid().ToString("N");
             _state = DrawState.Placement;
             GetComponent<ScrollWindow>()?.clickHide();
-            // clickHide 会把 controls_lock_timer 设为 0.3s,该 timer 归零前
-            // updateControls 的整个点击分支都被跳过 —— 表现就是点完「部署」
-            // 还要等约 0.3 秒才能点图。选点已有 IsPickingTile 状态机把关,
-            // 不需要这道防误触延迟,直接清零。
+            // 关窗后必须把这两样都清掉,否则点图会有肉眼可见的延迟:
+            //   1. clickHide 把 controls_lock_timer 设成 0.3s,归零前
+            //      updateControls 的整个点击分支被跳过;
+            //   2. hide tween(0.02s 延迟 + 0.1s 时长)跑完之前
+            //      ScrollWindow.isAnimationActive() 为真,于是
+            //      MapBox.isGameplayControlsLocked() 也为真 —— updateControls
+            //      在它为真时直接 return,点击同样被吞。
+            // 选点已有 IsPickingTile 状态机把关,这两道防误触都不需要。
+            ScrollWindow.finishAnimations();
             if (World.world?.player_control != null)
                 World.world.player_control.controls_lock_timer = 0f;
             // 提示必须在关窗之后:clickHide 走原版关窗流程,期间 WorldTip 会被
@@ -838,14 +843,22 @@ namespace AncientWarfare3.ui.windows
                     result.KingdomName);
                 _selectedTile = null;
                 _selectedCity = null;
+                _pendingConfirmWindow = false;
                 _state = DrawState.Details;
+                // \u90e8\u7f72\u6210\u529f\u540e\u73a9\u5bb6\u60f3\u770b\u7684\u662f\u521a\u843d\u5730\u7684\u4eba\u7269,\u4e0d\u662f\u518d\u5f39\u56de\u5361\u7247\u8be6\u60c5\u3002
+                // \u5173\u7a97\u628a\u89c6\u91ce\u4ea4\u8fd8\u7ed9\u5730\u56fe,\u5e76\u7528\u4e00\u6761\u5de5\u5177\u680f\u63d0\u793a\u56de\u62a5\u7ed3\u679c\u3002
+                Refresh();
+                try
+                {
+                    WorldTip.showNow(_status.text, pTranslate: false, "top", 4f);
                 }
-            else
-            {
-                _status.text = Format("aw_historical_figure_cards_deploy_failed",
-                    "\u90e8\u7f72\u5931\u8d25\uff1a{0}", result.Error);
-                _state = DrawState.Placement;
+                catch { }
+                GetComponent<ScrollWindow>()?.clickHide();
+                return;
             }
+            _status.text = Format("aw_historical_figure_cards_deploy_failed",
+                "\u90e8\u7f72\u5931\u8d25\uff1a{0}", result.Error);
+            _state = DrawState.Placement;
             Refresh();
         }
 
