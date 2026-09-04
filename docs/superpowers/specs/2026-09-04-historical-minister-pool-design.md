@@ -20,6 +20,7 @@
 ```csharp
 public enum HistoricalFigureCardMinisterType
 {
+    None,
     CivilOfficial,
     MilitaryGeneral
 }
@@ -36,7 +37,7 @@ public enum HistoricalFigureCardMinisterType
 - 背景简介和详细传记
 - `IsMilitaryGeneral` 便捷判断
 
-君主卡的 `MinisterType` 使用默认值，不参与武将部署分支。大臣卡必须显式配置文臣或武将类型。
+君主卡的 `MinisterType` 使用 `None`，不参与武将部署分支。大臣卡必须显式配置文臣或武将类型。
 
 ### 历史数据标准
 
