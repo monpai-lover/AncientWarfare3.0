@@ -92,6 +92,34 @@ namespace AncientWarfare3.patch
         }
 
         /// <summary>
+        ///     卡片降临时把历史国号直接种进建国流程,不走「先随机后改名」。
+        ///
+        ///     <para>
+        ///     原版 <c>Kingdom.newCivKingdom</c> 里是
+        ///     <c>generateName(MetaType.Kingdom, …)</c> → <c>setName(随机名)</c>,
+        ///     紧接着 <c>KingdomManager.makeNewCivKingdom</c> 就
+        ///     <c>WorldLog.logNewKingdom(kingdom)</c>。部署服务的
+        ///     <c>setName(历史国号)</c> 排在这之后 —— 随机名此时已经落进世界日志、
+        ///     编年史与归档,数据被污染。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     这里在 <c>newCivKingdom</c> 的后置里(早于 logNewKingdom)就把名字改
+        ///     成历史国号,让随机名从未对外可见。仅在部署作用域内生效,
+        ///     其余建国路径不受影响。
+        ///     </para>
+        /// </summary>
+        [HarmonyPostfix]
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.newCivKingdom))]
+        private static void NewCivKingdom_Postfix(Kingdom __instance)
+        {
+            string name = HistoricalFigureCardDeploymentService.PendingKingdomName;
+            if (string.IsNullOrEmpty(name) || __instance?.data == null) return;
+            __instance.setName(name, pTrack: false);
+        }
+
+        /// <summary>
         ///     每帧驱动「延后一帧开确认窗」。窗口在选点期间是隐藏的,
         ///     它自己的 Update 不跑,所以挂在原版 PlayerControl 上。
         /// </summary>

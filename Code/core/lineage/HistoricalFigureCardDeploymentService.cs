@@ -74,8 +74,16 @@ namespace AncientWarfare3.core.lineage
     public static class HistoricalFigureCardDeploymentService
     {
         [ThreadStatic] private static int _scopeDepth;
+        [ThreadStatic] private static string _pendingKingdomName;
 
         public static bool IsActive => _scopeDepth > 0;
+
+        /// <summary>
+        ///     本次降临要用的历史国号。<c>AW_HistoricalFigureCardPatch</c> 在
+        ///     <c>Kingdom.newCivKingdom</c> 的后置里读它,赶在
+        ///     <c>WorldLog.logNewKingdom</c> 之前把随机国名替换掉。
+        /// </summary>
+        internal static string PendingKingdomName => _pendingKingdomName;
 
         public static HistoricalFigureCardDeploymentResult TryDeploy(
             HistoricalFigureCardDeploymentRequest pRequest)
@@ -155,6 +163,11 @@ namespace AncientWarfare3.core.lineage
 
                 using (OpenScope())
                 {
+                    // 建国前先把历史国号挂上。AW_HistoricalFigureCardPatch 的
+                    // Kingdom.newCivKingdom 后置会读它,赶在 logNewKingdom 之前
+                    // 覆盖掉原版生成的随机国名 —— 否则随机名会先落进世界日志和
+                    // 编年史,再被我们改掉,留下一条污染记录。
+                    _pendingKingdomName = definition.HistoricalKingdomName;
                     actor = World.world.units.createNewUnit(asset.id,
                         targetTile, pMiracleSpawn: city == null, 0f,
                         FindXiaSubspecies(city), null,
@@ -476,6 +489,9 @@ namespace AncientWarfare3.core.lineage
                 if (_disposed) return;
                 _disposed = true;
                 if (_scopeDepth > 0) _scopeDepth--;
+                // 国号覆盖只在建国这一段有效,出了作用域必须清掉,
+                // 免得影响后续任何一次普通建国。
+                if (_scopeDepth == 0) _pendingKingdomName = null;
             }
         }
 
