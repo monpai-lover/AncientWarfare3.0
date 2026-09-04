@@ -18,10 +18,9 @@ namespace AncientWarfare3.patch
 
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(ActionLibrary), nameof(ActionLibrary.clickUnity))]
-        private static Exception ClickUnityFinalizer(Exception __exception)
+        private static void ClickUnityFinalizer()
         {
             ManualAllianceToolScope.Exit();
-            return __exception;
         }
 
         [HarmonyPrefix]

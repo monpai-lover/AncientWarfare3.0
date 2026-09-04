@@ -148,15 +148,17 @@ namespace AncientWarfare3.patch
             }
         }
 
+        // void 而非 Exception:见 AW_RestorationPatch 里的说明。Actor.die 上的
+        // 三个 finalizer 必须一起是 void,才能保住异常的原始栈。
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(Actor), "die",
             new[] { typeof(bool), typeof(AttackType), typeof(bool), typeof(bool) })]
-        private static Exception ActorDie_Finalizer(Actor __instance, bool __state,
-            bool pDestroy, Exception __exception)
+        private static void ActorDie_Finalizer(Actor __instance, bool __state,
+            bool pDestroy)
         {
-            if (AW3MultiplayerReplicaScope.IsApplying) return __exception;
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (!ActorDeathInvocationRules.ShouldProcess(__state,
-                    __instance?.isAlive() ?? false)) return __exception;
+                    __instance?.isAlive() ?? false)) return;
             long diagnostic = RuntimePerformanceDiagnostic.BeginDeathStage(
                 ActorDeathPerformanceStage.SchoolDeath);
             try
@@ -188,7 +190,6 @@ namespace AncientWarfare3.patch
                 RuntimePerformanceDiagnostic.EndDeathStage(
                     ActorDeathPerformanceStage.SchoolDeath, diagnostic);
             }
-            return __exception;
         }
 
         [HarmonyPrefix]

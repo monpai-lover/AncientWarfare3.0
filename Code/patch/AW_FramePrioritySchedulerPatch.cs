@@ -271,15 +271,21 @@ namespace AncientWarfare3.patch
             }
         }
 
+        // 声明成 void 而不是返回 Exception:HarmonyX 在异常路径上只有当该方法
+        // 的**全部** finalizer 都是 void 时才发 Rethrow,否则发 `throw ex`,
+        // Mono 上会把栈重置掉。这里既要打日志又要保住原始栈,只能是 void。
+        // 同一个 MapBox.Update 上的
+        // AW_RuntimeBenchmarkAutoLoadPatch.CheckBenchmarkAutoLoadTimeout_Finalizer
+        // 也必须保持 void,否则这里的努力白费。
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.Update))]
-        private static Exception FinalizeFailedMapBoxUpdate(
+        private static void FinalizeFailedMapBoxUpdate(
             Exception __exception,
             ref MapBoxUpdateScope __state)
         {
             if (__exception == null)
             {
-                return null;
+                return;
             }
 
             try
@@ -323,7 +329,6 @@ namespace AncientWarfare3.patch
             ModClass.LogError(
                 "AW MapBox.Update failed; scheduler stopped and game paused: " +
                 __exception);
-            return __exception;
         }
 
         private static void CloseHostMeasurement(

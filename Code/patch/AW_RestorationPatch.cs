@@ -45,15 +45,19 @@ namespace AncientWarfare3.patch
             RoyalClaimService.OnActorKingdomChanged(__instance);
         }
 
+        // void 而非 Exception:HarmonyX 只要 Actor.die 上有一个 finalizer 返回
+        // Exception,异常路径就会 `throw ex` 而不是 Rethrow,Mono 上原始栈全丢。
+        // AW_ActorDeathPatch / AW_HistoricalSchoolPatch 上的两个同名 finalizer
+        // 也必须一起保持 void。
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(Actor), "die",
             new[] { typeof(bool), typeof(AttackType), typeof(bool), typeof(bool) })]
-        private static Exception ActorDie_Finalizer(Actor __instance,
-            bool __state, Exception __exception)
+        private static void ActorDie_Finalizer(Actor __instance,
+            bool __state)
         {
-            if (AW3MultiplayerReplicaScope.IsApplying) return __exception;
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (!ActorDeathInvocationRules.ShouldProcess(__state,
-                    __instance?.isAlive() ?? false)) return __exception;
+                    __instance?.isAlive() ?? false)) return;
             long diagnostic = RuntimePerformanceDiagnostic.BeginDeathStage(
                 ActorDeathPerformanceStage.RoyalClaim);
             try
@@ -70,7 +74,6 @@ namespace AncientWarfare3.patch
                 RuntimePerformanceDiagnostic.EndDeathStage(
                     ActorDeathPerformanceStage.RoyalClaim, diagnostic);
             }
-            return __exception;
         }
 
         [HarmonyPrefix]

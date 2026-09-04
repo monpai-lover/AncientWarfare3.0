@@ -29,7 +29,7 @@ namespace AncientWarfare3.patch
 
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(ActorManager), nameof(ActorManager.createNewUnit))]
-        private static Exception ActorManagerCreateNewUnitCapture_Finalizer(
+        private static void ActorManagerCreateNewUnitCapture_Finalizer(
             HistoricalSchoolActorSpawnCapture.FactoryFrame __state,
             Exception __exception,
             string pStatsID,
@@ -50,7 +50,6 @@ namespace AncientWarfare3.patch
                     " actor_asset=" + (AssetManager.actor_library?.get(pStatsID) != null));
             }
             HistoricalSchoolActorSpawnCapture.ExitFactory(__state);
-            return __exception;
         }
 
         [HarmonyTranspiler]
@@ -105,12 +104,10 @@ namespace AncientWarfare3.patch
 
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(ActorManager), "addObject")]
-        private static Exception ActorManagerAddObjectCapture_Finalizer(
-            HistoricalSchoolActorSpawnCapture.RegistrationFrame __state,
-            Exception __exception)
+        private static void ActorManagerAddObjectCapture_Finalizer(
+            HistoricalSchoolActorSpawnCapture.RegistrationFrame __state)
         {
             HistoricalSchoolActorSpawnCapture.ExitRegistration(__state);
-            return __exception;
         }
     }
 }

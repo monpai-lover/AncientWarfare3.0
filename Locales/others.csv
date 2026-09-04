@@ -174,6 +174,7 @@ aw_city_history_entry,城市历史,City History,城市歷史
 aw_view_city_history,查看该城的易主历史,View this city's transfer history,查看該城的易主歷史
 aw_tree_expand,展开,Expand,展開
 aw_tree_collapse,收缩,Collapse,收縮
+aw_tree_reset_view,复位,Reset,復位
 aw_back_big_tree,← 回氏族大树,← Clan Tree,← 回氏族大樹
 aw_clan_big_tree,氏族大树,Clan Tree,氏族大樹
 aw_family_tree_short,家族树,Family Tree,家族樹

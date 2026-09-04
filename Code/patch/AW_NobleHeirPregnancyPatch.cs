@@ -99,10 +99,9 @@ namespace AncientWarfare3.patch
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(BabyMaker),
             nameof(BabyMaker.startMiracleBirth))]
-        private static Exception MiracleBirth_Finalizer(Exception __exception)
+        private static void MiracleBirth_Finalizer()
         {
             ExitNonSexualPregnancyScope();
-            return __exception;
         }
 
         [HarmonyPrefix]
@@ -116,11 +115,9 @@ namespace AncientWarfare3.patch
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(BabyMaker),
             nameof(BabyMaker.startSoulborneBirth))]
-        private static Exception SoulborneBirth_Finalizer(
-            Exception __exception)
+        private static void SoulborneBirth_Finalizer()
         {
             ExitNonSexualPregnancyScope();
-            return __exception;
         }
 
         private static void ExitNonSexualPregnancyScope()

@@ -232,13 +232,15 @@ namespace AncientWarfare3.patch
             CheckPendingBenchmarkAutoLoadTimeout();
         }
 
+        // void 而非 Exception:见 AW_FramePrioritySchedulerPatch 里的说明,
+        // MapBox.Update 上任何一个非 void finalizer 都会让 HarmonyX 用
+        // `throw ex` 代替 Rethrow,Mono 上原始栈会被抹掉。
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.Update))]
-        private static Exception CheckBenchmarkAutoLoadTimeout_Finalizer(Exception __exception)
+        private static void CheckBenchmarkAutoLoadTimeout_Finalizer(Exception __exception)
         {
             if (__exception != null)
                 CheckPendingBenchmarkAutoLoadTimeout();
-            return __exception;
         }
 
         private static void CheckPendingBenchmarkAutoLoadTimeout()

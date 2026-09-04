@@ -588,6 +588,23 @@ namespace AncientWarfare3.core.court
                 .Concat(CourtProfileRegistry.OfficeIdsForLayer(pKingdom,
                     CourtOfficeLayer.Military))
                 .ToArray();
+            // 自定义官场里既有 central 也有 censor / feudatory 层 —— 但
+            // CentralOfficeIdsForCurrentProfile 只精确匹配 "central",于是
+            // 用户自定义的「监察」层官职(设置图里「官场层级=监察」)从 expected
+            // 里消失:在职的(604)被 continue,空缺的(648)不生成,界面上就是
+            // 缺一格。customGraph 下应把自定义模板里全部非 city/county 层的
+            // 权威官职都纳入 expected。
+            if (CustomCourtRuntime.HasInstance(pKingdom))
+                expected = CustomCourtRuntime.Resolver.ResolveGraph(
+                        CustomCourtRuntime.KingdomKey(pKingdom),
+                        CourtProfileRegistry.For(pKingdom),
+                        CourtInstitutionService.GetInstitution(pKingdom))
+                    .Where(p => p != null &&
+                        !string.Equals(p.Layer, CourtOfficeLayer.City,
+                            StringComparison.Ordinal) &&
+                        !string.Equals(p.Layer, CourtOfficeLayer.County,
+                            StringComparison.Ordinal))
+                    .Select(p => p.Id).ToArray();
             var expectedOrder = new Dictionary<string, int>();
             for (int i = 0; i < expected.Length; i++) expectedOrder[expected[i]] = i;
             bool customGraph = CustomCourtRuntime.HasInstance(pKingdom);

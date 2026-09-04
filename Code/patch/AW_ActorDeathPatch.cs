@@ -377,17 +377,16 @@ namespace AncientWarfare3.patch
             }
         }
 
+        // void 而非 Exception:见 AW_RestorationPatch 里的说明。
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(Actor), "die", new[] { typeof(bool), typeof(AttackType), typeof(bool), typeof(bool) })]
-        public static Exception Die_Finalizer(Actor __instance, DieState __state,
-            Exception __exception)
+        public static void Die_Finalizer(Actor __instance, DieState __state)
         {
             try
             {
                 if (__state != null &&
                     DyingKingActorId == __state.DyingKingActorId)
                     DyingKingActorId = -1L;
-                return __exception;
             }
             finally
             {

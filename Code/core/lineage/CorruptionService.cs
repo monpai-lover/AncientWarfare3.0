@@ -21,17 +21,21 @@ namespace AncientWarfare3.core.lineage
             if (lastYear == year) return;
 
             List<City> cities = LiveCities(pKingdom);
+            // 一次性读取在任官员 city 层计数 + 监察官统计,避免两次 GetActiveOfficers。
+            // limit 用较大的 256 下界,保证影响力可能偏低的中央监察官不被截断。
+            List<CourtOfficerView> activeOfficers = CourtService
+                .GetActiveOfficers(pKingdom,
+                    Math.Max(256, cities.Count * 8));
+            Dictionary<long, int> officerCounts = activeOfficers
+                .Where(item => item != null &&
+                    item.layer == CourtOfficeLayer.City && item.city_id >= 0)
+                .GroupBy(item => item.city_id)
+                .ToDictionary(group => group.Key, group => group.Count());
             Dictionary<long, CityBureauView> bureaus = CourtService
                 .GetCityBureaus(pKingdom, Math.Max(32, cities.Count + 8))
                 .Where(item => item != null && item.city_id >= 0)
                 .GroupBy(item => item.city_id)
                 .ToDictionary(group => group.Key, group => group.First());
-            Dictionary<long, int> officerCounts = CourtService
-                .GetActiveOfficers(pKingdom, Math.Max(96, cities.Count * 8))
-                .Where(item => item != null &&
-                    item.layer == CourtOfficeLayer.City && item.city_id >= 0)
-                .GroupBy(item => item.city_id)
-                .ToDictionary(group => group.Key, group => group.Count());
 
             pKingdom.data.get(LineageKeys.CORRUPTION_CLEANUP_ACTIVE,
                 out bool cleanupActive, false);
@@ -42,14 +46,18 @@ namespace AncientWarfare3.core.lineage
             long totalPopulation = 0L;
             int highestScore = 0;
             long highestCityId = -1L;
+            // 地方监察官的逐城统计,先在城层循环前声明,循环内按城压官方压力。
+            var localCensorStats = new Dictionary<long, CensorLocalFacts>();
             foreach (City city in cities)
             {
                 CityEconomySnapshot economy = CityEconomyService.GetSnapshot(city);
                 int population = SafePopulation(city);
                 bureaus.TryGetValue(city.id, out CityBureauView bureau);
                 officerCounts.TryGetValue(city.id, out int officers);
+                localCensorStats.TryGetValue(city.id, out CensorLocalFacts censors);
                 CorruptionCityPressure pressure = CalculateCityPressure(city,
-                    economy, bureau, officers, population, cleanupMultiplier);
+                    economy, bureau, officers, population, cleanupMultiplier,
+                    censors.Count, censors.Influence);
                 int cityScore = UpdateCity(city, year, pressure);
                 int weight = Math.Max(1, population);
                 weightedScore += (long)cityScore * weight;
@@ -64,7 +72,43 @@ namespace AncientWarfare3.core.lineage
             int average = CorruptionRules.WeightedAverage(weightedScore,
                 totalPopulation);
             CourtSnapshot court = CourtService.GetSnapshot(pKingdom);
-            float centralPressure = CentralPressure(court) * cleanupMultiplier;
+            // 监察官的腐败抑制,分中央/地方两套:
+            //  - 中央监察官(在朝廷任职的 censor 层官职,如都察院监察官、御史)
+            //    → 压中央腐败压力。
+            //  - 地方监察官(在城/县任职但官职定义为 censor 层,如巡按/按察使)
+            //    → 压所在城的城层腐败压力,但**反腐难度加大**(折减上限低、
+            //    受官府效率制约,官府越腐越难查)。
+            // 识别监察性质:layer==censor(中央监察)或官职定义 Layer==censor
+            // (覆盖地方监察)或 office_id==censor(内置御史)。
+            int censorialCount = 0;
+            float censorialInfluence = 0f;
+            foreach (CourtOfficerView officer in activeOfficers)
+            {
+                if (officer == null ||
+                    !IsCensorial(pKingdom, officer)) continue;
+                bool local = officer.city_id >= 0 &&
+                    (string.Equals(officer.layer,
+                         CourtOfficeLayer.City,
+                         System.StringComparison.Ordinal) ||
+                     string.Equals(officer.layer,
+                         CourtOfficeLayer.County,
+                         System.StringComparison.Ordinal));
+                float influence = Math.Max(0f, officer.influence);
+                if (local)
+                {
+                    localCensorStats.TryGetValue(officer.city_id,
+                        out CensorLocalFacts facts);
+                    localCensorStats[officer.city_id] = new CensorLocalFacts(
+                        facts.Count + 1, facts.Influence + influence);
+                }
+                else
+                {
+                    censorialCount++;
+                    censorialInfluence += influence;
+                }
+            }
+            float centralPressure = CentralPressure(court, censorialCount,
+                    censorialInfluence) * cleanupMultiplier;
             float fiscalPressure = FiscalPressure(pKingdom, cities) *
                                    cleanupMultiplier;
             pKingdom.data.get(LineageKeys.CORRUPTION_SCORE,
@@ -227,7 +271,8 @@ namespace AncientWarfare3.core.lineage
 
         private static CorruptionCityPressure CalculateCityPressure(City pCity,
             CityEconomySnapshot pEconomy, CityBureauView pBureau,
-            int pOfficerCount, int pPopulation, float pCleanupMultiplier)
+            int pOfficerCount, int pPopulation, float pCleanupMultiplier,
+            int pLocalCensorCount = 0, float pLocalCensorInfluence = 0f)
         {
             float population = Math.Max(1, pPopulation);
             float taxPerCapita = pEconomy?.has_record == true
@@ -238,6 +283,10 @@ namespace AncientWarfare3.core.lineage
             float efficiency = Clamp(pBureau?.efficiency ?? 25f, 0f, 100f);
             float official = CorruptionRules.LocalOfficialPressure(
                 pBureau != null, pOfficerCount, slots, efficiency);
+            // 地方监察官反腐:压在城层官方压力上,但**难度加大** ——
+            // 折减上限远低于中央,且受官府效率制约(官府越腐,监察越查不动)。
+            official = CorruptionRules.ApplyLocalCensorRelief(official,
+                pLocalCensorCount, pLocalCensorInfluence, efficiency);
 
             float unrest = pEconomy?.has_record == true
                 ? Clamp(pEconomy.unrest_risk, 0f, 100f) : 10f;
@@ -256,12 +305,19 @@ namespace AncientWarfare3.core.lineage
                 food * pCleanupMultiplier);
         }
 
-        private static float CentralPressure(CourtSnapshot pCourt)
+        private static float CentralPressure(CourtSnapshot pCourt,
+            int pCensorialCount, float pCensorialInfluence)
         {
             if (pCourt == null) return 12f;
-            return Clamp((100f - Clamp(pCourt.efficiency, 0f, 100f)) * 0.12f +
-                         (100f - Clamp(pCourt.concentration, 0f, 100f)) * 0.05f,
+            float basePressure = Clamp(
+                (100f - Clamp(pCourt.efficiency, 0f, 100f)) * 0.12f +
+                (100f - Clamp(pCourt.concentration, 0f, 100f)) * 0.05f,
                 0f, 17f);
+            // 监察官反腐:每有一位在任监察官,中央腐败压力按影响力折减(非线性,
+            // 边际递减),上限为把基础压力压到近零。没有监察官时完全不加成。
+            float relief = CorruptionRules.CensorialPressureRelief(
+                pCensorialCount, pCensorialInfluence);
+            return Clamp(basePressure - relief, 0f, 17f);
         }
 
         private static float FiscalPressure(Kingdom pKingdom,
@@ -311,11 +367,48 @@ namespace AncientWarfare3.core.lineage
                    pKingdom.isCiv() && !pKingdom.isNeutral();
         }
 
+        /// <summary>
+        ///     判断某在任官员是否是监察性质的官职(不论中央还是地方任职)。
+        ///     识别三条:layer 直接是 censor(中央监察层)、官职定义 Resolution 的
+        ///     Layer 是 censor(覆盖地方监察官职)、office_id 是内置御史 censor。
+        /// </summary>
+        private static bool IsCensorial(Kingdom pKingdom,
+            CourtOfficerView pOfficer)
+        {
+            if (pOfficer == null) return false;
+            if (string.Equals(pOfficer.layer, CourtOfficeLayer.Censor,
+                    System.StringComparison.Ordinal)) return true;
+            if (string.Equals(pOfficer.office_id, CourtOfficeId.Censor,
+                    System.StringComparison.Ordinal)) return true;
+            try
+            {
+                CourtOfficeDefinition definition =
+                    CourtProfileRegistry.FindOffice(pKingdom,
+                        pOfficer.office_id);
+                return definition != null &&
+                       string.Equals(definition.Layer,
+                           CourtOfficeLayer.Censor,
+                           System.StringComparison.Ordinal);
+            }
+            catch { return false; }
+        }
+
         private static bool CanMutate()
         {
             return PeasantRebelRouteRules.CanMutateAuthority(
                        AW3MultiplayerReplicaScope.IsReplicaSession) &&
                    !AW3MultiplayerReplicaScope.IsApplying;
+        }
+
+        private readonly struct CensorLocalFacts
+        {
+            public readonly int Count;
+            public readonly float Influence;
+            public CensorLocalFacts(int count, float influence)
+            {
+                Count = count;
+                Influence = influence;
+            }
         }
 
         private readonly struct CorruptionCityPressure

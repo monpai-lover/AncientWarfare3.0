@@ -27,10 +27,9 @@ namespace AncientWarfare3.patch
         [HarmonyFinalizer]
         [HarmonyPriority(Priority.Last)]
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.clearWorld))]
-        private static Exception ClearWorld_Finalizer(Exception __exception)
+        private static void ClearWorld_Finalizer()
         {
             AWAsyncClearWorldGuard.EndInvocation();
-            return __exception;
         }
     }
 }

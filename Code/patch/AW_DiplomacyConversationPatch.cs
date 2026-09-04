@@ -47,11 +47,10 @@ namespace AncientWarfare3.patch
 
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(AllianceManager), nameof(AllianceManager.newAlliance))]
-        private static Exception NewAllianceFinalizer(Exception __exception,
+        private static void NewAllianceFinalizer(
             AllianceCreationFrame __state)
         {
             ReleaseCreationFrame(__state);
-            return __exception;
         }
 
         [HarmonyPrefix]

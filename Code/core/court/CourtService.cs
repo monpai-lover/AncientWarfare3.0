@@ -2639,6 +2639,7 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_SCHOOL, pSchoolId ?? "");
             pActor.data.set(LineageKeys.COURT_CITY_ID, pCity?.data?.id ?? -1L);
             pActor.data.set(LineageKeys.COURT_COUNTY_ID, pCountyId);
+            RelocateCountyMagistrate(pActor, pLayer, pOfficeId, pCity);
             if (!pActing && !pStateProjectionCommitted)
                 OfficialCareerStateService.ProjectAppointment(pActor, pKingdom,
                     pLayer, pOfficeId, pCity);
@@ -2688,6 +2689,46 @@ namespace AncientWarfare3.core.court
             if (cleanupPrior != null)
                 CourtVacancyReconciliationService.RegisterVacancy(cleanupPrior);
             return true;
+        }
+
+        /// <summary>
+        ///     县令要搬到县治(seat)所在的城市生活,不是只把
+        ///     <c>COURT_CITY_ID</c> 写进档案。州牧是城主(leader),走
+        ///     <c>joinCity + setLeader</c> 那条路;县令是**非首领**的地方官,
+        ///     <see cref="IsAuthoritativeCityLeaderOffice"/> 对它返回 false,
+        ///     于是那条「把它放进城里并设为城首」的路径从不触发,人一直待在
+        ///     原来的城、结衔也不进城。这里补上:县官上任时把自己迁到县治所在城。
+        ///
+        ///     只在任命提交后调用一次,且用
+        ///     <see cref="GovernorRotationRuntimeScope"/> 包住,避免
+        ///     <see cref="AW_PromotionPatch"/> 把这次纯岗位迁移误判成「新
+        ///     城主上任」触发谱系晋升。原版 <c>joinCity</c> 本身会顺带处理
+        ///     国籍/皇籍切换,这里不重复做。
+        /// </summary>
+        private static void RelocateCountyMagistrate(Actor pActor,
+            string pLayer, string pOfficeId, City pCity)
+        {
+            if (pActor?.data == null || pCity?.data == null ||
+                !string.Equals(pLayer, CourtOfficeLayer.County,
+                    StringComparison.Ordinal) ||
+                !string.Equals(pOfficeId, CourtOfficeId.CountyMagistrate,
+                    StringComparison.Ordinal)) return;
+            try
+            {
+                if (pActor.city == pCity) return;
+                using (GovernorRotationRuntimeScope.Enter())
+                {
+                    pActor.stopBeingWarrior();
+                    pActor.joinCity(pCity);
+                }
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "County magistrate relocation failed: actor=" +
+                    (pActor.data.id) + " city=" + (pCity.data.id) +
+                    " error=" + error.Message);
+            }
         }
 
         internal static OfficialCareerPrior CaptureRuntimeOfficerProjection(Actor pActor)

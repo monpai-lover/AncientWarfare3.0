@@ -105,6 +105,56 @@ namespace AncientWarfare3.core.lineage
                 vacancyRatio * 10f));
         }
 
+        /// <summary>
+        ///     监察官(censor 层)的中央腐败压力折减。每有一位在任监察官按影响力
+        ///     折减,边际递减 —— 第一位监察官作用最大,之后递减,符合「监察是
+        ///     降低腐败的制度性设计」。影响力为 0 或无人时折减为 0。
+        /// </summary>
+        public static float CensorialPressureRelief(int censorialCount,
+            float censorialInfluence)
+        {
+            if (censorialCount <= 0) return 0f;
+            float influence = Math.Max(0f, censorialInfluence);
+            // 影响力折算成等效监察压力折减:单官上限 4 分,影响力越高越接近上限。
+            float perOfficial = influence > 0f
+                ? 4f * (1f - (float)Math.Exp(-influence / 20f))
+                : 1f;
+            // 边际递减:第 N 位的贡献按 1/N 递减,总数逼近 6 分封顶。
+            float total = 0f;
+            for (int i = 0; i < censorialCount; i++)
+                total += perOfficial / (i + 1f);
+            return Math.Max(0f, Math.Min(6f, total));
+        }
+
+        /// <summary>
+        ///     地方监察官对**城层官方腐败压力**的折减。与中央不同,地方反腐
+        ///     难度加大:折减上限低(2 分 vs 中央 6 分),且受官府效率制约 ——
+        ///     官府效率越低(越糜烂),同样的监察官能查出的越少,折减越有限。
+        ///     这体现「天高皇帝远,地方监察的执行力先天弱于中央都察院」。
+        /// </summary>
+        public static float ApplyLocalCensorRelief(float officialPressure,
+            int localCensorCount, float localCensorInfluence,
+            float bureauEfficiency)
+        {
+            if (localCensorCount <= 0) return officialPressure;
+            float influence = Math.Max(0f, localCensorInfluence);
+            float perOfficial = influence > 0f
+                ? 2f * (1f - (float)Math.Exp(-influence / 25f))
+                : 0.5f;
+            float total = 0f;
+            for (int i = 0; i < localCensorCount; i++)
+                total += perOfficial / (i + 1f);
+            total = Math.Max(0f, Math.Min(2f, total));
+            // 官府效率制约:效率越高(官府越清明),监察官越能发挥;效率低
+            // (官府糜烂)时监察官难有作为,折减按 (100-效率)/100 折扣。
+            float boundedEfficiency = Math.Max(0f,
+                Math.Min(100f, float.IsNaN(bureauEfficiency) ? 0f
+                    : bureauEfficiency));
+            float effectiveness = 0.5f + 0.5f * boundedEfficiency / 100f;
+            float relief = total * effectiveness;
+            return Math.Max(0f, officialPressure - relief);
+        }
+
         private static void Mix(ref uint hash, ulong value)
         {
             unchecked

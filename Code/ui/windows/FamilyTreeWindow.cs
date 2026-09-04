@@ -64,6 +64,7 @@ namespace AncientWarfare3.ui.windows
         private Text _backText;
         private Button _expandButton;
         private Button _collapseButton;
+        private Button _resetViewButton;
         private Button _halfSiblingButton;
         private Text _halfSiblingText;
         private Button _renameClanButton;
@@ -78,6 +79,8 @@ namespace AncientWarfare3.ui.windows
         private const int MaterializationStepsPerFrame = 64;
         private bool _locateFound;
         private Vector2 _locateTarget;
+        private bool _resetAnchorReady;
+        private Vector2 _resetRootAnchor;
         private bool _commandPending;
         private bool _commandRefreshRequested;
         private bool _renameSurnameMode;
@@ -171,6 +174,7 @@ namespace AncientWarfare3.ui.windows
             ResetFoldState();
             _locateFound = false;
             _locateTarget = Vector2.zero;
+            _resetAnchorReady = false;
             _initialCenterRequested = false;
             _snapshotReadyForMaterialization = false;
             _intentState.CancelAll();
@@ -291,6 +295,7 @@ namespace AncientWarfare3.ui.windows
 
             _expandButton = MakeToolbarButton("ExpandLiveBranches", AW_L10n.Text("aw_tree_expand", "展开"), new Vector2(SIDE_RIGHT, -104), ExpandAllLiveBranches, SIDE_BUTTON_SIZE);
             _collapseButton = MakeToolbarButton("CollapseBranches", AW_L10n.Text("aw_tree_collapse", "收缩"), new Vector2(SIDE_RIGHT, -128), CollapseAllBranches, SIDE_BUTTON_SIZE);
+            _resetViewButton = MakeToolbarButton("ResetTreeView", AW_L10n.Text("aw_tree_reset_view", "复位"), new Vector2(SIDE_RIGHT, -152), ResetViewToAnchor, SIDE_BUTTON_SIZE);
             _halfSiblingButton = MakeToolbarButton("HalfSiblingRelations", "", new Vector2(SIDE_RIGHT, -54), ToggleHalfSiblingRelations, SIDE_BUTTON_SIZE);
             _renameClanButton = MakeToolbarButton("RenameVisibleClan", AW_L10n.Text("aw_rename_visible_clan", "\u6539\u6C0F"), new Vector2(SIDE_RIGHT, RENAME_TOP), ToggleRenameClanPanel, SIDE_BUTTON_SIZE);
             _renameSurnameButton = MakeToolbarButton("RenamePatrilinealSurname",
@@ -1336,6 +1341,47 @@ namespace AncientWarfare3.ui.windows
             float y = FamilyTreeViewportLayoutRules.CenterPanY(target.y,
                 NODE_H, LiveViewportHeight(), VIEWPORT_H);
             _canvasRect.anchoredPosition = new Vector2(x, y);
+            // 记录当前树根的布局锚点 —— 「复位」按钮靠它把被拖出画布的
+            // 族谱拉回视口中心。初开/定位时都刷新,保证复位目标始终是当前树。
+            _resetAnchorReady = true;
+            _resetRootAnchor = new Vector2(target.x, target.y);
+        }
+
+        /// <summary>
+        ///     把「复位」锚点刷成当前树根。「复位」= 把被拖出画布的族谱重新拉回
+        ///     视口中心。锚点用布局后的树根坐标(centerX/topY),而不是靠
+        ///     _canvasRect 当前位移反推 —— 后者在只拖动不重排时也是对的,但
+        ///     重排(展开/收起/跳转)后必须跟随新的根。
+        /// </summary>
+        private void RefreshResetAnchor(
+            FamilyTreeMaterializationRequest pRequest)
+        {
+            if (pRequest?.Root == null) return;
+            Vector2 target = pRequest.Mode == Mode.BigTree &&
+                             pRequest.LocateActorId >= 0 && _locateFound
+                ? _locateTarget
+                : new Vector2(pRequest.Root.centerX, pRequest.Root.topY);
+            _resetAnchorReady = true;
+            _resetRootAnchor = new Vector2(target.x, target.y);
+        }
+
+        /// <summary>把被拖出画布的族谱拉回视口中心,并复位缩放。</summary>
+        private void ResetViewToAnchor()
+        {
+            if (_canvasRect == null) return;
+            if (!_resetAnchorReady)
+            {
+                // 锚点还没就绪(极早期),退化为零位(左上),至少保证画布可见。
+                _canvasRect.anchoredPosition = Vector2.zero;
+                _canvasRect.localScale = Vector3.one;
+                return;
+            }
+            float x = FamilyTreeViewportLayoutRules.CenterPanX(
+                _resetRootAnchor.x, LiveViewportWidth(), VIEWPORT_W);
+            float y = FamilyTreeViewportLayoutRules.CenterPanY(
+                _resetRootAnchor.y, NODE_H, LiveViewportHeight(), VIEWPORT_H);
+            _canvasRect.anchoredPosition = new Vector2(x, y);
+            _canvasRect.localScale = Vector3.one;
         }
 
         private float LiveViewportWidth()
@@ -1798,6 +1844,7 @@ namespace AncientWarfare3.ui.windows
                 ApplyInitialCenterPan(pRequest);
             else if (pRequest.PreservePan)
                 _canvasRect.anchoredPosition = pRequest.SavedPan;
+            RefreshResetAnchor(pRequest);
             CommitInitialCenter(pRequest);
             _intentState.Commit(pRequest.IntentLease);
             yield return null;

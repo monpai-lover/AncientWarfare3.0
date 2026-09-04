@@ -943,11 +943,9 @@ namespace AncientWarfare3.patch
 
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(Army), nameof(Army.Dispose))]
-        private static Exception ArmyDispose_Finalizer(Exception __exception,
-            IDisposable __state)
+        private static void ArmyDispose_Finalizer(IDisposable __state)
         {
             __state?.Dispose();
-            return __exception;
         }
 
         private static City SafeCity(Army pArmy)
