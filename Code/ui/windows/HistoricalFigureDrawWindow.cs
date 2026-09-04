@@ -297,6 +297,20 @@ namespace AncientWarfare3.ui.windows
             Instance?.OpenInventory();
         }
 
+        internal static void OpenCardDetails(
+            HistoricalFigureCardDefinition pCard, string pCrateId)
+        {
+            if (pCard == null) return;
+            _selectedCard = pCard;
+            _lastReveal = null;
+            _selectedCrateId = string.IsNullOrEmpty(pCrateId)
+                ? pCard.CollectionId : pCrateId;
+            _selectedRole = pCard.Role;
+            _inventoryMode = false;
+            _state = DrawState.Details;
+            Open();
+        }
+
         private void OpenDedicatedRecycle()
         {
             if (!_inventoryMode || _state != DrawState.Idle) return;
@@ -2191,7 +2205,7 @@ namespace AncientWarfare3.ui.windows
                     14f + i * 67f, sortTop, 63f, 20f);
             for (int i = 0; i < _roleButtons.Count; i++)
                 Position(_roleButtons[i].GetComponent<RectTransform>(),
-                    14f + i * 92f, sortTop, 86f, 20f);
+                    width * .56f + i * 92f, 4f, 86f, 24f);
             Position(_recycleModeButton?.GetComponent<RectTransform>(),
                 286f, sortTop, 72f, 20f);
             float buttonTop = -height + 28f;

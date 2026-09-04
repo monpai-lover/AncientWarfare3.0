@@ -18,7 +18,109 @@ namespace AncientWarfare3.content.figures
             AddSuiTang(cards);
             AddFiveSong(cards);
             AddYuanMingQing(cards);
+            AddBlueRarityCoverage(cards);
             return cards;
+        }
+
+        private static void AddBlueRarityCoverage(
+            List<HistoricalFigureCardDefinition> cards)
+        {
+            M(cards, "qin_zhao_kuo", "\u8d75\u62ec", "\u8d75", "\u6218\u56fd",
+                -260, 50, true, "pre_qin_qin");
+            M(cards, "qin_yan_hui", "\u989c\u56de", "\u9c81", "\u6625\u79cb",
+                -521, 50, false, "pre_qin_qin");
+            M(cards, "qin_gongye_chang", "\u516c\u51b6\u957f", "\u9c81", "\u6625\u79cb",
+                -500, 50, false, "pre_qin_qin");
+            M(cards, "qin_fan_chi", "\u6a0a\u8fdf", "\u9c81", "\u6625\u79cb",
+                -500, 50, false, "pre_qin_qin");
+            M(cards, "qin_ran_geng", "\u5189\u8015", "\u9c81", "\u6625\u79cb",
+                -500, 50, false, "pre_qin_qin");
+            M(cards, "qin_ziyou", "\u5b50\u6e38", "\u9c81", "\u6625\u79cb",
+                -506, 50, false, "pre_qin_qin");
+            M(cards, "qin_zixia", "\u5b50\u590f", "\u9c81", "\u6625\u79cb",
+                -507, 50, false, "pre_qin_qin");
+            M(cards, "qin_tian_ji", "\u7530\u5fcc", "\u9f50", "\u6218\u56fd",
+                -350, 50, true, "pre_qin_qin");
+            M(cards, "han_li_yan", "\u674e\u5ef6\u5e74", "\u6c49", "\u897f\u6c49",
+                -110, 50, false, "han");
+            M(cards, "han_dongfang_shuo", "\u4e1c\u65b9\u6714", "\u6c49", "\u897f\u6c49",
+                -130, 50, false, "han");
+            M(cards, "han_wang_ji", "\u738b\u5409", "\u6c49", "\u897f\u6c49",
+                -80, 50, false, "han");
+            M(cards, "han_zhu_maichen", "\u6731\u4e70\u81e3", "\u6c49", "\u897f\u6c49",
+                -120, 50, false, "han");
+            M(cards, "han_yan_zhu", "\u4e25\u52a9", "\u6c49", "\u897f\u6c49",
+                -130, 50, false, "han");
+            M(cards, "han_zhong_jun", "\u7ec8\u519b", "\u6c49", "\u897f\u6c49",
+                -120, 50, false, "han");
+            M(cards, "han_sima_xiangru", "\u53f8\u9a6c\u76f8\u5982", "\u6c49", "\u897f\u6c49",
+                -130, 50, false, "han");
+            M(cards, "han_mei_cheng", "\u679a\u4e58", "\u6c49", "\u897f\u6c49",
+                -140, 50, false, "han");
+            M(cards, "three_liu_fang", "\u5218\u653e", "\u9b4f", "\u4e09\u56fd",
+                230, 50, false, "three_six_dynasties");
+            M(cards, "three_ding_yi", "\u4e01\u4eea", "\u9b4f", "\u4e09\u56fd",
+                210, 50, false, "three_six_dynasties");
+            M(cards, "three_yang_xiu", "\u6768\u4fee", "\u9b4f", "\u4e09\u56fd",
+                210, 50, false, "three_six_dynasties");
+            M(cards, "three_chen_lin", "\u9648\u7433", "\u9b4f", "\u4e09\u56fd",
+                200, 50, false, "three_six_dynasties");
+            M(cards, "three_wang_can", "\u738b\u7cb2", "\u9b4f", "\u4e09\u56fd",
+                200, 50, false, "three_six_dynasties");
+            M(cards, "three_ruan_ji", "\u962e\u7c4d", "\u9b4f", "\u4e09\u56fd",
+                250, 50, false, "three_six_dynasties");
+            M(cards, "three_xiang_xiu", "\u5411\u79c0", "\u9b4f", "\u4e09\u56fd",
+                250, 50, false, "three_six_dynasties");
+            M(cards, "three_shan_tao", "\u5c71\u6d9b", "\u664b", "\u897f\u664b",
+                270, 50, false, "three_six_dynasties");
+            M(cards, "sui_he_zhizhang", "\u8d3a\u77e5\u7ae0", "\u5510", "\u5510",
+                730, 50, false, "sui_tang");
+            M(cards, "sui_yu_shinan", "\u865e\u4e16\u5357", "\u5510", "\u5510",
+                620, 50, false, "sui_tang");
+            M(cards, "sui_chu_suiliang", "\u891a\u9042\u826f", "\u5510", "\u5510",
+                650, 50, false, "sui_tang");
+            M(cards, "sui_cen_wenben", "\u5c91\u6587\u672c", "\u5510", "\u5510",
+                620, 50, false, "sui_tang");
+            M(cards, "sui_ma_zhou", "\u9a6c\u5468", "\u5510", "\u5510",
+                630, 50, false, "sui_tang");
+            M(cards, "sui_xu_jingzong", "\u8bb8\u656c\u5b97", "\u5510", "\u5510",
+                630, 50, false, "sui_tang");
+            M(cards, "sui_yao_chong_blue", "\u59da\u5d07", "\u5510", "\u5510",
+                700, 50, false, "sui_tang");
+            M(cards, "sui_song_jing_blue", "\u5b8b\u749f", "\u5510", "\u5510",
+                700, 50, false, "sui_tang");
+            M(cards, "song_chen_yi", "\u9648\u4e0e\u4e49", "\u5b8b", "\u5357\u5b8b",
+                1130, 50, false, "five_song");
+            M(cards, "song_wang_yucheng", "\u738b\u79b9\u5041", "\u5b8b", "\u5317\u5b8b",
+                990, 50, false, "five_song");
+            M(cards, "song_yang_yi", "\u6768\u4ebf", "\u5b8b", "\u5317\u5b8b",
+                1000, 50, false, "five_song");
+            M(cards, "song_qian_weiyan", "\u94b1\u60df\u6f14", "\u5b8b", "\u5317\u5b8b",
+                1000, 50, false, "five_song");
+            M(cards, "song_yan_shu", "\u664f\u6b8a", "\u5b8b", "\u5317\u5b8b",
+                1020, 50, false, "five_song");
+            M(cards, "song_zeng_gong", "\u66fe\u5de9", "\u5b8b", "\u5317\u5b8b",
+                1080, 50, false, "five_song");
+            M(cards, "song_huang_tingjian", "\u9ec4\u5ead\u575a", "\u5b8b", "\u5317\u5b8b",
+                1080, 50, false, "five_song");
+            M(cards, "song_liu_kezhuang", "\u5218\u514b\u5e84", "\u5b8b", "\u5357\u5b8b",
+                1240, 50, false, "five_song");
+            M(cards, "yuan_wu_cheng", "\u5434\u6f84", "\u5143", "\u5143",
+                1300, 50, false, "yuan_ming_qing");
+            M(cards, "yuan_jiexisi", "\u63ed\u5085\u65af", "\u5143", "\u5143",
+                1320, 50, false, "yuan_ming_qing");
+            M(cards, "yuan_yuji", "\u865e\u96c6", "\u5143", "\u5143",
+                1320, 50, false, "yuan_ming_qing");
+            M(cards, "yuan_zhao_mengfu_blue", "\u8d75\u5b5f\u9886", "\u5143", "\u5143",
+                1300, 50, false, "yuan_ming_qing");
+            M(cards, "ming_song_lian", "\u5b8b\u6fc2", "\u660e", "\u660e",
+                1380, 50, false, "yuan_ming_qing");
+            M(cards, "ming_fang_xiaoru", "\u65b9\u5b5d\u5b5a", "\u660e", "\u660e",
+                1400, 50, false, "yuan_ming_qing");
+            M(cards, "ming_xie_jin", "\u89e3\u7f19", "\u660e", "\u660e",
+                1400, 50, false, "yuan_ming_qing");
+            M(cards, "ming_wang_shizhen", "\u738b\u4e16\u8d1e", "\u660e", "\u660e",
+                1550, 50, false, "yuan_ming_qing");
         }
 
         private static void AddPreQin(List<HistoricalFigureCardDefinition> cards)
@@ -32,7 +134,7 @@ namespace AncientWarfare3.content.figures
             M(cards, "qin_zhang_yi", "张仪", "秦", "战国", -329, 82, false, crate);
             M(cards, "qin_su_qin", "苏秦", "赵", "战国", -320, 78, false, crate);
             M(cards, "qin_fan_ju", "范雎", "秦", "战国", -307, 80, false, crate);
-            M(cards, "qin_bai_qi", "白起", "秦", "战国", -260, 94, true, crate);
+            M(cards, "qin_bai_qi", "白起", "秦", "战国", -260, 98, true, crate);
             M(cards, "qin_wang_jian", "王翦", "秦", "战国", -250, 91, true, crate);
             M(cards, "qin_wang_ben", "王贲", "秦", "战国", -230, 78, true, crate);
             M(cards, "qin_meng_tian", "蒙恬", "秦", "战国", -220, 88, true, crate);
@@ -40,10 +142,10 @@ namespace AncientWarfare3.content.figures
             M(cards, "qin_wei_liao", "尉缭", "秦", "战国", -250, 76, false, crate);
             M(cards, "qin_lu_buwei", "吕不韦", "秦", "战国", -260, 83, false, crate);
             M(cards, "qin_wu_qi", "吴起", "楚", "战国", -410, 89, true, crate);
-            M(cards, "qin_sun_wu", "孙武", "吴", "春秋", -500, 95, true, crate);
+            M(cards, "qin_sun_wu", "孙武", "吴", "春秋", -500, 98, true, crate);
             M(cards, "qin_sun_bin", "孙膑", "齐", "战国", -330, 86, true, crate);
             M(cards, "qin_lian_po", "廉颇", "赵", "战国", -327, 88, true, crate);
-            M(cards, "qin_li_mu", "李牧", "赵", "战国", -245, 93, true, crate);
+            M(cards, "qin_li_mu", "李牧", "赵", "战国", -245, 98, true, crate);
             M(cards, "qin_le_yi", "乐毅", "燕", "战国", -285, 87, true, crate);
             M(cards, "qin_zhao_she", "赵奢", "赵", "战国", -280, 79, true, crate);
             M(cards, "qin_tian_dan", "田单", "齐", "战国", -280, 82, true, crate);
@@ -76,8 +178,8 @@ namespace AncientWarfare3.content.figures
             M(cards, "han_fan_kuai", "樊哙", "汉", "西汉", -205, 77, true, crate);
             M(cards, "han_peng_yue", "彭越", "汉", "西汉", -205, 80, true, crate);
             M(cards, "han_ying_bu", "英布", "汉", "西汉", -205, 78, true, crate);
-            M(cards, "han_wei_qing", "卫青", "汉", "西汉", -106, 91, true, crate);
-            M(cards, "han_huo_qubing", "霍去病", "汉", "西汉", -121, 94, true, crate);
+            M(cards, "han_wei_qing", "卫青", "汉", "西汉", -106, 98, true, crate);
+            M(cards, "han_huo_qubing", "霍去病", "汉", "西汉", -121, 98, true, crate);
             M(cards, "han_li_guang", "李广", "汉", "西汉", -166, 87, true, crate);
             M(cards, "han_zhang_qian", "张骞", "汉", "西汉", -139, 83, false, crate);
             M(cards, "han_ban_gu", "班固", "汉", "东汉", 60, 84, false, crate);
@@ -113,7 +215,10 @@ namespace AncientWarfare3.content.figures
             M(cards, "three_guo_jia", "郭嘉", "魏", "三国", 207, 89, false, crate);
             M(cards, "three_jia_xu", "贾诩", "魏", "三国", 210, 90, false, crate);
             M(cards, "three_cheng_yu", "程昱", "魏", "三国", 210, 81, false, crate);
-            M(cards, "three_sima_yi", "司马懿", "魏", "三国", 234, 94, true, crate);
+            M(cards, "three_cao_cao", "曹操", "魏", "三国", 155, 100, true, crate,
+                pFatherDisplayName: "曹嵩", pMotherDisplayName: "不详",
+                pBiography: "东汉末年政治家、军事家和魏国奠基者，统一北方并为曹魏政权建立制度与军事基础。");
+            M(cards, "three_sima_yi", "司马懿", "魏", "三国", 234, 98, true, crate);
             M(cards, "three_zhang_liao", "张辽", "魏", "三国", 215, 91, true, crate);
             M(cards, "three_deng_ai", "邓艾", "魏", "三国", 255, 88, true, crate);
             M(cards, "three_zhuge_liang", "诸葛亮", "蜀汉", "三国", 220, 98, false, crate);
@@ -121,10 +226,10 @@ namespace AncientWarfare3.content.figures
             M(cards, "three_fa_zheng", "法正", "蜀汉", "三国", 215, 82, false, crate);
             M(cards, "three_zhao_yun", "赵云", "蜀汉", "三国", 225, 92, true, crate);
             M(cards, "three_jiang_wei", "姜维", "蜀汉", "三国", 250, 86, true, crate);
-            M(cards, "three_zhou_yu", "周瑜", "吴", "三国", 208, 94, true, crate);
+            M(cards, "three_zhou_yu", "周瑜", "吴", "三国", 208, 98, true, crate);
             M(cards, "three_lu_su", "鲁肃", "吴", "三国", 215, 84, false, crate);
             M(cards, "three_lu_meng", "吕蒙", "吴", "三国", 220, 87, true, crate);
-            M(cards, "three_lu_xun", "陆逊", "吴", "三国", 230, 93, true, crate);
+            M(cards, "three_lu_xun", "陆逊", "吴", "三国", 230, 98, true, crate);
             M(cards, "three_wang_dao", "王导", "晋", "东晋", 320, 83, false, crate);
             M(cards, "three_xie_an", "谢安", "晋", "东晋", 370, 90, false, crate);
             M(cards, "three_zu_ti", "祖逖", "晋", "东晋", 315, 82, true, crate);
@@ -156,10 +261,10 @@ namespace AncientWarfare3.content.figures
             M(cards, "sui_gao_jiong", "高颎", "隋", "隋", 590, 87, false, crate);
             M(cards, "sui_yang_su", "杨素", "隋", "隋", 590, 89, true, crate);
             M(cards, "sui_changsun_wuji", "长孙无忌", "唐", "唐", 630, 90, false, crate);
-            M(cards, "sui_fang_xuanling", "房玄龄", "唐", "唐", 630, 96, false, crate);
+            M(cards, "sui_fang_xuanling", "房玄龄", "唐", "唐", 630, 98, false, crate);
             M(cards, "sui_du_ruhui", "杜如晦", "唐", "唐", 630, 91, false, crate);
-            M(cards, "sui_wei_zheng", "魏征", "唐", "唐", 630, 94, false, crate);
-            M(cards, "sui_li_jing", "李靖", "唐", "唐", 630, 93, true, crate);
+            M(cards, "sui_wei_zheng", "魏征", "唐", "唐", 630, 98, false, crate);
+            M(cards, "sui_li_jing", "李靖", "唐", "唐", 630, 98, true, crate);
             M(cards, "sui_qin_qiong", "秦琼", "唐", "唐", 630, 84, true, crate);
             M(cards, "sui_yuchi_jingde", "尉迟敬德", "唐", "唐", 630, 84, true, crate);
             M(cards, "sui_hou_junji", "侯君集", "唐", "唐", 640, 78, true, crate);
@@ -168,7 +273,7 @@ namespace AncientWarfare3.content.figures
             M(cards, "sui_yao_chong", "姚崇", "唐", "唐", 710, 87, false, crate);
             M(cards, "sui_song_jing", "宋璟", "唐", "唐", 710, 86, false, crate);
             M(cards, "sui_zhang_jiuling", "张九龄", "唐", "唐", 730, 84, false, crate);
-            M(cards, "sui_guo_ziyi", "郭子仪", "唐", "唐", 760, 94, true, crate);
+            M(cards, "sui_guo_ziyi", "郭子仪", "唐", "唐", 760, 98, true, crate);
             M(cards, "sui_li_guangbi", "李光弼", "唐", "唐", 760, 88, true, crate);
             M(cards, "sui_yan_zhenqing", "颜真卿", "唐", "唐", 760, 90, false, crate);
             M(cards, "sui_li_mi", "李泌", "唐", "唐", 780, 82, false, crate);
@@ -208,7 +313,7 @@ namespace AncientWarfare3.content.figures
             M(cards, "song_su_shi", "苏轼", "宋", "北宋", 1080, 94, false, crate);
             M(cards, "song_wen_yanbo", "文彦博", "宋", "北宋", 1050, 77, false, crate);
             M(cards, "song_bao_zheng", "包拯", "宋", "北宋", 1050, 91, false, crate);
-            M(cards, "song_yue_fei", "岳飞", "宋", "南宋", 1130, 96, true, crate);
+            M(cards, "song_yue_fei", "岳飞", "宋", "南宋", 1130, 98, true, crate);
             M(cards, "song_han_shizhong", "韩世忠", "宋", "南宋", 1130, 86, true, crate);
             M(cards, "song_zong_ze", "宗泽", "宋", "南宋", 1125, 84, true, crate);
             M(cards, "song_li_gang", "李纲", "宋", "北宋", 1120, 83, false, crate);
@@ -226,7 +331,7 @@ namespace AncientWarfare3.content.figures
             M(cards, "song_yang_yanzhao", "杨延昭", "宋", "北宋", 1000, 85, true, crate);
             M(cards, "song_ouyang_xiu", "欧阳修", "宋", "北宋", 1050, 88, false, crate);
             M(cards, "song_shen_kuo", "沈括", "宋", "北宋", 1080, 86, false, crate);
-            M(cards, "song_wen_tianxiang", "文天祥", "宋", "南宋", 1270, 95, false, crate);
+            M(cards, "song_wen_tianxiang", "文天祥", "宋", "南宋", 1270, 98, false, crate);
             M(cards, "song_lu_you", "陆游", "宋", "南宋", 1180, 83, false, crate);
             M(cards, "song_qin_hui", "秦桧", "宋", "南宋", 1140, 70, false, crate);
             M(cards, "song_han_tuozhou", "韩侂胄", "宋", "南宋", 1200, 68, false, crate);
@@ -247,15 +352,15 @@ namespace AncientWarfare3.content.figures
             M(cards, "yuan_shi_tianze", "史天泽", "元", "元", 1250, 78, true, crate);
             M(cards, "yuan_bayan", "伯颜", "元", "元", 1270, 85, true, crate);
             M(cards, "yuan_tuotuo", "脱脱", "元", "元", 1340, 82, false, crate);
-            M(cards, "ming_liu_bowen", "刘伯温", "明", "明", 1368, 94, false, crate);
+            M(cards, "ming_liu_bowen", "刘伯温", "明", "明", 1368, 98, false, crate);
             M(cards, "ming_li_shanchang", "李善长", "明", "明", 1368, 84, false, crate);
-            M(cards, "ming_xu_da", "徐达", "明", "明", 1368, 94, true, crate);
+            M(cards, "ming_xu_da", "徐达", "明", "明", 1368, 98, true, crate);
             M(cards, "ming_chang_yuchun", "常遇春", "明", "明", 1368, 88, true, crate);
             M(cards, "ming_lan_yu", "蓝玉", "明", "明", 1380, 82, true, crate);
-            M(cards, "ming_yu_qian", "于谦", "明", "明", 1449, 96, false, crate);
+            M(cards, "ming_yu_qian", "于谦", "明", "明", 1449, 98, false, crate);
             M(cards, "ming_wang_yangming", "王阳明", "明", "明", 1510, 94, false, crate);
-            M(cards, "ming_zhang_juzheng", "张居正", "明", "明", 1570, 96, false, crate);
-            M(cards, "ming_qi_jiguang", "戚继光", "明", "明", 1560, 94, true, crate);
+            M(cards, "ming_zhang_juzheng", "张居正", "明", "明", 1570, 98, false, crate);
+            M(cards, "ming_qi_jiguang", "戚继光", "明", "明", 1560, 98, true, crate);
             M(cards, "ming_yu_dayou", "俞大猷", "明", "明", 1560, 84, true, crate);
             M(cards, "ming_yuan_chonghuan", "袁崇焕", "明", "明", 1625, 86, true, crate);
             M(cards, "ming_sun_chuanzing", "孙传庭", "明", "明", 1635, 78, true, crate);
@@ -264,7 +369,7 @@ namespace AncientWarfare3.content.figures
             M(cards, "qing_fan_wencheng", "范文程", "清", "清", 1644, 82, false, crate);
             M(cards, "qing_zeng_guofan", "曾国藩", "清", "清", 1860, 92, true, crate);
             M(cards, "qing_li_hongzhang", "李鸿章", "清", "清", 1870, 88, false, crate);
-            M(cards, "qing_zuo_zongtang", "左宗棠", "清", "清", 1870, 90, true, crate);
+            M(cards, "qing_zuo_zongtang", "左宗棠", "清", "清", 1870, 98, true, crate);
             M(cards, "yuan_muqali", "木华黎", "元", "元", 1215, 87, true, crate);
             M(cards, "yuan_guo_shoujing", "郭守敬", "元", "元", 1280, 84, false, crate);
             M(cards, "yuan_zhao_mengfu", "赵孟頫", "元", "元", 1290, 80, false, crate);
@@ -287,13 +392,17 @@ namespace AncientWarfare3.content.figures
 
         private static void M(List<HistoricalFigureCardDefinition> cards,
             string pId, string pName, string pKingdom, string pEra, int pYear,
-            int pFame, bool pMilitary, string pCollection)
+            int pFame, bool pMilitary, string pCollection,
+            string pFatherDisplayName = "", string pMotherDisplayName = "",
+            string pBiography = "")
         {
             string family = FamilyName(pName);
             string given = pName.Substring(family.Length);
             string role = pMilitary ? "武将" : "文臣";
-            string biography = pName + "是" + pEra + "时期" + pKingdom +
-                "的重要" + role + "，其事迹见于相关正史与编年记载。";
+            string biography = string.IsNullOrWhiteSpace(pBiography)
+                ? pName + "是" + pEra + "时期" + pKingdom +
+                    "的重要" + role + "，其事迹见于相关正史与编年记载。"
+                : pBiography.Trim();
             string background = pName + "活跃于" + pKingdom + "，属于" +
                 pEra + "历史人物。";
             string detail = biography + "这张卡记录其历史身份、所属政权与主要活动时期，部署后按" +
@@ -304,8 +413,8 @@ namespace AncientWarfare3.content.figures
                 HistoricalFigureCardCatalog.UnknownYear, pYear, pFame,
                 RarityForFame(pFame), HistoricalFigureSex.Male,
                 pBiography: biography, pFatherCardId: "",
-                pFatherDisplayName: "", pMotherCardId: "",
-                pMotherDisplayName: "", pPortraitPath: "",
+                pFatherDisplayName: pFatherDisplayName, pMotherCardId: "",
+                pMotherDisplayName: pMotherDisplayName, pPortraitPath: "",
                 pLegacyFigureId: "", pLegacyRegistryIndex: -1,
                 pCombatHealth: pMilitary ? 1800 : 1300,
                 pCombatTraits: pMilitary ? new[] { "warrior" } : Array.Empty<string>(),

@@ -70,6 +70,14 @@ namespace AncientWarfare3.ui.windows
 
         public override void OnNormalEnable()
         {
+            ScrollWindow window = GetComponent<ScrollWindow>();
+            if (window?.titleText != null)
+            {
+                window.titleText.text = AW_L10n.Text(
+                    "aw_historical_figure_card_recycle_title",
+                    "历史人物汰换");
+                window.titleText.raycastTarget = false;
+            }
             Refresh();
         }
 
@@ -226,10 +234,10 @@ namespace AncientWarfare3.ui.windows
                 }
                 BindCard(buttonObject, card);
                 Position(buttonObject.GetComponent<RectTransform>(),
-                    (i % 4) * 86f + 4f, -((i / 4) * 100f + 4f), 80f, 92f);
+                    (i % 3) * 94f + 4f, -((i / 3) * 100f + 4f), 88f, 92f);
             }
-            _listContent.sizeDelta = new Vector2(350f,
-                Mathf.Max(1f, Mathf.Ceil(pCards.Count / 4f) * 100f + 4f));
+            _listContent.sizeDelta = new Vector2(286f,
+                Mathf.Max(1f, Mathf.Ceil(pCards.Count / 3f) * 100f + 4f));
             _listScroll.StopMovement();
         }
 
@@ -266,11 +274,14 @@ namespace AncientWarfare3.ui.windows
             image.sprite = GradientSprite(ParseColor(pCard.Rarity?.ColorHex,
                 new Color(.3f, .42f, 1f, 1f)));
             image.color = Color.white;
+            int remaining = Math.Max(0, Store.GetOwnedCount(pCard.CardId) -
+                GetSelectedCount(pCard.CardId));
+            button.interactable = remaining > 0;
             Text name = ChildText(pObject.transform, "Name", 7);
             name.text = pCard.DisplayName ?? "-";
             Position(name.rectTransform, 3f, -72f, 74f, 13f);
             Text meta = ChildText(pObject.transform, "Meta", 6);
-            meta.text = "x" + Store.GetOwnedCount(pCard.CardId) + "  " +
+            meta.text = "x" + remaining + "  " +
                 RarityName(pCard.Rarity);
             Position(meta.rectTransform, 3f, 3f, 74f, 12f);
             Image portrait = ChildImage(pObject.transform, "Portrait");
@@ -280,6 +291,12 @@ namespace AncientWarfare3.ui.windows
                 "ui/icons/iconKings");
             portrait.preserveAspect = true;
             Position(portrait.rectTransform, 8f, -7f, 64f, 58f);
+        }
+
+        private int GetSelectedCount(string pCardId)
+        {
+            return _selection.SlotCardIds.Count(id =>
+                string.Equals(id, pCardId, StringComparison.Ordinal));
         }
 
         private void RenderSlots()
@@ -383,6 +400,15 @@ namespace AncientWarfare3.ui.windows
             HistoricalFigureCardAudioService.PlayReveal(output.Rarity);
             HistoricalFigureCardRecycleSelectionRules.Clear(_selection);
             Refresh();
+            RenderTradeUpResult();
+        }
+
+        private void RenderTradeUpResult()
+        {
+            if (_lastOutput == null) return;
+            GetComponent<ScrollWindow>()?.clickHide();
+            HistoricalFigureDrawWindow.OpenCardDetails(_lastOutput,
+                _lastOutputCrateId);
         }
 
         private void BackToInventory()
@@ -410,14 +436,15 @@ namespace AncientWarfare3.ui.windows
             Position(_preview.rectTransform, 14f, -43f, width - 28f, 18f);
             Position(_result.rectTransform, 14f, -64f, width - 76f, 54f);
             Position(_resultPortrait.rectTransform, width - 56f, -64f, 42f, 48f);
-            Position(_listViewport, 14f, -126f, width * .62f, height - 164f);
+            float listWidth = width * .56f;
+            Position(_listViewport, 14f, -126f, listWidth, height - 164f);
             Position(_listScrollbar.GetComponent<RectTransform>(),
-                width * .62f + 16f, -126f, 8f, height - 164f);
-            Position(_slotPanel, width * .65f, -126f, width * .35f - 14f,
+                listWidth + 16f, -126f, 8f, height - 164f);
+            Position(_slotPanel, width * .60f, -126f, width * .40f - 14f,
                 height - 164f);
             for (int i = 0; i < _slotButtons.Count; i++)
                 Position(_slotButtons[i].GetComponent<RectTransform>(),
-                    (i % 2) * 66f + 8f, -((i / 2) * 60f + 8f), 60f, 54f);
+                    (i % 2) * 95f + 8f, -((i / 2) * 62f + 8f), 88f, 56f);
             float buttonTop = -height + 24f;
             Position(_submit.GetComponent<RectTransform>(), 14f, buttonTop, 110f, 26f);
             Position(_reset.GetComponent<RectTransform>(), 132f, buttonTop, 80f, 26f);

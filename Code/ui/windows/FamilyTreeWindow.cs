@@ -36,9 +36,8 @@ namespace AncientWarfare3.ui.windows
         private const float SIDE_RIGHT_INSET = 80f;
         private static readonly float SIDE_RIGHT = FamilyTreeToolbarLayoutRules.RightAlignedX(SIDE_RIGHT_INSET);
         private const float RENAME_TOP = -164f;
-        // 「复位」在小树模式下与「改姓」上下相邻,-152 时两者只差 12px、
-        // 视觉上贴死。抬到 -132 与「收缩」(-128) 保持同样的 24px 步距。
-        private const float RESET_TOP_BIG_TREE = -132f;
+        // 「复位」固定在改氏/改姓按钮下方 50px，两个树模式保持一致。
+        private const float RESET_TOP_BIG_TREE = RENAME_TOP - 50f;
         private static readonly Vector2 SIDE_BUTTON_SIZE = new Vector2(78, 20);
 
         private enum Mode { Family, BigTree }

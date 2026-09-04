@@ -156,7 +156,7 @@ namespace AncientWarfare3.core.lineage
                     World.world.cities == null || targetTile == null)
                     return HistoricalFigureCardDeploymentResult.Failure("world_unavailable");
 
-                ActorAsset asset = ResolveDeploymentAsset(city);
+                ActorAsset asset = ResolveDeploymentAsset(city, definition);
                 if (asset == null || string.IsNullOrEmpty(asset.id))
                     return HistoricalFigureCardDeploymentResult.Failure(
                         "actor_asset_missing");
@@ -184,9 +184,14 @@ namespace AncientWarfare3.core.lineage
                     // 见空就 LineageNamePool.RandomSurname() 随机改姓。
                     // 之前 CommitLineage 排在建国之后,卡片人物于是被连改两次姓
                     // (每次称王一次),预设的姓与国号一并被随机氏名冲掉。
-                    // 这里只做预留(分配 id + 写 actor.data),入库与晋升仍留在
-                    // 建国之后,好让 ResolveOriginIds 能取到国/城。
+                    // 这里只做预留(分配 id + 写 actor.data);氏支入库紧跟其后,
+                    // 晋升留到建国之后,好让 ResolveOriginIds 能取到国/城。
                     ReserveLineageIdentity(actor, out lineageId, out shiId);
+                    // 氏支必须在 setKing 之前入库:setKing 会触发
+                    // OnKingChanged → TryOnKingChanged,后者靠 GetShiBranchInfo
+                    // 判断朝代承继,查不到氏支就建不起朝代分段(编年史段头
+                    // 因此回落成「早期」)。
+                    CommitLineageRecords(actor, definition, lineageId, shiId);
                     if (HistoricalFigureCardRoleRules.IsMinister(definition))
                     {
                         if (city?.data == null || oldKingdom?.data == null)
@@ -274,7 +279,7 @@ namespace AncientWarfare3.core.lineage
                 if (HistoricalFigureCardRoleRules.IsMonarch(definition) &&
                     (newKingdom.capital != city || newKingdom.king != actor))
                     throw new InvalidOperationException("kingdom_projection_failed");
-                CommitLineage(actor, definition, lineageId, shiId);
+                CommitLineagePromotion(actor);
                 if (!HistoricalAncestorService.EnsureCardParentage(actor,
                         definition, pRequest.DeploymentId))
                     throw new InvalidOperationException("parentage_commit_failed");
@@ -332,7 +337,13 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
         }
 
-        private static void CommitLineage(Actor pActor,
+        /// <summary>
+        ///     氏支入库。必须排在建国之前 —— <c>setKing</c> 会触发
+        ///     <c>ChronicleEvents.OnKingChanged</c> → <c>DynastyRecordWriter.TryOnKingChanged</c>,
+        ///     后者用 <c>LineageQuery.GetShiBranchInfo(shiId)</c> 判断朝代承继;
+        ///     此刻氏支若还没入库,朝代分段就建立不起来。
+        /// </summary>
+        private static void CommitLineageRecords(Actor pActor,
             HistoricalFigureCardDefinition pDefinition, long pLineageId,
             long pShiId)
         {
@@ -340,6 +351,14 @@ namespace AncientWarfare3.core.lineage
                 pDefinition.FamilyName, pActor);
             LineageService.InsertShiBranch(pShiId, pLineageId,
                 pDefinition.ClanName, pActor, ShiSourceType.SPECIAL_FIGURE);
+        }
+
+        /// <summary>
+        ///     贵族晋升。留在建国之后 —— <c>OnActorPromoted</c> 里的
+        ///     <c>ResolveOriginIds</c> 要取得所属国与城。
+        /// </summary>
+        private static void CommitLineagePromotion(Actor pActor)
+        {
             LineageService.OnActorPromoted(pActor, NobleTrigger.Figure);
         }
 
@@ -387,8 +406,10 @@ namespace AncientWarfare3.core.lineage
             HistoryWriter.RecordPerson(pActor.data.id, pKingdom, name,
                 "card_king", founded, ChronicleCategory.HONOR,
                 HistoryTarget.Kingdom(pKingdom));
-            HistoryWriter.RecordKingdom(pKingdom, "card_kingdom_founded",
-                founded, HistoryTarget.Actor(pActor));
+            // 开国那条 RULE_CHANGE 与 KingdomReign 行都由 setKing 触发的
+            // ChronicleEvents.OnKingChanged 负责(它同时写 DynastyPeriod 和
+            // 国号绑定,是完整的即位链路)。这里只补卡片专属的降世记述,
+            // 不再自己写 RULE_CHANGE / EnsureOpenReign,否则会重复开段。
             HistoryWriter.RecordCity(pCity, pKingdom, "card_deployed",
                 deployed, HistoryTarget.Actor(pActor));
             KingdomArchiveWriter.Upsert(pKingdom);
@@ -414,8 +435,31 @@ namespace AncientWarfare3.core.lineage
                 !pTile.Type.lava && !pTile.Type.block && !pTile.hasBuilding();
         }
 
-        private static ActorAsset ResolveDeploymentAsset(City pCity)
+        /// <summary>
+        ///     君主卡一律用夏人 asset,大臣卡沿用所在城市的种族。
+        ///
+        ///     <para>
+        ///     君主卡建国走 <c>makeOwnKingdom</c>/<c>makeNewCivKingdom</c>,原版
+        ///     <c>Kingdom.newCivKingdom</c> 会写
+        ///     <c>data.original_actor_asset = pActor.asset.id</c>。之前接管已有城市时
+        ///     取的是该城原住民的 asset(常是 human),于是新王国的
+        ///     <c>original_actor_asset</c> 不是夏人 —— <c>LineageService.IsXiaKingdom</c>
+        ///     因此为假,而 <c>DynastyRecordWriter.TryOnKingChanged</c> 与
+        ///     <c>ReignRecordWriter.OpenReign</c> 开头都以它做守卫,双双短路返回。
+        ///     结果是 DynastyPeriod 与 KingdomReign 都没有行:编年史段头拿不到氏名
+        ///     回落成「早期」,年号行拿不到君主名只剩一个干巴巴的干支,
+        ///     国号也停留在原版生成的随机名(截图里的「房」)。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     大臣卡不建国、只是入朝或从军,保持融入当地种族更合理,不动。
+        ///     </para>
+        /// </summary>
+        private static ActorAsset ResolveDeploymentAsset(City pCity,
+            HistoricalFigureCardDefinition pDefinition)
         {
+            if (HistoricalFigureCardRoleRules.IsMonarch(pDefinition))
+                return ResolveSpawnXiaAsset() ?? pCity?.getActorAsset();
             return pCity?.getActorAsset() ?? ResolveSpawnXiaAsset();
         }
 

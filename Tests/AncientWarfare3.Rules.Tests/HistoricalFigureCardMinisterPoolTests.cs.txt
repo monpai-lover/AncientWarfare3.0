@@ -35,8 +35,14 @@ internal static class HistoricalFigureCardMinisterPoolTests
             return cards.Any(card => card.MinisterType ==
                        HistoricalFigureCardMinisterType.CivilOfficial) &&
                    cards.Any(card => card.MinisterType ==
-                       HistoricalFigureCardMinisterType.MilitaryGeneral);
+                   HistoricalFigureCardMinisterType.MilitaryGeneral);
         }), "each period contains both minister types");
+        True(HistoricalFigureCardCrates.All.All(crate =>
+        {
+            var cards = HistoricalFigureCardCatalog.GetCards(crate.Id,
+                HistoricalFigureCardRole.Minister);
+            return cards.Count(card => card.Rarity == HistoricalFigureCardRarity.Blue) >= 8;
+        }), "each period minister crate contains at least eight blue rarity cards");
 
         foreach (HistoricalFigureCardDefinition card in
                  HistoricalFigureCardCatalog.All.Where(card =>

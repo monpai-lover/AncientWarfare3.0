@@ -14,6 +14,8 @@ internal static class HistoricalFigureCardCatalogRulesTests
             "rarity probabilities total one");
 
         var all = HistoricalFigureCardCatalog.All;
+        True(HistoricalFigureCardCatalog.IsValid,
+            "catalogue validation does not reject explicitly assigned minister collections");
         Equal(all.Count, all.Select(p => p.CardId).Distinct(StringComparer.Ordinal).Count(),
             "card ids are unique");
         True(all.All(p => p.FameScore >= 0 && p.FameScore <= 100),
@@ -33,14 +35,42 @@ internal static class HistoricalFigureCardCatalogRulesTests
             "every historical figure has a detailed biography");
         True(all.All(p => !HistoricalFigureCardCatalog.HasGeographicPrefix(
             p.HistoricalKingdomName)), "historical names are short kingdom names");
-        Equal(HistoricalFigureDef.All.Length, all.Count(p => p.LegacyFigureId != null),
-            "every registered historical figure has one card");
+        True(all.Count(p => p.LegacyFigureId != null) >= HistoricalFigureDef.All.Length,
+            "every registered historical figure still has a card after catalogue expansion");
         True(all.Any(p => p.CardId == "qin_shihuang") &&
              all.Any(p => p.CardId == "han_wudi") &&
              all.Any(p => p.CardId == "tang_taizong") &&
              all.Any(p => p.CardId == "ming_taizu") &&
              all.Any(p => p.CardId == "qing_xuantong"),
             "emperor catalogue contains snapshot anchors");
+
+        var gold = all.Where(p => p.Rarity.Equals(HistoricalFigureCardRarity.Gold))
+            .ToArray();
+        True(gold.Length >= 20,
+            "shared gold pool contains a broad historical roster");
+        True(new[] { "ji_fa", "han_gaozu", "qin_shihuang", "three_cao_cao",
+                     "tang_taizong", "yuan_taizu" }
+            .All(id => gold.Any(card => card.CardId == id)),
+            "shared gold pool contains the requested famous figures");
+        HistoricalFigureCardDefinition authorAvatar =
+            HistoricalFigureCardCatalog.Get("mengpai");
+        True(authorAvatar != null, "author avatar card is registered");
+        Equal("\u8499\u6d3e", authorAvatar.DisplayName,
+            "author avatar keeps the requested display name");
+        Equal("\u7334\u6c49", authorAvatar.HistoricalKingdomName,
+            "author avatar uses the Monkey Han historical kingdom");
+        Equal(HistoricalFigureCardRarity.Gold, authorAvatar.Rarity,
+            "author avatar belongs to the gold pool");
+        Equal(HistoricalFigureCardRole.Monarch, authorAvatar.Role,
+            "author avatar is a monarch card");
+        True(gold.Any(card => card.CardId == "mengpai"),
+            "author avatar is included in the shared gold pool");
+        HistoricalFigureCardDefinition caoCao =
+            HistoricalFigureCardCatalog.Get("three_cao_cao");
+        Equal(HistoricalFigureCardRole.Minister, caoCao.Role,
+            "Cao Cao is a deployable minister card");
+        Equal("曹嵩", caoCao.FatherDisplayName,
+            "Cao Cao records his historical father");
 
         var sorted = HistoricalFigureCardCatalog.SortForDisplay(all);
         True(sorted[0].FameScore >= sorted[1].FameScore,

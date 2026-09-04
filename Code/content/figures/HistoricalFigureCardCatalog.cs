@@ -8,9 +8,10 @@ namespace AncientWarfare3.content.figures
     /// The player card pool. Legacy figures are projected into this catalogue,
     /// while the emperor directory adds identities that are not auto-spawn slots.
     /// </summary>
-    public static class HistoricalFigureCardCatalog
-    {
-        public const int UnknownYear = int.MinValue;
+public static class HistoricalFigureCardCatalog
+{
+    public const int UnknownYear = int.MinValue;
+    private const int MinimumBlueMinisterCards = 8;
 
         private static readonly Dictionary<string, string> LegacyCardIds =
             new Dictionary<string, string>(StringComparer.Ordinal)
@@ -369,9 +370,14 @@ namespace AncientWarfare3.content.figures
             {
                 HistoricalFigureCardDefinition[] ministers = pCards.Where(card =>
                     card != null && card.Role == HistoricalFigureCardRole.Minister &&
-                    crate.ContainsYear(card.HistoricalYear)).ToArray();
+                    IsCardInCrate(card, crate)).ToArray();
                 if (ministers.Length < 40)
                     issues.Add("minister pool below minimum: " + crate.Id);
+                int blueCount = ministers.Count(card => card.Rarity != null &&
+                    card.Rarity.Equals(HistoricalFigureCardRarity.Blue));
+                if (blueCount < MinimumBlueMinisterCards)
+                    issues.Add("minister pool below blue rarity minimum: " +
+                        crate.Id);
                 if (!ministers.Any(card => card.MinisterType ==
                         HistoricalFigureCardMinisterType.CivilOfficial))
                     issues.Add("minister pool has no civil officials: " + crate.Id);
@@ -382,6 +388,17 @@ namespace AncientWarfare3.content.figures
             if (Math.Abs(HistoricalFigureCardRarity.TotalProbability - 1f) > 0.00001f)
                 issues.Add("rarity probabilities do not total one");
             return issues;
+        }
+
+        private static bool IsCardInCrate(
+            HistoricalFigureCardDefinition pCard,
+            HistoricalFigureCardCrate pCrate)
+        {
+            if (pCard == null || pCrate == null) return false;
+            return string.Equals(pCard.CollectionId, pCrate.Id,
+                       StringComparison.Ordinal) ||
+                   string.IsNullOrEmpty(pCard.CollectionId) &&
+                   pCrate.ContainsYear(pCard.HistoricalYear);
         }
 
         private static bool IsKnownYear(int pYear)
@@ -589,7 +606,7 @@ namespace AncientWarfare3.content.figures
                 pFamilyName: "子", pClanName: "商", pGivenName: "受");
 
             yield return E("ji_fa", "姬发", "周", "周", UnknownYear,
-                -1043, -1046, 88, "姬昌", "太姒",
+                -1043, -1046, 100, "姬昌", "太姒",
                 "灭商建立西周，后世称周武王。",
                 pFamilyName: "姬", pClanName: "周", pGivenName: "发",
                 pHistoricalEra: "西周");
@@ -748,7 +765,7 @@ namespace AncientWarfare3.content.figures
                 pFamilyName: "姬", pClanName: "项", pGivenName: "籍",
                 pHistoricalEra: "楚汉争霸");
             yield return E("han_han_xin", "韩信", "汉", "汉", -231,
-                -196, -206, 92, "", "",
+                -196, -206, 98, "", "",
                 "汉初军事家，统兵平定诸国，为汉朝统一建立重要功绩。",
                 pFamilyName: "韩", pClanName: "韩", pGivenName: "信",
                 pHistoricalEra: "西汉");
@@ -758,7 +775,7 @@ namespace AncientWarfare3.content.figures
                 pFamilyName: "萧", pClanName: "萧", pGivenName: "何",
                 pHistoricalEra: "西汉");
             yield return E("han_zhang_liang", "张良", "汉", "汉", -250,
-                -186, -206, 90, "张平", "",
+                -186, -206, 98, "张平", "",
                 "辅佐刘邦夺取天下，是汉初重要谋臣。",
                 pFamilyName: "张", pClanName: "张", pGivenName: "良",
                 pHistoricalEra: "西汉");
@@ -793,13 +810,13 @@ namespace AncientWarfare3.content.figures
                 pFamilyName: "班", pClanName: "班", pGivenName: "超",
                 pHistoricalEra: "东汉");
 
-            yield return E("han_gaozu", "刘邦", "汉", "汉", -256, -195, -202, 96, "刘煓", "刘媪", "击败群雄建立汉朝，奠定汉帝国制度。");
+            yield return E("han_gaozu", "刘邦", "汉", "汉", -256, -195, -202, 99, "刘煓", "刘媪", "击败群雄建立汉朝，奠定汉帝国制度。");
             yield return E("han_huidi", "刘盈", "汉", "汉", -210, -188, -195, 58, "刘邦", "吕雉");
             yield return E("han_qianshao", "刘恭", "汉", "汉", -192, -184, -187, 30, "刘盈", "张皇后");
             yield return E("han_houshao", "刘弘", "汉", "汉", -190, -180, -184, 30, "刘盈", "不详");
             yield return E("han_wendi", "刘恒", "汉", "汉", -203, -157, -180, 80, "刘邦", "薄姬", "以黄老之治休养生息，开创文景之治。");
             yield return E("han_jingdi", "刘启", "汉", "汉", -188, -141, -157, 72, "刘恒", "窦姬");
-            yield return E("han_wudi", "刘彻", "汉", "汉", -156, -87, -141, 97, "刘启", "王娡", "拓展汉帝国疆域，确立儒学为国家政治的重要基础。");
+            yield return E("han_wudi", "刘彻", "汉", "汉", -156, -87, -141, 99, "刘启", "王娡", "拓展汉帝国疆域，确立儒学为国家政治的重要基础。");
             yield return E("han_zhaodi", "刘弗陵", "汉", "汉", -94, -74, -87, 55, "刘彻", "赵婕妤");
             yield return E("han_xuandi", "刘询", "汉", "汉", -91, -49, -74, 72, "刘进", "王翁须");
             yield return E("han_yuandi", "刘奭", "汉", "汉", -75, -33, -49, 52, "刘询", "许平君");
@@ -809,7 +826,7 @@ namespace AncientWarfare3.content.figures
             yield return E("han_ruzi", "刘婴", "汉", "汉", 5, 25, 6, 28, "刘显", "不详");
             yield return E("xin_wangmang", "王莽", "新", "新", -45, 23, 9, 82, "王曼", "渠氏", "以新朝取代西汉，推动了一系列制度改革。");
 
-            yield return E("han_guangwu", "刘秀", "汉", "汉", -5, 57, 25, 94, "刘钦", "樊娴都", "重建汉朝并完成全国统一，史称光武中兴。");
+            yield return E("han_guangwu", "刘秀", "汉", "汉", -5, 57, 25, 98, "刘钦", "樊娴都", "重建汉朝并完成全国统一，史称光武中兴。");
             yield return E("han_mingdi", "刘庄", "汉", "汉", 28, 75, 57, 70, "刘秀", "阴丽华");
             yield return E("han_zhangdi", "刘炟", "汉", "汉", 56, 88, 75, 68, "刘庄", "贾贵人");
             yield return E("han_hedi", "刘肇", "汉", "汉", 79, 106, 88, 68, "刘炟", "梁贵人");
@@ -833,9 +850,9 @@ namespace AncientWarfare3.content.figures
             yield return E("wei_feidi", "曹芳", "魏", "魏", 232, 274, 239, 30, "曹楷", "不详");
             yield return E("wei_zhengdi", "曹髦", "魏", "魏", 241, 260, 254, 43, "曹霖", "不详");
             yield return E("wei_yuandi", "曹奂", "魏", "魏", 246, 302, 260, 32, "曹宇", "不详");
-            yield return E("shu_han_zhaolie", "刘备", "蜀汉", "蜀汉", 161, 223, 221, 86, "刘弘", "不详", "在群雄割据中建立蜀汉政权，成为三国政治核心人物。");
+            yield return E("shu_han_zhaolie", "刘备", "蜀汉", "蜀汉", 161, 223, 221, 98, "刘弘", "不详", "在群雄割据中建立蜀汉政权，成为三国政治核心人物。");
             yield return E("shu_hou_zhu", "刘禅", "蜀汉", "蜀汉", 207, 271, 223, 62, "刘备", "甘夫人");
-            yield return E("wu_dadi", "孙权", "吴", "吴", 182, 252, 229, 88, "孙坚", "吴夫人", "经营江东并建立吴国，维持三国鼎立格局。");
+            yield return E("wu_dadi", "孙权", "吴", "吴", 182, 252, 229, 98, "孙坚", "吴夫人", "经营江东并建立吴国，维持三国鼎立格局。");
             yield return E("wu_hui_zhu", "孙亮", "吴", "吴", 243, 260, 252, 28, "孙权", "潘皇后");
             yield return E("wu_jingdi", "孙休", "吴", "吴", 235, 264, 258, 32, "孙权", "王夫人");
             yield return E("wu_moding", "孙皓", "吴", "吴", 242, 284, 264, 40, "孙和", "何姬");
@@ -902,7 +919,7 @@ namespace AncientWarfare3.content.figures
             yield return E("beizhou_xuandi", "宇文赟", "北周", "周", 559, 580, 578, 22, "宇文邕", "李娥姿");
             yield return E("beizhou_jingdi", "宇文阐", "北周", "周", 573, 581, 580, 18, "宇文赟", "朱满月");
 
-            yield return E("sui_wendi", "杨坚", "隋", "隋", 541, 604, 581, 89, "杨忠", "吕苦桃", "结束南北朝长期分裂并建立隋朝，完成全国统一。");
+            yield return E("sui_wendi", "杨坚", "隋", "隋", 541, 604, 581, 98, "杨忠", "吕苦桃", "结束南北朝长期分裂并建立隋朝，完成全国统一。");
             yield return E("sui_yangdi", "杨广", "隋", "隋", 569, 618, 604, 68, "杨坚", "独孤伽罗");
             yield return E("sui_gongdi", "杨侑", "隋", "隋", 605, 619, 617, 18, "杨昭", "韦妃");
             yield return E("sui_yangtong", "杨侗", "隋", "隋", 605, 619, 618, 20, "杨昭", "刘良娣");
@@ -911,7 +928,7 @@ namespace AncientWarfare3.content.figures
             yield return E("tang_gaozong", "李治", "唐", "唐", 628, 683, 649, 72, "李世民", "长孙皇后");
             yield return E("tang_zhongzong", "李显", "唐", "唐", 656, 710, 684, 48, "李治", "武曌");
             yield return E("tang_ruizong", "李旦", "唐", "唐", 662, 716, 684, 43, "李治", "武曌");
-            yield return E("zhou_wuzetian", "武曌", "周", "周", 624, 705, 690, 91, "武士彟", "杨氏", "中国历史上唯一得到普遍承认的女皇帝，重用人才并稳定国家治理。", HistoricalFigureSex.Female);
+            yield return E("zhou_wuzetian", "武曌", "周", "周", 624, 705, 690, 98, "武士彟", "杨氏", "中国历史上唯一得到普遍承认的女皇帝，重用人才并稳定国家治理。", HistoricalFigureSex.Female);
             yield return E("tang_shang", "李重茂", "唐", "唐", 695, 714, 710, 18, "李显", "韦皇后");
             yield return E("tang_xuanzong_li_longji", "李隆基", "唐", "唐", 685, 762, 712, 91, "李旦", "窦德妃", "前期开创开元盛世，后期因政治与军事危机导致政局转折。");
             yield return E("tang_suzong", "李亨", "唐", "唐", 711, 762, 756, 51, "李隆基", "杨贵妃");
@@ -944,7 +961,7 @@ namespace AncientWarfare3.content.figures
             yield return E("later_zhou_shizong", "柴荣", "后周", "周", 921, 959, 954, 62, "柴守礼", "不详");
             yield return E("later_zhou_gongdi", "郭宗训", "后周", "周", 953, 973, 959, 17, "柴荣", "符皇后");
 
-            yield return E("song_taizu", "赵匡胤", "宋", "宋", 927, 976, 960, 84, "赵弘殷", "杜氏", "陈桥兵变建立宋朝，确立重文抑武的国家制度。");
+            yield return E("song_taizu", "赵匡胤", "宋", "宋", 927, 976, 960, 98, "赵弘殷", "杜氏", "陈桥兵变建立宋朝，确立重文抑武的国家制度。");
             yield return E("song_taizong", "赵光义", "宋", "宋", 939, 997, 976, 64, "赵弘殷", "杜氏");
             yield return E("song_zhenzong", "赵恒", "宋", "宋", 968, 1022, 997, 54, "赵光义", "李贤妃");
             yield return E("song_renzong", "赵祯", "宋", "宋", 1010, 1063, 1022, 72, "赵恒", "李宸妃", "在位时期政治相对宽和，文化与制度发展显著。");
@@ -999,7 +1016,7 @@ namespace AncientWarfare3.content.figures
             yield return E("yuan_taizong", "窝阔台", "元", "元", 1186, 1241, 1229, 70, "铁木真", "孛儿帖");
             yield return E("yuan_dingzong", "贵由", "元", "元", 1206, 1248, 1246, 34, "窝阔台", "乃马真后");
             yield return E("yuan_xianzong", "蒙哥", "元", "元", 1209, 1259, 1251, 51, "拖雷", "唆鲁禾帖尼");
-            yield return E("yuan_shizu", "忽必烈", "元", "元", 1215, 1294, 1271, 94, "拖雷", "唆鲁禾帖尼", "建立元朝并完成对中国大部的征服，建立多民族大一统王朝。");
+            yield return E("yuan_shizu", "忽必烈", "元", "元", 1215, 1294, 1271, 98, "拖雷", "唆鲁禾帖尼", "建立元朝并完成对中国大部的征服，建立多民族大一统王朝。");
             yield return E("yuan_chengzong", "铁穆耳", "元", "元", 1265, 1307, 1294, 48, "真金", "阔阔真");
             yield return E("yuan_wuzong", "海山", "元", "元", 1281, 1311, 1307, 34, "答剌麻八剌", "答己");
             yield return E("yuan_renzong", "爱育黎拔力八达", "元", "元", 1285, 1320, 1311, 46, "答剌麻八剌", "答己");
@@ -1011,7 +1028,7 @@ namespace AncientWarfare3.content.figures
             yield return E("yuan_ningzong", "懿璘质班", "元", "元", 1326, 1332, 1332, 17, "和世㻋", "八不沙");
             yield return E("yuan_shundi", "妥懽帖睦尔", "元", "元", 1320, 1370, 1333, 58, "图帖睦尔", "不详");
 
-            yield return E("ming_taizu", "朱元璋", "明", "明", 1328, 1398, 1368, 96, "朱世珍", "陈氏", "推翻元朝建立明朝，重建中央集权国家体系。");
+            yield return E("ming_taizu", "朱元璋", "明", "明", 1328, 1398, 1368, 99, "朱世珍", "陈氏", "推翻元朝建立明朝，重建中央集权国家体系。");
             yield return E("ming_huidi", "朱允炆", "明", "明", 1377, 1402, 1398, 45, "朱标", "吕氏");
             yield return E("ming_chengzu", "朱棣", "明", "明", 1360, 1424, 1402, 88, "朱元璋", "马皇后", "通过靖难夺取帝位，迁都北京并推动郑和下西洋。");
             yield return E("ming_renzong", "朱高炽", "明", "明", 1378, 1425, 1424, 54, "朱棣", "徐皇后");
@@ -1034,7 +1051,7 @@ namespace AncientWarfare3.content.figures
             yield return E("qing_taizu", "努尔哈赤", "清", "清", 1559, 1626, 1616, 87, "塔克世", "喜塔腊氏", "统一女真各部并建立后金，为清朝入关奠定基础。");
             yield return E("qing_taizong", "皇太极", "清", "清", 1592, 1643, 1636, 74, "努尔哈赤", "叶赫那拉氏", "改国号为清并完善国家制度，推动清军入关前的国家转型。");
             yield return E("qing_shizu", "福临", "清", "清", 1638, 1661, 1644, 65, "皇太极", "孝庄文皇后");
-            yield return E("qing_shengzu", "玄烨", "清", "清", 1654, 1722, 1661, 93, "福临", "佟佳氏", "平定三藩、收复台湾并稳定清朝早期统治，形成康熙盛世。");
+            yield return E("qing_shengzu", "玄烨", "清", "清", 1654, 1722, 1661, 98, "福临", "佟佳氏", "平定三藩、收复台湾并稳定清朝早期统治，形成康熙盛世。");
             yield return E("qing_shizong", "胤禛", "清", "清", 1678, 1735, 1722, 78, "玄烨", "德妃");
             yield return E("qing_gaozong", "弘历", "清", "清", 1711, 1799, 1735, 90, "胤禛", "钮祜禄氏", "乾隆时期疆域与文化事业达到高峰，也埋下晚清财政与社会问题。");
             yield return E("qing_renzong", "颙琰", "清", "清", 1760, 1820, 1796, 51, "弘历", "魏佳氏");
@@ -1043,6 +1060,12 @@ namespace AncientWarfare3.content.figures
             yield return E("qing_muzong", "载淳", "清", "清", 1856, 1875, 1861, 42, "奕詝", "叶赫那拉氏");
             yield return E("qing_dezong", "载湉", "清", "清", 1871, 1908, 1875, 57, "奕譞", "叶赫那拉氏");
             yield return E("qing_xuantong", "溥仪", "清", "清", 1906, 1967, 1908, 78, "载沣", "苏完瓜尔佳氏", "清朝末代皇帝，也是中国帝制时代最后一位君主。");
+
+            yield return E("mengpai", "\u8499\u6d3e", "\u5927\u6c49",
+                "\u7334\u6c49", UnknownYear, UnknownYear, UnknownYear, 100,
+                "", "",
+                "\u4f5c\u8005\u5316\u8eab\uff0c\u4ece\u5357\u6d0b\u8fd4\u56de\u795e\u5dde\u7684\u5f00\u62d3\u8005\uff0c\u7387\u4f17\u5efa\u7acb\u7334\u6c49\u5e1d\u56fd\uff0c\u5e76\u4ee5\u5927\u6c49\u4e4b\u540d\u91cd\u6574\u5929\u4e0b\u3002",
+                pHistoricalEra: "\u5927\u6c49");
         }
     }
 }

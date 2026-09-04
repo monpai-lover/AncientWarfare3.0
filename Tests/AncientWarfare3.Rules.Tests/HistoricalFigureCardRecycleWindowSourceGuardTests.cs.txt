@@ -25,6 +25,12 @@ internal static class HistoricalFigureCardRecycleWindowSourceGuardTests
             "recycle window uses source weighting");
         Contains(recycle, "HistoricalFigureCardCatalog.GetCards(crateId)",
             "recycle output uses the selected source crate");
+        Contains(recycle, "GetSelectedCount(pCard.CardId)",
+            "recycle list displays inventory after selected cards are reserved");
+        Contains(recycle, "titleText.text = AW_L10n.Text",
+            "recycle window localizes the native window title");
+        Contains(recycle, "RenderTradeUpResult",
+            "recycle success renders the same detailed result presentation");
 
         Contains(draw, "HistoricalFigureRecycleWindow.Open",
             "draw window exposes the dedicated recycle entry");

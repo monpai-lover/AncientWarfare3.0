@@ -677,12 +677,39 @@ namespace AncientWarfare3.content.figures
             ModClass.LogInfo($"历史人物 {def.Key} 成为国王 → 国号 '{def.KingdomName}' 已提交");
         }
 
+        /// <summary>
+        ///     取该人物「应有的历史国号」。两个来源:
+        ///     FigureStateStore(原有的开国君主序列)与历史人物卡。
+        ///
+        ///     <para>
+        ///     卡片人物不在 FigureStateStore 里,之前这里只查前者,卡片君主一律
+        ///     返回空 —— 于是 <c>ChronicleEvents.EnsureInitialStateNameForRuler</c>
+        ///     拿不到预设国号,<c>StateNameService.EnsureBoundStateName</c> 回落到
+        ///     <c>pKingdom.name</c>(此刻还是原版生成的随机名),编年史里就出现
+        ///     「李诵立国号为房」这类记录,历史国号反而没绑上。
+        ///     </para>
+        /// </summary>
         public static string GetPreferredKingdomName(Actor pActor)
         {
             if (pActor?.data == null) return "";
             int index = FigureStateStore.IndexOfActor(pActor.data.id);
             HistoricalFigureDef definition = HistoricalFigureDef.Get(index);
-            return definition?.KingdomName ?? "";
+            string name = definition?.KingdomName ?? "";
+            if (!string.IsNullOrEmpty(name)) return name;
+            return GetCardKingdomName(pActor);
+        }
+
+        private static string GetCardKingdomName(Actor pActor)
+        {
+            try
+            {
+                pActor.data.get(LineageKeys.HISTORICAL_CARD_ID,
+                    out string cardId, "");
+                if (string.IsNullOrEmpty(cardId)) return "";
+                return HistoricalFigureCardCatalog.Get(cardId)
+                    ?.HistoricalKingdomName ?? "";
+            }
+            catch { return ""; }
         }
 
         /// <summary>

@@ -13,9 +13,13 @@
     <Compile Include="..\..\Code\content\figures\HistoricalFigureDef.cs" Link="Production\HistoricalFigureDef.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureCardModels.cs" Link="Production\HistoricalFigureCardModels.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureCardCatalog.cs" Link="Production\HistoricalFigureCardCatalog.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureCardCrates.cs" Link="Production\HistoricalFigureCardCrates.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureCardMinisterSeeds.cs" Link="Production\HistoricalFigureCardMinisterSeeds.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureCardRecycleRules.cs" Link="Production\HistoricalFigureCardRecycleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoricalFigureCardCollectionStore.cs" Link="Production\HistoricalFigureCardCollectionStore.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoricalFigureCardDrawService.cs" Link="Production\HistoricalFigureCardDrawService.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoricalFigureCardDeploymentRules.cs" Link="Production\HistoricalFigureCardDeploymentRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HistoricalFigureCardRoleRules.cs" Link="Production\HistoricalFigureCardRoleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoricalFigureCardParentageService.cs" Link="Production\HistoricalFigureCardParentageService.cs" />
     <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardCatalogRulesTests.cs.txt" Link="HistoricalFigureCardCatalogRulesTests.cs" />
     <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardCollectionRulesTests.cs.txt" Link="HistoricalFigureCardCollectionRulesTests.cs" />

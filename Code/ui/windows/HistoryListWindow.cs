@@ -1122,6 +1122,21 @@ namespace AncientWarfare3.ui.windows
                     return AW_L10n.Text("aw_history_ruler_period", "统治者") +
                            " 路 " + RichName(DisplayKingName(pReign),
                                DisplayKingColor(pReign)) + " 路 " + span;
+                // 年号前缀(year_prefix_snapshot)本身已含礼制称呼与起始日期 ——
+                // YearNameService.GetYearName 生成的是「国号+爵位+名」,
+                // 整条前缀形如「齐伯宝融元年·甲子（1年2月3日）」。
+                // 因此这里只补结束端:在位接「-至今」,已终结接「-结束日期」。
+                // 若再拼整个 span,起始日期会重复出现一次。
+                string reignPrefix = HistoryWriter.NormalizeYearPrefix(
+                    pReign.year_prefix_snapshot, pReign.start_time);
+                if (!string.IsNullOrEmpty(reignPrefix))
+                {
+                    string tail = pReign.end_time < 0d
+                        ? AW_L10n.Text("aw_until_now", "至今")
+                        : HistoryWriter.FormatDate(pReign.end_time);
+                    return RichName(reignPrefix + "-" + tail,
+                        pReign.period_color);
+                }
                 string chronology = BuildReignChronologySpan(pReign);
                 if (!string.IsNullOrEmpty(chronology))
                     return chronology;
@@ -1253,6 +1268,15 @@ namespace AncientWarfare3.ui.windows
             string startChronology = BuildReignChronology(pReign, 1);
             string endChronology = BuildReignChronology(
                 pReign, endReignYear);
+            // 在位君主(end_time < 0)的结束点不能拿「当前时间的干支」充数 ——
+            // 那会把还在延续的统治期显示成「甲子-戊辰」这种看着已经终结的闭区间。
+            // 与段头的 YearSpan 保持一致,用「至今」。
+            if (pReign.end_time < 0d)
+                return RichName(ReignHeaderChronologyRules.FormatSpan(
+                    GanzhiChronologyRules.GetYearName(start[2]),
+                    startChronology, "",
+                    AW_L10n.Text("aw_until_now", "至今")),
+                    pReign.period_color);
             return RichName(ReignHeaderChronologyRules.FormatSpan(
                 GanzhiChronologyRules.GetYearName(start[2]),
                 startChronology,
@@ -1260,6 +1284,11 @@ namespace AncientWarfare3.ui.windows
                 endChronology), pReign.period_color);
         }
 
+        /// <summary>
+        ///     年号纪年。只有立了正式年号才输出「年号+N年」;没有年号时留空,
+        ///     由调用方回退到干支。段头的常规形态走的是
+        ///     <c>year_prefix_snapshot</c>(自带礼制称呼),这里是后备路径。
+        /// </summary>
         private static string BuildReignChronology(ReignPeriod pReign,
             int pReignYear)
         {
