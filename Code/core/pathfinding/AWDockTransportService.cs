@@ -535,8 +535,8 @@ namespace AncientWarfare3.core.pathfinding
         {
             TileTypeBase type = pTile?.Type;
             return pTile?.data != null && type != null &&
-                   !type.ocean && !type.liquid && !type.lava &&
-                   !type.block;
+                   type.ground && !type.ocean && !type.liquid &&
+                   !type.lava && !type.block;
         }
 
         private static bool IsBoatSafe(WorldTile pTile)
