@@ -55,13 +55,16 @@ namespace AncientWarfare3.ui.windows
         /// </summary>
         private static bool _suppressCloseCancel;
         /// <summary>
-        ///     进入选点状态的那一帧。选点从**下一帧**才开始受理 ——
-        ///     点「部署到城市」这一次点击本身仍在本帧内继续传播,
-        ///     补丁层的 checkEmptyClick / clickedStart 会在同一帧看到
-        ///     IsPickingTile 已为真,把按钮所在的屏幕位置当成玩家选的格子
-        ///     (实测直接跳到「目标：176, 189」——那正是按钮的位置)。
+        ///     已进入选点状态。与 <see cref="_pickingReleased"/> 一起构成
+        ///     「上一次点击已彻底结束」的判据,见 TickPendingConfirmWindow。
         /// </summary>
-        private static int _pickingArmedFrame = -1;
+        private static bool _pickingArmed;
+        /// <summary>
+        ///     进入选点后是否已经观察到鼠标松开。为假时不受理选点 ——
+        ///     否则点「部署到城市」这一次点击本身会被当成玩家选的格子
+        ///     (实测直接跳到「目标：176, 189」,那正是按钮的位置)。
+        /// </summary>
+        private static bool _pickingReleased;
         private static string _selectedCrateId = "";
         private static bool _inventoryMode;
         private const int InventoryPageSize = 20;
@@ -208,8 +211,7 @@ namespace AncientWarfare3.ui.windows
         ///     </para>
         /// </summary>
         internal static bool IsPickingTile =>
-            _state == DrawState.Placement &&
-            UnityEngine.Time.frameCount > _pickingArmedFrame;
+            _state == DrawState.Placement && _pickingReleased;
 
         internal static void ResetTransientState()
         {
@@ -224,7 +226,8 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _deploymentId = "";
             _pendingConfirmWindow = false;
-            _pickingArmedFrame = -1;
+            _pickingArmed = false;
+            _pickingReleased = false;
             _state = DrawState.Idle;
             _rollStartedAt = 0f;
             _revealStartedAt = 0f;
@@ -293,6 +296,15 @@ namespace AncientWarfare3.ui.windows
                     " lava=" + (pTile.Type?.lava == true) +
                     " block=" + (pTile.Type?.block == true) +
                     " building=" + pTile.hasBuilding());
+                // 拒绝必须让玩家看得见。原来这里是静默 return —— 玩家点在
+                // 不合法的格子上时屏幕毫无反应,和「功能坏了」完全无法区分,
+                // 实测因此被反复当成 bug 上报。
+                try
+                {
+                    WorldTip.showNow(TileRejectionText(pTile, city),
+                        pTranslate: false, "top", 3f);
+                }
+                catch { }
                 return;
             }
             _selectedTile = pTile;
@@ -309,11 +321,51 @@ namespace AncientWarfare3.ui.windows
         }
 
         /// <summary>
+        ///     被拒格子的原因文案。按玩家最可能踩到的顺序判断,
+        ///     只说第一条不满足的 —— 一次给一个可执行的指令,
+        ///     不罗列全部判据。
+        /// </summary>
+        private static string TileRejectionText(WorldTile pTile, City pCity)
+        {
+            bool ministerOnly = _selectedCard != null &&
+                (HistoricalFigureCardRoleRules.IsMinister(_selectedCard) ||
+                 HistoricalFigureCardRoleRules.IsMilitaryGeneral(
+                     _selectedCard));
+            if (pCity != null)
+                return Text("aw_historical_figure_cards_reject_city",
+                    "这座城市不属于任何文明国家");
+            if (ministerOnly)
+                return Text("aw_historical_figure_cards_reject_minister",
+                    "大臣只能部署进已有的文明城市");
+            if (pTile.Type?.liquid == true)
+                return Text("aw_historical_figure_cards_reject_water",
+                    "不能部署到水面上");
+            if (pTile.Type?.lava == true || pTile.Type?.block == true ||
+                pTile.Type?.ground != true)
+                return Text("aw_historical_figure_cards_reject_terrain",
+                    "这里的地形无法部署");
+            if (pTile.hasBuilding())
+                return Text("aw_historical_figure_cards_reject_building",
+                    "这块地上有建筑，请另选一处空地");
+            return Text("aw_historical_figure_cards_reject_generic",
+                "这里不能部署，请另选一处");
+        }
+
+        /// <summary>
         ///     选到格子后延后一帧再开确认窗。由补丁层的每帧钩子驱动 ——
         ///     窗口这时是隐藏的,自身的 Update 不会跑。
         /// </summary>
         internal static void TickPendingConfirmWindow()
         {
+            // 选点的解锁条件:必须先观察到鼠标左键处于松开状态。
+            //
+            // 原来用帧号(「武装的下一帧才受理」)挡不住 —— 按下按钮到那次
+            // 点击传到地图链路之间不一定只隔一帧,实测仍会把按钮所在的位置
+            // 当成玩家选的格子。按住不放的那几帧里 GetMouseButton(0) 恒为真,
+            // 松开才转假,这才是「上一次点击已经彻底结束」的可靠信号。
+            if (_pickingArmed && !_pickingReleased &&
+                !UnityEngine.Input.GetMouseButton(0))
+                _pickingReleased = true;
             if (!_pendingConfirmWindow) return;
             _pendingConfirmWindow = false;
             if (_state != DrawState.PlacementConfirm) return;
@@ -991,8 +1043,9 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _deploymentId = Guid.NewGuid().ToString("N");
             _state = DrawState.Placement;
-            // 点「部署到城市」这一次点击本身还没走完,本帧不受理选点。
-            _pickingArmedFrame = UnityEngine.Time.frameCount;
+            // 点「部署到城市」这一次点击还没结束(键仍按着),等松开再受理选点。
+            _pickingArmed = true;
+            _pickingReleased = false;
             // 关窗后必须把这两样都清掉,否则点图会有肉眼可见的延迟:
             //   1. clickHide 把 controls_lock_timer 设成 0.3s,归零前
             //      updateControls 的整个点击分支被跳过;
@@ -1069,9 +1122,10 @@ namespace AncientWarfare3.ui.windows
             _status.text = Format("aw_historical_figure_cards_deploy_failed",
                 "\u90e8\u7f72\u5931\u8d25\uff1a{0}", result.Error);
             _state = DrawState.Placement;
-            // \u540c BeginPlacement:\u70b9\u300c\u786e\u8ba4\u90e8\u7f72\u300d\u8fd9\u6b21\u70b9\u51fb\u8fd8\u5728\u672c\u5e27\u4f20\u64ad\u4e2d,
-            // \u9000\u56de\u9009\u70b9\u540e\u672c\u5e27\u4e0d\u53d7\u7406,\u5426\u5219\u786e\u8ba4\u6309\u94ae\u7684\u4f4d\u7f6e\u4f1a\u88ab\u5f53\u6210\u65b0\u9009\u7684\u683c\u5b50\u3002
-            _pickingArmedFrame = UnityEngine.Time.frameCount;
+            // \u540c BeginPlacement:\u70b9\u300c\u786e\u8ba4\u90e8\u7f72\u300d\u8fd9\u6b21\u70b9\u51fb\u8fd8\u6ca1\u7ed3\u675f,
+            // \u7b49\u677e\u5f00\u518d\u53d7\u7406,\u5426\u5219\u786e\u8ba4\u6309\u94ae\u7684\u4f4d\u7f6e\u4f1a\u88ab\u5f53\u6210\u65b0\u9009\u7684\u683c\u5b50\u3002
+            _pickingArmed = true;
+            _pickingReleased = false;
             Refresh();
         }
 

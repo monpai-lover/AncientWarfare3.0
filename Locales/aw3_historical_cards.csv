@@ -59,6 +59,12 @@ aw_historical_figure_cards_details_title,{0} [{1}],{0} [{1}],{0} [{1}]
 aw_historical_figure_cards_owned,已拥有：{0},Owned: {0},已擁有：{0}
 aw_historical_figure_cards_select_city,请选择文明城市或无主陆地,Select a civilization city or unowned land,請選擇文明城市或無主陸地
 aw_historical_figure_cards_select_city_minister,请选择一座文明城市,Select a civilization city,請選擇一座文明城市
+aw_historical_figure_cards_reject_city,这座城市不属于任何文明国家,That city does not belong to a civilization,這座城市不屬於任何文明國家
+aw_historical_figure_cards_reject_minister,大臣只能部署进已有的文明城市,Ministers can only deploy into an existing civilization city,大臣只能部署進已有的文明城市
+aw_historical_figure_cards_reject_water,不能部署到水面上,Cannot deploy onto water,不能部署到水面上
+aw_historical_figure_cards_reject_terrain,这里的地形无法部署,This terrain cannot be deployed on,這裡的地形無法部署
+aw_historical_figure_cards_reject_building,这块地上有建筑，请另选一处空地,That tile has a building on it; pick empty ground,這塊地上有建築，請另選一處空地
+aw_historical_figure_cards_reject_generic,这里不能部署，请另选一处,Cannot deploy here; pick another spot,這裡不能部署，請另選一處
 aw_historical_figure_cards_target,目标：{0},Target: {0},目標：{0}
 aw_historical_figure_cards_confirm_city_hint,确认后将在此部署；无主地会建立其历史国家。,Deploy here after confirmation; unowned land will found the figure's historical kingdom.,確認後將在此部署；無主地會建立其歷史國家。
 aw_historical_figure_cards_confirm_city_hint_minister,确认后将在此部署；大臣只能进入已有国家，无主地无法部署。,Deploy here after confirmation. Ministers can only join an existing kingdom and cannot be placed on unowned land.,確認後將在此部署；大臣只能進入已有國家，無主地無法部署。
