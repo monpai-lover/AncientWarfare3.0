@@ -54,6 +54,14 @@ namespace AncientWarfare3.ui.windows
         ///     「关窗即取消」不要把自己那次隐藏当成玩家取消。
         /// </summary>
         private static bool _suppressCloseCancel;
+        /// <summary>
+        ///     进入选点状态的那一帧。选点从**下一帧**才开始受理 ——
+        ///     点「部署到城市」这一次点击本身仍在本帧内继续传播,
+        ///     补丁层的 checkEmptyClick / clickedStart 会在同一帧看到
+        ///     IsPickingTile 已为真,把按钮所在的屏幕位置当成玩家选的格子
+        ///     (实测直接跳到「目标：176, 189」——那正是按钮的位置)。
+        /// </summary>
+        private static int _pickingArmedFrame = -1;
         private static string _selectedCrateId = "";
         private static bool _inventoryMode;
         private const int InventoryPageSize = 20;
@@ -199,7 +207,9 @@ namespace AncientWarfare3.ui.windows
         ///     置真 → 下一帧窗口又被开回来,表现就是「关掉马上又弹出来」。
         ///     </para>
         /// </summary>
-        internal static bool IsPickingTile => _state == DrawState.Placement;
+        internal static bool IsPickingTile =>
+            _state == DrawState.Placement &&
+            UnityEngine.Time.frameCount > _pickingArmedFrame;
 
         internal static void ResetTransientState()
         {
@@ -214,6 +224,7 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _deploymentId = "";
             _pendingConfirmWindow = false;
+            _pickingArmedFrame = -1;
             _state = DrawState.Idle;
             _rollStartedAt = 0f;
             _revealStartedAt = 0f;
@@ -781,16 +792,27 @@ namespace AncientWarfare3.ui.windows
 
             if (_state == DrawState.Placement || _state == DrawState.PlacementConfirm)
             {
+                bool ministerOnly =
+                    HistoricalFigureCardRoleRules.IsMinister(_selectedCard) ||
+                    HistoricalFigureCardRoleRules.IsMilitaryGeneral(
+                        _selectedCard);
                 _status.text = _state == DrawState.Placement
-                    ? Text("aw_historical_figure_cards_select_city",
-                        "\u8bf7\u9009\u62e9\u6587\u660e\u57ce\u5e02\u6216\u65e0\u4e3b\u9646\u5730")
+                    ? (ministerOnly
+                        ? Text("aw_historical_figure_cards_select_city_minister",
+                            "\u8bf7\u9009\u62e9\u4e00\u5ea7\u6587\u660e\u57ce\u5e02")
+                        : Text("aw_historical_figure_cards_select_city",
+                            "\u8bf7\u9009\u62e9\u6587\u660e\u57ce\u5e02\u6216\u65e0\u4e3b\u9646\u5730"))
                     : Format("aw_historical_figure_cards_target",
                         "\u76ee\u6807\uff1a{0}", _selectedCity?.name ??
                         (_selectedTile == null ? "-" : _selectedTile.x + ", " +
                          _selectedTile.y));
                 _body.text = CardText(_selectedCard) + "\n\n" +
-                    Text("aw_historical_figure_cards_confirm_city_hint",
-                        "\u786e\u8ba4\u540e\u5c06\u5728\u6b64\u90e8\u7f72\uff1b\u65e0\u4e3b\u5730\u4f1a\u5efa\u7acb\u5176\u5386\u53f2\u56fd\u5bb6\u3002");
+                    (ministerOnly
+                        ? Text(
+                            "aw_historical_figure_cards_confirm_city_hint_minister",
+                            "\u786e\u8ba4\u540e\u5c06\u5728\u6b64\u90e8\u7f72\uff1b\u5927\u81e3\u53ea\u80fd\u8fdb\u5165\u5df2\u6709\u56fd\u5bb6\uff0c\u65e0\u4e3b\u5730\u65e0\u6cd5\u90e8\u7f72\u3002")
+                        : Text("aw_historical_figure_cards_confirm_city_hint",
+                            "\u786e\u8ba4\u540e\u5c06\u5728\u6b64\u90e8\u7f72\uff1b\u65e0\u4e3b\u5730\u4f1a\u5efa\u7acb\u5176\u5386\u53f2\u56fd\u5bb6\u3002"));
                 return;
             }
             if (_selectedCard != null && (_state == DrawState.Details || _state == DrawState.Reveal))
@@ -969,6 +991,8 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _deploymentId = Guid.NewGuid().ToString("N");
             _state = DrawState.Placement;
+            // 点「部署到城市」这一次点击本身还没走完,本帧不受理选点。
+            _pickingArmedFrame = UnityEngine.Time.frameCount;
             // 关窗后必须把这两样都清掉,否则点图会有肉眼可见的延迟:
             //   1. clickHide 把 controls_lock_timer 设成 0.3s,归零前
             //      updateControls 的整个点击分支被跳过;
@@ -1045,6 +1069,9 @@ namespace AncientWarfare3.ui.windows
             _status.text = Format("aw_historical_figure_cards_deploy_failed",
                 "\u90e8\u7f72\u5931\u8d25\uff1a{0}", result.Error);
             _state = DrawState.Placement;
+            // \u540c BeginPlacement:\u70b9\u300c\u786e\u8ba4\u90e8\u7f72\u300d\u8fd9\u6b21\u70b9\u51fb\u8fd8\u5728\u672c\u5e27\u4f20\u64ad\u4e2d,
+            // \u9000\u56de\u9009\u70b9\u540e\u672c\u5e27\u4e0d\u53d7\u7406,\u5426\u5219\u786e\u8ba4\u6309\u94ae\u7684\u4f4d\u7f6e\u4f1a\u88ab\u5f53\u6210\u65b0\u9009\u7684\u683c\u5b50\u3002
+            _pickingArmedFrame = UnityEngine.Time.frameCount;
             Refresh();
         }
 

@@ -58,8 +58,10 @@ aw_historical_figure_cards_reveal_result,{0} · {1:0.00}%,{0} · {1:0.00}%,{0} �
 aw_historical_figure_cards_details_title,{0} [{1}],{0} [{1}],{0} [{1}]
 aw_historical_figure_cards_owned,已拥有：{0},Owned: {0},已擁有：{0}
 aw_historical_figure_cards_select_city,请选择文明城市或无主陆地,Select a civilization city or unowned land,請選擇文明城市或無主陸地
+aw_historical_figure_cards_select_city_minister,请选择一座文明城市,Select a civilization city,請選擇一座文明城市
 aw_historical_figure_cards_target,目标：{0},Target: {0},目標：{0}
 aw_historical_figure_cards_confirm_city_hint,确认后将在此部署；无主地会建立其历史国家。,Deploy here after confirmation; unowned land will found the figure's historical kingdom.,確認後將在此部署；無主地會建立其歷史國家。
+aw_historical_figure_cards_confirm_city_hint_minister,确认后将在此部署；大臣只能进入已有国家，无主地无法部署。,Deploy here after confirmation. Ministers can only join an existing kingdom and cannot be placed on unowned land.,確認後將在此部署；大臣只能進入已有國家，無主地無法部署。
 aw_historical_figure_cards_deployed,已部署 {0}，国号为{1},Deployed {0} as {1},已部署 {0}，國號為{1}
 aw_historical_figure_cards_draw_failed,抽取失败：{0},Draw failed: {0},抽取失敗：{0}
 aw_historical_figure_cards_deploy_failed,部署失败：{0},Deployment failed: {0},部署失敗：{0}
