@@ -31,10 +31,14 @@ namespace AncientWarfare3.patch.naming
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__result?.data == null) return;
-            Actor anchor = pActor?.data != null
-                ? pActor
-                : FamilyIdentitySyncService.ResolveAnchor(__result);
-            FamilyIdentitySyncService.SyncFamilyName(__result, anchor);
+            // 建家者优先,但他此刻不一定已经有氏 —— 建家发生在结婚流程里,
+            // 氏的写入未必排在前面。实测日志:
+            //   [AW3 FAMILY] 跳过改名 anchor=涆国 lineage=True identity=''
+            // 夏化判定过了,却因为锚点没氏而整家留着随机名。
+            // 所以取不到氏就回退到家里其他有氏的人(配偶通常已有)。
+            FamilyIdentitySyncService.SyncFamilyName(__result,
+                FamilyIdentitySyncService.ResolveAnchor(__result, pActor),
+                pDiagnose: true);
         }
     }
 }

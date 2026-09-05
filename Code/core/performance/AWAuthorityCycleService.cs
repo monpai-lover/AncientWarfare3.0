@@ -33,6 +33,7 @@ namespace AncientWarfare3.core.performance
             ArmyMembershipReconciliation,
             WarriorArmyMembership,
             EnclosedUnownedZoneRepair,
+            FamilyIdentityMaintenance,
             DeJureMaintenance,
             CountyAdministrationRepair,
             CourtVacancyRetryDrain,
@@ -320,6 +321,10 @@ namespace AncientWarfare3.core.performance
                 WarriorArmyMembershipService.ProcessAuthorityCycle);
             Step(AuthorityStep.EnclosedUnownedZoneRepair,
                 EnclosedUnownedZoneRepairService.ProcessAuthorityCycle);
+            // 建家的后置钩子只拿得到建家当时的状态,而氏未必已经写进 actor。
+            // 每周期扫一个小家庭把漏网的补上,成本恒定。
+            Step(AuthorityStep.FamilyIdentityMaintenance,
+                FamilyIdentitySyncService.ProcessAuthorityCycle);
             // 法理州的脏票据处理。同样在 c39aab9e 丢失(它由 982fc828 接入,
             // 早于那次合并),而全仓库有 17 处 MarkKingdomDirty/MarkRegionDirty
             // 在往里塞票据。预算沿用接入时的 2 张/周期。

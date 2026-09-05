@@ -237,11 +237,19 @@ namespace AncientWarfare3.ui.windows
         ///     </para>
         ///
         ///     <para>
+        ///     必须重写 <c>OnNormalDisable</c> 而不是自己写 <c>OnDisable</c>:
+        ///     基类 <c>AbstractWindow</c> 已有一个 <c>private void OnDisable</c>
+        ///     (里面维护 <c>IsOpened</c> 并派发 <c>OnNormalDisable</c>),
+        ///     Unity 只调最派生类的那一个 —— 自己写 <c>OnDisable</c> 会把基类
+        ///     的整套关窗清理吃掉,窗口状态从此错乱,表现为「点部署不弹窗」。
+        ///     </para>
+        ///
+        ///     <para>
         ///     部署成功那条路自己会把状态收干净(<c>_state</c> 已是
         ///     <c>Details</c>),所以这里只处理仍停在部署流程里的情况。
         ///     </para>
         /// </summary>
-        private void OnDisable()
+        public override void OnNormalDisable()
         {
             // BeginPlacement 自己会 clickHide 一次(它要把地图让出来给玩家
             // 选点),那次隐藏不是玩家在关窗,不能当成取消。

@@ -15,6 +15,8 @@ namespace AncientWarfare3.core.lineage
         private static readonly object Gate = new object();
         private static int _lastWorldIdentity;
         private static bool _completed;
+        /// <summary>ProcessAuthorityCycle 的轮转游标,见该方法注释。</summary>
+        private static int _maintenanceCursor;
 
         /// <summary>
         ///     读档后一次性把全世界现有的小家庭名对齐到谱系。
@@ -62,6 +64,7 @@ namespace AncientWarfare3.core.lineage
                 _completed = false;
                 _lastWorldIdentity = 0;
             }
+            _maintenanceCursor = 0;
         }
 
         private static int RepairFamilies()
@@ -96,10 +99,62 @@ namespace AncientWarfare3.core.lineage
         }
 
         /// <summary>
+        ///     每权威周期看一个小家庭,把漏网的名字补上。
+        ///
+        ///     <para>
+        ///     建家的后置钩子只能拿建家当时的状态,而氏未必已经写进 actor ——
+        ///     建家发生在结婚流程里,氏的写入未必排在它之前,实测
+        ///     <c>identity=''</c> 而 <c>lineage=True</c> 的家庭就是这么留下
+        ///     随机名的。氏的写入点散布在十几处(出生、继承、册封、卡片降临…),
+        ///     逐个挂钩不现实,所以用一个恒定成本的轮转扫描收尾。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     每周期只看一个,游标越界回绕。<see cref="SyncFamilyName"/> 自身
+        ///     幂等(名字相同直接返回),重复扫描不产生写入。
+        ///     </para>
+        /// </summary>
+        internal static void ProcessAuthorityCycle()
+        {
+            FamilyManager mgr;
+            try { mgr = World.world?.families; }
+            catch { return; }
+            if (mgr == null) return;
+
+            Family target = null;
+            int index = 0;
+            try
+            {
+                foreach (Family family in mgr)
+                {
+                    if (index++ != _maintenanceCursor) continue;
+                    target = family;
+                    break;
+                }
+            }
+            catch { return; }
+
+            _maintenanceCursor = target == null ? 0 : _maintenanceCursor + 1;
+            if (target?.data == null || target.isRekt()) return;
+            try { SyncFamilyName(target, ResolveAnchor(target)); }
+            catch { }
+        }
+
+        /// <summary>
         ///     按某个成员的氏/姓重命名小家庭。<paramref name="pAnchor"/> 一般是
         ///     建家者；取不到氏/姓就什么都不做，让原版随机名留着。
         /// </summary>
         internal static void SyncFamilyName(Family pFamily, Actor pAnchor)
+        {
+            SyncFamilyName(pFamily, pAnchor, pDiagnose: false);
+        }
+
+        /// <param name="pDiagnose">
+        ///     只有建家那一次值得打诊断。周期维护每帧都会走这里,
+        ///     开着会把日志刷爆。
+        /// </param>
+        internal static void SyncFamilyName(Family pFamily, Actor pAnchor,
+            bool pDiagnose)
         {
             if (pFamily?.data == null || pFamily.isRekt() ||
                 pAnchor?.data == null) return;
@@ -112,7 +167,8 @@ namespace AncientWarfare3.core.lineage
                     // 两个条件的合取,任一为假就静默保留原版随机名
                     // (「Hen」「Shufo」这类)。哪一个为假从外面看不出来,
                     // 诊断开关下把两个值都打出来。
-                    if (AncientWarfare3.core.performance.AWDiagnosticsGate
+                    if (pDiagnose &&
+                        AncientWarfare3.core.performance.AWDiagnosticsGate
                             .Enabled)
                         ModClass.LogInfo("[AW3 FAMILY] 跳过改名 anchor=" +
                             (pAnchor.data.name ?? "?") +
@@ -138,9 +194,16 @@ namespace AncientWarfare3.core.lineage
         ///     小家庭已有成员里挑一个当命名锚点。优先建家者，其次家长，
         ///     最后退回任意在世成员 —— 建家者可能已经死了。
         /// </summary>
-        internal static Actor ResolveAnchor(Family pFamily)
+        /// <param name="pPreferred">
+        ///     优先候选(建家路径上的 <c>pActor</c>)。他**有氏**才用他;
+        ///     没氏就当他不存在,继续往下找。建家发生在结婚流程里,
+        ///     氏的写入未必排在建家之前,而配偶那边通常已经有了。
+        /// </param>
+        internal static Actor ResolveAnchor(Family pFamily,
+            Actor pPreferred = null)
         {
             if (pFamily?.data == null || pFamily.isRekt()) return null;
+            if (IsUsableAnchor(pPreferred)) return pPreferred;
             try
             {
                 Actor founder = pFamily.getFounderFirst();
