@@ -110,7 +110,8 @@ public static class HistoricalFigureCardCatalog
         private static readonly Dictionary<string, string> PortraitPathByCardId =
             new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["ming_taizu"] = "ui/historical_cards/ming_taizu"
+                ["ming_taizu"] = "ui/historical_cards/ming_taizu",
+                ["mengpai"] = "ui/historical_cards/mengpai"
             };
 
         public static readonly IReadOnlyList<HistoricalFigureCardDefinition> All =

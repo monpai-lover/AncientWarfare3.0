@@ -82,21 +82,24 @@ namespace AncientWarfare3.core.lineage
             IReadOnlyDictionary<HistoricalFigureCardRarity,
                 HistoricalFigureCardDefinition[]> pools = BuildPools(pLocalCards,
                     pSharedGoldCards);
-            int totalWeight = HistoricalFigureCardRarity.All
-                .Where(p => pools[p].Length > 0).Sum(RarityWeight);
-            if (totalWeight <= 0) return null;
-            int roll = Math.Max(0, Math.Min(totalWeight - 1, pRoll));
-            int boundary = 0;
-            foreach (HistoricalFigureCardRarity rarity in
-                     HistoricalFigureCardRarity.All)
+            HistoricalFigureCardRarity requested = RarityForRoll(pRoll);
+            int requestedIndex = 0;
+            while (!HistoricalFigureCardRarity.All[requestedIndex].Equals(
+                       requested)) requestedIndex++;
+            for (int i = requestedIndex;
+                 i < HistoricalFigureCardRarity.All.Count; i++)
             {
-                if (pools[rarity].Length == 0) continue;
-                boundary += RarityWeight(rarity);
-                if (roll < boundary) return rarity;
+                HistoricalFigureCardRarity rarity =
+                    HistoricalFigureCardRarity.All[i];
+                if (pools[rarity].Length > 0) return rarity;
             }
-            return pools[HistoricalFigureCardRarity.Blue].Length > 0
-                ? HistoricalFigureCardRarity.Blue
-                : HistoricalFigureCardRarity.All.Last(p => pools[p].Length > 0);
+            for (int i = requestedIndex - 1; i >= 0; i--)
+            {
+                HistoricalFigureCardRarity rarity =
+                    HistoricalFigureCardRarity.All[i];
+                if (pools[rarity].Length > 0) return rarity;
+            }
+            return null;
         }
 
         public static HistoricalFigureCardRevealResult BuildReveal(
@@ -127,10 +130,8 @@ namespace AncientWarfare3.core.lineage
             IReadOnlyDictionary<HistoricalFigureCardRarity,
                 HistoricalFigureCardDefinition[]> pools = BuildPools(candidates,
                     sharedGold);
-            int totalWeight = HistoricalFigureCardRarity.All
-                .Where(p => pools[p].Length > 0).Sum(RarityWeight);
             HistoricalFigureCardRarity rarity = RarityForRoll(
-                pRandom.Next(totalWeight), candidates, sharedGold);
+                pRandom.Next(ProbabilityScale), candidates, sharedGold);
             if (rarity == null) return Failure("selected crate has no cards");
             HistoricalFigureCardDefinition[] rarityCards = pools[rarity];
 
@@ -154,7 +155,7 @@ namespace AncientWarfare3.core.lineage
                     continue;
                 }
                 HistoricalFigureCardRarity trackRarity = RarityForRoll(
-                    pRandom.Next(totalWeight), candidates, sharedGold);
+                    pRandom.Next(ProbabilityScale), candidates, sharedGold);
                 HistoricalFigureCardDefinition[] trackPool = pools[trackRarity];
                 HistoricalFigureCardDefinition card = trackPool[
                     pRandom.Next(trackPool.Length)];

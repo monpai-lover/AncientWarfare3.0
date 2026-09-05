@@ -26,8 +26,6 @@ internal static class HistoricalFigureCardSupporterSeedTests
         True(wei.CardId.StartsWith("supporter_", StringComparison.Ordinal),
             "card id uses the supporter namespace");
         Equal(26, wei.CardId.Length, "card id uses a stable truncated hash");
-        Equal(HistoricalFigureCardRarity.Pink, wei.Rarity,
-            "supporter cards are pink");
         Equal(HistoricalFigureCardRole.Minister, wei.Role,
             "supporter cards deploy as ministers");
         Equal(HistoricalFigureCardMinisterType.CivilOfficial, wei.MinisterType,
@@ -50,9 +48,42 @@ internal static class HistoricalFigureCardSupporterSeedTests
                 .Distinct(StringComparer.OrdinalIgnoreCase).Count(),
             currentCards.Count,
             "current supporters.csv contributes one card per distinct name");
-        True(currentCards.All(p => p.Rarity.Equals(
-                HistoricalFigureCardRarity.Pink)),
-            "the current supporter pool contains only pink local cards");
+        Equal(2, Count(currentCards, HistoricalFigureCardRarity.Red),
+            "the supporter pool contains two red cards");
+        Equal(3, Count(currentCards, HistoricalFigureCardRarity.Pink),
+            "the supporter pool contains three pink cards");
+        Equal(5, Count(currentCards, HistoricalFigureCardRarity.Purple),
+            "the supporter pool contains five purple cards");
+        Equal(10, Count(currentCards, HistoricalFigureCardRarity.Blue),
+            "the supporter pool contains ten blue cards");
+        Equal(0, Count(currentCards, HistoricalFigureCardRarity.Gold),
+            "the supporter pool keeps gold exclusive to the shared prize pool");
+
+        Equal(HistoricalFigureCardRarity.Red,
+            currentCards.Single(p => p.DisplayName == "威行").Rarity,
+            "duplicate sponsorship amounts are summed before tier assignment");
+        Equal(HistoricalFigureCardRarity.Pink,
+            currentCards.Single(p => p.DisplayName == "一米").Rarity,
+            "technical assistance receives a high contribution tier");
+        Equal(HistoricalFigureCardRarity.Pink,
+            currentCards.Single(p => p.DisplayName == "vader").Rarity,
+            "substantial art assistance receives a high contribution tier");
+        Equal(HistoricalFigureCardRarity.Purple,
+            currentCards.Single(p => p.DisplayName == "博士").Rarity,
+            "art assistance contributes to supporter tier ranking");
+        Equal(HistoricalFigureCardRarity.Purple,
+            currentCards.Single(p => p.DisplayName == "妖妖凛").Rarity,
+            "larger monetary sponsors remain above the purple boundary");
+        Equal(HistoricalFigureCardRarity.Blue,
+            currentCards.Single(p => p.DisplayName == "Jake").Rarity,
+            "lower monetary sponsors remain below the purple boundary");
+    }
+
+    private static int Count(
+        System.Collections.Generic.IEnumerable<HistoricalFigureCardDefinition> pCards,
+        HistoricalFigureCardRarity pRarity)
+    {
+        return pCards.Count(p => p.Rarity.Equals(pRarity));
     }
 
     private static void True(bool value, string message)

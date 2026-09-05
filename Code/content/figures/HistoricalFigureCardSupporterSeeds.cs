@@ -18,37 +18,89 @@ namespace AncientWarfare3.content.figures
         public static IReadOnlyList<HistoricalFigureCardDefinition> Build(
             IEnumerable<SupporterRosterEntry> pEntries)
         {
-            return (pEntries ?? Enumerable.Empty<SupporterRosterEntry>())
+            SupporterAggregate[] supporters = (pEntries ??
+                    Enumerable.Empty<SupporterRosterEntry>())
                 .Where(p => p != null && !string.IsNullOrWhiteSpace(p.Name))
-                .GroupBy(p => p.Name.Trim(), StringComparer.OrdinalIgnoreCase)
-                .Select(BuildCard)
+                .GroupBy(p => NormalizeName(p.Name), StringComparer.Ordinal)
+                .Select(BuildAggregate)
+                .OrderByDescending(p => p.SupportScore)
+                .ThenBy(p => p.FirstRank)
+                .ThenBy(p => p.NormalizedName, StringComparer.Ordinal)
+                .ToArray();
+            int redCount = supporters.Length * 2 / 20;
+            int pinkCount = supporters.Length * 3 / 20;
+            int purpleCount = supporters.Length * 5 / 20;
+
+            return supporters.Select((p, i) => BuildCard(p,
+                    i < redCount
+                        ? HistoricalFigureCardRarity.Red
+                        : i < redCount + pinkCount
+                            ? HistoricalFigureCardRarity.Pink
+                            : i < redCount + pinkCount + purpleCount
+                                ? HistoricalFigureCardRarity.Purple
+                                : HistoricalFigureCardRarity.Blue))
                 .OrderBy(p => p.CardId, StringComparer.Ordinal)
                 .ToArray();
         }
 
-        private static HistoricalFigureCardDefinition BuildCard(
+        private static SupporterAggregate BuildAggregate(
             IGrouping<string, SupporterRosterEntry> pGroup)
         {
             SupporterRosterEntry[] records = pGroup
                 .OrderBy(p => p.Rank)
                 .ThenBy(p => p.Date, StringComparer.Ordinal)
+                .ThenBy(p => p.Name, StringComparer.Ordinal)
                 .ToArray();
-            string name = records[0].Name.Trim();
+            return new SupporterAggregate
+            {
+                Records = records,
+                Name = records[0].Name.Trim(),
+                NormalizedName = pGroup.Key,
+                FirstRank = records.Min(p => p.Rank),
+                SupportScore = records.Sum(p => ParseAmount(p.Amount) +
+                    ParseAmount(p.ContributionWeight))
+            };
+        }
+
+        private static HistoricalFigureCardDefinition BuildCard(
+            SupporterAggregate pSupporter,
+            HistoricalFigureCardRarity pRarity)
+        {
+            SupporterRosterEntry[] records = pSupporter.Records;
+            string name = pSupporter.Name;
             string detail = BuildBiography(name, records);
             string family = StringInfo.GetNextTextElement(name, 0);
             string given = name.Substring(family.Length);
+            int fame = pRarity.Equals(HistoricalFigureCardRarity.Red) ? 92
+                : pRarity.Equals(HistoricalFigureCardRarity.Pink) ? 82
+                : pRarity.Equals(HistoricalFigureCardRarity.Purple) ? 65
+                : 45;
             return new HistoricalFigureCardDefinition(
                 StableCardId(name), name, family, family, given,
                 "赞助者", "赞助者", "赞助者",
                 HistoricalFigureCardCatalog.UnknownYear,
                 HistoricalFigureCardCatalog.UnknownYear,
-                HistoricalFigureCardCatalog.UnknownYear, 80,
-                HistoricalFigureCardRarity.Pink, HistoricalFigureSex.Male,
+                HistoricalFigureCardCatalog.UnknownYear, fame,
+                pRarity, HistoricalFigureSex.Male,
                 detail, "", "", "", "", "", "", -1, 5000,
                 Array.Empty<string>(),
                 name + "是 Ancient Warfare 3 的赞助者与贡献者。",
                 detail, HistoricalFigureCardRole.Minister,
                 HistoricalFigureCardMinisterType.CivilOfficial, CollectionId);
+        }
+
+        private static decimal ParseAmount(string pAmount)
+        {
+            return decimal.TryParse((pAmount ?? "").Trim(), NumberStyles.Number,
+                CultureInfo.InvariantCulture, out decimal amount)
+                ? amount
+                : 0m;
+        }
+
+        private static string NormalizeName(string pName)
+        {
+            return (pName ?? "").Trim().Normalize(NormalizationForm.FormKC)
+                .ToUpperInvariant();
         }
 
         private static string BuildBiography(string pName,
@@ -79,8 +131,7 @@ namespace AncientWarfare3.content.figures
 
         private static string StableCardId(string pName)
         {
-            string normalized = (pName ?? "").Trim()
-                .Normalize(NormalizationForm.FormKC).ToUpperInvariant();
+            string normalized = NormalizeName(pName);
             using (SHA256 sha = SHA256.Create())
             {
                 byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(normalized));
@@ -88,6 +139,15 @@ namespace AncientWarfare3.content.figures
                 for (int i = 0; i < 8; i++) hex.Append(hash[i].ToString("x2"));
                 return "supporter_" + hex;
             }
+        }
+
+        private sealed class SupporterAggregate
+        {
+            public SupporterRosterEntry[] Records { get; set; }
+            public string Name { get; set; }
+            public string NormalizedName { get; set; }
+            public int FirstRank { get; set; }
+            public decimal SupportScore { get; set; }
         }
     }
 }

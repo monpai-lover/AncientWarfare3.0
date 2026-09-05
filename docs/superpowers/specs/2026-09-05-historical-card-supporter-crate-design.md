@@ -12,8 +12,8 @@ Its headline is `赞助，你也可以进入游戏`. Every distinct person in
   maintained in the card catalogue.
 - Repeated names are merged case-insensitively into one card. Their monetary
   records and contribution descriptions are combined for the card biography.
-- Every supporter card uses pink rarity, minister role, civil-official subtype,
-  Xia actor defaults, and the `supporters` collection id.
+- Every supporter card uses minister role, civil-official subtype, Xia actor
+  defaults, and the `supporters` collection id.
 - Empty or malformed names are skipped. Stable card ids are derived from the
   normalized display name so existing inventory entries survive rank changes.
 - Supporter cards use the standard fallback portrait until dedicated art exists.
@@ -27,10 +27,12 @@ Its headline is `赞助，你也可以进入游戏`. Every distinct person in
   available local rarity instead of renormalizing the distribution.
 - Within the selected rarity, every card has equal probability. Adding cards to
   one rarity never changes another rarity's probability.
-- Distinct supporters are ordered by their aggregated numeric donation amount,
-  then by their earliest leaderboard rank and normalized name. With the current
-  20-person roster, the top 2 are red, the next 3 pink, the next 5 purple, and
-  the remaining 10 blue. Duplicate rows contribute to one person's total.
+- Distinct supporters are ordered by their aggregated numeric donation amount
+  plus the separately recorded non-monetary contribution weight, then by their
+  earliest leaderboard rank and normalized name. The weight recognizes actual
+  technical and art assistance without presenting it as donated money. With
+  the current 20-person roster, the top 2 are red, the next 3 pink, the next 5
+  purple, and the remaining 10 blue. Duplicate rows contribute to one total.
 - Supporter cards are excluded from historical period crates because their
   collection id is explicit and outside all period ids.
 - The crate is available as a minister crate and does not expose an empty
@@ -67,6 +69,7 @@ candidate pool with the normal historical-card minister preference.
 - Draw tests prove fixed rarity thresholds, deterministic fallback for missing
   local rarities, equal selection within a rarity, and the shared gold pool.
 - Crate/catalog tests prove all current distinct supporter names are present,
-  pink, minister-role cards and excluded from period crates.
+  use the 2/3/5/10 rarity split, remain minister-role cards, and are excluded
+  from period crates.
 - Build, source guards, local deployment, and source/deployed hash comparison
   complete the release check.

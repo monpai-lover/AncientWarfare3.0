@@ -24,6 +24,18 @@ internal static class HistoricalFigureCardSourceGuardTests
             "supporter crate forces minister role");
         True(window.Contains("CollectionDisplayName(_selectedCard.CollectionId)"),
             "card details localize their source collection");
+        True(window.Contains("portrait.preserveAspect = true") &&
+             window.Contains("_revealPortrait.preserveAspect = true"),
+            "draw and detail portraits preserve their aspect ratio");
+        True(!window.Contains("SetNativeSize"),
+            "draw portraits never resize their fixed card slots");
+
+        string cardItem = File.ReadAllText(Path.Combine(root, "ui", "items",
+            "HistoricalFigureCardListItem.cs"));
+        True(cardItem.Contains("portrait.preserveAspect = true"),
+            "catalogue portraits preserve their aspect ratio");
+        True(!cardItem.Contains("SetNativeSize"),
+            "catalogue portraits never resize their fixed card slots");
 
         string leaderboard = File.ReadAllText(Path.Combine(root, "ui",
             "SupporterLeaderboardData.cs"));

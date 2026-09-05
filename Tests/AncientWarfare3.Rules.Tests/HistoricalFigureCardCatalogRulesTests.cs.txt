@@ -72,6 +72,8 @@ internal static class HistoricalFigureCardCatalogRulesTests
             "author avatar belongs to the gold pool");
         Equal(HistoricalFigureCardRole.Monarch, authorAvatar.Role,
             "author avatar is a monarch card");
+        Equal("ui/historical_cards/mengpai", authorAvatar.PortraitPath,
+            "author avatar uses its bounded card portrait resource");
         True(gold.Any(card => card.CardId == "mengpai"),
             "author avatar is included in the shared gold pool");
         HistoricalFigureCardDefinition caoCao =

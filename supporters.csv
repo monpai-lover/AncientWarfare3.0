@@ -1,7 +1,7 @@
-rank,name,amount,date
-21,vader,,,提供了很多的人物和建筑贴图
-# Optional fifth column: description for non-monetary contributions.
-1,一米,,,提供了技术支持和帮助:寻路/大步长调度器
+rank,name,amount,date,description,contribution_weight
+21,vader,,,提供了很多的人物和建筑贴图,80
+# Optional fifth/sixth columns: contribution description and ranking weight.
+1,一米,,,提供了技术支持和帮助:寻路/大步长调度器,90
 2,刘季,100,2026-08-19
 3,Jake,20,2026-08-02
 4,Au,10,2026-08-01
@@ -19,5 +19,5 @@ rank,name,amount,date
 16,威行,50,2026-08-16
 17,快修bug,20,2026-08-14
 18,阿巴,10,2026-08-19
-19,博士,,,提供了一些建筑和人物贴图
+19,博士,,,提供了一些建筑和人物贴图,30
 20,威行,100,2026-08-27

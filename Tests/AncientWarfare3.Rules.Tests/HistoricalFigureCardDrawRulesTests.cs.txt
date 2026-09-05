@@ -19,6 +19,30 @@ internal static class HistoricalFigureCardDrawRulesTests
         Equal(HistoricalFigureCardRarity.Blue,
             HistoricalFigureCardDrawService.RarityForRoll(2008), "2008 is blue");
 
+        var pinkOnly = HistoricalFigureCardSupporterSeeds.Build(
+            SupporterRosterData.Read()).Where(p => p.Rarity.Equals(
+                HistoricalFigureCardRarity.Pink)).ToArray();
+        var sharedGold = HistoricalFigureCardCatalog.All.Where(p =>
+            p.Rarity.Equals(HistoricalFigureCardRarity.Gold)).ToArray();
+        Equal(HistoricalFigureCardRarity.Gold,
+            HistoricalFigureCardDrawService.RarityForRoll(25, pinkOnly,
+                sharedGold),
+            "sparse pools retain the fixed gold boundary");
+        Equal(HistoricalFigureCardRarity.Pink,
+            HistoricalFigureCardDrawService.RarityForRoll(26, pinkOnly,
+                sharedGold),
+            "a missing red bucket falls toward the next lower rarity");
+        Equal(HistoricalFigureCardRarity.Pink,
+            HistoricalFigureCardDrawService.RarityForRoll(9999, pinkOnly,
+                sharedGold),
+            "missing lower buckets resolve without changing gold odds");
+
+        var sparsePoolRandom = new RecordingRandom(25, 0);
+        HistoricalFigureCardDrawService.BuildReveal(pinkOnly,
+            sparsePoolRandom, "supporters");
+        Equal(10000, sparsePoolRandom.FirstMaximum,
+            "rarity roll always uses the fixed probability scale");
+
         var result = HistoricalFigureCardDrawService.BuildReveal(
             HistoricalFigureCardCatalog.All, new FixedRandom(2008, 0, 1));
         Equal(50, result.RollingCards.Count, "reveal has fifty cards");
@@ -33,13 +57,23 @@ internal static class HistoricalFigureCardDrawRulesTests
             SupporterRosterData.Read());
         Equal(supporters.Count, supporters.Select(p => p.CardId)
                 .Distinct(StringComparer.Ordinal).Count(),
-            "each distinct supporter occupies one pink pool slot");
-        for (int i = 0; i < supporters.Count; i++)
+            "each distinct supporter occupies one local pool slot");
+        foreach (HistoricalFigureCardRarity supporterRarity in
+                 HistoricalFigureCardRarity.All.Where(p =>
+                     !p.Equals(HistoricalFigureCardRarity.Gold)))
         {
-            var supporterReveal = HistoricalFigureCardDrawService.BuildReveal(
-                supporters, new FixedRandom(26, i), "supporters");
-            Equal(supporters[i].CardId, supporterReveal.Winner.CardId,
-                "uniform pink index can select supporter " + i);
+            var rarityCards = supporters.Where(p => p.Rarity.Equals(
+                supporterRarity)).ToArray();
+            for (int i = 0; i < rarityCards.Length; i++)
+            {
+                var supporterReveal =
+                    HistoricalFigureCardDrawService.BuildReveal(supporters,
+                        new FixedRandom(RollFor(supporterRarity), i),
+                        "supporters");
+                Equal(rarityCards[i].CardId, supporterReveal.Winner.CardId,
+                    "uniform " + supporterRarity.Id +
+                    " index can select supporter " + i);
+            }
         }
         var goldReveal = HistoricalFigureCardDrawService.BuildReveal(
             supporters, new FixedRandom(0, 0), "supporters");
@@ -50,6 +84,14 @@ internal static class HistoricalFigureCardDrawRulesTests
             "gold winner comes from the shared catalogue");
     }
 
+    private static int RollFor(HistoricalFigureCardRarity pRarity)
+    {
+        if (pRarity.Equals(HistoricalFigureCardRarity.Red)) return 26;
+        if (pRarity.Equals(HistoricalFigureCardRarity.Pink)) return 90;
+        if (pRarity.Equals(HistoricalFigureCardRarity.Purple)) return 410;
+        return 2008;
+    }
+
     private sealed class FixedRandom : IHistoricalFigureCardRandom
     {
         private readonly int[] _values;
@@ -57,6 +99,22 @@ internal static class HistoricalFigureCardDrawRulesTests
         public FixedRandom(params int[] values) { _values = values; }
         public int Next(int maximumExclusive)
         {
+            int value = _values[Math.Min(_index++, _values.Length - 1)];
+            return value % maximumExclusive;
+        }
+    }
+
+    private sealed class RecordingRandom : IHistoricalFigureCardRandom
+    {
+        private readonly int[] _values;
+        private int _index;
+        public int FirstMaximum { get; private set; }
+
+        public RecordingRandom(params int[] values) { _values = values; }
+
+        public int Next(int maximumExclusive)
+        {
+            if (_index == 0) FirstMaximum = maximumExclusive;
             int value = _values[Math.Min(_index++, _values.Length - 1)];
             return value % maximumExclusive;
         }

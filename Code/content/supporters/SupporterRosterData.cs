@@ -13,6 +13,7 @@ namespace AncientWarfare3.content.supporters
         public string Amount { get; set; } = "";
         public string Date { get; set; } = "";
         public string Description { get; set; } = "";
+        public string ContributionWeight { get; set; } = "";
     }
 
     public static class SupporterRosterData
@@ -69,7 +70,9 @@ namespace AncientWarfare3.content.supporters
                     Name = name,
                     Amount = Clean(fields.Count > 2 ? fields[2] : ""),
                     Date = Clean(fields.Count > 3 ? fields[3] : ""),
-                    Description = Clean(fields.Count > 4 ? fields[4] : "")
+                    Description = Clean(fields.Count > 4 ? fields[4] : ""),
+                    ContributionWeight = Clean(fields.Count > 5
+                        ? fields[5] : "")
                 });
             }
 
