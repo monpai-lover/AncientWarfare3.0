@@ -355,17 +355,37 @@ namespace AncientWarfare3.ui.windows
         ///     选到格子后延后一帧再开确认窗。由补丁层的每帧钩子驱动 ——
         ///     窗口这时是隐藏的,自身的 Update 不会跑。
         /// </summary>
+        /// <summary>
+        ///     选点的解锁观察点。武装之后必须再看到一次**全新的按下**。
+        ///
+        ///     <para>
+        ///     前两版判据都不成立:
+        ///     帧号 —— 按下按钮到那次点击传到地图链路之间不一定只隔一帧;
+        ///     「等松开」—— UI 按钮的 onClick 本来就在鼠标松开时触发,
+        ///     <c>BeginPlacement</c> 跑的时候键已经是松开的,条件当场就满足。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     原版桌面端在 <c>GetMouseButtonDown(0)</c> 上调
+        ///     <c>clickedStart</c>(PlayerControl.cs:258),也就是**按下**那一
+        ///     瞬。所以只有等到下一次真正的按下,才说明这是玩家为选格子而发出
+        ///     的新点击,而不是点「部署到城市」那一次的残留。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     由 <c>updateControls</c> 的**前置**驱动,必须早于原版的点击分支;
+        ///     放在后置会晚一帧,玩家得点两次才生效。
+        ///     </para>
+        /// </summary>
+        internal static void ObservePickingUnlock()
+        {
+            if (_pickingArmed && !_pickingReleased &&
+                UnityEngine.Input.GetMouseButtonDown(0))
+                _pickingReleased = true;
+        }
+
         internal static void TickPendingConfirmWindow()
         {
-            // 选点的解锁条件:必须先观察到鼠标左键处于松开状态。
-            //
-            // 原来用帧号(「武装的下一帧才受理」)挡不住 —— 按下按钮到那次
-            // 点击传到地图链路之间不一定只隔一帧,实测仍会把按钮所在的位置
-            // 当成玩家选的格子。按住不放的那几帧里 GetMouseButton(0) 恒为真,
-            // 松开才转假,这才是「上一次点击已经彻底结束」的可靠信号。
-            if (_pickingArmed && !_pickingReleased &&
-                !UnityEngine.Input.GetMouseButton(0))
-                _pickingReleased = true;
             if (!_pendingConfirmWindow) return;
             _pendingConfirmWindow = false;
             if (_state != DrawState.PlacementConfirm) return;
