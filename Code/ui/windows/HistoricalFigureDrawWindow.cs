@@ -239,7 +239,14 @@ namespace AncientWarfare3.ui.windows
             get
             {
                 if (_state != DrawState.Placement) return false;
-                TickPlacementInput();
+                if (_awaitingPickPress)
+                {
+                    // Only a new press may release the arming gate. An idle
+                    // frame after the deploy button was released is still
+                    // part of that original click sequence.
+                    if (!InputHelpers.GetMouseButtonDown(0)) return false;
+                    _awaitingPickPress = false;
+                }
                 return !_awaitingPickPress;
             }
         }
@@ -251,12 +258,9 @@ namespace AncientWarfare3.ui.windows
         /// </summary>
         internal static void TickPlacementInput()
         {
-            if (_state != DrawState.Placement || !_awaitingPickPress) return;
-            // 当前点击还在按住或刚刚松开时,继续屏蔽它;否则按钮点击可能
-            // 被当成地图选点。下一帧空闲时解除,下一次点击即可被接管。
-            if (InputHelpers.GetMouseButton(0) ||
-                InputHelpers.GetMouseButtonUp(0)) return;
-            _awaitingPickPress = false;
+            // Kept as a player-control hook for lifecycle symmetry. The gate
+            // is consumed by IsPickingTile only when a new press is observed;
+            // an idle frame must never release the original button click.
         }
 
         internal static void ResetTransientState()

@@ -53,10 +53,10 @@ internal static class HistoricalFigureCardAcceptanceSourceGuardTests
         Contains(window, "ResetTransientState", "window exposes transient reset");
         string pickingProperty = Between(window, "internal static bool IsPickingTile",
             "internal static void ResetTransientState");
-        Contains(pickingProperty, "GetMouseButtonUp(0)",
-            "placement arming waits for the current mouse release to finish");
-        Contains(pickingProperty, "GetMouseButton(0)",
-            "placement arming does not accept a held button as a fresh click");
+        Contains(pickingProperty, "GetMouseButtonDown(0)",
+            "placement arming waits for the next mouse press");
+        False(pickingProperty.Contains("TickPlacementInput();"),
+            "placement gate is not released by an idle frame poll");
         Contains(window, "TickPlacementInput",
             "placement input gate advances on the player-control tick");
         string inputPatchPath = Path.Combine(root, "patch",
