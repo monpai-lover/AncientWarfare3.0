@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.content.figures;
@@ -55,16 +55,24 @@ namespace AncientWarfare3.ui.windows
         /// </summary>
         private static bool _suppressCloseCancel;
         /// <summary>
-        ///     已进入选点状态。与 <see cref="_pickingReleased"/> 一起构成
-        ///     「上一次点击已彻底结束」的判据,见 TickPendingConfirmWindow。
+        ///     进入选点状态的时刻(unscaled)。选点在此后一小段静默期内不受理,
+        ///     见 <see cref="IsPickingTile"/>。
         /// </summary>
-        private static bool _pickingArmed;
+        private static float _pickingArmedTime;
         /// <summary>
-        ///     进入选点后是否已经观察到鼠标松开。为假时不受理选点 ——
-        ///     否则点「部署到城市」这一次点击本身会被当成玩家选的格子
-        ///     (实测直接跳到「目标：176, 189」,那正是按钮的位置)。
+        ///     选点静默期。点「部署到城市」那一次点击必须在这段时间内彻底走完,
+        ///     否则它会被当成玩家选的格子。
+        ///
+        ///     <para>
+        ///     不再去猜输入事件的时序 —— 前三版判据(帧号、等松开、等新按下)
+        ///     都建立在「按钮 onClick 与原版地图点击分别落在哪个事件、相隔几帧」
+        ///     的推断上,而这个推断每次都不成立。一段固定的静默期与事件顺序
+        ///     无关:0.2 秒足够任何一次点击走完全部处理,而玩家把鼠标从按钮
+        ///     移到地图上再按下,本来就远不止这个时间。
+        ///     </para>
         /// </summary>
-        private static bool _pickingReleased;
+        private const float PickingArmDelay = .2f;
+
         private static string _selectedCrateId = "";
         private static bool _inventoryMode;
         private const int InventoryPageSize = 20;
@@ -211,7 +219,9 @@ namespace AncientWarfare3.ui.windows
         ///     </para>
         /// </summary>
         internal static bool IsPickingTile =>
-            _state == DrawState.Placement && _pickingReleased;
+            _state == DrawState.Placement &&
+            UnityEngine.Time.unscaledTime - _pickingArmedTime >=
+                PickingArmDelay;
 
         internal static void ResetTransientState()
         {
@@ -226,8 +236,7 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _deploymentId = "";
             _pendingConfirmWindow = false;
-            _pickingArmed = false;
-            _pickingReleased = false;
+            _pickingArmedTime = 0f;
             _state = DrawState.Idle;
             _rollStartedAt = 0f;
             _revealStartedAt = 0f;
@@ -355,35 +364,6 @@ namespace AncientWarfare3.ui.windows
         ///     选到格子后延后一帧再开确认窗。由补丁层的每帧钩子驱动 ——
         ///     窗口这时是隐藏的,自身的 Update 不会跑。
         /// </summary>
-        /// <summary>
-        ///     选点的解锁观察点。武装之后必须再看到一次**全新的按下**。
-        ///
-        ///     <para>
-        ///     前两版判据都不成立:
-        ///     帧号 —— 按下按钮到那次点击传到地图链路之间不一定只隔一帧;
-        ///     「等松开」—— UI 按钮的 onClick 本来就在鼠标松开时触发,
-        ///     <c>BeginPlacement</c> 跑的时候键已经是松开的,条件当场就满足。
-        ///     </para>
-        ///
-        ///     <para>
-        ///     原版桌面端在 <c>GetMouseButtonDown(0)</c> 上调
-        ///     <c>clickedStart</c>(PlayerControl.cs:258),也就是**按下**那一
-        ///     瞬。所以只有等到下一次真正的按下,才说明这是玩家为选格子而发出
-        ///     的新点击,而不是点「部署到城市」那一次的残留。
-        ///     </para>
-        ///
-        ///     <para>
-        ///     由 <c>updateControls</c> 的**前置**驱动,必须早于原版的点击分支;
-        ///     放在后置会晚一帧,玩家得点两次才生效。
-        ///     </para>
-        /// </summary>
-        internal static void ObservePickingUnlock()
-        {
-            if (_pickingArmed && !_pickingReleased &&
-                UnityEngine.Input.GetMouseButtonDown(0))
-                _pickingReleased = true;
-        }
-
         internal static void TickPendingConfirmWindow()
         {
             if (!_pendingConfirmWindow) return;
@@ -1063,9 +1043,8 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _deploymentId = Guid.NewGuid().ToString("N");
             _state = DrawState.Placement;
-            // 点「部署到城市」这一次点击还没结束(键仍按着),等松开再受理选点。
-            _pickingArmed = true;
-            _pickingReleased = false;
+            // 点「部署到城市」这次点击要先彻底走完,静默期内不受理选点。
+            _pickingArmedTime = UnityEngine.Time.unscaledTime;
             // 关窗后必须把这两样都清掉,否则点图会有肉眼可见的延迟:
             //   1. clickHide 把 controls_lock_timer 设成 0.3s,归零前
             //      updateControls 的整个点击分支被跳过;
@@ -1142,10 +1121,9 @@ namespace AncientWarfare3.ui.windows
             _status.text = Format("aw_historical_figure_cards_deploy_failed",
                 "\u90e8\u7f72\u5931\u8d25\uff1a{0}", result.Error);
             _state = DrawState.Placement;
-            // \u540c BeginPlacement:\u70b9\u300c\u786e\u8ba4\u90e8\u7f72\u300d\u8fd9\u6b21\u70b9\u51fb\u8fd8\u6ca1\u7ed3\u675f,
-            // \u7b49\u677e\u5f00\u518d\u53d7\u7406,\u5426\u5219\u786e\u8ba4\u6309\u94ae\u7684\u4f4d\u7f6e\u4f1a\u88ab\u5f53\u6210\u65b0\u9009\u7684\u683c\u5b50\u3002
-            _pickingArmed = true;
-            _pickingReleased = false;
+            // \u540c BeginPlacement:\u70b9\u300c\u786e\u8ba4\u90e8\u7f72\u300d\u8fd9\u6b21\u70b9\u51fb\u8981\u5148\u5f7b\u5e95\u8d70\u5b8c,
+            // \u5426\u5219\u786e\u8ba4\u6309\u94ae\u7684\u4f4d\u7f6e\u4f1a\u88ab\u5f53\u6210\u65b0\u9009\u7684\u683c\u5b50\u3002
+            _pickingArmedTime = UnityEngine.Time.unscaledTime;
             Refresh();
         }
 

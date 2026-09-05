@@ -120,26 +120,8 @@ namespace AncientWarfare3.patch
         }
 
         /// <summary>
-        ///     在原版的点击分支**之前**观察鼠标按下,给选点解锁。
-        ///
-        ///     <para>
-        ///     必须是前置:原版桌面端在 <c>GetMouseButtonDown(0)</c> 上调
-        ///     <c>clickedStart</c>,而解锁判据看的是同一个按下。挂在后置里
-        ///     解锁会晚一帧 —— 那一次按下已经被原版分支处理完了,玩家得点
-        ///     两次才生效。
-        ///     </para>
-        /// </summary>
-        [HarmonyPrefix]
-        [HarmonyPriority(Priority.First)]
-        [HarmonyPatch(typeof(PlayerControl), "updateControls")]
-        private static void UpdateControls_Prefix()
-        {
-            HistoricalFigureDrawWindow.ObservePickingUnlock();
-        }
-
-        /// <summary>
-        ///     每帧驱动「延后一帧开确认窗」。窗口在选点期间是隐藏的,
-        ///     它自己的 Update 不跑,所以挂在原版 PlayerControl 上。
+        ///     每帧驱动「延后一帧开确认窗」,并观察选点解锁。窗口在选点期间是
+        ///     隐藏的,它自己的 Update 不跑,所以挂在原版 PlayerControl 上。
         /// </summary>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PlayerControl), "updateControls")]
