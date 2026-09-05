@@ -969,10 +969,6 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _deploymentId = Guid.NewGuid().ToString("N");
             _state = DrawState.Placement;
-            // BeginPlacement 主动关窗,不是玩家在取消部署;压住 OnDisable 的守卫。
-            _suppressCloseCancel = true;
-            try { GetComponent<ScrollWindow>()?.clickHide(); }
-            finally { _suppressCloseCancel = false; }
             // 关窗后必须把这两样都清掉,否则点图会有肉眼可见的延迟:
             //   1. clickHide 把 controls_lock_timer 设成 0.3s,归零前
             //      updateControls 的整个点击分支被跳过;
@@ -981,7 +977,20 @@ namespace AncientWarfare3.ui.windows
             //      MapBox.isGameplayControlsLocked() 也为真 —— updateControls
             //      在它为真时直接 return,点击同样被吞。
             // 选点已有 IsPickingTile 状态机把关,这两道防误触都不需要。
-            ScrollWindow.finishAnimations();
+            //
+            // 压制标志必须罩住 finishAnimations:原版 setActive(false) 只是
+            // **起了一个 tween**,真正的 gameObject.SetActive(false) 在 tween
+            // 的 activeToFalse 回调里,也就是 finishAnimations 这一句才触发 ——
+            // OnNormalDisable 因此跑在 clickHide 返回之后。只罩住 clickHide
+            // 的话,标志早已复位,自己主动的这次关窗会被当成玩家取消,
+            // _state 被打回 Details,选点直接失效(表现为点部署没有弹窗)。
+            _suppressCloseCancel = true;
+            try
+            {
+                GetComponent<ScrollWindow>()?.clickHide();
+                ScrollWindow.finishAnimations();
+            }
+            finally { _suppressCloseCancel = false; }
             if (World.world?.player_control != null)
                 World.world.player_control.controls_lock_timer = 0f;
             // 提示必须在关窗之后:clickHide 走原版关窗流程,期间 WorldTip 会被
