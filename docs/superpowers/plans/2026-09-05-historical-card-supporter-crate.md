@@ -117,6 +117,6 @@ Run: `git diff --check` and inspect `git status --short` plus the scoped diff.
 
 Run: `.\deploy-local.ps1`, then compare SHA-256 for changed source, locale, supporter CSV, and crate image between repository and deployed mod.
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Commit the implementation and updated plan, then push `b/20260822-baseline-non-path-port` to origin.
