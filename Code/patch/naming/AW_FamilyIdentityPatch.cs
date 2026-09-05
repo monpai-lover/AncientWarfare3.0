@@ -39,18 +39,23 @@ namespace AncientWarfare3.patch.naming
         }
 
         /// <summary>
-        ///     开宗时同步宗族名。原版 <c>Clan.newClan</c> 末尾同样调
-        ///     <c>generateName(MetaType.Clan, ...)</c> 随机取名 —— 不接管的话
-        ///     新宗族一出生就顶着随机洋名，而我们在归档、王室认定、继承多处
-        ///     读这个对象。
+        ///     开宗时补一次宗族命名。
         ///
-        ///     挂 manager 而不是 <c>Clan.newClan</c>：后者跑完时
-        ///     <c>setClan</c> 还没执行，建族者还不属于这个 clan。
+        ///     <para>
+        ///     主链路是 <see cref="AncientWarfare3.patch.AW_ClanNamePatch"/> 在
+        ///     <c>Clan.newClan</c> 后置里调的 <c>RenameClanByLeader</c>，
+        ///     它拼「本源城名 + 氏 + 氏」。这里挂在外层的
+        ///     <c>ClanManager.newClan</c> 上，跑在它之后 ——
+        ///     <c>Clan.newClan</c> 结束时 <c>setClan</c> 还没执行，
+        ///     建族者的 <c>CLAN_NAME</c> 若此刻才就绪，主链路那趟会跳过。
+        ///     </para>
         ///
-        ///     用 <c>pTreatAsChief</c> 而不是等族长就位：原版建族路径上
-        ///     <c>chief_id</c> 从头到尾没被写过（<c>setChief</c> 只出现在每帧
-        ///     <c>checkMembersForNewChief</c> 和 <c>tryForgetChief</c> 里），
-        ///     等族长就位就等于永远不改名。
+        ///     <para>
+        ///     两趟都走同一个 <c>RenameClanByLeader</c>，它自身幂等
+        ///     （名字相同直接返回），所以重复调用无害。绝不能在这里另拼一套
+        ///     名字：本类的 <c>ResolveFamilyName</c> 只给裸氏，那是小家庭的
+        ///     规格，用在宗族上会把「乐安国宣氏」覆写成「蓟」。
+        ///     </para>
         /// </summary>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ClanManager), nameof(ClanManager.newClan))]
@@ -58,8 +63,7 @@ namespace AncientWarfare3.patch.naming
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__result?.data == null || pFounder?.data == null) return;
-            FamilyIdentitySyncService.SyncClanName(pFounder,
-                pTreatAsChief: true);
+            FamilyIdentitySyncService.SyncClanName(pFounder);
         }
     }
 }

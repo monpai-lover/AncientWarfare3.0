@@ -115,21 +115,17 @@ namespace AncientWarfare3.core.lineage
                 try
                 {
                     // 族长优先;没有族长就退回建族者。原版建族路径不写
-                    // chief_id(见 SyncClanName 的注释),存量存档里大量宗族
-                    // 直到某帧 checkMembersForNewChief 跑到才有族长 ——
-                    // 只认族长会让这趟修复对它们全部跳过。
-                    Actor chief;
-                    try { chief = clan.getChief(); }
-                    catch { chief = null; }
-                    bool treatAsChief = false;
-                    if (chief?.data == null || chief.isRekt())
-                    {
-                        chief = ResolveClanFounder(clan);
-                        treatAsChief = true;
-                    }
-                    if (chief?.data == null) continue;
+                    // chief_id(setChief 只出现在每帧 checkMembersForNewChief
+                    // 和 tryForgetChief 里),存量存档里大量宗族直到某帧才有
+                    // 族长 —— 只认族长会让这趟修复对它们全部跳过。
+                    Actor anchor;
+                    try { anchor = clan.getChief(); }
+                    catch { anchor = null; }
+                    if (anchor?.data == null || anchor.isRekt())
+                        anchor = ResolveClanFounder(clan);
+                    if (anchor?.data == null) continue;
                     string before = clan.data.name;
-                    SyncClanName(chief, treatAsChief);
+                    SyncClanName(anchor);
                     if (!string.Equals(clan.data.name, before,
                             StringComparison.Ordinal))
                         changed++;
@@ -193,47 +189,39 @@ namespace AncientWarfare3.core.lineage
         ///
         ///     只有族长能改名 —— 普通族人改氏不该把整个宗族改名。
         /// </summary>
-        internal static void SyncClanName(Actor pActor)
-        {
-            SyncClanName(pActor, pTreatAsChief: false);
-        }
-
         /// <summary>
-        ///     <paramref name="pTreatAsChief"/> 用于开宗那一刻。
+        ///     把某人的氏同步到他所属的原版 <c>Clan</c>。
         ///
         ///     <para>
-        ///     原版建族路径上 <c>chief_id</c> **从来没被设置过**:
-        ///     <c>ClanManager.newClan</c> 只写 <c>founder_actor_id</c>,
-        ///     <c>setChief</c> 仅在 <c>checkMembersForNewChief</c>(每帧
-        ///     <c>ClanManager.update</c> 调)和 <c>tryForgetChief</c> 里出现。
-        ///     所以开宗后置里 <c>getChief()</c> 必然返回 null,族长守卫恒为假,
-        ///     新宗族一律留着 <c>generateName(MetaType.Clan)</c> 的随机洋名 ——
-        ///     实测「Sheishe」「Qang」这类名字就是这么来的,而读档修复那趟
-        ///     同样因为改动数恒为 0 而从不打日志。
+        ///     **委托给 <see cref="LineageService.RenameClanByLeader"/>**,
+        ///     不自己拼名字。宗族的显示名是「本源城名 + 氏 + 氏」
+        ///     (如「乐安国宣氏」),由 <c>ShiBranchRules.BuildDisplayName</c>
+        ///     从 <c>ShiBranchInfo.origin_city_name</c> 拼出;而本类的
+        ///     <c>ResolveFamilyName</c> 只给裸氏(「蓟」),那是**小家庭**的规格。
+        ///     两者混用会让宗族名退化成裸氏。
         ///     </para>
         ///
         ///     <para>
-        ///     建族者就是开宗者,用他命名是对的;原版随后把族长补上时通常仍是
-        ///     同一个人,那一遍会因为名字已相同而被 <c>ShouldRewriteName</c>
-        ///     跳过。普通族人改氏仍走默认的族长守卫,不受影响。
+        ///     历史上这里确实自己拼过名,但因为族长守卫恒为假(原版建族路径
+        ///     从不写 <c>chief_id</c>)而从未真正执行,一直是
+        ///     <c>RenameClanByLeader</c> 在独占这条路。放宽族长守卫后覆盖才
+        ///     显形 —— 玩家看到宗族名从「乐安国宣氏」退化成「蓟」。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     夏化文化守卫仍在:<c>RenameClanByLeader</c> 内部走
+        ///     <c>ForeignPseudoLineageRules.ShouldRenameInstitutionalClan</c>,
+        ///     要求领袖是夏人或王国行夏化制度,其余种族的 clan 保持原版随机名。
         ///     </para>
         /// </summary>
-        internal static void SyncClanName(Actor pActor, bool pTreatAsChief)
+        internal static void SyncClanName(Actor pActor)
         {
             if (pActor?.data == null || pActor.isRekt()) return;
             try
             {
                 Clan clan = pActor.clan;
                 if (clan?.data == null || clan.isRekt()) return;
-                bool isChief = pTreatAsChief || clan.getChief() == pActor;
-                string identity = ResolveIdentity(pActor);
-                if (!FamilyIdentitySyncRules.ShouldAdoptClanName(
-                        UsesLineageSystem(pActor), isChief, identity)) return;
-                string desired =
-                    FamilyIdentitySyncRules.ResolveFamilyName(identity);
-                if (!FamilyIdentitySyncRules.ShouldRewriteName(
-                        clan.data.name, desired)) return;
-                clan.setName(desired);
+                LineageService.RenameClanByLeader(clan, pActor);
             }
             catch (Exception error)
             {

@@ -56,14 +56,23 @@ namespace AncientWarfare3.core.lineage
         /// <summary>
         ///     原版 <c>Clan</c> 该不该跟随我们的氏。
         ///
-        ///     Clan 在语义上**就是**宗族（有族长、传承、旗帜、族训），和我们的
-        ///     「氏」直接对应 —— 比小家庭那层更该同步。但它同样走
-        ///     <c>Clan.newClan</c> → <c>generateName(MetaType.Clan, ...)</c>
-        ///     随机取名，于是「姬」氏的人所属的原版宗族叫着一个随机洋名，
-        ///     而归档、王室认定、继承都在读这个对象。
+        ///     <para>
+        ///     **已无调用者，保留仅为其单测。** 宗族命名统一走
+        ///     <c>LineageService.RenameClanByLeader</c> —— 它拼的是
+        ///     「本源城名 + 氏 + 氏」（「乐安国宣氏」），而本类的
+        ///     <see cref="ResolveFamilyName"/> 只给裸氏，那是小家庭的规格。
+        ///     两条链路都挂在建族路径上（<c>Clan.newClan</c> 与外层
+        ///     <c>ClanManager.newClan</c>），后者一旦生效就会把前者的正确
+        ///     名字覆写成裸氏。
+        ///     </para>
         ///
-        ///     只有本人确实是该 Clan 的**族长**时才改名：一个普通族人改氏
-        ///     不应该把整个宗族改名，那是族长/开宗才有的权限。
+        ///     <para>
+        ///     这里的族长条件曾经恒为假 —— 原版建族路径从不写
+        ///     <c>chief_id</c>（<c>setChief</c> 只出现在每帧
+        ///     <c>checkMembersForNewChief</c> 和 <c>tryForgetChief</c> 里），
+        ///     所以覆盖从未发生，一直是 <c>RenameClanByLeader</c> 独占。
+        ///     放宽族长条件反而让覆盖显形，这是它被弃用的原因。
+        ///     </para>
         /// </summary>
         internal static bool ShouldAdoptClanName(bool pUsesLineageSystem,
             bool pIsChief, string pClanIdentity)

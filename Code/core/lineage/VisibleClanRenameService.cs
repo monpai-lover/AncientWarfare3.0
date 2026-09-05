@@ -99,7 +99,7 @@ namespace AncientWarfare3.core.lineage
                 LineageService.ArchiveActor(live, pAlive: live.isAlive());
                 // 原版 Clan 的名字走 generateName(MetaType.Clan) 随机生成，
                 // 从不认我们的氏；而归档写入、王室认定、继承都在读这个对象。
-                // 只有族长改氏才改宗族名（见 ShouldAdoptClanName）。
+                // 内部委托 RenameClanByLeader，拼「本源城名 + 氏 + 氏」。
                 FamilyIdentitySyncService.SyncClanName(live);
                 try { live.clearGraphicsFully(); } catch { }
                 changed = true;
