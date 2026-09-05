@@ -54,24 +54,6 @@ namespace AncientWarfare3.ui.windows
         ///     「关窗即取消」不要把自己那次隐藏当成玩家取消。
         /// </summary>
         private static bool _suppressCloseCancel;
-        /// <summary>
-        ///     进入选点状态的时刻(unscaled)。选点在此后一小段静默期内不受理,
-        ///     见 <see cref="IsPickingTile"/>。
-        /// </summary>
-        private static float _pickingArmedTime;
-        /// <summary>
-        ///     选点静默期。点「部署到城市」那一次点击必须在这段时间内彻底走完,
-        ///     否则它会被当成玩家选的格子。
-        ///
-        ///     <para>
-        ///     不再去猜输入事件的时序 —— 前三版判据(帧号、等松开、等新按下)
-        ///     都建立在「按钮 onClick 与原版地图点击分别落在哪个事件、相隔几帧」
-        ///     的推断上,而这个推断每次都不成立。一段固定的静默期与事件顺序
-        ///     无关:0.2 秒足够任何一次点击走完全部处理,而玩家把鼠标从按钮
-        ///     移到地图上再按下,本来就远不止这个时间。
-        ///     </para>
-        /// </summary>
-        private const float PickingArmDelay = .2f;
 
         private static string _selectedCrateId = "";
         private static bool _inventoryMode;
@@ -219,9 +201,7 @@ namespace AncientWarfare3.ui.windows
         ///     </para>
         /// </summary>
         internal static bool IsPickingTile =>
-            _state == DrawState.Placement &&
-            UnityEngine.Time.unscaledTime - _pickingArmedTime >=
-                PickingArmDelay;
+            _state == DrawState.Placement;
 
         internal static void ResetTransientState()
         {
@@ -236,7 +216,6 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _deploymentId = "";
             _pendingConfirmWindow = false;
-            _pickingArmedTime = 0f;
             _state = DrawState.Idle;
             _rollStartedAt = 0f;
             _revealStartedAt = 0f;
@@ -1043,8 +1022,6 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _deploymentId = Guid.NewGuid().ToString("N");
             _state = DrawState.Placement;
-            // 点「部署到城市」这次点击要先彻底走完,静默期内不受理选点。
-            _pickingArmedTime = UnityEngine.Time.unscaledTime;
             // 关窗后必须把这两样都清掉,否则点图会有肉眼可见的延迟:
             //   1. clickHide 把 controls_lock_timer 设成 0.3s,归零前
             //      updateControls 的整个点击分支被跳过;
@@ -1121,9 +1098,6 @@ namespace AncientWarfare3.ui.windows
             _status.text = Format("aw_historical_figure_cards_deploy_failed",
                 "\u90e8\u7f72\u5931\u8d25\uff1a{0}", result.Error);
             _state = DrawState.Placement;
-            // \u540c BeginPlacement:\u70b9\u300c\u786e\u8ba4\u90e8\u7f72\u300d\u8fd9\u6b21\u70b9\u51fb\u8981\u5148\u5f7b\u5e95\u8d70\u5b8c,
-            // \u5426\u5219\u786e\u8ba4\u6309\u94ae\u7684\u4f4d\u7f6e\u4f1a\u88ab\u5f53\u6210\u65b0\u9009\u7684\u683c\u5b50\u3002
-            _pickingArmedTime = UnityEngine.Time.unscaledTime;
             Refresh();
         }
 

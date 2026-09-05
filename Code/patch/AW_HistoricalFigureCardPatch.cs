@@ -146,12 +146,43 @@ namespace AncientWarfare3.patch
         ///     只在选点状态下放行,且只影响这一个判断:别的 UI 交互不受影响。
         ///     </para>
         /// </summary>
+        /// <summary>
+        ///     选点期间只放行「关窗计时」这一道闸,不动真实的指针判定。
+        ///
+        ///     <para>
+        ///     原版 <c>isOverUI</c> 是两件事的或:
+        ///     <c>_over_ui_timeout &gt; 0</c>(刚关过窗的一段计时)和
+        ///     <c>isPointerOverUIObject()</c>(指针**当真**压在 UI 上)。
+        ///     <c>PlayerControl.Update</c> 在它为真时直接 return,连
+        ///     <c>clickedStart</c> 都不调 —— 关窗后那段计时会把选点的第一次
+        ///     点击整个吃掉,这是当初加这个后置的原因。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     但原来的实现是无条件 <c>__result = false</c>,把指针判定也一并
+        ///     抹掉了。于是点「部署到城市」的那一瞬间,指针明明还压在按钮上,
+        ///     原版却认为它在地图上,那次点击直接被路由成选点 —— 确认窗因此
+        ///     跳到按钮所在的坐标(实测「目标：176, 189」)。这不是时序问题
+        ///     而是空间问题,之前在窗口侧调帧号/等松开/等按下都治不到。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     现在只在指针确实不在任何 UI 元素上时才放行,timeout 那一道
+        ///     照旧压制。指针压在按钮上的点击交还给原版,由按钮自己消费。
+        ///     </para>
+        /// </summary>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PlayerControl), nameof(PlayerControl.isOverUI))]
-        private static void IsOverUI_Postfix(ref bool __result)
+        private static void IsOverUI_Postfix(PlayerControl __instance,
+            ref bool __result)
         {
+            if (!__result) return;
             if (!HistoricalFigureDrawWindow.IsPickingTile) return;
             if (ScrollWindow.isWindowActive()) return;
+            bool pointerOverUi;
+            try { pointerOverUi = __instance.isPointerOverUIObject(); }
+            catch { return; }
+            if (pointerOverUi) return;
             __result = false;
         }
     }
