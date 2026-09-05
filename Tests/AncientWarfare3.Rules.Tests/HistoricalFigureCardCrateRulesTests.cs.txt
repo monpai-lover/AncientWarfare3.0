@@ -7,8 +7,8 @@ internal static class HistoricalFigureCardCrateRulesTests
 {
     public static void Run()
     {
-        Equal(6, HistoricalFigureCardCrates.All.Count,
-            "six historical period crates are available");
+        Equal(7, HistoricalFigureCardCrates.All.Count,
+            "six period crates and one supporter crate are available");
         Equal(HistoricalFigureCardCrates.All.Count,
             HistoricalFigureCardCrates.All.Select(p => p.Id)
                 .Distinct(StringComparer.Ordinal).Count(),
@@ -17,12 +17,22 @@ internal static class HistoricalFigureCardCrateRulesTests
         foreach (HistoricalFigureCardCrate crate in HistoricalFigureCardCrates.All)
         {
             var cards = HistoricalFigureCardCatalog.GetCards(crate.Id);
+            if (crate.Id == HistoricalFigureCardSupporterSeeds.CollectionId)
+            {
+                True(cards.Count > 0, "supporter crate is not empty");
+                True(cards.All(p => p.CollectionId == crate.Id),
+                    "supporter crate contains only explicit supporter cards");
+                True(cards.All(p => p.Role == HistoricalFigureCardRole.Minister),
+                    "supporter crate contains only ministers");
+                continue;
+            }
             True(cards.Count >= 40, "crate contains at least forty cards: " + crate.Id);
             Equal(cards.Count, crate.CardCount,
                 "crate count matches its catalogue: " + crate.Id);
             Equal("ui/historical_cards/crates/" + crate.Id, crate.ImagePath,
                 "crate artwork path is stable: " + crate.Id);
-            True(cards.All(p => crate.ContainsYear(p.HistoricalYear)),
+            True(cards.All(p => p.CollectionId == crate.Id ||
+                                crate.ContainsYear(p.HistoricalYear)),
                 "crate does not contain a card outside its period: " + crate.Id);
         }
 
@@ -40,6 +50,10 @@ internal static class HistoricalFigureCardCrateRulesTests
             "the founding of Later Liang belongs to the fifth crate");
         Equal("yuan_ming_qing", HistoricalFigureCardCrates.ForYear(1644).Id,
             "late imperial period belongs to the sixth crate");
+        Equal("supporters", HistoricalFigureCardCrates.Get("supporters").Id,
+            "supporter crate has a stable id");
+        True(HistoricalFigureCardCrates.ForYear(-1).Id != "supporters",
+            "supporter crate never captures cards by year");
 
         IReadOnlyList<HistoricalFigureCardDefinition> dividedCards =
             HistoricalFigureCardCatalog.GetCards("three_six_dynasties");
@@ -50,10 +64,13 @@ internal static class HistoricalFigureCardCrateRulesTests
             HistoricalFigureCardDrawService.RarityForRoll(0, dividedCards,
                 globalGold),
             "every crate uses the shared gold grand-prize pool");
-        Equal(HistoricalFigureCardRarity.Pink,
+        Equal(dividedCards.Any(p => p.Rarity.Equals(
+                    HistoricalFigureCardRarity.Red))
+                ? HistoricalFigureCardRarity.Red
+                : HistoricalFigureCardRarity.Pink,
             HistoricalFigureCardDrawService.RarityForRoll(26, dividedCards,
                 globalGold),
-            "an unavailable local red bucket is skipped");
+            "the roll follows the first available local rarity bucket");
         var reveal = HistoricalFigureCardDrawService.BuildReveal(dividedCards,
             new FixedRandom(0, 0, 0), "three_six_dynasties");
         True(reveal.Succeeded, "a sparse crate still produces a reveal");

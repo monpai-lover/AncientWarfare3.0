@@ -15,6 +15,27 @@ internal static class HistoricalFigureCardSourceGuardTests
             True(!source.Contains("Task.Run"),
                 "card source does not schedule Unity work on a worker: " + path);
         }
+
+        string window = File.ReadAllText(Path.Combine(root, "ui", "windows",
+            "HistoricalFigureDrawWindow.cs"));
+        True(window.Contains("IsMinisterOnlyCrate(crate.Id)"),
+            "crate selection checks the minister-only supporter crate");
+        True(window.Contains("_selectedRole = HistoricalFigureCardRole.Minister"),
+            "supporter crate forces minister role");
+        True(window.Contains("CollectionDisplayName(_selectedCard.CollectionId)"),
+            "card details localize their source collection");
+
+        string leaderboard = File.ReadAllText(Path.Combine(root, "ui",
+            "SupporterLeaderboardData.cs"));
+        True(leaderboard.Contains("SupporterRosterData.Read()"),
+            "leaderboard shares the supporters.csv parser");
+        True(!leaderboard.Contains("BuiltIn"),
+            "leaderboard has no second hard-coded supporter roster");
+
+        string catalogue = File.ReadAllText(Path.Combine(root, "content",
+            "figures", "HistoricalFigureCardCatalog.cs"));
+        True(!catalogue.Contains("supporter pool is empty"),
+            "an unavailable external supporter CSV does not disable all crates");
     }
 
     private static void True(bool value, string message)

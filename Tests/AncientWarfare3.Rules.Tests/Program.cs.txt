@@ -42,6 +42,13 @@ if (args.Length == 1 && args[0] == "--historical-figure-card-catalog")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--supporter-roster")
+{
+    SupporterRosterRulesTests.Run();
+    Console.WriteLine("Supporter roster rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--historical-figure-card-collection")
 {
     HistoricalFigureCardCollectionRulesTests.Run();
@@ -59,6 +66,7 @@ if (args.Length == 1 && args[0] == "--historical-figure-card-draw")
 if (args.Length == 1 && args[0] == "--historical-figure-card-crates")
 {
     HistoricalFigureCardCrateRulesTests.Run();
+    HistoricalFigureCardSupporterSeedTests.Run();
     HistoricalFigureCardInventoryRulesTests.Run();
     HistoricalFigureCardRecycleRulesTests.Run();
     HistoricalFigureCardRecycleSelectionRulesTests.Run();

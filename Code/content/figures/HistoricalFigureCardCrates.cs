@@ -64,7 +64,9 @@ namespace AncientWarfare3.content.figures
                 new HistoricalFigureCardCrate("five_song", "五代·宋·辽·金",
                     "五代十国至宋辽金的历史人物", 907, 1279),
                 new HistoricalFigureCardCrate("yuan_ming_qing", "元·明·清",
-                    "元、明、清三代的历史人物", 1280, MaximumYear)
+                    "元、明、清三代的历史人物", 1280, MaximumYear),
+                new HistoricalFigureCardCrate("supporters", "赞助者",
+                    "赞助，你也可以进入游戏", 1, 0)
             };
 
         public static HistoricalFigureCardCrate Get(string pCrateId)

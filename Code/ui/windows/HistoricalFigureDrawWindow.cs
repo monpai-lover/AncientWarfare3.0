@@ -289,6 +289,8 @@ namespace AncientWarfare3.ui.windows
             HistoricalFigureCardCrate crate =
                 HistoricalFigureCardCrates.Get(pCrateId);
             if (_state != DrawState.Idle || crate == null) return;
+            if (IsMinisterOnlyCrate(crate.Id))
+                _selectedRole = HistoricalFigureCardRole.Minister;
             _selectedCard = null;
             _lastReveal = null;
             _selectedCrateId = crate.Id;
@@ -1157,7 +1159,10 @@ namespace AncientWarfare3.ui.windows
                 if (title != null) title.text = CrateName(crate);
                 if (count != null)
                     count.text = Format("aw_historical_figure_cards_crate_count",
-                        "{0} \u4eba\u7269", crate.CardCountFor(_selectedRole));
+                        "{0} \u4eba\u7269", crate.CardCountFor(
+                            IsMinisterOnlyCrate(crate.Id)
+                                ? HistoricalFigureCardRole.Minister
+                                : _selectedRole));
                 if (gold != null)
                     gold.text = Text("aw_historical_figure_cards_shared_gold_badge",
                         "\u5171\u4eab\u91d1\u6c60");
@@ -1741,7 +1746,7 @@ namespace AncientWarfare3.ui.windows
                 _selectedCard.DynastyName, _selectedCard.FameScore,
                 CardRoleName(_selectedCard),
                 string.IsNullOrEmpty(_selectedCard.CollectionId)
-                    ? "-" : _selectedCard.CollectionId);
+                    ? "-" : CollectionDisplayName(_selectedCard.CollectionId));
             _revealBiography.text = Format(
                 "aw_historical_figure_cards_reveal_identity",
                 "\u751f\u5352\uff1a{0} - {1}\n\u7236\uff1a{2}\n\u6bcd\uff1a{3}\n\u80cc\u666f\uff1a{4}\n\n\u8be6\u7ec6\u4ecb\u7ecd\uff1a{5}",
@@ -2145,6 +2150,20 @@ namespace AncientWarfare3.ui.windows
         {
             return pCrate == null ? "-" :
                 Text(pCrate.DescriptionKey, pCrate.Description);
+        }
+
+        private static bool IsMinisterOnlyCrate(string pCrateId)
+        {
+            return string.Equals(pCrateId,
+                HistoricalFigureCardSupporterSeeds.CollectionId,
+                StringComparison.Ordinal);
+        }
+
+        private static string CollectionDisplayName(string pCollectionId)
+        {
+            HistoricalFigureCardCrate crate =
+                HistoricalFigureCardCrates.Get(pCollectionId);
+            return crate == null ? pCollectionId : CrateName(crate);
         }
 
         private static string Format(string pKey, string pFallback,

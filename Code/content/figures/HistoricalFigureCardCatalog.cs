@@ -238,6 +238,11 @@ public static class HistoricalFigureCardCatalog
             {
                 cards[minister.CardId] = minister;
             }
+            foreach (HistoricalFigureCardDefinition supporter in
+                     HistoricalFigureCardSupporterSeeds.All)
+            {
+                cards[supporter.CardId] = supporter;
+            }
             return SortForDisplay(cards.Values).ToArray();
         }
 
@@ -371,6 +376,12 @@ public static class HistoricalFigureCardCatalog
                 HistoricalFigureCardDefinition[] ministers = pCards.Where(card =>
                     card != null && card.Role == HistoricalFigureCardRole.Minister &&
                     IsCardInCrate(card, crate)).ToArray();
+                if (string.Equals(crate.Id,
+                        HistoricalFigureCardSupporterSeeds.CollectionId,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
                 if (ministers.Length < 40)
                     issues.Add("minister pool below minimum: " + crate.Id);
                 int blueCount = ministers.Count(card => card.Rarity != null &&

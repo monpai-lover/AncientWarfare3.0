@@ -13,6 +13,8 @@
 		<Compile Include="HistoricalFigureCardCollectionRulesTests.cs.txt" />
 		<Compile Include="HistoricalFigureCardDrawRulesTests.cs.txt" />
 		<Compile Include="HistoricalFigureCardCrateRulesTests.cs.txt" />
+		<Compile Include="HistoricalFigureCardSupporterSeedTests.cs.txt" />
+		<Compile Include="SupporterRosterRulesTests.cs.txt" />
 		<Compile Include="HistoricalFigureCardInventoryRulesTests.cs.txt" />
 		<Compile Include="HistoricalFigureCardRecycleRulesTests.cs.txt" />
 		<Compile Include="HistoricalFigureCardRecycleSelectionRulesTests.cs.txt" />
@@ -29,7 +31,9 @@
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardNarratives.cs" Link="Production\HistoricalFigureCardNarratives.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographyCatalog.cs" Link="Production\HistoricalFigureCardBiographyCatalog.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardMinisterSeeds.cs" Link="Production\HistoricalFigureCardMinisterSeeds.cs" />
+		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardSupporterSeeds.cs" Link="Production\HistoricalFigureCardSupporterSeeds.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardCrates.cs" Link="Production\HistoricalFigureCardCrates.cs" />
+		<Compile Include="..\..\Code\content\supporters\SupporterRosterData.cs" Link="Production\SupporterRosterData.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardInventoryRules.cs" Link="Production\HistoricalFigureCardInventoryRules.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardRecycleRules.cs" Link="Production\HistoricalFigureCardRecycleRules.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardRecycleSelectionRules.cs" Link="Production\HistoricalFigureCardRecycleSelectionRules.cs" />
