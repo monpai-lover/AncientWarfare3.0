@@ -50,6 +50,7 @@ namespace AncientWarfare3.core.lineage
                 AddFallback("aw_historical_figure_cards_role_monarch", "君主箱");
                 AddFallback("aw_historical_figure_cards_role_minister", "大臣箱");
                 AddFallback("aw_historical_figure_cards_recycle_title", "历史人物汰换");
+                AddFallback("aw_historical_figure_card_recycle Title", "历史人物汰换");
                 AddFallback("aw_historical_figure_card_recycle_title", "历史人物汰换");
                 AddFallback("aw_historical_figure_cards_recycle_summary", "已选择 {0}/{1}");
                 AddFallback("aw_historical_figure_cards_recycle_next", "下一品质：{0}");

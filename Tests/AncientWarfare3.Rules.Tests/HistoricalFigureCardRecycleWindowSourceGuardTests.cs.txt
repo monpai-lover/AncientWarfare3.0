@@ -14,6 +14,12 @@ internal static class HistoricalFigureCardRecycleWindowSourceGuardTests
         string store = File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
             "Code", "core", "lineage",
             "HistoricalFigureCardCollectionStore.cs"));
+        string locale = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Locales",
+            "aw3_historical_cards.csv"));
+        string runtime = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "HistoricalFigureCardRuntimeService.cs"));
         string activeDraw = StripBlockComments(draw);
 
         Contains(recycle, "HistoricalFigureCardRecycleSelectionRules.FilterVisible",
@@ -34,6 +40,11 @@ internal static class HistoricalFigureCardRecycleWindowSourceGuardTests
             "recycle window localizes the native window title");
         Contains(recycle, "aw_historical_figure_cards_recycle_title",
             "recycle title uses the plural locale key registered by the runtime");
+        Contains(locale, "aw_historical_figure_card_recycle Title,",
+            "native recycle window title has a localized framework key");
+        Contains(runtime,
+            "AddFallback(\"aw_historical_figure_card_recycle Title\"",
+            "native recycle window title has a runtime locale fallback");
         Contains(recycle, "const int SlotColumns = 3",
             "recycle selection uses a three-column grid");
         Contains(recycle, "const int CardColumns = 3",
