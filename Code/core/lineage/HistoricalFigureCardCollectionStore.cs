@@ -53,6 +53,7 @@ namespace AncientWarfare3.core.lineage
         private readonly string _path;
         private HistoricalFigureCardCollectionSnapshot _snapshot;
         private bool _loaded;
+        private int _revision;
 
         public HistoricalFigureCardCollectionStore()
             : this(DefaultPath())
@@ -67,6 +68,15 @@ namespace AncientWarfare3.core.lineage
         }
 
         public string Path => _path;
+
+        public int Revision
+        {
+            get
+            {
+                EnsureLoaded();
+                lock (Gate) return _revision;
+            }
+        }
 
         public HistoricalFigureCardDrawRecord LastDraw
         {
@@ -89,6 +99,7 @@ namespace AncientWarfare3.core.lineage
                 if (_loaded) return;
                 _snapshot = ReadSnapshot();
                 _loaded = true;
+                _revision = 1;
             }
         }
 
@@ -169,6 +180,20 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        public int CopyInventorySnapshot(
+            out IReadOnlyDictionary<string, int> pOwnedCounts,
+            out IReadOnlyList<HistoricalFigureCardDrawRecord> pDraws)
+        {
+            EnsureLoaded();
+            lock (Gate)
+            {
+                pOwnedCounts = new Dictionary<string, int>(
+                    _snapshot.ownedCounts, StringComparer.Ordinal);
+                pDraws = _snapshot.draws.Select(Clone).ToArray();
+                return _revision;
+            }
+        }
+
         public HistoricalFigureCardCollectionSnapshot Snapshot()
         {
             EnsureLoaded();
@@ -219,6 +244,7 @@ namespace AncientWarfare3.core.lineage
                         string.Equals(p.DrawId, pDrawId, StringComparison.Ordinal));
                     return false;
                 }
+                _revision++;
                 return true;
             }
         }
@@ -237,7 +263,11 @@ namespace AncientWarfare3.core.lineage
                 RemoveSource(_snapshot, pCardId, source, 1);
                 string previousUpdatedUtc = _snapshot.lastUpdatedUtc;
                 _snapshot.lastUpdatedUtc = pUtc ?? DateTime.UtcNow.ToString("O");
-                if (TryWriteSnapshot(_snapshot)) return true;
+                if (TryWriteSnapshot(_snapshot))
+                {
+                    _revision++;
+                    return true;
+                }
                 _snapshot.ownedCounts[pCardId] = count;
                 AddSource(_snapshot, pCardId, source, 1);
                 _snapshot.lastUpdatedUtc = previousUpdatedUtc;
@@ -319,7 +349,11 @@ namespace AncientWarfare3.core.lineage
                 while (_snapshot.draws.Count > MaximumDrawHistory)
                     _snapshot.draws.RemoveAt(0);
                 _snapshot.lastUpdatedUtc = utc;
-                if (TryWriteSnapshot(_snapshot)) return true;
+                if (TryWriteSnapshot(_snapshot))
+                {
+                    _revision++;
+                    return true;
+                }
                 _snapshot = before;
                 return false;
             }

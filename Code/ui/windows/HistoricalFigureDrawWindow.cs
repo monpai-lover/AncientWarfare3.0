@@ -136,7 +136,7 @@ namespace AncientWarfare3.ui.windows
         private int _virtualBoundCount;
         // Tiles are six GameObjects each; building a viewport's worth in one
         // frame is a visible hitch. Amortise across frames instead.
-        private const int MaxTileBuildsPerFrame = 6;
+        private const int MaxTileBuildsPerFrame = 2;
         private bool _virtualPoolIncomplete;
         // 「返回箱子」的位置是底部按钮排的锚点:「部署到城市」按它算相对位置。
         private const float BackButtonX = 230f;
@@ -147,8 +147,9 @@ namespace AncientWarfare3.ui.windows
         // order actually changes -- selection state alone does not affect it.
         private IReadOnlyList<HistoricalFigureCardDefinition> _inventoryCache;
         private int _inventoryCacheTotalOwned;
-        private int _inventoryCacheDraws = -1;
-        private int _inventoryCacheOwned = -1;
+        private int _inventoryCacheRevision = -1;
+        private IReadOnlyDictionary<string, int> _inventoryOwnedCounts =
+            new Dictionary<string, int>(StringComparer.Ordinal);
         private HistoricalFigureCardInventorySort _inventoryCacheSort =
             (HistoricalFigureCardInventorySort)(-1);
 
@@ -610,8 +611,9 @@ namespace AncientWarfare3.ui.windows
 
         private void Refresh()
         {
+            bool needsInitialLayout = !_built;
             BuildUi();
-            ApplyLayout();
+            if (needsInitialLayout) ApplyLayout();
             Store.Load();
             if (_state != DrawState.Rolling)
                 UpdateTrack(_lastReveal?.RollingCards,
@@ -1104,14 +1106,14 @@ namespace AncientWarfare3.ui.windows
             // Pool mutual exclusion happens in UpdateCardList/ShowOnlyPool.
             HideMysteryGoldCard();
             SetRoleButtonsVisible(false);
-            int drawCount = Store.Draws.Count;
-            int ownedCount = Store.OwnedCounts.Count;
+            int revision = Store.Revision;
             if (_inventoryCache == null ||
-                _inventoryCacheDraws != drawCount ||
-                _inventoryCacheOwned != ownedCount ||
+                _inventoryCacheRevision != revision ||
                 _inventoryCacheSort != _inventorySort)
             {
-                IReadOnlyList<HistoricalFigureCardDrawRecord> draws = Store.Draws;
+                int snapshotRevision = Store.CopyInventorySnapshot(
+                    out IReadOnlyDictionary<string, int> ownedCounts,
+                    out IReadOnlyList<HistoricalFigureCardDrawRecord> draws);
                 var latestRanks = new Dictionary<string, int>(StringComparer.Ordinal);
                 int nextRank = 0;
                 for (int i = draws.Count - 1; i >= 0; i--)
@@ -1122,15 +1124,18 @@ namespace AncientWarfare3.ui.windows
                     latestRanks[cardId] = nextRank++;
                 }
                 _inventoryCache = HistoricalFigureCardInventoryRules.Sort(
-                    HistoricalFigureCardCatalog.All.Where(p =>
-                        Store.GetOwnedCount(p.CardId) > 0), _inventorySort,
+                    HistoricalFigureCardCatalog.All.Where(p => p != null &&
+                        ownedCounts.TryGetValue(p.CardId, out int count) &&
+                        count > 0), _inventorySort,
                     latestRanks);
                 _inventoryCacheTotalOwned = _inventoryCache.Sum(p =>
-                    Store.GetOwnedCount(p.CardId));
-                _inventoryCacheDraws = drawCount;
-                _inventoryCacheOwned = ownedCount;
+                    ownedCounts.TryGetValue(p.CardId, out int count)
+                        ? count : 0);
+                _inventoryOwnedCounts = ownedCounts;
+                _inventoryCacheRevision = snapshotRevision;
                 _inventoryCacheSort = _inventorySort;
-                UpdateInventoryStats(_inventoryCache, _inventoryCacheTotalOwned);
+                UpdateInventoryStats(_inventoryCache, _inventoryCacheTotalOwned,
+                    _inventoryOwnedCounts);
             }
             IReadOnlyList<HistoricalFigureCardDefinition> cards = _inventoryCache;
             int totalPages = Mathf.Max(1, Mathf.CeilToInt(
@@ -1351,7 +1356,8 @@ namespace AncientWarfare3.ui.windows
             if (owned != null)
             {
                 owned.gameObject.SetActive(_virtualOwnedOnly);
-                owned.text = "x" + Store.GetOwnedCount(card.CardId);
+                owned.text = "x" + (_inventoryOwnedCounts.TryGetValue(
+                    card.CardId, out int count) ? count : 0);
             }
             if (portrait != null)
             {
@@ -1611,7 +1617,8 @@ namespace AncientWarfare3.ui.windows
 
         private void UpdateInventoryStats(
             IReadOnlyList<HistoricalFigureCardDefinition> pCards,
-            int pTotalOwned)
+            int pTotalOwned,
+            IReadOnlyDictionary<string, int> pOwnedCounts)
         {
             for (int i = 0; i < _rarityStats.Count &&
                             i < HistoricalFigureCardRarity.All.Count; i++)
@@ -1620,7 +1627,9 @@ namespace AncientWarfare3.ui.windows
                     HistoricalFigureCardRarity.All[i];
                 int count = (pCards ?? Array.Empty<HistoricalFigureCardDefinition>())
                     .Where(p => p?.Rarity != null && p.Rarity.Equals(rarity))
-                    .Sum(p => Store.GetOwnedCount(p.CardId));
+                    .Sum(p => pOwnedCounts != null &&
+                        pOwnedCounts.TryGetValue(p.CardId, out int owned)
+                            ? owned : 0);
                 float percent = pTotalOwned <= 0 ? 0f :
                     count * 100f / pTotalOwned;
                 _rarityStats[i].text = Format(
@@ -2258,15 +2267,6 @@ namespace AncientWarfare3.ui.windows
                 collectionHeight);
             Position(_collectionScrollbar?.GetComponent<RectTransform>(),
                 width - 24f, collectionTop, 8f, collectionHeight);
-            if (collectionMode)
-                ModClass.LogInfo("[AW3 cards layout] win=" + _windowSize +
-                    " w=" + width + " h=" + height +
-                    " compact=" + compactHeader +
-                    " invCtl=" + inventoryControls +
-                    " top=" + collectionTop + " vpH=" + collectionHeight +
-                    " vpRect=" + _collectionViewport.rect +
-                    " rootRect=" + _root.rect +
-                    " contentSize=" + _collectionRoot.sizeDelta);
             float statWidth = Mathf.Max(48f, (width - 44f) / 5f);
             float statTop = compactHeader ? -45f : -77f;
             float sortTop = compactHeader ? -61f : -95f;

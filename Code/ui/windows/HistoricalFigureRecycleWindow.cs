@@ -18,7 +18,7 @@ namespace AncientWarfare3.ui.windows
         AbstractWindow<HistoricalFigureRecycleWindow>
     {
         private static readonly Vector2 DefaultSize = new Vector2(550f, 410f);
-        private static readonly Vector2 MinimumSize = new Vector2(480f, 330f);
+        private static readonly Vector2 MinimumSize = new Vector2(480f, 350f);
         private static readonly Vector2 MaximumSize = new Vector2(760f, 620f);
         private const int SlotColumns = 3;
         private const float SlotGap = 5f;
@@ -285,7 +285,8 @@ namespace AncientWarfare3.ui.windows
                     -((i / CardColumns) * (CardHeight + CardRowGap) + 4f),
                     CardWidth, CardHeight);
             }
-            _listContent.sizeDelta = new Vector2(286f,
+            _listContent.sizeDelta = new Vector2(
+                Mathf.Max(1f, _listViewport.rect.width - 12f),
                 Mathf.Max(1f, Mathf.Ceil(pCards.Count / (float)CardColumns) *
                     (CardHeight + CardRowGap) + 4f));
             _listScroll.StopMovement();
@@ -479,11 +480,67 @@ namespace AncientWarfare3.ui.windows
             if (_root == null) return;
             RectTransform background = BackgroundTransform as RectTransform;
             if (background != null) background.sizeDelta = _windowSize;
+            float width = Mathf.Max(1f, _windowSize.x - 42f);
+            float height = Mathf.Max(1f, _windowSize.y - 40f);
             Transform close = BackgroundTransform?.parent?.Find("CloseBackground");
             if (close != null) close.localPosition = new Vector3(
                 _windowSize.x * .5f - 20f, _windowSize.y * .5f - 12f);
-            float width = _windowSize.x - 42f;
-            float height = _windowSize.y - 48f;
+            ScrollWindow window = GetComponent<ScrollWindow>();
+            if (window?.titleText != null)
+            {
+                window.titleText.text = AW_L10n.Text(
+                    "aw_historical_figure_cards_recycle_title",
+                    "历史人物汰换");
+                window.titleText.transform.localPosition = new Vector3(0f,
+                    _windowSize.y * .5f - 16f, 0f);
+                RectTransform titleTextRect =
+                    window.titleText.GetComponent<RectTransform>();
+                if (titleTextRect != null)
+                    titleTextRect.sizeDelta = new Vector2(
+                        _windowSize.x * .46f, 28f);
+                window.titleText.raycastTarget = false;
+            }
+
+            // The native Scroll View otherwise clips custom children to its old
+            // narrow template rectangle, which hides the right panel and footer.
+            Transform nativeScroll = BackgroundTransform?.Find("Scroll View");
+            RectTransform nativeScrollRect =
+                nativeScroll?.GetComponent<RectTransform>();
+            if (nativeScrollRect != null)
+            {
+                nativeScrollRect.sizeDelta = new Vector2(width, height);
+                nativeScrollRect.localPosition = new Vector3(0f, -20f, 0f);
+            }
+            ScrollRect nativeScrollComponent =
+                nativeScroll?.GetComponent<ScrollRect>();
+            if (nativeScrollComponent != null)
+            {
+                nativeScrollComponent.horizontal = false;
+                nativeScrollComponent.vertical = false;
+            }
+            Transform nativeScrollbar = BackgroundTransform?.Find(
+                "Scroll View/Scrollbar Vertical");
+            if (nativeScrollbar != null)
+                foreach (Graphic graphic in
+                         nativeScrollbar.GetComponentsInChildren<Graphic>(true))
+                {
+                    graphic.enabled = false;
+                    graphic.raycastTarget = false;
+                }
+            RectTransform nativeViewport = ContentTransform?.parent as
+                RectTransform;
+            if (nativeViewport != null)
+                nativeViewport.sizeDelta = new Vector2(width, height);
+            RectTransform nativeContent = ContentTransform as RectTransform;
+            if (nativeContent != null)
+            {
+                nativeContent.anchorMin = new Vector2(0f, 1f);
+                nativeContent.anchorMax = new Vector2(0f, 1f);
+                nativeContent.pivot = new Vector2(0f, 1f);
+                nativeContent.anchoredPosition = Vector2.zero;
+                nativeContent.sizeDelta = new Vector2(width, height);
+            }
+
             Position(_root, 0f, 0f, width, height);
             Position(_status.rectTransform, 14f, 4f, width - 28f, 22f);
             Position(_summary.rectTransform, 14f, -23f, width - 28f, 18f);
@@ -492,7 +549,8 @@ namespace AncientWarfare3.ui.windows
             Position(_resultPortrait.rectTransform, width - 56f, -64f, 42f, 48f);
             float listTop = -112f;
             float listHeight = Mathf.Max(140f, height - 150f);
-            float listWidth = Mathf.Min(286f, width * .58f);
+            float listWidth = Mathf.Min(286f, width - 216f);
+            listWidth = Mathf.Max(220f, listWidth);
             float scrollbarX = 14f + listWidth + 4f;
             float rightX = scrollbarX + 14f;
             float rightWidth = Mathf.Max(120f, width - rightX - 14f);
@@ -506,11 +564,14 @@ namespace AncientWarfare3.ui.windows
             float slotSize = Mathf.Max(32f, Mathf.Min(50f,
                 Mathf.Min(slotSizeByWidth, slotSizeByHeight)));
             for (int i = 0; i < _slotButtons.Count; i++)
+            {
+                int slotColumn = i == 9 ? 1 : i % SlotColumns;
                 Position(_slotButtons[i].GetComponent<RectTransform>(),
-                    7f + (i % SlotColumns) * (slotSize + SlotGap),
+                    7f + slotColumn * (slotSize + SlotGap),
                     -(7f + (i / SlotColumns) * (slotSize + SlotGap)),
                     slotSize, slotSize);
-            float slotButtonTop = listTop - listHeight - 8f;
+            }
+            float slotButtonTop = -height + 28f;
             Position(_previousPage.GetComponent<RectTransform>(), 104f,
                 slotButtonTop, 38f, 26f);
             Position(_pageLabel.rectTransform, 146f, slotButtonTop, 34f, 26f);

@@ -11,6 +11,9 @@ internal static class HistoricalFigureCardRecycleWindowSourceGuardTests
             "HistoricalFigureDrawWindow.cs"));
         string recycle = File.ReadAllText(Path.Combine(root,
             "HistoricalFigureRecycleWindow.cs"));
+        string store = File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+            "Code", "core", "lineage",
+            "HistoricalFigureCardCollectionStore.cs"));
         string activeDraw = StripBlockComments(draw);
 
         Contains(recycle, "HistoricalFigureCardRecycleSelectionRules.FilterVisible",
@@ -58,6 +61,18 @@ internal static class HistoricalFigureCardRecycleWindowSourceGuardTests
             "inventory exposes a next-page control");
         Contains(draw, "_inventoryPageLabel",
             "inventory exposes a page indicator");
+        Contains(draw, "Store.CopyInventorySnapshot(",
+            "inventory projects ownership from one atomic snapshot");
+        Contains(draw, "_inventoryCacheRevision",
+            "inventory cache invalidates on collection revisions");
+        Contains(draw, "private const int MaxTileBuildsPerFrame = 2",
+            "inventory amortizes card object creation across frames");
+        False(draw.Contains("[AW3 cards layout]"),
+            "inventory layout does not write synchronous diagnostic logs");
+        Contains(store, "public int Revision",
+            "collection store exposes a reliable cache revision");
+        Contains(store, "public int CopyInventorySnapshot(",
+            "collection store copies counts and draw history under one lock");
         Contains(recycle, "const int PageSize = 20",
             "recycle uses a bounded twenty-card page");
         Contains(recycle, "Skip(_page * PageSize)",
@@ -68,6 +83,24 @@ internal static class HistoricalFigureCardRecycleWindowSourceGuardTests
             "recycle exposes a next-page control");
         Contains(recycle, "_pageLabel",
             "recycle exposes a page indicator");
+        Contains(recycle, "nativeScrollComponent.horizontal = false",
+            "recycle disables the native horizontal scroll container");
+        Contains(recycle, "nativeScrollComponent.vertical = false",
+            "recycle disables the native vertical scroll container");
+        Contains(recycle, "nativeViewport.sizeDelta = new Vector2(width, height)",
+            "recycle expands the native viewport to the custom window");
+        Contains(recycle, "nativeContent.sizeDelta = new Vector2(width, height)",
+            "recycle expands the native content to the custom window");
+        Contains(recycle, "Mathf.Min(286f, width - 216f)",
+            "recycle warehouse leaves room for the ten-card selection grid");
+        Contains(recycle, "_listViewport.rect.width - 12f",
+            "recycle card content follows the expanded warehouse area");
+        Contains(recycle, "for (int i = 0; i < 10; i++)",
+            "recycle renders the nine-plus-one selection grid");
+        Contains(recycle, "int slotColumn = i == 9 ? 1 : i % SlotColumns",
+            "recycle centers the plus-one card below the nine-card grid");
+        Contains(recycle, "new Vector2(480f, 350f)",
+            "recycle minimum size keeps all four selection rows visible");
         Contains(draw, "aw_historical_figure_cards_recycle_back_to_recycle",
             "details localizes the return-to-recycle label");
         False(activeDraw.Contains("TryRecycle"),

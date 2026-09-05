@@ -14,8 +14,25 @@ internal static class HistoricalFigureCardCollectionRulesTests
         {
             var store = new HistoricalFigureCardCollectionStore(path);
             Equal(0, store.GetOwnedCount("qin_shihuang"), "empty store starts empty");
+            int emptyRevision = store.Revision;
+            int snapshotRevision = store.CopyInventorySnapshot(
+                out var emptyOwned, out var emptyDraws);
+            Equal(emptyRevision, snapshotRevision,
+                "inventory snapshot reports the collection revision");
+            Equal(0, emptyOwned.Count, "empty inventory snapshot has no cards");
+            Equal(0, emptyDraws.Count, "empty inventory snapshot has no draws");
             True(store.RecordDraw("draw-1", "qin_shihuang", "gold",
                 "2026-09-04T00:00:00Z"), "first draw commits");
+            True(store.Revision > emptyRevision,
+                "successful draw advances the collection revision");
+            int drawRevision = store.CopyInventorySnapshot(
+                out var ownedAfterDraw, out var drawsAfterDraw);
+            Equal(store.Revision, drawRevision,
+                "draw snapshot and revision are atomic");
+            Equal(1, ownedAfterDraw["qin_shihuang"],
+                "draw snapshot includes owned count");
+            Equal(1, drawsAfterDraw.Count,
+                "draw snapshot includes draw history");
             True(store.RecordDraw("draw-2", "qin_shihuang", "gold",
                 "2026-09-04T00:00:01Z"), "duplicate draw commits");
             Equal(2, store.GetOwnedCount("qin_shihuang"),
