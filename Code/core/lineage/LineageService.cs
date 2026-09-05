@@ -2362,7 +2362,22 @@ namespace AncientWarfare3.core.lineage
             if (!ForeignPseudoLineageRules.ShouldRenameInstitutionalClan(
                     leaderIsXia: IsXia(pLeader), kingdomUsesXiaizedInstitutions: institutional,
                     hasClan: true, hasBranch: !string.IsNullOrEmpty(shi),
-                    hasPlace: !string.IsNullOrEmpty(place))) return;
+                    hasPlace: !string.IsNullOrEmpty(place)))
+            {
+                // 四个条件的合取,任一为假就静默保留原版随机名(「Chin」
+                // 「Sheishe」这类)。哪一个为假在外面完全看不出来,所以在
+                // 诊断开关下把四个值都打出来 —— 静态推演已经猜错过两轮。
+                if (AncientWarfare3.core.performance.AWDiagnosticsGate.Enabled)
+                    ModClass.LogInfo("[AW3 CLAN] 跳过改名 leader=" +
+                        (pLeader.data.name ?? "?") +
+                        " xia=" + IsXia(pLeader) +
+                        " institutional=" + institutional +
+                        " shi='" + (shi ?? "") + "'" +
+                        " shiId=" + shiId +
+                        " branch=" + (branch != null) +
+                        " place='" + (place ?? "") + "'");
+                return;
+            }
 
             string newName = branch != null
                 ? ShiBranchRules.BuildDisplayName(branch.origin_city_name, branch.clan_name)
