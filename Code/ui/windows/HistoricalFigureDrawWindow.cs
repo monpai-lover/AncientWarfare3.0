@@ -50,6 +50,12 @@ namespace AncientWarfare3.ui.windows
         private static DrawState _state = DrawState.Idle;
         private static bool _pendingConfirmWindow;
         /// <summary>
+        ///     待执行的关窗请求。<c>BeginPlacement</c> 不能同步关窗 ——
+        ///     那次点击还没走完,窗口一消失原版就会把它判成点在地图上。
+        ///     见 <see cref="TickPendingHideWindow"/>。
+        /// </summary>
+        private static bool _pendingHideWindow;
+        /// <summary>
         ///     BeginPlacement 主动关窗期间置真,让 <c>OnDisable</c> 的
         ///     「关窗即取消」不要把自己那次隐藏当成玩家取消。
         /// </summary>
@@ -216,6 +222,7 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _deploymentId = "";
             _pendingConfirmWindow = false;
+            _pendingHideWindow = false;
             _state = DrawState.Idle;
             _rollStartedAt = 0f;
             _revealStartedAt = 0f;
@@ -253,18 +260,22 @@ namespace AncientWarfare3.ui.windows
         /// </summary>
         public override void OnNormalDisable()
         {
-            // BeginPlacement 自己会 clickHide 一次(它要把地图让出来给玩家
-            // 选点),那次隐藏不是玩家在关窗,不能当成取消。
+            // BeginPlacement 请求的那次关窗不是玩家在取消,由
+            // TickPendingHideWindow 用 _suppressCloseCancel 罩住。
             if (_suppressCloseCancel || !IsPlacementActive) return;
             _selectedTile = null;
             _selectedCity = null;
             _pendingConfirmWindow = false;
+            _pendingHideWindow = false;
             _state = DrawState.Details;
         }
 
         internal static void SelectMapTile(WorldTile pTile)
         {
-            if (!IsPickingTile || pTile?.data == null) return;            City city = pTile.zone_city;
+            if (!IsPickingTile || pTile?.data == null) return;
+            ModClass.LogInfo("[AW3 cards deploy] pick frame=" +
+                UnityEngine.Time.frameCount + " tile=" +
+                pTile.x + "," + pTile.y);            City city = pTile.zone_city;
             bool validCity = city?.data != null && !city.isRekt() &&
                 city.isAlive() && city.kingdom?.data != null &&
                 !city.kingdom.isRekt() && city.kingdom.isCiv() &&
@@ -345,6 +356,7 @@ namespace AncientWarfare3.ui.windows
         /// </summary>
         internal static void TickPendingConfirmWindow()
         {
+            TickPendingHideWindow();
             if (!_pendingConfirmWindow) return;
             _pendingConfirmWindow = false;
             if (_state != DrawState.PlacementConfirm) return;
@@ -1012,6 +1024,9 @@ namespace AncientWarfare3.ui.windows
             UpdateRevealActionLabels();
         }
 
+        /// <summary>
+        ///     进入选点。关窗推迟到下一帧执行 —— 见 <see cref="_pendingHideWindow"/>。
+        /// </summary>
         private void BeginPlacement()
         {
             if ((_state != DrawState.Details && _state != DrawState.Reveal) ||
@@ -1022,32 +1037,57 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _deploymentId = Guid.NewGuid().ToString("N");
             _state = DrawState.Placement;
-            // 关窗后必须把这两样都清掉,否则点图会有肉眼可见的延迟:
-            //   1. clickHide 把 controls_lock_timer 设成 0.3s,归零前
-            //      updateControls 的整个点击分支被跳过;
-            //   2. hide tween(0.02s 延迟 + 0.1s 时长)跑完之前
-            //      ScrollWindow.isAnimationActive() 为真,于是
-            //      MapBox.isGameplayControlsLocked() 也为真 —— updateControls
-            //      在它为真时直接 return,点击同样被吞。
-            // 选点已有 IsPickingTile 状态机把关,这两道防误触都不需要。
+            // 关窗必须推迟一帧,不能在这里同步做。
             //
-            // 压制标志必须罩住 finishAnimations:原版 setActive(false) 只是
-            // **起了一个 tween**,真正的 gameObject.SetActive(false) 在 tween
-            // 的 activeToFalse 回调里,也就是 finishAnimations 这一句才触发 ——
-            // OnNormalDisable 因此跑在 clickHide 返回之后。只罩住 clickHide
-            // 的话,标志早已复位,自己主动的这次关窗会被当成玩家取消,
-            // _state 被打回 Details,选点直接失效(表现为点部署没有弹窗)。
+            // 本方法由按钮的 onClick 调起,而这次点击**还没走完** ——
+            // 原版 PlayerControl 稍后仍会在同一次输入上跑它的点击分支。
+            // 它靠 isPointerOverUIObject() 判断指针是不是压在 UI 上,
+            // 而那是一次 EventSystem.RaycastAll:窗口一旦在这里被
+            // SetActive(false),按钮就不在 UI 树里了,射线打空、判定为
+            // 「指针在地图上」,于是这次点击被当成选点,确认窗跳到按钮
+            // 自己的坐标(实测「目标：176, 189」)。
+            //
+            // clickHide + finishAnimations 是同步生效的(finishAnimations
+            // 用 Kill(complete:true) 立刻跑完 tween 的 activeToFalse 回调),
+            // 所以窗口就是在这一句里消失的。推迟到下一帧,这次点击就能在
+            // 窗口仍然存在的前提下被原版正确判成「点在 UI 上」而放过。
+            _pendingHideWindow = true;
+            ModClass.LogInfo("[AW3 cards deploy] begin frame=" +
+                UnityEngine.Time.frameCount + " card=" +
+                (_selectedCard?.CardId ?? "null"));
+        }
+
+        /// <summary>
+        ///     执行推迟的关窗。由补丁层的每帧钩子驱动。
+        /// </summary>
+        private static void TickPendingHideWindow()
+        {
+            if (!_pendingHideWindow) return;
+            _pendingHideWindow = false;
+            if (_state != DrawState.Placement) return;
+            HistoricalFigureDrawWindow window = Instance;
+            if (window == null) return;
+            // 自己主动关窗,不是玩家取消;压住 OnNormalDisable 的守卫。
+            // 必须罩住 finishAnimations —— 原版 setActive(false) 只是起了
+            // 一个 tween,真正的 SetActive(false) 在 activeToFalse 回调里,
+            // 由 finishAnimations 的 Kill(complete:true) 触发。
             _suppressCloseCancel = true;
             try
             {
-                GetComponent<ScrollWindow>()?.clickHide();
+                window.GetComponent<ScrollWindow>()?.clickHide();
                 ScrollWindow.finishAnimations();
             }
             finally { _suppressCloseCancel = false; }
+            // 关窗后必须把这两样都清掉,否则点图会有肉眼可见的延迟:
+            //   1. clickHide 把 controls_lock_timer 设成 0.3s,归零前
+            //      updateControls 的整个点击分支被跳过;
+            //   2. hide tween 跑完之前 ScrollWindow.isAnimationActive()
+            //      为真,MapBox.isGameplayControlsLocked() 也为真 ——
+            //      updateControls 在它为真时直接 return,点击同样被吞。
             if (World.world?.player_control != null)
                 World.world.player_control.controls_lock_timer = 0f;
-            // 提示必须在关窗之后:clickHide 走原版关窗流程,期间 WorldTip 会被
-            // 收起,先弹的提示会被一起吃掉。
+            // 提示必须在关窗之后:clickHide 走原版关窗流程,期间 WorldTip
+            // 会被收起,先弹的提示会被一起吃掉。
             HistoricalFigureCardPlacementPowerService.ShowPlacementHint(
                 HistoricalFigureCardRoleRules.IsMinister(_selectedCard) ||
                 HistoricalFigureCardRoleRules.IsMilitaryGeneral(_selectedCard));
@@ -1107,8 +1147,10 @@ namespace AncientWarfare3.ui.windows
             _selectedTile = null;
             _selectedCity = null;
             // 未消费的开窗请求必须一并清掉,否则下一帧 TickPendingConfirmWindow
-            // 还会把确认窗开回来。
+            // 还会把确认窗开回来。待执行的关窗请求同理 —— 玩家在它兑现之前
+            // 就取消了,那次关窗不该再发生。
             _pendingConfirmWindow = false;
+            _pendingHideWindow = false;
             _state = DrawState.Details;
             Refresh();
         }
