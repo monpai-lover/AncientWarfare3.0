@@ -114,12 +114,22 @@ namespace AncientWarfare3.core.lineage
                 if (clan?.data == null || clan.isRekt()) continue;
                 try
                 {
+                    // 族长优先;没有族长就退回建族者。原版建族路径不写
+                    // chief_id(见 SyncClanName 的注释),存量存档里大量宗族
+                    // 直到某帧 checkMembersForNewChief 跑到才有族长 ——
+                    // 只认族长会让这趟修复对它们全部跳过。
                     Actor chief;
                     try { chief = clan.getChief(); }
                     catch { chief = null; }
+                    bool treatAsChief = false;
+                    if (chief?.data == null || chief.isRekt())
+                    {
+                        chief = ResolveClanFounder(clan);
+                        treatAsChief = true;
+                    }
                     if (chief?.data == null) continue;
                     string before = clan.data.name;
-                    SyncClanName(chief);
+                    SyncClanName(chief, treatAsChief);
                     if (!string.Equals(clan.data.name, before,
                             StringComparison.Ordinal))
                         changed++;
@@ -127,6 +137,26 @@ namespace AncientWarfare3.core.lineage
                 catch { }
             }
             return changed;
+        }
+
+        /// <summary>
+        ///     宗族的建族者。原版把他记在 <c>founder_actor_id</c> 上,
+        ///     这是没有族长时唯一可靠的命名锚点。他可能已经死了 ——
+        ///     那就退回族里任意一个有氏的在世成员。
+        /// </summary>
+        private static Actor ResolveClanFounder(Clan pClan)
+        {
+            if (pClan?.data == null) return null;
+            try
+            {
+                Actor founder = World.world?.units?.get(
+                    pClan.data.founder_actor_id);
+                if (IsUsableAnchor(founder)) return founder;
+                foreach (Actor unit in pClan.units)
+                    if (IsUsableAnchor(unit)) return unit;
+            }
+            catch { }
+            return null;
         }
         /// <summary>
         ///     按某个成员的氏/姓重命名小家庭。<paramref name="pAnchor"/> 一般是
@@ -165,12 +195,37 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         internal static void SyncClanName(Actor pActor)
         {
+            SyncClanName(pActor, pTreatAsChief: false);
+        }
+
+        /// <summary>
+        ///     <paramref name="pTreatAsChief"/> 用于开宗那一刻。
+        ///
+        ///     <para>
+        ///     原版建族路径上 <c>chief_id</c> **从来没被设置过**:
+        ///     <c>ClanManager.newClan</c> 只写 <c>founder_actor_id</c>,
+        ///     <c>setChief</c> 仅在 <c>checkMembersForNewChief</c>(每帧
+        ///     <c>ClanManager.update</c> 调)和 <c>tryForgetChief</c> 里出现。
+        ///     所以开宗后置里 <c>getChief()</c> 必然返回 null,族长守卫恒为假,
+        ///     新宗族一律留着 <c>generateName(MetaType.Clan)</c> 的随机洋名 ——
+        ///     实测「Sheishe」「Qang」这类名字就是这么来的,而读档修复那趟
+        ///     同样因为改动数恒为 0 而从不打日志。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     建族者就是开宗者,用他命名是对的;原版随后把族长补上时通常仍是
+        ///     同一个人,那一遍会因为名字已相同而被 <c>ShouldRewriteName</c>
+        ///     跳过。普通族人改氏仍走默认的族长守卫,不受影响。
+        ///     </para>
+        /// </summary>
+        internal static void SyncClanName(Actor pActor, bool pTreatAsChief)
+        {
             if (pActor?.data == null || pActor.isRekt()) return;
             try
             {
                 Clan clan = pActor.clan;
                 if (clan?.data == null || clan.isRekt()) return;
-                bool isChief = clan.getChief() == pActor;
+                bool isChief = pTreatAsChief || clan.getChief() == pActor;
                 string identity = ResolveIdentity(pActor);
                 if (!FamilyIdentitySyncRules.ShouldAdoptClanName(
                         UsesLineageSystem(pActor), isChief, identity)) return;

@@ -44,8 +44,13 @@ namespace AncientWarfare3.patch.naming
         ///     新宗族一出生就顶着随机洋名，而我们在归档、王室认定、继承多处
         ///     读这个对象。
         ///
-        ///     挂 manager 而不是 <c>Clan.newClan</c>：后者跑完时创建者还没被
-        ///     设成族长，<c>getChief()</c> 取不到人，同步条件不成立。
+        ///     挂 manager 而不是 <c>Clan.newClan</c>：后者跑完时
+        ///     <c>setClan</c> 还没执行，建族者还不属于这个 clan。
+        ///
+        ///     用 <c>pTreatAsChief</c> 而不是等族长就位：原版建族路径上
+        ///     <c>chief_id</c> 从头到尾没被写过（<c>setChief</c> 只出现在每帧
+        ///     <c>checkMembersForNewChief</c> 和 <c>tryForgetChief</c> 里），
+        ///     等族长就位就等于永远不改名。
         /// </summary>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ClanManager), nameof(ClanManager.newClan))]
@@ -53,7 +58,8 @@ namespace AncientWarfare3.patch.naming
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__result?.data == null || pFounder?.data == null) return;
-            FamilyIdentitySyncService.SyncClanName(pFounder);
+            FamilyIdentitySyncService.SyncClanName(pFounder,
+                pTreatAsChief: true);
         }
     }
 }
