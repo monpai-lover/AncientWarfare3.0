@@ -34,6 +34,48 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || pGeneral?.data == null || pCity?.data == null || !Ready) return false;
             if (!CanGrantFief(pKingdom, pGeneral, pCity)) return false;
 
+            return GrantFiefCore(pKingdom, pGeneral, pCity, pReason,
+                pBypassGeneralQualification: false);
+        }
+
+        /// <summary>
+        ///     Amnesty has already selected and validated the city before the
+        ///     leader is naturalized. The leader is promoted to a general by
+        ///     the amnesty service, but starts without ordinary merit history;
+        ///     this entry point keeps the normal city/fief safety checks while
+        ///     allowing that one-time political grant.
+        /// </summary>
+        internal static bool GrantFiefForAmnesty(Kingdom pKingdom,
+            Actor pGeneral, City pCity, string pReason)
+        {
+            if (pKingdom?.data == null || pGeneral?.data == null ||
+                pCity?.data == null || !Ready || pGeneral.kingdom != pKingdom ||
+                !GeneralService.IsGeneral(pGeneral) ||
+                !CanGrantAmnestyFief(pKingdom, pGeneral, pCity)) return false;
+
+            return GrantFiefCore(pKingdom, pGeneral, pCity, pReason,
+                pBypassGeneralQualification: true);
+        }
+
+        internal static bool CanGrantAmnestyFief(Kingdom pKingdom,
+            Actor pRecipient, City pCity)
+        {
+            return Ready && pRecipient?.data != null && pCity?.data != null &&
+                   !pRecipient.isRekt() && pRecipient.isAlive() &&
+                   pRecipient.isAdult() &&
+                   GetFiefCityId(pRecipient) < 0 &&
+                   CanGrantCity(pKingdom, pRecipient, pCity,
+                       pRequireGeneralQualification: false);
+        }
+
+        private static bool GrantFiefCore(Kingdom pKingdom, Actor pGeneral,
+            City pCity, string pReason, bool pBypassGeneralQualification)
+        {
+            if (pKingdom?.data == null || pGeneral?.data == null ||
+                pCity?.data == null || !Ready ||
+                !CanGrantCity(pKingdom, pGeneral, pCity,
+                    !pBypassGeneralQualification)) return false;
+
             long grantId = TableIdAllocator.Next(DB, FiefGrantTableItem.GetTableName(), "GRANT_ID");
             double now = LineageService.CurTime();
             Actor king = pKingdom.king;
@@ -279,16 +321,21 @@ namespace AncientWarfare3.core.lineage
             return best;
         }
 
-        private static bool CanGrantCity(Kingdom pKingdom, Actor pGeneral, City pCity)
+        private static bool CanGrantCity(Kingdom pKingdom, Actor pGeneral,
+            City pCity, bool pRequireGeneralQualification = true)
         {
             if (pKingdom?.data == null || pGeneral?.data == null || pCity?.data == null) return false;
             if (pCity.kingdom != pKingdom || pCity.isRekt() || !pCity.isAlive()) return false;
             if (pKingdom.capital == pCity) return false;
             if (IsActiveFief(pCity)) return false;
             if (HeirService.IsCurrentHeir(pKingdom, pCity.leader)) return false;
-            if (pGeneral.kingdom != pKingdom) return false;
-            if (!FiefGrantRules.CanGrantToGeneral(GeneralService.IsGeneral(pGeneral), GeneralService.GetMerit(pGeneral)))
-                return false;
+            if (pRequireGeneralQualification)
+            {
+                if (pGeneral.kingdom != pKingdom) return false;
+                if (!FiefGrantRules.CanGrantToGeneral(
+                        GeneralService.IsGeneral(pGeneral),
+                        GeneralService.GetMerit(pGeneral))) return false;
+            }
             return true;
         }
 

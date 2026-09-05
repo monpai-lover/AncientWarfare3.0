@@ -14,6 +14,7 @@ namespace AncientWarfare3.core.db
         public long mother_city_id = -1L;
         public string reward_kind = "None";
         public string office_id = "";
+        public long fief_city_id = -1L;
         public string title_text = "";
         public int hereditary = 1;
         public string phase = "Prepared";

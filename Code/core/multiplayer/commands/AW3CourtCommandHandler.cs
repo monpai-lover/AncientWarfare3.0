@@ -323,6 +323,7 @@ namespace AncientWarfare3.core.multiplayer.commands
             {
                 RewardKind = rewardKind,
                 OfficeId = request.SecondaryKey,
+                FiefCityId = request.CityId,
                 TitleText = request.Text,
                 Hereditary = request.BoolValue
             };

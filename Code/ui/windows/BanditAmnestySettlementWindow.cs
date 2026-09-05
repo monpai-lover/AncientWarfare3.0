@@ -20,6 +20,7 @@ namespace AncientWarfare3.ui.windows
         private static long _originId = -1L;
 
         private readonly List<string> _officeIds = new List<string>();
+        private readonly List<long> _fiefCityIds = new List<long>();
         private Vector2 _windowSize = DefaultSize;
         private WideWindowChrome _chrome;
         private RectTransform _root;
@@ -27,9 +28,13 @@ namespace AncientWarfare3.ui.windows
         private Text _feedback;
         private Button _noneButton;
         private Button _officeModeButton;
+        private Button _fiefModeButton;
+        private Button _officeAndFiefModeButton;
         private Button _titleModeButton;
         private Button _officeButton;
         private Text _officeText;
+        private Button _fiefButton;
+        private Text _fiefText;
         private InputField _titleInput;
         private Button _hereditaryButton;
         private Text _hereditaryText;
@@ -38,6 +43,7 @@ namespace AncientWarfare3.ui.windows
         private BanditAmnestyRewardKind _rewardKind =
             BanditAmnestyRewardKind.None;
         private int _officeIndex;
+        private int _fiefIndex;
         private bool _hereditary = true;
         private bool _submitting;
 
@@ -79,11 +85,19 @@ namespace AncientWarfare3.ui.windows
             Kingdom origin = ResolveKingdom(_originId);
             Actor leader = bandit?.king;
             _officeIds.Clear();
+            _fiefCityIds.Clear();
             if (origin?.data != null && leader?.data != null)
+            {
                 _officeIds.AddRange(CourtService.
                     GetPromiseableAmnestyOffices(origin, leader));
+                _fiefCityIds.AddRange(
+                    PeasantRebelBanditAmnestyService.
+                        GetPromiseableAmnestyFiefCities(origin, leader));
+            }
             _officeIndex = Mathf.Clamp(_officeIndex, 0,
                 Mathf.Max(0, _officeIds.Count - 1));
+            _fiefIndex = Mathf.Clamp(_fiefIndex, 0,
+                Mathf.Max(0, _fiefCityIds.Count - 1));
             _submitting = false;
             if (_identity != null)
                 _identity.text = bandit?.data != null && origin?.data != null
@@ -104,6 +118,18 @@ namespace AncientWarfare3.ui.windows
         private void SelectOffice()
         {
             _rewardKind = BanditAmnestyRewardKind.Office;
+            RefreshControls();
+        }
+
+        private void SelectFief()
+        {
+            _rewardKind = BanditAmnestyRewardKind.Fief;
+            RefreshControls();
+        }
+
+        private void SelectOfficeAndFief()
+        {
+            _rewardKind = BanditAmnestyRewardKind.OfficeAndFief;
             RefreshControls();
         }
 
@@ -139,6 +165,13 @@ namespace AncientWarfare3.ui.windows
             RefreshControls();
         }
 
+        private void CycleFief()
+        {
+            if (_fiefCityIds.Count > 0)
+                _fiefIndex = (_fiefIndex + 1) % _fiefCityIds.Count;
+            RefreshControls();
+        }
+
         private void CycleHereditary()
         {
             _hereditary = !_hereditary;
@@ -151,10 +184,15 @@ namespace AncientWarfare3.ui.windows
             var offer = new PeasantRebelBanditAmnestyOffer
             {
                 RewardKind = _rewardKind,
-                OfficeId = _rewardKind == BanditAmnestyRewardKind.Office &&
+                OfficeId = PeasantRebelBanditAmnestyRules.IncludesOffice(
+                               _rewardKind) &&
                            _officeIds.Count > 0
                     ? _officeIds[_officeIndex]
                     : "",
+                FiefCityId = PeasantRebelBanditAmnestyRules.IncludesFief(
+                                 _rewardKind) && _fiefCityIds.Count > 0
+                    ? _fiefCityIds[_fiefIndex]
+                    : -1L,
                 TitleText = _titleInput?.text ?? "",
                 Hereditary = _hereditary
             };
@@ -163,7 +201,8 @@ namespace AncientWarfare3.ui.windows
             AW3CommandResult result = AW3MultiplayerCommandFacade.
                 DispatchFromUi(AW3CommandRequest.GrantBanditAmnesty(
                     _banditId, _originId, offer.RewardKind.ToString(),
-                    offer.OfficeId, offer.TitleText, offer.Hereditary));
+                    offer.OfficeId, offer.TitleText, offer.Hereditary,
+                    offer.FiefCityId));
             if (!result.Accepted)
             {
                 _submitting = false;
@@ -189,9 +228,16 @@ namespace AncientWarfare3.ui.windows
                 _rewardKind == BanditAmnestyRewardKind.None);
             SetModeVisual(_officeModeButton,
                 _rewardKind == BanditAmnestyRewardKind.Office);
+            SetModeVisual(_fiefModeButton,
+                _rewardKind == BanditAmnestyRewardKind.Fief);
+            SetModeVisual(_officeAndFiefModeButton,
+                _rewardKind == BanditAmnestyRewardKind.OfficeAndFief);
             SetModeVisual(_titleModeButton,
                 _rewardKind == BanditAmnestyRewardKind.VirtualTitle);
-            bool officeMode = _rewardKind == BanditAmnestyRewardKind.Office;
+            bool officeMode = PeasantRebelBanditAmnestyRules.IncludesOffice(
+                _rewardKind);
+            bool fiefMode = PeasantRebelBanditAmnestyRules.IncludesFief(
+                _rewardKind);
             bool titleMode = _rewardKind ==
                              BanditAmnestyRewardKind.VirtualTitle;
             if (_officeButton != null)
@@ -204,6 +250,16 @@ namespace AncientWarfare3.ui.windows
                     : CourtInstitutionService.OfficeName(
                         ResolveKingdom(_originId),
                         _officeIds[_officeIndex]);
+            if (_fiefButton != null)
+                _fiefButton.interactable = fiefMode &&
+                    _fiefCityIds.Count > 0 && !_submitting;
+            if (_fiefText != null)
+                _fiefText.text = _fiefCityIds.Count == 0
+                    ? AW_L10n.Text("aw_bandit_amnesty_no_fief_city",
+                        "No eligible fief city")
+                    : ResolveCity(_fiefCityIds[_fiefIndex])?.data?.name ??
+                      AW_L10n.Text("aw_bandit_amnesty_no_fief_city",
+                          "No eligible fief city");
             if (_titleInput != null)
                 _titleInput.interactable = titleMode && !_submitting;
             if (_hereditaryButton != null)
@@ -217,7 +273,10 @@ namespace AncientWarfare3.ui.windows
                         _hereditary ? "Yes" : "No");
             if (_confirmButton != null)
                 _confirmButton.interactable = !_submitting &&
-                    (!officeMode || _officeIds.Count > 0);
+                    (!officeMode || _officeIds.Count > 0) &&
+                    (!fiefMode || _fiefCityIds.Count > 0) &&
+                    (!titleMode || !string.IsNullOrWhiteSpace(
+                        _titleInput?.text));
         }
 
         private static void SetModeVisual(Button pButton, bool pSelected)
@@ -256,11 +315,20 @@ namespace AncientWarfare3.ui.windows
             _officeModeButton = CreateButton(_root, "OfficeMode",
                 AW_L10n.Text("aw_bandit_amnesty_reward_office", "Office"),
                 SelectOffice);
+            _fiefModeButton = CreateButton(_root, "FiefMode",
+                AW_L10n.Text("aw_bandit_amnesty_reward_fief", "Fief"),
+                SelectFief);
+            _officeAndFiefModeButton = CreateButton(_root,
+                "OfficeAndFiefMode",
+                AW_L10n.Text("aw_bandit_amnesty_reward_office_fief",
+                    "Office + Fief"), SelectOfficeAndFief);
             _titleModeButton = CreateButton(_root, "TitleMode",
                 AW_L10n.Text("aw_bandit_amnesty_reward_title", "Noble title"),
                 SelectTitle);
             _officeButton = CreateButton(_root, "Office", "",
                 CycleOffice, out _officeText);
+            _fiefButton = CreateButton(_root, "Fief", "",
+                CycleFief, out _fiefText);
             _titleInput = CreateInput(_root);
             _hereditaryButton = CreateButton(_root, "Hereditary", "",
                 CycleHereditary, out _hereditaryText);
@@ -314,16 +382,23 @@ namespace AncientWarfare3.ui.windows
             SetRect(_identity, 10f, 8f, width - 20f, 48f);
             SetRect(_root.Find("RewardLabel") as RectTransform, 12f, 62f,
                 width - 24f, 22f);
-            float third = (width - 32f) / 3f;
-            SetRect(_noneButton, 10f, 88f, third, 32f);
-            SetRect(_officeModeButton, 16f + third, 88f, third, 32f);
-            SetRect(_titleModeButton, 22f + third * 2f, 88f, third, 32f);
+            float modeWidth = (width - 48f) / 5f;
+            SetRect(_noneButton, 10f, 88f, modeWidth, 32f);
+            SetRect(_officeModeButton, 16f + modeWidth, 88f,
+                modeWidth, 32f);
+            SetRect(_fiefModeButton, 22f + modeWidth * 2f, 88f,
+                modeWidth, 32f);
+            SetRect(_officeAndFiefModeButton, 28f + modeWidth * 3f, 88f,
+                modeWidth, 32f);
+            SetRect(_titleModeButton, 34f + modeWidth * 4f, 88f,
+                modeWidth, 32f);
             SetRect(_officeButton, 10f, 132f, width - 20f, 32f);
-            SetRect(_titleInput, 10f, 176f, width - 20f, 32f);
-            SetRect(_hereditaryButton, 10f, 218f,
+            SetRect(_fiefButton, 10f, 174f, width - 20f, 32f);
+            SetRect(_titleInput, 10f, 216f, width - 20f, 32f);
+            SetRect(_hereditaryButton, 10f, 258f,
                 Mathf.Min(240f, width - 20f), 32f);
-            SetRect(_feedback, 10f, 258f, width - 20f,
-                Mathf.Max(24f, height - 312f));
+            SetRect(_feedback, 10f, 300f, width - 20f,
+                Mathf.Max(24f, height - 354f));
             SetRect(_confirmButton, width - 252f, height - 34f, 116f, 30f);
             SetRect(_cancelButton, width - 126f, height - 34f, 116f, 30f);
             _chrome?.RepositionResizeHandle();
@@ -437,6 +512,13 @@ namespace AncientWarfare3.ui.windows
         {
             if (pKingdomId <= 0L) return null;
             try { return World.world?.kingdoms?.get(pKingdomId); }
+            catch { return null; }
+        }
+
+        private static City ResolveCity(long pCityId)
+        {
+            if (pCityId <= 0L) return null;
+            try { return World.world?.cities?.get(pCityId); }
             catch { return null; }
         }
     }

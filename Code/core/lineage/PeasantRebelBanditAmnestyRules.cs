@@ -55,6 +55,18 @@ namespace AncientWarfare3.core.lineage
             return officeExists && officeVacant && leaderEligible;
         }
 
+        public static bool IncludesOffice(BanditAmnestyRewardKind pKind)
+        {
+            return pKind == BanditAmnestyRewardKind.Office ||
+                   pKind == BanditAmnestyRewardKind.OfficeAndFief;
+        }
+
+        public static bool IncludesFief(BanditAmnestyRewardKind pKind)
+        {
+            return pKind == BanditAmnestyRewardKind.Fief ||
+                   pKind == BanditAmnestyRewardKind.OfficeAndFief;
+        }
+
         public static bool IsRewardRecipientNaturalized(
             bool leaderBelongsToOrigin, bool leaderHasCity,
             bool leaderCityBelongsToOrigin)

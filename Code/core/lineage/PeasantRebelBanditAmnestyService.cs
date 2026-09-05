@@ -198,13 +198,24 @@ namespace AncientWarfare3.core.lineage
         {
             pFailureKey = "aw_bandit_amnesty_reward_invalid";
             if (pOffer == null) return false;
+            if (PeasantRebelBanditAmnestyRules.IncludesOffice(
+                    pOffer.RewardKind) &&
+                !CourtService.CanPromiseAmnestyOffice(pOrigin, pLeader,
+                    pOffer.OfficeId)) return false;
+            if (PeasantRebelBanditAmnestyRules.IncludesFief(
+                    pOffer.RewardKind) &&
+                (pOffer.FiefCityId <= 0L ||
+                 !FiefService.CanGrantAmnestyFief(pOrigin, pLeader,
+                     ResolveCity(pOffer.FiefCityId)))) return false;
+
             switch (pOffer.RewardKind)
             {
                 case BanditAmnestyRewardKind.None:
                     return true;
                 case BanditAmnestyRewardKind.Office:
-                    if (!CourtService.CanPromiseAmnestyOffice(pOrigin,
-                            pLeader, pOffer.OfficeId)) return false;
+                    return true;
+                case BanditAmnestyRewardKind.Fief:
+                case BanditAmnestyRewardKind.OfficeAndFief:
                     return true;
                 case BanditAmnestyRewardKind.VirtualTitle:
                     VirtualNobleTitleGrantResult result =
@@ -233,19 +244,23 @@ namespace AncientWarfare3.core.lineage
             if (origin?.data == null || leader?.data == null || offer == null ||
                 !EnsureRewardRecipientNaturalized(pSettlement, origin,
                     leader)) return false;
+            if (PeasantRebelBanditAmnestyRules.IncludesFief(
+                    offer.RewardKind) &&
+                !TryApplyFiefReward(origin, leader, offer,
+                    out pFailureKey)) return false;
+            if (PeasantRebelBanditAmnestyRules.IncludesOffice(
+                    offer.RewardKind) &&
+                !TryApplyOfficeReward(origin, leader, offer,
+                    out pFailureKey)) return false;
+
             switch (offer.RewardKind)
             {
                 case BanditAmnestyRewardKind.None:
                     return true;
                 case BanditAmnestyRewardKind.Office:
-                    CourtManualAppointmentResult appointment =
-                        CourtService.TryManualAppointment(origin.id,
-                            offer.OfficeId, leader.data.id);
-                    if (appointment == CourtManualAppointmentResult.Success)
-                        return true;
-                    pFailureKey = "aw_court_appointment_" +
-                                  appointment.ToString().ToLowerInvariant();
-                    return false;
+                case BanditAmnestyRewardKind.Fief:
+                case BanditAmnestyRewardKind.OfficeAndFief:
+                    return true;
                 case BanditAmnestyRewardKind.VirtualTitle:
                     VirtualNobleTitleGrantResult title =
                         VirtualNobleTitleService.TryGrant(origin,
@@ -259,6 +274,71 @@ namespace AncientWarfare3.core.lineage
                 default:
                     return false;
             }
+        }
+
+        private static bool TryApplyOfficeReward(Kingdom pOrigin,
+            Actor pLeader, PeasantRebelBanditAmnestyOffer pOffer,
+            out string pFailureKey)
+        {
+            pFailureKey = "aw_bandit_amnesty_reward_failed";
+            if (HasOfficeProjection(pOrigin, pLeader, pOffer.OfficeId))
+                return true;
+            CourtManualAppointmentResult appointment =
+                CourtService.TryManualAppointment(pOrigin.id,
+                    pOffer.OfficeId, pLeader.data.id);
+            if (appointment == CourtManualAppointmentResult.Success)
+                return true;
+            pFailureKey = "aw_court_appointment_" +
+                          appointment.ToString().ToLowerInvariant();
+            return false;
+        }
+
+        private static bool TryApplyFiefReward(Kingdom pOrigin, Actor pLeader,
+            PeasantRebelBanditAmnestyOffer pOffer, out string pFailureKey)
+        {
+            pFailureKey = "aw_bandit_amnesty_fief_failed";
+            City city = ResolveCity(pOffer.FiefCityId);
+            long currentFiefId = FiefService.GetFiefCityId(pLeader);
+            if (currentFiefId == pOffer.FiefCityId) return true;
+            if (currentFiefId >= 0L || city?.data == null ||
+                city.isRekt() || city.kingdom != pOrigin) return false;
+
+            if (!GeneralService.IsGeneral(pLeader))
+                GeneralService.PromoteToGeneral(pLeader);
+            if (!GeneralService.IsGeneral(pLeader) ||
+                !FiefService.GrantFiefForAmnesty(pOrigin, pLeader, city,
+                    "bandit_amnesty")) return false;
+            return FiefService.GetFiefCityId(pLeader) == pOffer.FiefCityId;
+        }
+
+        private static bool HasOfficeProjection(Kingdom pOrigin,
+            Actor pLeader, string pOfficeId)
+        {
+            if (pOrigin?.data == null || pLeader?.data == null ||
+                string.IsNullOrEmpty(pOfficeId)) return false;
+            pLeader.data.get(LineageKeys.COURT_KINGDOM_ID,
+                out long kingdomId, -1L);
+            pLeader.data.get(LineageKeys.COURT_LAYER, out string layer, "");
+            pLeader.data.get(LineageKeys.COURT_OFFICE_ID,
+                out string officeId, "");
+            return kingdomId == pOrigin.id &&
+                   layer == CourtOfficeLayer.Central &&
+                   officeId == pOfficeId;
+        }
+
+        internal static IReadOnlyList<long> GetPromiseableAmnestyFiefCities(
+            Kingdom pOrigin, Actor pLeader)
+        {
+            var result = new List<long>();
+            if (pOrigin?.data == null || pLeader?.data == null) return result;
+            try
+            {
+                foreach (City city in pOrigin.getCities())
+                    if (FiefService.CanGrantAmnestyFief(pOrigin, pLeader,
+                            city)) result.Add(city.id);
+            }
+            catch { }
+            return result;
         }
 
         private static bool EnsureRewardRecipientNaturalized(
@@ -365,6 +445,7 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("REWARD_KIND",
                         pOffer.RewardKind.ToString()),
                     ColumnVal.Create("OFFICE_ID", pOffer.OfficeId ?? ""),
+                    ColumnVal.Create("FIEF_CITY_ID", pOffer.FiefCityId),
                     ColumnVal.Create("TITLE_TEXT", pOffer.TitleText ?? ""),
                     ColumnVal.Create("HEREDITARY",
                         pOffer.Hereditary ? 1 : 0),
@@ -462,7 +543,7 @@ namespace AncientWarfare3.core.lineage
                 command.CommandText = "SELECT SETTLEMENT_ID," +
                     "BANDIT_KINGDOM_ID,ORIGIN_KINGDOM_ID,LEADER_ACTOR_ID," +
                     "STRONGHOLD_CITY_ID,MOTHER_CITY_ID,REWARD_KIND," +
-                    "OFFICE_ID,TITLE_TEXT,HEREDITARY,PHASE FROM " + Table +
+                    "OFFICE_ID,FIEF_CITY_ID,TITLE_TEXT,HEREDITARY,PHASE FROM " + Table +
                     " WHERE PHASE=@territory OR PHASE=@reward" +
                     " ORDER BY UPDATED_TIME,SETTLEMENT_ID LIMIT @limit";
                 command.Parameters.AddWithValue("@territory",
@@ -489,12 +570,14 @@ namespace AncientWarfare3.core.lineage
                         Offer = new PeasantRebelBanditAmnestyOffer
                         {
                             RewardKind = rewardKind,
-                            OfficeId = reader.IsDBNull(7) ? "" :
-                                reader.GetString(7),
-                            TitleText = reader.IsDBNull(8) ? "" :
-                                reader.GetString(8),
-                            Hereditary = !reader.IsDBNull(9) &&
-                                         reader.GetInt32(9) != 0
+                             OfficeId = reader.IsDBNull(7) ? "" :
+                                 reader.GetString(7),
+                             FiefCityId = reader.IsDBNull(8) ? -1L :
+                                 reader.GetInt64(8),
+                             TitleText = reader.IsDBNull(9) ? "" :
+                                 reader.GetString(9),
+                             Hereditary = !reader.IsDBNull(10) &&
+                                          reader.GetInt32(10) != 0
                         },
                         Phase = phase
                     });
@@ -516,6 +599,7 @@ namespace AncientWarfare3.core.lineage
                 RewardKind = pOffer?.RewardKind ??
                     BanditAmnestyRewardKind.None,
                 OfficeId = pOffer?.OfficeId ?? "",
+                FiefCityId = pOffer?.FiefCityId ?? -1L,
                 TitleText = pOffer?.TitleText ?? "",
                 Hereditary = pOffer?.Hereditary ?? true
             };
@@ -553,6 +637,10 @@ namespace AncientWarfare3.core.lineage
             {
                 case BanditAmnestyRewardKind.Office:
                     return "aw_hist_bandit_amnesty_reward_office";
+                case BanditAmnestyRewardKind.Fief:
+                    return "aw_hist_bandit_amnesty_reward_fief";
+                case BanditAmnestyRewardKind.OfficeAndFief:
+                    return "aw_hist_bandit_amnesty_reward_office_fief";
                 case BanditAmnestyRewardKind.VirtualTitle:
                     return "aw_hist_bandit_amnesty_reward_title";
                 default:

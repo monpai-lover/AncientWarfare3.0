@@ -713,14 +713,16 @@ namespace AncientWarfare3.api.multiplayer
 
         public static AW3CommandRequest GrantBanditAmnesty(
             long banditCountryId, long originCountryId, string rewardKind,
-            string officeId, string titleText, bool hereditary) => Create(
+            string officeId, string titleText, bool hereditary,
+            long fiefCityId = -1L) => Create(
             AW3CommandKind.GrantBanditAmnesty, banditCountryId,
             targetCountryId: Positive(originCountryId,
                 nameof(originCountryId)),
             key: Token(rewardKind, nameof(rewardKind)),
             secondaryKey: officeId?.Trim() ?? string.Empty,
             text: titleText?.Trim() ?? string.Empty,
-            boolValue: hereditary);
+            boolValue: hereditary,
+            cityId: Optional(fiefCityId, nameof(fiefCityId)));
 
         public static AW3CommandRequest ChangeEra(long countryId,
             string eraName) => Create(AW3CommandKind.ChangeEra, countryId,

@@ -51,6 +51,29 @@ internal static class HistoricalFigureCardAcceptanceSourceGuardTests
         Contains(window, "UpdateInventory", "owned cards have an inventory view");
         Contains(window, "GetCards(_selectedCrateId,", "draw uses the selected role crate pool");
         Contains(window, "ResetTransientState", "window exposes transient reset");
+        string pickingProperty = Between(window, "internal static bool IsPickingTile",
+            "internal static void ResetTransientState");
+        Contains(pickingProperty, "GetMouseButtonUp(0)",
+            "placement arming waits for the current mouse release to finish");
+        Contains(pickingProperty, "GetMouseButton(0)",
+            "placement arming does not accept a held button as a fresh click");
+        Contains(window, "TickPlacementInput",
+            "placement input gate advances on the player-control tick");
+        string inputPatchPath = Path.Combine(root, "patch",
+            "AW_HistoricalFigureCardPatch.cs");
+        string inputPatch = File.ReadAllText(inputPatchPath);
+        Contains(inputPatch, "HistoricalFigureDrawWindow.TickPlacementInput();",
+            "player-control tick advances the placement input gate");
+        False(inputPatch.Contains("if (MapBox.isRenderMiniMap()) return true;"),
+            "card placement is not disabled in low-resolution minimap rendering");
+        Contains(window, "PlayerControl._is_pointer_over_ui_object = null",
+            "placement transitions invalidate the vanilla pointer-over-UI cache");
+        string confirmMethod = Between(window, "private void ConfirmPlacement()",
+            "private void CancelPlacement()");
+        Contains(confirmMethod, "_inventoryMode = true",
+            "successful deployment returns the card window to inventory mode");
+        Contains(confirmMethod, "_state = DrawState.Idle",
+            "successful deployment leaves placement state before refreshing inventory");
         Contains(window, "HistoricalFigureCardAudioService.PlayScroll",
             "rolling crosses play scroll cue");
         Contains(window, "EnsureCrateVisual", "crate selection uses image cards");

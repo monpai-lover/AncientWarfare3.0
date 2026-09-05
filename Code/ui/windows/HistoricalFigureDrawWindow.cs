@@ -56,12 +56,12 @@ namespace AncientWarfare3.ui.windows
         /// </summary>
         private static bool _pendingHideWindow;
         /// <summary>
-        ///     选点已武装但还在等一次全新的鼠标按下。
+        ///     选点已武装但还在等进入选点前的那次点击彻底结束。
         ///
         ///     <para>
         ///     点「部署到城市」的那次点击不能被当成选点。它的按下发生在
         ///     <c>BeginPlacement</c> **之前**(按钮 onClick 在鼠标松开时触发),
-        ///     所以「关窗之后再出现的一次按下」必定是玩家为选格子发出的新点击。
+        ///     所以之后出现的按下或松开必定属于玩家为选格子发出的新点击。
         ///     </para>
         ///
         ///     <para>
@@ -200,8 +200,19 @@ namespace AncientWarfare3.ui.windows
         {
             HistoricalFigureCardRuntimeService.Initialize();
             if (Instance == null) CreateAndInit(AW_LineageWindowIds.HISTORICAL_FIGURE_CARDS);
+            InvalidatePointerOverUiCache();
             AW_LineageWindowIds.SafeShow(AW_LineageWindowIds.HISTORICAL_FIGURE_CARDS,
                 () => Instance?.Refresh());
+        }
+
+        /// <summary>
+        ///     原版 PlayerControl 会缓存一次 UI 射线结果。窗口在部署流程中
+        ///     隐藏或重新打开后,旧结果不能继续代表当前指针位置,否则
+        ///     updateControls 会把下一次地图点击提前 return 掉。
+        /// </summary>
+        internal static void InvalidatePointerOverUiCache()
+        {
+            PlayerControl._is_pointer_over_ui_object = null;
         }
 
         /// <summary>
@@ -228,14 +239,24 @@ namespace AncientWarfare3.ui.windows
             get
             {
                 if (_state != DrawState.Placement) return false;
-                // 惰性解锁:恰好在拦截点求值,也就是要做决定的那一刻。
-                if (_awaitingPickPress)
-                {
-                    if (!InputHelpers.GetMouseButtonDown(0)) return false;
-                    _awaitingPickPress = false;
-                }
-                return true;
+                TickPlacementInput();
+                return !_awaitingPickPress;
             }
+        }
+
+        /// <summary>
+        ///     推进进入选点后的输入闸门。必须在 PlayerControl 的每帧钩子中
+        ///     调用,因为无神力路线的 <c>checkEmptyClick</c> 只在 mouse-up
+        ///     才会进入,不能依靠它自己把等待状态解除。
+        /// </summary>
+        internal static void TickPlacementInput()
+        {
+            if (_state != DrawState.Placement || !_awaitingPickPress) return;
+            // 当前点击还在按住或刚刚松开时,继续屏蔽它;否则按钮点击可能
+            // 被当成地图选点。下一帧空闲时解除,下一次点击即可被接管。
+            if (InputHelpers.GetMouseButton(0) ||
+                InputHelpers.GetMouseButtonUp(0)) return;
+            _awaitingPickPress = false;
         }
 
         internal static void ResetTransientState()
@@ -290,6 +311,7 @@ namespace AncientWarfare3.ui.windows
         /// </summary>
         public override void OnNormalDisable()
         {
+            InvalidatePointerOverUiCache();
             // BeginPlacement 请求的那次关窗不是玩家在取消,由
             // TickPendingHideWindow 用 _suppressCloseCancel 罩住。
             if (_suppressCloseCancel || !IsPlacementActive) return;
@@ -1066,6 +1088,9 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _deploymentId = Guid.NewGuid().ToString("N");
             _state = DrawState.Placement;
+            // BeginPlacement 发生在按钮点击回调里。若上一轮地图交互留下
+            // 了原版的缓存结果,同一次按钮点击可能被错误路由到地图。
+            InvalidatePointerOverUiCache();
             // 关窗必须推迟一帧,不能在这里同步做。
             //
             // 本方法由按钮的 onClick 调起,而这次点击**还没走完** ——
@@ -1105,6 +1130,7 @@ namespace AncientWarfare3.ui.windows
                 ScrollWindow.finishAnimations();
             }
             finally { _suppressCloseCancel = false; }
+            InvalidatePointerOverUiCache();
             // 关窗后必须把这两样都清掉,否则点图会有肉眼可见的延迟:
             //   1. clickHide 把 controls_lock_timer 设成 0.3s,归零前
             //      updateControls 的整个点击分支被跳过;
@@ -1144,22 +1170,30 @@ namespace AncientWarfare3.ui.windows
                 " kingdom=" + (result.KingdomName ?? ""));
             if (result.Succeeded)
             {
-                _status.text = Format("aw_historical_figure_cards_deployed",
+                string deployedStatus = Format("aw_historical_figure_cards_deployed",
                     "\u5df2\u90e8\u7f72 {0}\uff0c\u56fd\u53f7\u4e3a{1}", _selectedCard.DisplayName,
                     result.KingdomName);
                 _selectedTile = null;
                 _selectedCity = null;
                 _pendingConfirmWindow = false;
-                _state = DrawState.Details;
-                // \u90e8\u7f72\u6210\u529f\u540e\u73a9\u5bb6\u60f3\u770b\u7684\u662f\u521a\u843d\u5730\u7684\u4eba\u7269,\u4e0d\u662f\u518d\u5f39\u56de\u5361\u7247\u8be6\u60c5\u3002
-                // \u5173\u7a97\u628a\u89c6\u91ce\u4ea4\u8fd8\u7ed9\u5730\u56fe,\u5e76\u7528\u4e00\u6761\u5de5\u5177\u680f\u63d0\u793a\u56de\u62a5\u7ed3\u679c\u3002
+                _pendingHideWindow = false;
+                _awaitingPickPress = false;
+                _deploymentId = "";
+                _selectedCard = null;
+                _lastReveal = null;
+                _selectedCrateId = "";
+                _detailsReturnTarget = DetailsReturnTarget.Inventory;
+                _inventoryMode = true;
+                _state = DrawState.Idle;
+                InvalidatePointerOverUiCache();
+                // 卡片已在部署服务中消耗。回到仓库并刷新缓存,避免成功后
+                // 仍停留在旧的详情页或继续显示可部署的旧数量。
                 Refresh();
                 try
                 {
-                    WorldTip.showNow(_status.text, pTranslate: false, "top", 4f);
+                    WorldTip.showNow(deployedStatus, pTranslate: false, "top", 4f);
                 }
                 catch { }
-                GetComponent<ScrollWindow>()?.clickHide();
                 return;
             }
             _status.text = Format("aw_historical_figure_cards_deploy_failed",
@@ -1182,6 +1216,7 @@ namespace AncientWarfare3.ui.windows
             _pendingConfirmWindow = false;
             _pendingHideWindow = false;
             _awaitingPickPress = false;
+            InvalidatePointerOverUiCache();
             _state = DrawState.Details;
             Refresh();
         }

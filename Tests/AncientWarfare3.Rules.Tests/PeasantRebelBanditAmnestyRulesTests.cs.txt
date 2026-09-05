@@ -31,6 +31,16 @@ internal static class PeasantRebelBanditAmnestyRulesTests
         Assert(!PeasantRebelBanditAmnestyRules.CanSelectOffice(
             true, true, false),
             "an ineligible leader cannot receive an office promise");
+        Assert(PeasantRebelBanditAmnestyRules.IncludesOffice(
+                BanditAmnestyRewardKind.OfficeAndFief) &&
+               PeasantRebelBanditAmnestyRules.IncludesFief(
+                BanditAmnestyRewardKind.OfficeAndFief),
+            "an amnesty offer may promise an office and a fief together");
+        Assert(!PeasantRebelBanditAmnestyRules.IncludesFief(
+                BanditAmnestyRewardKind.Office) &&
+               PeasantRebelBanditAmnestyRules.IncludesFief(
+                BanditAmnestyRewardKind.Fief),
+            "fief selection is independent from the office reward");
         Assert(PeasantRebelBanditAmnestyRules.IsRewardRecipientNaturalized(
                 leaderBelongsToOrigin: true,
                 leaderHasCity: true,

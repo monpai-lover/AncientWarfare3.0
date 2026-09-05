@@ -409,3 +409,6 @@ aw_hist_guiyi_returned,归还故国, returned the city to its living ancestral k
 aw_hist_guiyi_restored,恢复故国身份, restored the extinct ancestral identity,恢復故國身份
 aw_amnesty_bandit,招安土匪,Amnesty Bandits,招安土匪
 aw_amnesty_bandit_description,由母国招安选中的土匪寨，结束战争并恢复普通政体,The origin realm grants amnesty to the selected bandit stronghold; ending wars and restoring ordinary government,由母國招安選中的土匪寨，結束戰爭並恢復普通政體
+aw_bandit_amnesty_reward_fief,授予实土,Grant fief,授予實土
+aw_bandit_amnesty_reward_office_fief,授予官职与实土,Grant office and fief,授予官職與實土
+aw_bandit_amnesty_no_fief_city,没有符合条件的实土城市,No eligible fief city,沒有符合條件的實土城市

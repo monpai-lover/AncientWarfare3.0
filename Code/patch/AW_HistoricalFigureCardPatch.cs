@@ -30,7 +30,6 @@ namespace AncientWarfare3.patch
             bool pTrack)
         {
             if (!HistoricalFigureDrawWindow.IsPickingTile) return true;
-            if (MapBox.isRenderMiniMap()) return true;
             WorldTile tile = World.world?.GetTile(pPos.x, pPos.y);
             HistoricalFigureDrawWindow.SelectMapTile(tile);
             return false;
@@ -54,7 +53,6 @@ namespace AncientWarfare3.patch
         private static bool ClickedStart_Prefix()
         {
             if (!HistoricalFigureDrawWindow.IsPickingTile) return true;
-            if (MapBox.isRenderMiniMap()) return true;
             if (!PixelDetector.GetSpritePixelColorUnderMousePointer(
                     World.world, out Vector2Int pos) || pos.x == -1)
                 return false;
@@ -82,7 +80,6 @@ namespace AncientWarfare3.patch
         private static bool CheckEmptyClick_Prefix()
         {
             if (!HistoricalFigureDrawWindow.IsPickingTile) return true;
-            if (MapBox.isRenderMiniMap()) return true;
             if (!PixelDetector.GetSpritePixelColorUnderMousePointer(
                     World.world, out Vector2Int pos) || pos.x == -1)
                 return false;
@@ -127,6 +124,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(PlayerControl), "updateControls")]
         private static void UpdateControls_Postfix()
         {
+            HistoricalFigureDrawWindow.TickPlacementInput();
             HistoricalFigureDrawWindow.TickPendingConfirmWindow();
         }
 

@@ -4,7 +4,9 @@ namespace AncientWarfare3.core.lineage
     {
         None,
         Office,
-        VirtualTitle
+        VirtualTitle,
+        Fief,
+        OfficeAndFief
     }
 
     public enum BanditAmnestySettlementPhase
@@ -21,6 +23,7 @@ namespace AncientWarfare3.core.lineage
         public BanditAmnestyRewardKind RewardKind =
             BanditAmnestyRewardKind.None;
         public string OfficeId = "";
+        public long FiefCityId = -1L;
         public string TitleText = "";
         public bool Hereditary = true;
     }
