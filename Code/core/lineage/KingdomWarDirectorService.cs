@@ -1291,25 +1291,61 @@ namespace AncientWarfare3.core.lineage
             var result = new Dictionary<long, FrontTargetAssignment>();
             if (pCommit)
                 CoalitionWarTaskService.ClearLeaderReservations(pKingdom);
+
+            // 第一阶段:先把每场战争「实际可分派的目标集合」算出来。分派必须
+            // 等这一步全部算完 —— 因为 AllocateWars 是在前线目标扫出来之前就
+            // 把军队平摊掉的,得先知道哪几场战争压根无目标可打,才能把分到
+            // 那几场上的军队挪走。
+            var planTargets =
+                new IReadOnlyList<FrontTargetFacts>[pWork.SelectedWars.Count];
+            var viableWarIds = new List<long>();
+            var capitalThreatWarIds = new List<long>();
             for (int planIndex = 0;
                  planIndex < pWork.SelectedWars.Count; planIndex++)
             {
                 WarPlanWork plan = pWork.SelectedWars[planIndex];
+                if (plan == null) continue;
                 IReadOnlyList<FrontTargetFacts> targets =
-                    plan?.Front?.Targets ??
+                    plan.Front?.Targets ??
                      (IReadOnlyList<FrontTargetFacts>)
                      Array.Empty<FrontTargetFacts>();
-                if (plan == null) continue;
                 targets = RevalidateFrontTargets(pKingdom, pWork,
                     plan.War, targets);
                 targets = ArmyRtsAsyncPlanningService.OrderTargets(
                     CreateAsyncPlanStamp(pKingdom, pWork, plan.War),
                     targets);
-                plan.OpenObjectiveCount = targets.Count;
+                planTargets[planIndex] = targets;
+                // 计数必须用 AssignFrontTargets 实际会考虑的那个集合,而不是
+                // 筛选前的开放目标数。两者按构造不一致时,「全部开放目标都不
+                // 可达」这一档会让所有军队既拿不到前线目标、又因为
+                // CanCommit(FrontHold) 要求 openObjectiveCount<=0 而退不回驻守,
+                // 提案 TargetCityId=-1 被 ApplyDirectorSnapshot 静默丢弃,
+                // 军队永久停在「等待军令」。
+                plan.OpenObjectiveCount = KingdomWarDirectorRules.
+                    FilterAssignableFrontTargets(targets).Count;
+                if (plan.OpenObjectiveCount > 0)
+                    viableWarIds.Add(plan.Allocation.WarId);
+                if (plan.Allocation.CapitalThreat)
+                    capitalThreatWarIds.Add(plan.Allocation.WarId);
+            }
+
+            // 第二阶段:把搁浅在无目标战争上的军队挪到还有目标的战争上。
+            pWork.Assignments = KingdomWarDirectorRules.
+                RebalanceAssignmentsToViableWars(pWork.Assignments,
+                    viableWarIds, capitalThreatWarIds);
+
+            // 第三阶段:按重排后的归属分派前线目标。
+            for (int planIndex = 0;
+                 planIndex < pWork.SelectedWars.Count; planIndex++)
+            {
+                WarPlanWork plan = pWork.SelectedWars[planIndex];
+                if (plan == null) continue;
+                IReadOnlyList<FrontTargetFacts> assignmentTargets =
+                    planTargets[planIndex] ??
+                     (IReadOnlyList<FrontTargetFacts>)
+                     Array.Empty<FrontTargetFacts>();
                 bool warLeader = CoalitionWarTaskService.IsWarLeader(
                     plan.War, pKingdom);
-                IReadOnlyList<FrontTargetFacts> assignmentTargets =
-                    targets;
                 IReadOnlyDictionary<long, int> externalReservations =
                     warLeader
                         ? CoalitionWarTaskService.ExternalReservationCounts(

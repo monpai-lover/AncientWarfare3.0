@@ -661,22 +661,116 @@ namespace AncientWarfare3.core.lineage
             return targets;
         }
 
-        public static IReadOnlyList<FrontTargetAssignment>
-            AssignFrontTargets(IReadOnlyList<FrontArmyFacts> pArmies,
-                IReadOnlyList<FrontTargetFacts> pTargets,
-                IReadOnlyDictionary<long, int>
-                    pExistingAssaultReservations = null)
+        /// <summary>
+        ///     把分到「无可达目标的战争」上的军队挪到还有目标的战争上。
+        ///
+        ///     <para>
+        ///     <see cref="AllocateWars"/> 是把全部野战军轮转平摊到各场选中的
+        ///     战争上的,分摊时前线目标还没扫出来(目标在 Fronts 阶段才有)。
+        ///     所以一个同时打两场战争的国家,若其中一场的开放目标全都不可达,
+        ///     被分到那一场的军队就没有任何前线目标可拿 —— 而另一场明明还有
+        ///     城可打。表现正是「大部分军队有任务,少部分一直等待军令」。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     首都受威胁那场战争的防御军不动:它们由
+        ///     <c>ResolvePlanTarget</c> 的优先防御分支直接指向首都,本来就不走
+        ///     前线目标分派。若一场战争一个可达目标都没有,它的防御军会退回
+        ///     驻守,这也是对的。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     纯函数:入参已经是「哪些战争可打」的结论,不在这里查世界。
+        ///     没有可挪的军队时原样返回,不产生分配。
+        ///     </para>
+        /// </summary>
+        public static IReadOnlyList<WarArmyAssignment>
+            RebalanceAssignmentsToViableWars(
+                IReadOnlyList<WarArmyAssignment> pAssignments,
+                IReadOnlyList<long> pViableWarIds,
+                IReadOnlyCollection<long> pCapitalThreatWarIds)
         {
-            var armies = new List<FrontArmyFacts>();
-            if (pArmies != null)
-                for (int i = 0; i < pArmies.Count; i++)
-                {
-                    FrontArmyFacts army = pArmies[i];
-                    if (army != null && army.ArmyId >= 0L &&
-                        army.EffectiveForce > 0) armies.Add(army);
-                }
-            armies.Sort(CompareFrontArmies);
+            if (pAssignments == null || pAssignments.Count == 0 ||
+                pViableWarIds == null || pViableWarIds.Count == 0)
+                return pAssignments ??
+                       (IReadOnlyList<WarArmyAssignment>)
+                       Array.Empty<WarArmyAssignment>();
 
+            var viable = new HashSet<long>();
+            for (int i = 0; i < pViableWarIds.Count; i++)
+                viable.Add(pViableWarIds[i]);
+            var capitalThreat = new HashSet<long>();
+            if (pCapitalThreatWarIds != null)
+                foreach (long warId in pCapitalThreatWarIds)
+                    capitalThreat.Add(warId);
+
+            bool anyStranded = false;
+            for (int i = 0; i < pAssignments.Count; i++)
+                if (IsStrandedAssignment(pAssignments[i], viable,
+                        capitalThreat))
+                {
+                    anyStranded = true;
+                    break;
+                }
+            if (!anyStranded) return pAssignments;
+
+            var result = new List<WarArmyAssignment>(pAssignments.Count);
+            int cursor = 0;
+            for (int i = 0; i < pAssignments.Count; i++)
+            {
+                WarArmyAssignment assignment = pAssignments[i];
+                if (!IsStrandedAssignment(assignment, viable, capitalThreat))
+                {
+                    result.Add(assignment);
+                    continue;
+                }
+                long warId = pViableWarIds[cursor % pViableWarIds.Count];
+                cursor++;
+                result.Add(new WarArmyAssignment(assignment.ArmyId, warId,
+                    ArmyRtsRole.Assault));
+            }
+            return result;
+        }
+
+        private static bool IsStrandedAssignment(
+            WarArmyAssignment pAssignment, HashSet<long> pViableWarIds,
+            HashSet<long> pCapitalThreatWarIds)
+        {
+            return pAssignment != null && pAssignment.ArmyId >= 0L &&
+                   !pViableWarIds.Contains(pAssignment.WarId) &&
+                   !(pAssignment.Role == ArmyRtsRole.Defense &&
+                     pCapitalThreatWarIds.Contains(pAssignment.WarId));
+        }
+
+        /// <summary>
+        ///     前线目标里真正可供分派的那一部分。
+        ///
+        ///     <para>
+        ///     <see cref="AssignFrontTargets"/> 在分派前会先按可达性筛一轮,
+        ///     并且只要存在陆路目标就把跨海目标整片剔掉。而战争计划上的
+        ///     <c>OpenObjectiveCount</c> 记的是筛选**之前**的开放目标数 ——
+        ///     两者按构造就会不一致。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     不一致的后果是死的:当所有开放目标都不可达时,筛完为空、没有
+        ///     任何军队拿得到前线目标,但 <c>OpenObjectiveCount</c> 仍大于 0,
+        ///     于是 <c>ResolvePlanTarget</c> 直接返回 null,提案的
+        ///     <c>TargetCityId</c> 为 -1,被 <c>ApplyDirectorSnapshot</c> 静默丢弃,
+        ///     军队永远停在「等待军令」。即便退回驻守也不行 ——
+        ///     <see cref="ArmyRtsObjectiveRules.CanCommit"/> 对 FrontHold 的条件
+        ///     正是 <c>openObjectiveCount &lt;= 0</c>。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     所以计数必须和分派用的是同一个集合。这里把筛选独立出来,
+        ///     两边共用,杜绝再次漂移。
+        ///     </para>
+        /// </summary>
+        public static IReadOnlyList<FrontTargetFacts>
+            FilterAssignableFrontTargets(
+                IReadOnlyList<FrontTargetFacts> pTargets)
+        {
             var targets = new List<FrontTargetFacts>();
             if (pTargets != null)
                 for (int i = 0; i < pTargets.Count; i++)
@@ -694,6 +788,27 @@ namespace AncientWarfare3.core.lineage
                 }
             if (connectedLandAvailable)
                 targets.RemoveAll(target => !IsLandObjective(target));
+            return targets;
+        }
+
+        public static IReadOnlyList<FrontTargetAssignment>
+            AssignFrontTargets(IReadOnlyList<FrontArmyFacts> pArmies,
+                IReadOnlyList<FrontTargetFacts> pTargets,
+                IReadOnlyDictionary<long, int>
+                    pExistingAssaultReservations = null)
+        {
+            var armies = new List<FrontArmyFacts>();
+            if (pArmies != null)
+                for (int i = 0; i < pArmies.Count; i++)
+                {
+                    FrontArmyFacts army = pArmies[i];
+                    if (army != null && army.ArmyId >= 0L &&
+                        army.EffectiveForce > 0) armies.Add(army);
+                }
+            armies.Sort(CompareFrontArmies);
+
+            IReadOnlyList<FrontTargetFacts> targets =
+                FilterAssignableFrontTargets(pTargets);
 
             var result = new List<FrontTargetAssignment>(armies.Count);
             var reservedForce = new Dictionary<long, int>();

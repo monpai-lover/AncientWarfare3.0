@@ -49,6 +49,7 @@ namespace AncientWarfare3.core.performance
             SpecialGovernmentWarParticipation,
             KingdomDecisionMonthly,
             TemporaryLevyLegacyMigration,
+            SyntheticMobilization,
             CityReservePool,
             ArmyReplenishmentOperation,
             WarRefugee,
@@ -369,6 +370,21 @@ namespace AncientWarfare3.core.performance
                 KingdomDecisionMonthlyService.ProcessAuthorityCycle);
             Step(AuthorityStep.TemporaryLevyLegacyMigration,
                 TemporaryLevyService.ProcessLegacyMigration);
+            // 合成兵账本的唯一泵。它负责三件事:把 Mobilizing 记录的配额补齐、
+            // 把 Demobilizing 记录名下的合成兵真正销毁、以及兜底扫出「战争已经
+            // 不在了但记录还没进遣散」的漏网记录。
+            //
+            // 这一步在合并 c39aab9e(把 master 的协作式阶段机换回基线扁平列表)
+            // 时被整段丢掉,于是 ProcessAuthorityCycle 全仓库没有调用者 ——
+            // 战争结束后 MarkDemobilizing 照常把记录切到 Demobilizing,但没有
+            // 任何东西再去执行销毁。实测日志:
+            //   synthetic_levy=mob:30,active:0,demob:32,done:14 live=1356
+            //   mob_live=672 ended_wars=17   live_population=8733
+            // 17 场战争已结束,32 条记录卡在遣散相位,1356 个合成兵永不消失,
+            // 占全世界人口的 15.5%。
+            Step(AuthorityStep.SyntheticMobilization,
+                RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
+                SyntheticMobilizationLedgerService.ProcessAuthorityCycle);
             Step(AuthorityStep.CityReservePool,
                 RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
                 CityReservePoolService.ProcessAuthorityCycle);
