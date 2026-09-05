@@ -1131,14 +1131,12 @@ namespace AncientWarfare3.ui.windows
             }
             finally { _suppressCloseCancel = false; }
             InvalidatePointerOverUiCache();
-            // 关窗后必须把这两样都清掉,否则点图会有肉眼可见的延迟:
-            //   1. clickHide 把 controls_lock_timer 设成 0.3s,归零前
-            //      updateControls 的整个点击分支被跳过;
-            //   2. hide tween 跑完之前 ScrollWindow.isAnimationActive()
-            //      为真,MapBox.isGameplayControlsLocked() 也为真 ——
-            //      updateControls 在它为真时直接 return,点击同样被吞。
-            if (World.world?.player_control != null)
-                World.world.player_control.controls_lock_timer = 0f;
+            // 保留 clickHide 的约 0.3s 输入锁,让按钮点击和地图选点之间
+            // 有一个完整的关闭动画间隔。若底层窗口实现没有写入计时器,
+            // 这里也补足同样的保护,避免同一次点击重新打开确认窗。
+            if (World.world?.player_control != null &&
+                World.world.player_control.controls_lock_timer < 0.3f)
+                World.world.player_control.controls_lock_timer = 0.3f;
             // 提示必须在关窗之后:clickHide 走原版关窗流程,期间 WorldTip
             // 会被收起,先弹的提示会被一起吃掉。
             HistoricalFigureCardPlacementPowerService.ShowPlacementHint(

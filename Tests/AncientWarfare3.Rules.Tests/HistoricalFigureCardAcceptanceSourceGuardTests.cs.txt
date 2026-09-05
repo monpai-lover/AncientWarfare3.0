@@ -68,6 +68,8 @@ internal static class HistoricalFigureCardAcceptanceSourceGuardTests
             "card placement is not disabled in low-resolution minimap rendering");
         Contains(window, "PlayerControl._is_pointer_over_ui_object = null",
             "placement transitions invalidate the vanilla pointer-over-UI cache");
+        Contains(window, "controls_lock_timer = 0.3f",
+            "placement keeps the close-animation input gap");
         string confirmMethod = Between(window, "private void ConfirmPlacement()",
             "private void CancelPlacement()");
         Contains(confirmMethod, "_inventoryMode = true",
