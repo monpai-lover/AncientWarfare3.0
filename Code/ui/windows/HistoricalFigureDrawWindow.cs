@@ -56,6 +56,23 @@ namespace AncientWarfare3.ui.windows
         /// </summary>
         private static bool _pendingHideWindow;
         /// <summary>
+        ///     选点已武装但还在等一次全新的鼠标按下。
+        ///
+        ///     <para>
+        ///     点「部署到城市」的那次点击不能被当成选点。它的按下发生在
+        ///     <c>BeginPlacement</c> **之前**(按钮 onClick 在鼠标松开时触发),
+        ///     所以「关窗之后再出现的一次按下」必定是玩家为选格子发出的新点击。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     不能用帧号判定:AW3 的调度器一帧内可能多次调用
+        ///     <c>updateControls</c>,推迟一帧仍会在同一帧的后续调用里被吃掉 ——
+        ///     实测 <c>begin frame=7073</c> 紧跟 <c>pick frame=7074</c>,
+        ///     且坐标是按钮所在处。
+        ///     </para>
+        /// </summary>
+        private static bool _awaitingPickPress;
+        /// <summary>
         ///     BeginPlacement 主动关窗期间置真,让 <c>OnDisable</c> 的
         ///     「关窗即取消」不要把自己那次隐藏当成玩家取消。
         /// </summary>
@@ -206,8 +223,20 @@ namespace AncientWarfare3.ui.windows
         ///     置真 → 下一帧窗口又被开回来,表现就是「关掉马上又弹出来」。
         ///     </para>
         /// </summary>
-        internal static bool IsPickingTile =>
-            _state == DrawState.Placement;
+        internal static bool IsPickingTile
+        {
+            get
+            {
+                if (_state != DrawState.Placement) return false;
+                // 惰性解锁:恰好在拦截点求值,也就是要做决定的那一刻。
+                if (_awaitingPickPress)
+                {
+                    if (!InputHelpers.GetMouseButtonDown(0)) return false;
+                    _awaitingPickPress = false;
+                }
+                return true;
+            }
+        }
 
         internal static void ResetTransientState()
         {
@@ -223,6 +252,7 @@ namespace AncientWarfare3.ui.windows
             _deploymentId = "";
             _pendingConfirmWindow = false;
             _pendingHideWindow = false;
+            _awaitingPickPress = false;
             _state = DrawState.Idle;
             _rollStartedAt = 0f;
             _revealStartedAt = 0f;
@@ -267,6 +297,7 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _pendingConfirmWindow = false;
             _pendingHideWindow = false;
+            _awaitingPickPress = false;
             _state = DrawState.Details;
         }
 
@@ -1052,6 +1083,7 @@ namespace AncientWarfare3.ui.windows
             // 所以窗口就是在这一句里消失的。推迟到下一帧,这次点击就能在
             // 窗口仍然存在的前提下被原版正确判成「点在 UI 上」而放过。
             _pendingHideWindow = true;
+            _awaitingPickPress = true;
             ModClass.LogInfo("[AW3 cards deploy] begin frame=" +
                 UnityEngine.Time.frameCount + " card=" +
                 (_selectedCard?.CardId ?? "null"));
@@ -1138,6 +1170,9 @@ namespace AncientWarfare3.ui.windows
             _status.text = Format("aw_historical_figure_cards_deploy_failed",
                 "\u90e8\u7f72\u5931\u8d25\uff1a{0}", result.Error);
             _state = DrawState.Placement;
+            // 点「确认部署」这次点击还没走完,退回选点后同样要等一次新的按下,
+            // 否则确认按钮的位置会被当成新选的格子。
+            _awaitingPickPress = true;
             Refresh();
         }
 
@@ -1151,6 +1186,7 @@ namespace AncientWarfare3.ui.windows
             // 就取消了,那次关窗不该再发生。
             _pendingConfirmWindow = false;
             _pendingHideWindow = false;
+            _awaitingPickPress = false;
             _state = DrawState.Details;
             Refresh();
         }
