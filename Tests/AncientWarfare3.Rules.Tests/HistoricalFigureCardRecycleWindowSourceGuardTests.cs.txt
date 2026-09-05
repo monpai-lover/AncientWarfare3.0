@@ -59,6 +59,12 @@ internal static class HistoricalFigureCardRecycleWindowSourceGuardTests
             "recycle result details retain a return-to-recycle target");
         Contains(recycle, "RenderTradeUpResult",
             "recycle success renders the same detailed result presentation");
+        Contains(recycle, "case \"recycle_output_missing\":",
+            "missing recycle output uses its localized message");
+        Contains(recycle, "case \"recycle_source_missing\":",
+            "missing recycle source uses its localized message");
+        Contains(recycle, "case \"recycle_persistence_failed\":",
+            "recycle persistence failure uses its localized message");
 
         Contains(draw, "HistoricalFigureRecycleWindow.Open",
             "draw window exposes the dedicated recycle entry");

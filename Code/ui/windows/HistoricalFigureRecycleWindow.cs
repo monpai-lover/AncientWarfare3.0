@@ -733,6 +733,9 @@ namespace AncientWarfare3.ui.windows
         {
             switch (pError ?? "")
             {
+                case "recycle_incomplete":
+                    return Text("aw_historical_figure_cards_recycle_incomplete",
+                        "请按要求数量选择同品质卡片");
                 case "recycle_same_rarity":
                     return Text("aw_historical_figure_cards_recycle_same_rarity",
                         "必须选择同品质卡片");
@@ -742,6 +745,18 @@ namespace AncientWarfare3.ui.windows
                 case "recycle_gold_forbidden":
                     return Text("aw_historical_figure_cards_recycle_gold_locked",
                         "金色卡片不可汰换");
+                case "recycle_source_missing":
+                    return Text(
+                        "aw_historical_figure_cards_recycle_source_missing",
+                        "没有可用的收藏品来源");
+                case "recycle_output_missing":
+                    return Text(
+                        "aw_historical_figure_cards_recycle_output_missing",
+                        "没有可用的输出卡");
+                case "recycle_persistence_failed":
+                    return Text(
+                        "aw_historical_figure_cards_recycle_persistence_failed",
+                        "仓库保存失败");
                 default:
                     return Text("aw_historical_figure_cards_recycle_failed",
                         "汰换失败：" + pError);
