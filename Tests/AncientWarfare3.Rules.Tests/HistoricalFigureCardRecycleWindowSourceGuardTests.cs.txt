@@ -29,11 +29,47 @@ internal static class HistoricalFigureCardRecycleWindowSourceGuardTests
             "recycle list displays inventory after selected cards are reserved");
         Contains(recycle, "titleText.text = AW_L10n.Text",
             "recycle window localizes the native window title");
+        Contains(recycle, "aw_historical_figure_cards_recycle_title",
+            "recycle title uses the plural locale key registered by the runtime");
+        Contains(recycle, "const int SlotColumns = 3",
+            "recycle selection uses a three-column grid");
+        Contains(recycle, "const int CardColumns = 3",
+            "recycle inventory uses a three-column card grid");
+        Contains(recycle, "CardHeight = 64f",
+            "recycle inventory shows three compact rows in the default window");
+        Contains(recycle, "i < 10",
+            "recycle selection keeps the ten-card contract");
+        Contains(recycle, "Position(_submit.GetComponent<RectTransform>()",
+            "recycle submit is positioned from the selection panel layout");
+        Contains(recycle, "OpenCardDetails(_lastOutput, _lastOutputCrateId, true)",
+            "recycle result details retain a return-to-recycle target");
         Contains(recycle, "RenderTradeUpResult",
             "recycle success renders the same detailed result presentation");
 
         Contains(draw, "HistoricalFigureRecycleWindow.Open",
             "draw window exposes the dedicated recycle entry");
+        Contains(draw, "const int InventoryPageSize = 20",
+            "inventory uses a bounded twenty-card page");
+        Contains(draw, "Skip(_inventoryPage * InventoryPageSize)",
+            "inventory binds only the active page");
+        Contains(draw, "_inventoryPreviousPage",
+            "inventory exposes a previous-page control");
+        Contains(draw, "_inventoryNextPage",
+            "inventory exposes a next-page control");
+        Contains(draw, "_inventoryPageLabel",
+            "inventory exposes a page indicator");
+        Contains(recycle, "const int PageSize = 20",
+            "recycle uses a bounded twenty-card page");
+        Contains(recycle, "Skip(_page * PageSize)",
+            "recycle binds only the active page");
+        Contains(recycle, "_previousPage",
+            "recycle exposes a previous-page control");
+        Contains(recycle, "_nextPage",
+            "recycle exposes a next-page control");
+        Contains(recycle, "_pageLabel",
+            "recycle exposes a page indicator");
+        Contains(draw, "aw_historical_figure_cards_recycle_back_to_recycle",
+            "details localizes the return-to-recycle label");
         False(activeDraw.Contains("TryRecycle"),
             "draw window does not commit recycle transactions");
         False(activeDraw.Contains("ToggleRecycleCard"),

@@ -33,6 +33,15 @@ internal static class HistoricalFigureCardCatalogRulesTests
         True(all.All(p => !string.IsNullOrWhiteSpace(p.DetailedBiography) &&
                           p.DetailedBiography.Length >= 20),
             "every historical figure has a detailed biography");
+        True(all.All(p => !p.DetailedBiography.Contains("该人物卡以现有历史目录")),
+            "detailed biographies do not use the old placeholder suffix");
+        True(all.All(p => p.DetailedBiography.Length >= 60),
+            "every card exposes paragraph-length historical detail");
+        True(all.All(p => !p.DetailedBiography.Contains(
+            "是所属政权历史进程中的重要人物。其经历集中体现")),
+            "detailed biographies do not use the generic card fallback");
+        True(all.Count(p => p.DetailedBiography.Length >= 60) > all.Count / 2,
+            "most cards expose paragraph-length historical detail");
         True(all.All(p => !HistoricalFigureCardCatalog.HasGeographicPrefix(
             p.HistoricalKingdomName)), "historical names are short kingdom names");
         True(all.Count(p => p.LegacyFigureId != null) >= HistoricalFigureDef.All.Length,
@@ -46,8 +55,8 @@ internal static class HistoricalFigureCardCatalogRulesTests
 
         var gold = all.Where(p => p.Rarity.Equals(HistoricalFigureCardRarity.Gold))
             .ToArray();
-        True(gold.Length >= 20,
-            "shared gold pool contains a broad historical roster");
+        True(gold.Length >= 21,
+            "shared gold pool has room for the added author avatar card");
         True(new[] { "ji_fa", "han_gaozu", "qin_shihuang", "three_cao_cao",
                      "tang_taizong", "yuan_taizu" }
             .All(id => gold.Any(card => card.CardId == id)),

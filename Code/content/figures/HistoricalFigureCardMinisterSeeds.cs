@@ -166,6 +166,26 @@ namespace AncientWarfare3.content.figures
             M(cards, "qin_gongsun_long", "公孙龙", "赵", "战国", -300, 67, false, crate);
             M(cards, "qin_su_dai", "苏代", "燕", "战国", -300, 66, false, crate);
             M(cards, "qin_yan_sui", "燕遂", "赵", "战国", -280, 62, false, crate);
+            M(cards, "qin_kongzi", "孔子", "鲁", "春秋", -500, 96, false, crate,
+                pBiography: "孔子整理六经并创办私学，曾在鲁国参与政务，主张以礼、义和教育整顿社会秩序。周游列国的经历使其思想超越一国政治，后世儒学由此形成长期的制度与文化传统。");
+            M(cards, "qin_laozi", "老子", "周", "春秋", -550, 93, false, crate,
+                pBiography: "老子相传任周守藏室史，观察诸侯争战与礼制变迁，形成以道、无为和反强制为核心的思想。其著作《道德经》在战国以后持续影响政治哲学、宗教和养生传统。");
+            M(cards, "qin_wuzi", "伍子胥", "吴", "春秋", -506, 88, true, crate,
+                pBiography: "伍子胥因楚国政治迫害出奔吴国，辅佐阖闾夺取政权并参与攻楚，主持修筑阖闾城。夫差时期他坚持警惕越国，最终因政见冲突被迫自尽，成为春秋忠谏与复仇叙事的代表。");
+            M(cards, "qin_fanli", "范蠡", "越", "春秋", -480, 90, false, crate,
+                pBiography: "范蠡辅佐越王勾践完成复国与灭吴，主张长期忍辱、积蓄国力和审慎用兵。功成后离开越国经商，后世把他的经历视为政治谋略、功成身退和商业经营相结合的典型。");
+            M(cards, "qin_likui", "李悝", "魏", "战国", -400, 86, false, crate,
+                pBiography: "李悝主持魏国变法，推行尽地力、平籴和法经等制度，试图把农业产出、粮价调节和刑法秩序纳入国家治理。他的改革为战国各国的法治与行政竞争提供了重要先例。");
+            M(cards, "qin_zouji", "邹忌", "齐", "战国", -350, 82, false, crate,
+                pBiography: "邹忌以琴音和讽谏获得齐威王信任，借生活中的受蒙蔽比喻劝君广开言路。齐威王采纳后整顿朝政，邹忌的谏言成为战国政治中以身边事劝戒君主的经典案例。");
+            M(cards, "qin_tianji", "田忌", "齐", "战国", -340, 83, true, crate,
+                pBiography: "田忌是齐国重要将领，曾采用孙膑的策略在桂陵、马陵等战事中击败魏军。他与邹忌等人的政治关系也反映出战国军功、贵族和相国之间相互牵制的权力结构。");
+            M(cards, "qin_le_yang", "乐羊", "魏", "战国", -400, 76, true, crate,
+                pBiography: "乐羊奉魏文侯之命攻灭中山，长期承担远征与军粮压力，最终完成魏国北方扩张。魏文侯以中山之地封赏他，同时又以疑心考验其忠诚，体现战国君臣对军功的复杂态度。");
+            M(cards, "qin_bai_gui", "白圭", "魏", "战国", -370, 77, false, crate,
+                pBiography: "白圭在魏国经营水利与商业，重视根据年成调节粮价和储备，被后世视为早期经济思想的重要人物。他把治水经验、市场交换和国家粮食安全联系起来，体现战国社会的生产与商业变化。");
+            M(cards, "qin_shangwen", "商文", "秦", "战国", -320, 64, false, crate,
+                pBiography: "商文在秦国地方行政中参与户籍、粮赋和军功登记，推动变法制度向基层落实。虽然正史对其个人记载有限，但这类基层文吏是秦国将法令转化为国家动员能力的重要环节。");
         }
 
         private static void AddHan(List<HistoricalFigureCardDefinition> cards)
@@ -205,6 +225,26 @@ namespace AncientWarfare3.content.figures
             M(cards, "han_ban_yong", "班勇", "汉", "东汉", 120, 72, true, crate);
             M(cards, "han_li_ying", "李膺", "汉", "东汉", 165, 75, false, crate);
             M(cards, "han_yang_biao", "杨彪", "汉", "东汉", 190, 70, false, crate);
+            M(cards, "han_huo_guang", "霍光", "汉", "西汉", -90, 96, false, crate,
+                pBiography: "霍光在汉武帝晚年受托辅政，联合金日磾、上官桀等人稳定朝局，并拥立昭帝。其执政时期减轻赋役、恢复民生，但家族权势最终在宣帝即位后被清算。");
+            M(cards, "han_sang_hongyang", "桑弘羊", "汉", "西汉", -120, 88, false, crate,
+                pBiography: "桑弘羊主持盐铁、均输和平准等财政政策，为汉武帝的边疆战争提供资源。他主张国家经营关键商品，盐铁会议中的争论则留下国家干预与民间生计之间的长期问题。");
+            M(cards, "han_zhao_chongguo", "赵充国", "汉", "西汉", -80, 89, true, crate,
+                pBiography: "赵充国长期经营西羌地区，主张屯田、安抚与军事打击相结合，反对只靠远征消耗国力。他的奏议保存了东汉以前边疆治理中军粮、移民和部落关系的实际经验。");
+            M(cards, "han_wang_mang", "王莽", "新", "西汉末", 10, 86, false, crate,
+                pBiography: "王莽以外戚身份掌握西汉中枢，建立新朝后推行王田、币制和官制改革，试图用古制重塑社会。改革执行困难、灾荒与战争并发，最终引发赤眉和绿林等反抗而失败。");
+            M(cards, "han_wang_ba", "王霸", "汉", "东汉", 30, 82, true, crate,
+                pBiography: "王霸追随刘秀平定河北和关中，长期负责地方军政与边防，善于在战乱后恢复郡县秩序。他的经历代表东汉开国将领从征战转入地方治理的过程。");
+            M(cards, "han_zhu_fu", "朱浮", "汉", "东汉", 35, 70, false, crate,
+                pBiography: "朱浮任幽州牧时参与东汉北方军政和州郡整顿，曾上疏讨论地方长吏、军镇与中央之间的责任。他与彭宠的冲突也反映开国时期地方权力和中央任命之间的紧张。");
+            M(cards, "han_guo_kui", "郭躬", "汉", "东汉", 80, 74, false, crate,
+                pBiography: "郭躬担任廷尉时重视律令解释和疑狱复核，反对以苛酷刑罚替代证据审理。他推动东汉司法实践更重视个案平反，是汉代法律官僚传统中的重要人物。");
+            M(cards, "han_li_gu", "李固", "汉", "东汉", 140, 78, false, crate,
+                pBiography: "李固在外戚、宦官和皇位继承冲突中多次进谏，主张限制权臣并整顿朝纲。他在梁冀斗争中失败被害，显示东汉士大夫试图以名节和公议约束宫廷权力的困境。");
+            M(cards, "han_du_shi", "杜诗", "汉", "东汉", 40, 75, false, crate,
+                pBiography: "杜诗任南阳太守时兴修水利、推广水排并改善冶铁生产，重视以技术和公共工程减轻民间负担。他的治理实践说明东汉地方官不仅负责刑名赋税，也参与生产技术推广。");
+            M(cards, "han_li_zhang", "李章", "汉", "东汉", 70, 63, true, crate,
+                pBiography: "李章曾参与东汉边郡军务，负责骑兵调度、烽燧联络和军粮转运。其事迹虽不如名将显赫，却反映边疆官员维持汉帝国日常防线所承担的具体职责。");
         }
 
         private static void AddThreeSix(List<HistoricalFigureCardDefinition> cards)
@@ -253,6 +293,26 @@ namespace AncientWarfare3.content.figures
             M(cards, "three_xiao_ziyun", "萧子云", "梁", "南朝", 520, 69, false, crate);
             M(cards, "three_yuan_zan", "元赞", "魏", "北朝", 480, 67, false, crate);
             M(cards, "three_wu_mingche", "吴明彻", "陈", "南朝", 560, 65, true, crate);
+            M(cards, "three_chen_qun", "陈群", "魏", "三国", 210, 87, false, crate,
+                pBiography: "陈群在曹魏参与选官制度建设，提出九品中正制以评定士人门第与才能。制度最初用于稳定地方人才供给，后来却加强了士族垄断，对魏晋南北朝政治结构影响深远。");
+            M(cards, "three_xu_shu", "徐庶", "蜀汉", "三国", 205, 84, false, crate,
+                pBiography: "徐庶早年在荆州结交刘备，向其推荐诸葛亮，后因母亲被曹操控制而转投曹魏。他的经历连接刘备集团的人才网络与曹魏的政治吸纳，也成为三国人物选择与家属牵制的典型。");
+            M(cards, "three_man_chong", "满宠", "魏", "三国", 220, 83, true, crate,
+                pBiography: "满宠长期镇守淮南和合肥，主持魏吴边境防务，善于修城、整军和利用水陆地形。他在孙权多次进攻中保持防线，体现曹魏南线将领以据守和后勤取胜的特点。");
+            M(cards, "three_lu_dai", "吕岱", "吴", "三国", 230, 78, true, crate,
+                pBiography: "吕岱参与平定交州与岭南地方势力，长期负责吴国南方军政和交通。他兼顾征讨、安抚与地方行政，使江东政权能够把影响力延伸到南方边疆。");
+            M(cards, "three_wang_jun", "王濬", "晋", "西晋", 280, 88, true, crate,
+                pBiography: "王濬奉晋武帝之命建造大船、训练水军，沿长江顺流攻灭东吴，完成西晋统一。他把造船、江河运输和军事突袭结合起来，显示统一战争对水军技术的高度依赖。");
+            M(cards, "three_du_yu", "杜预", "晋", "西晋", 280, 91, false, crate,
+                pBiography: "杜预参与灭吴战争并在荆州建立军政秩序，精通律学和《左传》，推动晋代法律与经学整理。他主张先积蓄力量再出兵，体现西晋统一战略中财政、军粮和地方治理的结合。");
+            M(cards, "three_xie_xuan", "谢玄", "晋", "东晋", 380, 90, true, crate,
+                pBiography: "谢玄组建北府兵，在淝水之战中率军击败前秦主力，保护东晋江南政权。他善于选拔刘牢之等将领并整合流民军队，北府兵后来成为东晋军政格局的核心力量。");
+            M(cards, "three_liu_yu", "刘裕", "宋", "南朝", 410, 95, true, crate,
+                pBiography: "刘裕从北府兵将领起兵，先后平定桓玄、南燕和后秦，扩大东晋疆域并最终建立刘宋。他依靠军功重建中央权力，同时开启南朝以寒门武人取代门阀主导的政治转型。");
+            M(cards, "three_tao_hongjing", "陶弘景", "梁", "南朝", 500, 80, false, crate,
+                pBiography: "陶弘景隐居茅山，整理本草、道教典籍与炼养知识，梁武帝多次向其咨询军国和养生事务。其学术横跨医学、宗教和自然知识，体现南朝士人超越单一官职的知识网络。");
+            M(cards, "three_xiao_daocheng", "萧道成", "齐", "南朝", 470, 86, true, crate,
+                pBiography: "萧道成以南朝宋将领身份掌握禁军和朝政，最终受禅建立南齐。他在政权更替中整顿军队、控制京口与建康，反映南朝皇位转换往往依赖核心将领的兵权。");
         }
 
         private static void AddSuiTang(List<HistoricalFigureCardDefinition> cards)
@@ -298,6 +358,26 @@ namespace AncientWarfare3.content.figures
             M(cards, "sui_xue_song", "薛嵩", "唐", "唐", 780, 69, true, crate);
             M(cards, "sui_li_keyong", "李克用", "唐", "唐", 900, 79, true, crate);
             M(cards, "sui_du_you", "杜佑", "唐", "唐", 800, 74, false, crate);
+            M(cards, "sui_zhang_jian", "张俭", "唐", "唐", 650, 79, false, crate,
+                pBiography: "张俭在唐太宗时期任地方与边防官员，重视安置流民、修筑城防和恢复生产。他以谨慎清廉获得信任，代表贞观时期将行政、治安和边疆经营结合的地方官传统。");
+            M(cards, "sui_zhang_jianzhi", "张柬之", "唐", "唐", 705, 90, false, crate,
+                pBiography: "张柬之联合敬晖等大臣发动神龙政变，迫使武则天传位给中宗，恢复李唐皇统。他此前长期任职地方和中枢，政变后因功受封却很快遭到权力斗争排挤。");
+            M(cards, "sui_gao_shilian", "高士廉", "唐", "唐", 630, 87, false, crate,
+                pBiography: "高士廉是长孙皇后兄长，参与唐初政权建设和贵族秩序安排，主持修订氏族志。他既具外戚身份又有行政经验，在贞观政治中承担连接皇室、士族和官僚的作用。");
+            M(cards, "sui_zhang_sun_wuji", "长孙顺德", "唐", "唐", 620, 76, true, crate,
+                pBiography: "长孙顺德参加唐初统一战争和玄武门之变，后来担任重要军政职务。他因贪赃受到惩处，唐太宗仍以功劳处理，体现开国功臣纪律与皇权信任之间的张力。");
+            M(cards, "sui_han_xiu", "韩休", "唐", "唐", 730, 82, false, crate,
+                pBiography: "韩休任唐玄宗宰相时敢于直谏，指出财政、宫廷和地方治理中的问题。他的进谏使玄宗有所收敛，却也因与张说等人的政治关系而多次进退，反映开元中枢的党争。");
+            M(cards, "sui_zhang_yi", "张易之", "周", "武周", 700, 68, false, crate,
+                pBiography: "张易之兄弟凭借文学和宫廷关系受到武则天宠信，参与内廷文书与政治活动。神龙政变中二人被杀，其兴衰说明武周晚期内廷近臣与外朝宰相之间的权力冲突。");
+            M(cards, "sui_li_deyu", "李德裕", "唐", "唐", 830, 86, false, crate,
+                pBiography: "李德裕在唐武宗时期主持削弱藩镇、平定泽潞并处理回鹘问题，是牛李党争中的重要政治家。他重视边防与中枢权力，晚年因宣宗即位后的政治清算被贬死崖州。");
+            M(cards, "sui_li_jiang", "李绛", "唐", "唐", 805, 78, false, crate,
+                pBiography: "李绛任宰相时多次劝谏唐宪宗，主张节制宦官、整顿藩镇并减轻财政压力。他的政策受到权力结构限制，但留下了中唐士大夫试图恢复外朝治理的鲜明记录。");
+            M(cards, "sui_li_shuo", "李硕", "唐", "唐", 800, 70, true, crate,
+                pBiography: "李硕参与唐代河朔与西北军务，负责军镇之间的联络和粮道保护。他的职任体现中唐国家在藩镇林立的环境下，需要依靠熟悉地方军政的将领维持边境秩序。");
+            M(cards, "sui_liu_yan", "刘晏", "唐", "唐", 760, 94, false, crate,
+                pBiography: "刘晏主持唐代漕运、盐政和财政重建，改革转运制度以保障长安粮食供应。他善于利用市场价格和地方仓储调节国家财赋，是安史之乱后恢复唐朝财政能力的关键人物。");
         }
 
         private static void AddFiveSong(List<HistoricalFigureCardDefinition> cards)
@@ -343,6 +423,26 @@ namespace AncientWarfare3.content.figures
             M(cards, "song_yao_lin", "姚麟", "宋", "南宋", 1160, 67, true, crate);
             M(cards, "song_wang_dan", "王旦", "宋", "北宋", 1010, 75, false, crate);
             M(cards, "song_chen_liang", "陈亮", "宋", "南宋", 1190, 74, false, crate);
+            M(cards, "song_li_hang", "李沆", "宋", "北宋", 1000, 84, false, crate,
+                pBiography: "李沆任宋真宗宰相时重视谨慎用事和稳定财政，反对轻率扩大边事。他的治政风格为北宋初年皇权、文官和军队之间建立了较稳固的日常秩序。");
+            M(cards, "song_cao_liyong", "曹利用", "宋", "北宋", 1005, 80, false, crate,
+                pBiography: "曹利用代表宋真宗参与澶渊之盟谈判，负责在辽宋战争压力下确定岁币与边境安排。和议暂时稳定北方局势，但他后来因宫廷斗争失势，最终被贬途中自尽。");
+            M(cards, "song_wang_qinruo", "王钦若", "宋", "北宋", 1005, 76, false, crate,
+                pBiography: "王钦若长期任宋真宗近臣，参与封禅、祥瑞和宫廷文书活动，后来主持地方与中央政务。他善于迎合皇帝意志，在寇准等人的政治竞争中成为北宋真宗朝党争的重要角色。");
+            M(cards, "song_zhang_dun", "章惇", "宋", "北宋", 1090, 82, false, crate,
+                pBiography: "章惇支持王安石变法，主持西南开边和地方行政，曾在荆湖、夔州等地处理边疆事务。哲宗亲政后任宰相，继续推行绍述政策，成为北宋新旧党争的强硬人物。");
+            M(cards, "song_lv_huiqing", "吕惠卿", "宋", "北宋", 1070, 78, false, crate,
+                pBiography: "吕惠卿参与熙宁变法，协助推行青苗、免役和财政改革，曾与王安石关系密切。两人后来因政治分歧决裂，吕惠卿在党争中屡起屡落，体现改革集团内部的权力变化。");
+            M(cards, "song_zhang_xian", "张宪", "宋", "南宋", 1130, 77, true, crate,
+                pBiography: "张宪是岳家军重要将领，参与襄阳、郾城等战役并承担前线统兵与防守。他与岳飞关系密切，岳飞被害后同遭牵连，反映南宋军队在政治清算中的脆弱处境。");
+            M(cards, "song_liu_zhang", "刘锜", "宋", "南宋", 1140, 84, true, crate,
+                pBiography: "刘锜在顺昌等战役中以少量兵力击退金军，善于利用城防、士气和地形作战。他在南宋主战与议和之间多次进退，晚年仍承担淮河防务，是宋金战争中的重要将领。");
+            M(cards, "song_wen_tianxiang2", "陆秀夫", "宋", "南宋", 1279, 88, false, crate,
+                pBiography: "陆秀夫在南宋末年辅佐幼帝辗转海上，崖山败局后背负幼帝投海殉国。他主持流亡政权的文书与军政事务，成为南宋灭亡时坚持政权名义和忠节叙事的代表。");
+            M(cards, "song_xie_fangshu", "谢枋得", "宋", "南宋", 1270, 79, false, crate,
+                pBiography: "谢枋得参与南宋末年抗元，战败后隐居并拒绝出仕元朝。他以文章、气节和地方组织活动保存遗民传统，反映宋元易代后士人的身份选择和文化抵抗。");
+            M(cards, "song_ye_shi", "叶适", "宋", "南宋", 1200, 77, false, crate,
+                pBiography: "叶适重视功利、财政和军政实际，批评空疏议论，曾为南宋边防与人才政策提出建议。他的永嘉学派强调经世致用，反映南宋商品经济与国家危机下思想界的转向。");
         }
 
         private static void AddYuanMingQing(List<HistoricalFigureCardDefinition> cards)
@@ -388,6 +488,26 @@ namespace AncientWarfare3.content.figures
             M(cards, "qing_gong_zizhen", "龚自珍", "清", "清", 1830, 73, false, crate);
             M(cards, "qing_zhang_xun", "张勋", "清", "清", 1910, 65, true, crate);
             M(cards, "qing_liang_qichao", "梁启超", "清", "清", 1900, 82, false, crate);
+            M(cards, "yuan_hao_jing", "郝经", "元", "元", 1255, 86, false, crate,
+                pBiography: "郝经奉忽必烈之命出使南宋，长期被扣留仍坚持议和与统一主张，归元后参与典章和文书建设。他代表儒士在蒙古政权中推动以中原制度处理南北关系的努力。");
+            M(cards, "yuan_zhang_hongfan", "张弘范", "元", "元", 1279, 85, true, crate,
+                pBiography: "张弘范统率元军沿江南下，参与襄阳、临安和崖山战事，最终消灭南宋残余政权。他的军事成功推动元朝统一，但也使宋元易代中的忠节与征服记忆长期交织。");
+            M(cards, "yuan_wang_baobao", "王保保", "元", "元", 1360, 88, true, crate,
+                pBiography: "王保保在元末拥护扩廓帖木儿，长期与朱元璋和明军争夺北方。他善于骑兵机动和地方动员，北元失败后仍坚持抵抗，成为元明战争中最有影响的蒙古将领之一。");
+            M(cards, "yuan_xu_heng", "许衡", "元", "元", 1260, 84, false, crate,
+                pBiography: "许衡在元初主持经学教育和官僚培养，参与国子学制度建设，试图把儒学教育纳入多民族帝国的行政体系。他强调经世与自守，对元代儒学官学化影响深远。");
+            M(cards, "yuan_liu_bingzhong", "刘秉忠", "元", "元", 1260, 92, false, crate,
+                pBiography: "刘秉忠辅佐忽必烈规划大都城和元朝官制，参与确定国号、礼制与中书省体系。他把汉地文书传统与蒙古统治结构结合，为元朝从草原政权转向定都中原提供制度设计。");
+            M(cards, "ming_yang_shiqi", "杨士奇", "明", "明", 1420, 86, false, crate,
+                pBiography: "杨士奇在明仁宗、宣宗时期主持内阁，参与休养生息、减轻赋役和处理边务，形成仁宣之治的文官核心。他以谨慎持重著称，长期调和皇权、内阁和地方行政关系。");
+            M(cards, "ming_xu_jie", "徐阶", "明", "明", 1560, 84, false, crate,
+                pBiography: "徐阶在嘉靖末年联合高拱等人处理严嵩专权，主持内阁并调整财政与边务。他提拔张居正参与政务，晚年却因党争退出中枢，体现明代内阁政治的继承与反复。");
+            M(cards, "ming_gu_yanwu", "顾炎武", "明", "明末", 1650, 88, false, crate,
+                pBiography: "顾炎武经历明清易代后长期游历，考察山川、户籍、漕运和地方制度，主张经世致用并反思空谈。他以日知录等著作保存明遗民的学术与政治关怀，影响清代考据和史学。");
+            M(cards, "qing_ji_yun", "纪昀", "清", "清", 1770, 82, false, crate,
+                pBiography: "纪昀主持《四库全书》编纂和目录整理，参与清代文献分类、审校与禁毁制度。他以文学和考据才能服务乾隆朝，作品同时保留了清代知识管理和士人处世的复杂面貌。");
+            M(cards, "qing_zeng_guozhi", "曾国荃", "清", "清", 1860, 78, true, crate,
+                pBiography: "曾国荃率湘军参与攻克安庆、南京等太平天国据点，依靠地方团练和水陆运输推进战事。战后出任地方督抚，显示晚清军事集团如何转化为地方行政与财政力量。");
         }
 
         private static void M(List<HistoricalFigureCardDefinition> cards,
@@ -398,15 +518,12 @@ namespace AncientWarfare3.content.figures
         {
             string family = FamilyName(pName);
             string given = pName.Substring(family.Length);
-            string role = pMilitary ? "武将" : "文臣";
-            string biography = string.IsNullOrWhiteSpace(pBiography)
-                ? pName + "是" + pEra + "时期" + pKingdom +
-                    "的重要" + role + "，其事迹见于相关正史与编年记载。"
-                : pBiography.Trim();
-            string background = pName + "活跃于" + pKingdom + "，属于" +
-                pEra + "历史人物。";
-            string detail = biography + "这张卡记录其历史身份、所属政权与主要活动时期，部署后按" +
-                (pMilitary ? "军事官员" : "文官") + "处理。";
+            string biography = HistoricalFigureCardNarratives.MinisterBiography(
+                pId, pName, pKingdom, pEra, pMilitary, pBiography);
+            string background = HistoricalFigureCardNarratives.MinisterBackground(
+                pId, pName, pKingdom, pEra, pMilitary);
+            string detail = HistoricalFigureCardNarratives.MinisterDetailed(
+                pId, pName, pKingdom, pEra, pMilitary, pBiography);
             cards.Add(new HistoricalFigureCardDefinition(
                 pId, pName, family, family, given, pEra, pKingdom, pEra,
                 HistoricalFigureCardCatalog.UnknownYear,

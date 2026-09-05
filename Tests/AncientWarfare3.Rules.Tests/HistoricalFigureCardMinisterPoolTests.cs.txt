@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.content.figures;
 using AncientWarfare3.core.lineage;
@@ -24,10 +25,22 @@ internal static class HistoricalFigureCardMinisterPoolTests
         False(HistoricalFigureCardRoleRules.IsMilitaryGeneral(xiaoHe),
             "civil minister is not a military general");
 
+        var expectedCounts = new Dictionary<string, int>
+        {
+            ["pre_qin_qin"] = 58,
+            ["han"] = 52,
+            ["three_six_dynasties"] = 59,
+            ["sui_tang"] = 58,
+            ["five_song"] = 58,
+            ["yuan_ming_qing"] = 58
+        };
         True(HistoricalFigureCardCrates.All.All(crate =>
-            HistoricalFigureCardCatalog.GetCards(crate.Id,
-                HistoricalFigureCardRole.Minister).Count >= 40),
-            "each period has at least forty ministers");
+        {
+            int actual = HistoricalFigureCardCatalog.GetCards(crate.Id,
+                HistoricalFigureCardRole.Minister).Count;
+            return expectedCounts.TryGetValue(crate.Id, out int expected) &&
+                actual == expected;
+        }), "each period has the planned minister card count");
         True(HistoricalFigureCardCrates.All.All(crate =>
         {
             var cards = HistoricalFigureCardCatalog.GetCards(crate.Id,

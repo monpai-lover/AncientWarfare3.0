@@ -220,8 +220,8 @@ public static class HistoricalFigureCardCatalog
                     figure.CombatHealth, figure.CombatTraits,
                     BuildBackgroundSummary(figure.Key, figure.DynastyName,
                         NormalizeShortKingdomName(figure.KingdomName),
-                        figure.FoundingYear),
-                    BuildDetailedBiography(figure.Key, figure.DynastyName,
+                        figure.FoundingYear, cardId),
+                    BuildDetailedBiography(cardId, figure.Key, figure.DynastyName,
                         NormalizeShortKingdomName(figure.KingdomName),
                         figure.FoundingYear, figure.Key + "\uff0c\u5386\u53f2\u4eba\u7269\u3002"),
                     RoleForCard(cardId));
@@ -262,29 +262,29 @@ public static class HistoricalFigureCardCatalog
         }
 
         private static string BuildBackgroundSummary(string pName,
-            string pDynasty, string pKingdom, int pHistoricalYear)
+            string pDynasty, string pKingdom, int pHistoricalYear,
+            string pCardId = "")
         {
             string era = string.IsNullOrWhiteSpace(pDynasty)
                 ? "\u5386\u53f2\u65f6\u671f" : pDynasty;
             string kingdom = string.IsNullOrWhiteSpace(pKingdom)
                 ? "\u5176\u5386\u53f2\u653f\u6743" : pKingdom;
-            return pName + "\u662f" + era + "\u7684\u91cd\u8981\u5386\u53f2\u4eba\u7269\uff0c\u6d3b\u52a8\u4e8e" +
-                kingdom + "\u7684\u653f\u6cbb\u4e0e\u793e\u4f1a\u80cc\u666f\u4e4b\u4e2d\u3002";
+            string focus = HistoricalFigureCardNarratives.Focus(pCardId);
+            return pName + "\u662f" + era + "\u7684" + kingdom + "\u5386\u53f2\u4eba\u7269\uff0c\u5176\u6d3b\u52a8\u4e0e" +
+                focus + "\u5bc6\u5207\u76f8\u5173\u3002";
         }
 
-        private static string BuildDetailedBiography(string pName,
+        private static string BuildDetailedBiography(string pCardId, string pName,
             string pDynasty, string pKingdom, int pHistoricalYear,
             string pBiography)
         {
-            string detail = string.IsNullOrWhiteSpace(pBiography)
-                ? pName + "\u7684\u751f\u5e73\u4e0e\u5386\u53f2\u6d3b\u52a8\u89c1\u4e8e" +
-                    pDynasty + "\u76f8\u5173\u53f2\u6599\u3002"
-                : pBiography.Trim();
+            string detail = HistoricalFigureCardNarratives.Detailed(
+                pCardId, pName, pDynasty, pKingdom, pBiography);
             string year = pHistoricalYear == UnknownYear
                 ? "\u5e74\u4ee3\u672a\u8be6" : "\u91cd\u8981\u6d3b\u52a8\u5e74\u4ee3\u7ea6\u4e3a" +
-                    pHistoricalYear + "\u5e74";
+                pHistoricalYear + "\u5e74";
             return detail + "\n" + year + "\uff1b\u5386\u53f2\u56fd\u53f7\u4e3a" +
-                pKingdom + "\u3002\u8be5\u4eba\u7269\u5361\u4ee5\u73b0\u6709\u5386\u53f2\u76ee\u5f55\u7684\u8eab\u4efd\u3001\u4eb2\u7f18\u4e0e\u65f6\u4ee3\u5b57\u6bb5\u4e3a\u51c6\u3002";
+                pKingdom + "\u3002";
         }
 
         private static HistoricalFigureCardRarity RarityForFame(int pFame)
@@ -457,8 +457,9 @@ public static class HistoricalFigureCardCatalog
                     ? pDynastyName
                     : pHistoricalEra;
                 BackgroundSummary = BuildBackgroundSummary(pDisplayName,
-                    HistoricalEra, HistoricalKingdomName, pHistoricalYear);
-                DetailedBiography = BuildDetailedBiography(pDisplayName,
+                    HistoricalEra, HistoricalKingdomName, pHistoricalYear,
+                    pCardId);
+                DetailedBiography = BuildDetailedBiography(pCardId, pDisplayName,
                     HistoricalEra, HistoricalKingdomName, pHistoricalYear,
                     string.IsNullOrEmpty(pBiography) ? "" : Biography);
                 FatherDisplayName = UnknownParent(FatherDisplayName);
@@ -1064,7 +1065,7 @@ public static class HistoricalFigureCardCatalog
             yield return E("mengpai", "\u8499\u6d3e", "\u5927\u6c49",
                 "\u7334\u6c49", UnknownYear, UnknownYear, UnknownYear, 100,
                 "", "",
-                "\u4f5c\u8005\u5316\u8eab\uff0c\u4ece\u5357\u6d0b\u8fd4\u56de\u795e\u5dde\u7684\u5f00\u62d3\u8005\uff0c\u7387\u4f17\u5efa\u7acb\u7334\u6c49\u5e1d\u56fd\uff0c\u5e76\u4ee5\u5927\u6c49\u4e4b\u540d\u91cd\u6574\u5929\u4e0b\u3002",
+                "\u4f5c\u8005\u5316\u8eab\uff0c\u4ece\u5357\u6d0b\u6253\u56de\u795e\u5dde\u7684\u5f00\u62d3\u8005\uff0c\u7387\u4f17\u5efa\u7acb\u7334\u6c49\u5e1d\u56fd\uff0c\u5e76\u4ee5\u5927\u6c49\u4e4b\u540d\u91cd\u6574\u5929\u4e0b\u3002",
                 pHistoricalEra: "\u5927\u6c49");
         }
     }

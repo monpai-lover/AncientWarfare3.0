@@ -50,11 +50,13 @@ namespace AncientWarfare3.core.lineage
                 AddFallback("aw_historical_figure_cards_role_monarch", "君主箱");
                 AddFallback("aw_historical_figure_cards_role_minister", "大臣箱");
                 AddFallback("aw_historical_figure_cards_recycle_title", "历史人物汰换");
+                AddFallback("aw_historical_figure_card_recycle_title", "历史人物汰换");
                 AddFallback("aw_historical_figure_cards_recycle_summary", "已选择 {0}/{1}");
                 AddFallback("aw_historical_figure_cards_recycle_next", "下一品质：{0}");
                 AddFallback("aw_historical_figure_cards_recycle_next_empty", "选择同品质卡片");
                 AddFallback("aw_historical_figure_cards_recycle_reset", "重置");
                 AddFallback("aw_historical_figure_cards_recycle_back", "返回仓库");
+                AddFallback("aw_historical_figure_cards_recycle_back_to_recycle", "返回汰换");
                 AddFallback("aw_historical_figure_cards_recycle_insufficient", "持有数量不足");
                 AddFallback("aw_historical_figure_cards_recycle_success", "获得：{0}  来源：{1}");
                 AddFallback("aw_historical_figure_cards_recycle_source_missing", "没有可用的收藏品来源");

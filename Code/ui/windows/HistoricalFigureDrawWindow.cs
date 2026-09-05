@@ -43,6 +43,9 @@ namespace AncientWarfare3.ui.windows
         private static bool _pendingConfirmWindow;
         private static string _selectedCrateId = "";
         private static bool _inventoryMode;
+        private const int InventoryPageSize = 20;
+        private int _inventoryPage;
+        private static bool _returnToRecycle;
         private static HistoricalFigureCardRole _selectedRole =
             HistoricalFigureCardRole.Monarch;
         private static float _rollStartedAt;
@@ -111,6 +114,9 @@ namespace AncientWarfare3.ui.windows
         private Button _autoOpen;
         private Button _sound;
         private Button _recycleModeButton;
+        private Button _inventoryPreviousPage;
+        private Button _inventoryNextPage;
+        private Text _inventoryPageLabel;
         private WideWindowChrome _chrome;
         private bool _built;
         private float _cardLayoutWidth = -1f;
@@ -182,6 +188,7 @@ namespace AncientWarfare3.ui.windows
             _selectedCrateId = "";
             _selectedRole = HistoricalFigureCardRole.Monarch;
             _inventoryMode = false;
+            _returnToRecycle = false;
             _selectedTile = null;
             _selectedCity = null;
             _deploymentId = "";
@@ -255,6 +262,7 @@ namespace AncientWarfare3.ui.windows
                 Store.GetOwnedCount(card.CardId) <= 0) return;
             _selectedCard = card;
             _lastReveal = null;
+            _returnToRecycle = false;
             _state = DrawState.Details;
             Refresh();
         }
@@ -267,6 +275,7 @@ namespace AncientWarfare3.ui.windows
             _selectedCard = null;
             _lastReveal = null;
             _selectedCrateId = crate.Id;
+            _returnToRecycle = false;
             _inventoryMode = false;
             Refresh();
         }
@@ -286,7 +295,9 @@ namespace AncientWarfare3.ui.windows
             _selectedCard = null;
             _lastReveal = null;
             _selectedCrateId = "";
+            _returnToRecycle = false;
             _inventoryMode = true;
+            _inventoryPage = 0;
             _state = DrawState.Idle;
             Refresh();
         }
@@ -298,7 +309,8 @@ namespace AncientWarfare3.ui.windows
         }
 
         internal static void OpenCardDetails(
-            HistoricalFigureCardDefinition pCard, string pCrateId)
+            HistoricalFigureCardDefinition pCard, string pCrateId,
+            bool pReturnToRecycle = false)
         {
             if (pCard == null) return;
             _selectedCard = pCard;
@@ -307,6 +319,7 @@ namespace AncientWarfare3.ui.windows
                 ? pCard.CollectionId : pCrateId;
             _selectedRole = pCard.Role;
             _inventoryMode = false;
+            _returnToRecycle = pReturnToRecycle;
             _state = DrawState.Details;
             Open();
         }
@@ -321,6 +334,17 @@ namespace AncientWarfare3.ui.windows
         private void BackToCrates()
         {
             if (_state == DrawState.Rolling || IsPlacementActive) return;
+            if (_returnToRecycle)
+            {
+                _returnToRecycle = false;
+                _selectedCard = null;
+                _lastReveal = null;
+                _selectedCrateId = "";
+                _inventoryMode = false;
+                GetComponent<ScrollWindow>()?.clickHide();
+                HistoricalFigureRecycleWindow.Open();
+                return;
+            }
             _selectedCard = null;
             _lastReveal = null;
             _selectedCrateId = "";
@@ -618,8 +642,7 @@ namespace AncientWarfare3.ui.windows
             _stageBackdrop?.gameObject.SetActive(showOpeningStage);
             _stageShade?.gameObject.SetActive(showOpeningStage);
             _openingSliderStage?.gameObject.SetActive(showTrack);
-            bool showRevealPanel = _state == DrawState.Reveal ||
-                _state == DrawState.Details;
+            bool showRevealPanel = _state == DrawState.Reveal || _state == DrawState.Details;
             _revealPanel?.gameObject.SetActive(showRevealPanel);
             SetInventoryControlsVisible(_inventoryMode &&
                 _state == DrawState.Idle);
@@ -662,6 +685,10 @@ namespace AncientWarfare3.ui.windows
                 _body.text = CardText(_selectedCard) +
                     "\n\n" + Format("aw_historical_figure_cards_owned",
                     "\u5df2\u62e5\u6709\uff1a{0}", Store.GetOwnedCount(_selectedCard.CardId));
+                SetButtonText(_back, _returnToRecycle
+                    ? Text("aw_historical_figure_cards_recycle_back_to_recycle",
+                        "\u8fd4\u56de\u6c70\u6362")
+                    : Text("aw_historical_figure_cards_back", "\u8fd4\u56de\u7bb1\u5b50"));
                 return;
             }
 
@@ -1106,6 +1133,14 @@ namespace AncientWarfare3.ui.windows
                 UpdateInventoryStats(_inventoryCache, _inventoryCacheTotalOwned);
             }
             IReadOnlyList<HistoricalFigureCardDefinition> cards = _inventoryCache;
+            int totalPages = Mathf.Max(1, Mathf.CeilToInt(
+                cards.Count / (float)InventoryPageSize));
+            _inventoryPage = Mathf.Clamp(_inventoryPage, 0, totalPages - 1);
+            IReadOnlyList<HistoricalFigureCardDefinition> pageCards = cards
+                .Skip(_inventoryPage * InventoryPageSize)
+                .Take(InventoryPageSize)
+                .ToArray();
+            UpdateInventoryPagination(totalPages);
             int totalOwned = _inventoryCacheTotalOwned;
             if (cards.Count == 0)
                 _body.text = Text("aw_historical_figure_cards_inventory_empty",
@@ -1114,7 +1149,7 @@ namespace AncientWarfare3.ui.windows
                 _body.text = Format("aw_historical_figure_cards_inventory_summary",
                     "{0} \u5f20\u4eba\u7269\u5361 \u00b7 \u6309{1}\u6392\u5e8f", totalOwned,
                     InventorySortName(_inventorySort));
-            UpdateCardList(cards, true, _inventoryButtons);
+            UpdateCardList(pageCards, true, _inventoryButtons);
         }
 
         private void UpdateCrateContents(
@@ -1451,6 +1486,7 @@ namespace AncientWarfare3.ui.windows
                     {
                         if (!_inventoryMode || _state != DrawState.Idle) return;
                         _inventorySort = selectedSort;
+                        _inventoryPage = 0;
                         Refresh();
                     });
                 _sortButtons.Add(button);
@@ -1463,7 +1499,35 @@ namespace AncientWarfare3.ui.windows
                 stat.color = ParseColor(rarity.ColorHex, Color.white);
                 _rarityStats.Add(stat);
             }
+            _inventoryPreviousPage = MakeButton("InventoryPreviousPage", _root,
+                Text("aw_historical_figure_cards_previous_page", "上一页"),
+                () => ChangeInventoryPage(-1));
+            _inventoryPageLabel = MakeText("InventoryPageLabel", _root, 7,
+                TextAnchor.MiddleCenter);
+            _inventoryNextPage = MakeButton("InventoryNextPage", _root,
+                Text("aw_historical_figure_cards_next_page", "下一页"),
+                () => ChangeInventoryPage(1));
             SetInventoryControlsVisible(false);
+        }
+
+        private void ChangeInventoryPage(int pDelta)
+        {
+            if (!_inventoryMode || _state != DrawState.Idle ||
+                _inventoryCache == null) return;
+            int totalPages = Mathf.Max(1, Mathf.CeilToInt(
+                _inventoryCache.Count / (float)InventoryPageSize));
+            _inventoryPage = Mathf.Clamp(_inventoryPage + pDelta, 0,
+                totalPages - 1);
+            Refresh();
+        }
+
+        private void UpdateInventoryPagination(int pTotalPages)
+        {
+            _inventoryPageLabel.text = Format(
+                "aw_historical_figure_cards_page", "{0}/{1}",
+                _inventoryPage + 1, pTotalPages);
+            _inventoryPreviousPage.interactable = _inventoryPage > 0;
+            _inventoryNextPage.interactable = _inventoryPage < pTotalPages - 1;
         }
 
         private static Scrollbar CreateCollectionScrollbar(Transform pParent)
@@ -1532,6 +1596,16 @@ namespace AncientWarfare3.ui.windows
                 SetButtonText(_recycleModeButton,
                     Text("aw_historical_figure_cards_recycle_mode",
                         "\u6c70\u6362"));
+            }
+            if (_inventoryPreviousPage != null)
+            {
+                _inventoryPreviousPage.gameObject.SetActive(pVisible);
+                _inventoryPageLabel.gameObject.SetActive(pVisible);
+                _inventoryNextPage.gameObject.SetActive(pVisible);
+                SetButtonText(_inventoryPreviousPage, Text(
+                    "aw_historical_figure_cards_previous_page", "上一页"));
+                SetButtonText(_inventoryNextPage, Text(
+                    "aw_historical_figure_cards_next_page", "下一页"));
             }
         }
 
@@ -2043,8 +2117,7 @@ namespace AncientWarfare3.ui.windows
                 _collectionViewport.gameObject.activeSelf;
             bool trackMode = _trackViewport != null &&
                 _trackViewport.gameObject.activeSelf;
-            bool revealMode = _state == DrawState.Reveal ||
-                _state == DrawState.Details;
+            bool revealMode = _state == DrawState.Reveal || _state == DrawState.Details;
             bool inventoryControls = _inventoryMode &&
                 _state == DrawState.Idle;
             RectTransform background = BackgroundTransform as RectTransform;
@@ -2202,12 +2275,19 @@ namespace AncientWarfare3.ui.windows
                     14f + i * (statWidth + 4f), statTop, statWidth, 15f);
             for (int i = 0; i < _sortButtons.Count; i++)
                 Position(_sortButtons[i].GetComponent<RectTransform>(),
-                    14f + i * 67f, sortTop, 63f, 20f);
+                    14f + i * 59f, sortTop, 55f, 20f);
             for (int i = 0; i < _roleButtons.Count; i++)
                 Position(_roleButtons[i].GetComponent<RectTransform>(),
                     width * .56f + i * 92f, 4f, 86f, 24f);
             Position(_recycleModeButton?.GetComponent<RectTransform>(),
-                286f, sortTop, 72f, 20f);
+                250f, sortTop, 60f, 20f);
+            float inventoryPageX = Mathf.Max(316f, width - 122f);
+            Position(_inventoryPreviousPage?.GetComponent<RectTransform>(),
+                inventoryPageX, sortTop, 38f, 20f);
+            Position(_inventoryPageLabel?.rectTransform, inventoryPageX + 40f,
+                sortTop, 34f, 20f);
+            Position(_inventoryNextPage?.GetComponent<RectTransform>(),
+                inventoryPageX + 76f, sortTop, 38f, 20f);
             float buttonTop = -height + 28f;
             Position(_draw.GetComponent<RectTransform>(), 14f, buttonTop,
                 100f, 28f);

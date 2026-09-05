@@ -20,6 +20,13 @@ namespace AncientWarfare3.ui.windows
         private static readonly Vector2 DefaultSize = new Vector2(550f, 410f);
         private static readonly Vector2 MinimumSize = new Vector2(480f, 330f);
         private static readonly Vector2 MaximumSize = new Vector2(760f, 620f);
+        private const int SlotColumns = 3;
+        private const float SlotGap = 5f;
+        private const int CardColumns = 3;
+        private const int PageSize = 20;
+        private const float CardWidth = 88f;
+        private const float CardHeight = 64f;
+        private const float CardRowGap = 8f;
 
         private static HistoricalFigureCardCollectionStore Store =>
             HistoricalFigureCardRuntimeService.Collection;
@@ -46,6 +53,10 @@ namespace AncientWarfare3.ui.windows
         private Button _submit;
         private Button _reset;
         private Button _back;
+        private Button _previousPage;
+        private Button _nextPage;
+        private Text _pageLabel;
+        private int _page;
         private bool _built;
 
         public static void Open()
@@ -74,7 +85,7 @@ namespace AncientWarfare3.ui.windows
             if (window?.titleText != null)
             {
                 window.titleText.text = AW_L10n.Text(
-                    "aw_historical_figure_card_recycle_title",
+                    "aw_historical_figure_cards_recycle_title",
                     "历史人物汰换");
                 window.titleText.raycastTarget = false;
             }
@@ -136,6 +147,14 @@ namespace AncientWarfare3.ui.windows
             _listScroll.verticalScrollbar = _listScrollbar;
             _listScroll.verticalScrollbarVisibility =
                 ScrollRect.ScrollbarVisibility.Permanent;
+            _previousPage = MakeButton("PreviousPage", _root,
+                Text("aw_historical_figure_cards_previous_page", "上一页"),
+                () => ChangePage(-1));
+            _pageLabel = MakeText("PageLabel", _root, 7,
+                TextAnchor.MiddleCenter, Color.white);
+            _nextPage = MakeButton("NextPage", _root,
+                Text("aw_historical_figure_cards_next_page", "下一页"),
+                () => ChangePage(1));
 
             GameObject slots = new GameObject("RecycleSlots", typeof(RectTransform),
                 typeof(Image));
@@ -164,7 +183,15 @@ namespace AncientWarfare3.ui.windows
                 HistoricalFigureCardRecycleSelectionRules.FilterVisible(
                     HistoricalFigureCardCatalog.All, Store.OwnedCounts,
                     _selection.LockedRarity);
-            RenderCards(cards);
+            int totalPages = Mathf.Max(1, Mathf.CeilToInt(
+                cards.Count / (float)PageSize));
+            _page = Mathf.Clamp(_page, 0, totalPages - 1);
+            IReadOnlyList<HistoricalFigureCardDefinition> pageCards = cards
+                .Skip(_page * PageSize)
+                .Take(PageSize)
+                .ToArray();
+            UpdatePagination(totalPages);
+            RenderCards(pageCards);
             RenderSlots();
             int required = HistoricalFigureCardRecycleSelectionRules.RequiredCount(
                 _selection.LockedRarity);
@@ -185,10 +212,30 @@ namespace AncientWarfare3.ui.windows
                 "aw_historical_figure_cards_recycle_submit", "汰换 {0}/{1}",
                 _selection.SlotCardIds.Count, required));
             SetButtonText(_reset, Text(
-                "aw_historical_figure_cards_recycle_reset", "重置"));
+                "aw_historical_figure_cards_recycle_cancel", "取消"));
             SetButtonText(_back, Text(
                 "aw_historical_figure_cards_recycle_back", "返回仓库"));
             RenderResult();
+        }
+
+        private void ChangePage(int pDelta)
+        {
+            IReadOnlyList<HistoricalFigureCardDefinition> cards =
+                HistoricalFigureCardRecycleSelectionRules.FilterVisible(
+                    HistoricalFigureCardCatalog.All, Store.OwnedCounts,
+                    _selection.LockedRarity);
+            int totalPages = Mathf.Max(1, Mathf.CeilToInt(
+                cards.Count / (float)PageSize));
+            _page = Mathf.Clamp(_page + pDelta, 0, totalPages - 1);
+            Refresh();
+        }
+
+        private void UpdatePagination(int pTotalPages)
+        {
+            _pageLabel.text = Format("aw_historical_figure_cards_page", "{0}/{1}",
+                _page + 1, pTotalPages);
+            _previousPage.interactable = _page > 0;
+            _nextPage.interactable = _page < pTotalPages - 1;
         }
 
         private void RenderResult()
@@ -234,10 +281,13 @@ namespace AncientWarfare3.ui.windows
                 }
                 BindCard(buttonObject, card);
                 Position(buttonObject.GetComponent<RectTransform>(),
-                    (i % 3) * 94f + 4f, -((i / 3) * 100f + 4f), 88f, 92f);
+                    (i % CardColumns) * (CardWidth + 6f) + 4f,
+                    -((i / CardColumns) * (CardHeight + CardRowGap) + 4f),
+                    CardWidth, CardHeight);
             }
             _listContent.sizeDelta = new Vector2(286f,
-                Mathf.Max(1f, Mathf.Ceil(pCards.Count / 3f) * 100f + 4f));
+                Mathf.Max(1f, Mathf.Ceil(pCards.Count / (float)CardColumns) *
+                    (CardHeight + CardRowGap) + 4f));
             _listScroll.StopMovement();
         }
 
@@ -279,7 +329,7 @@ namespace AncientWarfare3.ui.windows
             button.interactable = remaining > 0;
             Text name = ChildText(pObject.transform, "Name", 7);
             name.text = pCard.DisplayName ?? "-";
-            Position(name.rectTransform, 3f, -72f, 74f, 13f);
+            Position(name.rectTransform, 3f, -48f, 74f, 13f);
             Text meta = ChildText(pObject.transform, "Meta", 6);
             meta.text = "x" + remaining + "  " +
                 RarityName(pCard.Rarity);
@@ -290,7 +340,7 @@ namespace AncientWarfare3.ui.windows
             portrait.sprite = portrait.sprite ?? SpriteTextureLoader.getSprite(
                 "ui/icons/iconKings");
             portrait.preserveAspect = true;
-            Position(portrait.rectTransform, 8f, -7f, 64f, 58f);
+            Position(portrait.rectTransform, 8f, -7f, 64f, 34f);
         }
 
         private int GetSelectedCount(string pCardId)
@@ -315,15 +365,19 @@ namespace AncientWarfare3.ui.windows
                     ParseColor(card.Rarity?.ColorHex, Color.white));
                 image.color = card == null
                     ? new Color(.15f, .15f, .16f, .9f) : Color.white;
+                float slotSize = Mathf.Max(32f,
+                    button.GetComponent<RectTransform>().sizeDelta.x);
                 Text label = ChildText(button.transform, "SlotLabel", 7);
                 label.text = card == null ? (i + 1).ToString() : card.DisplayName;
-                Position(label.rectTransform, 2f, -29f, 56f, 14f);
+                Position(label.rectTransform, 2f, -slotSize + 2f,
+                    slotSize - 4f, 12f);
                 Image portrait = ChildImage(button.transform, "SlotPortrait");
                 portrait.sprite = card == null ? null :
                     SpriteTextureLoader.getSprite(card.PortraitPath) ??
                     SpriteTextureLoader.getSprite("ui/icons/iconKings");
                 portrait.preserveAspect = true;
-                Position(portrait.rectTransform, 5f, -4f, 50f, 40f);
+                Position(portrait.rectTransform, 4f, -3f,
+                    slotSize - 8f, Mathf.Max(18f, slotSize - 17f));
             }
         }
 
@@ -338,6 +392,7 @@ namespace AncientWarfare3.ui.windows
         private void ResetSelection()
         {
             HistoricalFigureCardRecycleSelectionRules.Clear(_selection);
+            _page = 0;
             _result.text = "";
             _lastOutput = null;
             _lastOutputCrateId = "";
@@ -407,8 +462,7 @@ namespace AncientWarfare3.ui.windows
         {
             if (_lastOutput == null) return;
             GetComponent<ScrollWindow>()?.clickHide();
-            HistoricalFigureDrawWindow.OpenCardDetails(_lastOutput,
-                _lastOutputCrateId);
+            HistoricalFigureDrawWindow.OpenCardDetails(_lastOutput, _lastOutputCrateId, true);
         }
 
         private void BackToInventory()
@@ -434,21 +488,41 @@ namespace AncientWarfare3.ui.windows
             Position(_status.rectTransform, 14f, 4f, width - 28f, 22f);
             Position(_summary.rectTransform, 14f, -23f, width - 28f, 18f);
             Position(_preview.rectTransform, 14f, -43f, width - 28f, 18f);
-            Position(_result.rectTransform, 14f, -64f, width - 76f, 54f);
+            Position(_result.rectTransform, 14f, -64f, width - 76f, 48f);
             Position(_resultPortrait.rectTransform, width - 56f, -64f, 42f, 48f);
-            float listWidth = width * .56f;
-            Position(_listViewport, 14f, -126f, listWidth, height - 164f);
+            float listTop = -112f;
+            float listHeight = Mathf.Max(140f, height - 150f);
+            float listWidth = Mathf.Min(286f, width * .58f);
+            float scrollbarX = 14f + listWidth + 4f;
+            float rightX = scrollbarX + 14f;
+            float rightWidth = Mathf.Max(120f, width - rightX - 14f);
+            Position(_listViewport, 14f, listTop, listWidth, listHeight);
             Position(_listScrollbar.GetComponent<RectTransform>(),
-                listWidth + 16f, -126f, 8f, height - 164f);
-            Position(_slotPanel, width * .60f, -126f, width * .40f - 14f,
-                height - 164f);
+                scrollbarX, listTop, 10f, listHeight);
+            Position(_slotPanel, rightX, listTop, rightWidth, listHeight);
+            float slotSizeByWidth = (rightWidth - 14f -
+                (SlotColumns - 1) * SlotGap) / SlotColumns;
+            float slotSizeByHeight = (listHeight - 14f - 3f * SlotGap) / 4f;
+            float slotSize = Mathf.Max(32f, Mathf.Min(50f,
+                Mathf.Min(slotSizeByWidth, slotSizeByHeight)));
             for (int i = 0; i < _slotButtons.Count; i++)
                 Position(_slotButtons[i].GetComponent<RectTransform>(),
-                    (i % 2) * 95f + 8f, -((i / 2) * 62f + 8f), 88f, 56f);
-            float buttonTop = -height + 24f;
-            Position(_submit.GetComponent<RectTransform>(), 14f, buttonTop, 110f, 26f);
-            Position(_reset.GetComponent<RectTransform>(), 132f, buttonTop, 80f, 26f);
-            Position(_back.GetComponent<RectTransform>(), width - 92f, buttonTop, 78f, 26f);
+                    7f + (i % SlotColumns) * (slotSize + SlotGap),
+                    -(7f + (i / SlotColumns) * (slotSize + SlotGap)),
+                    slotSize, slotSize);
+            float slotButtonTop = listTop - listHeight - 8f;
+            Position(_previousPage.GetComponent<RectTransform>(), 104f,
+                slotButtonTop, 38f, 26f);
+            Position(_pageLabel.rectTransform, 146f, slotButtonTop, 34f, 26f);
+            Position(_nextPage.GetComponent<RectTransform>(), 184f,
+                slotButtonTop, 38f, 26f);
+            Position(_submit.GetComponent<RectTransform>(), rightX,
+                slotButtonTop, Mathf.Min(82f, (rightWidth - 6f) * .5f), 26f);
+            Position(_reset.GetComponent<RectTransform>(), rightX +
+                Mathf.Min(82f, (rightWidth - 6f) * .5f) + 6f,
+                slotButtonTop, Mathf.Min(82f, (rightWidth - 6f) * .5f), 26f);
+            Position(_back.GetComponent<RectTransform>(), 14f, slotButtonTop,
+                84f, 26f);
             _chrome?.RepositionResizeHandle();
         }
 
