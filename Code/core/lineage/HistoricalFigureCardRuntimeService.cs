@@ -57,6 +57,8 @@ namespace AncientWarfare3.core.lineage
                 AddFallback("aw_historical_figure_cards_recycle_reset", "重置");
                 AddFallback("aw_historical_figure_cards_recycle_back", "返回仓库");
                 AddFallback("aw_historical_figure_cards_recycle_back_to_recycle", "返回汰换");
+                AddFallback("aw_historical_figure_cards_back_previous",
+                    "返回上一页");
                 AddFallback("aw_historical_figure_cards_recycle_insufficient", "持有数量不足");
                 AddFallback("aw_historical_figure_cards_recycle_success", "获得：{0}  来源：{1}");
                 AddFallback("aw_historical_figure_cards_recycle_source_missing", "没有可用的收藏品来源");

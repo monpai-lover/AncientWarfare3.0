@@ -101,6 +101,7 @@ aw_historical_figure_cards_recycle_next_empty,选择同品质卡片,Select cards
 aw_historical_figure_cards_recycle_reset,重置,Reset,重置
 aw_historical_figure_cards_recycle_back,返回仓库,Back to inventory,返回倉庫
 aw_historical_figure_cards_recycle_back_to_recycle,返回汰换,Back to trade up,返回汰換
+aw_historical_figure_cards_back_previous,返回上一页,Back,返回上一頁
 aw_historical_figure_cards_recycle_insufficient,持有数量不足,Insufficient owned quantity,持有數量不足
 aw_historical_figure_cards_recycle_success,获得：{0}  来源：{1},Received: {0}  Source: {1},獲得：{0}  來源：{1}
 aw_historical_figure_cards_recycle_source_missing,没有可用的收藏品来源,No collection source available,沒有可用的收藏品來源

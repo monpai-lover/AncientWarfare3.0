@@ -101,8 +101,8 @@ internal static class HistoricalFigureCardRecycleWindowSourceGuardTests
             "recycle centers the plus-one card below the nine-card grid");
         Contains(recycle, "new Vector2(480f, 350f)",
             "recycle minimum size keeps all four selection rows visible");
-        Contains(draw, "aw_historical_figure_cards_recycle_back_to_recycle",
-            "details localizes the return-to-recycle label");
+        Contains(draw, "aw_historical_figure_cards_back_previous",
+            "details uses a localized previous-page action");
         False(activeDraw.Contains("TryRecycle"),
             "draw window does not commit recycle transactions");
         False(activeDraw.Contains("ToggleRecycleCard"),

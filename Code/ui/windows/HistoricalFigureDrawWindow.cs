@@ -32,6 +32,14 @@ namespace AncientWarfare3.ui.windows
         private enum DrawState { Idle, Rolling, Reveal, Details, Placement,
             PlacementConfirm, Deploying }
 
+        private enum DetailsReturnTarget
+        {
+            CrateSelection,
+            CrateContents,
+            Inventory,
+            Recycle
+        }
+
         private static HistoricalFigureCardCollectionStore Store =>
             HistoricalFigureCardRuntimeService.Collection;
         private static HistoricalFigureCardDefinition _selectedCard;
@@ -45,7 +53,9 @@ namespace AncientWarfare3.ui.windows
         private static bool _inventoryMode;
         private const int InventoryPageSize = 20;
         private int _inventoryPage;
-        private static bool _returnToRecycle;
+        private static int _detailsReturnInventoryPage;
+        private static DetailsReturnTarget _detailsReturnTarget =
+            DetailsReturnTarget.CrateSelection;
         private static HistoricalFigureCardRole _selectedRole =
             HistoricalFigureCardRole.Monarch;
         private static float _rollStartedAt;
@@ -84,6 +94,10 @@ namespace AncientWarfare3.ui.windows
         private Text _revealRarity;
         private Text _revealMeta;
         private Text _revealBiography;
+        private RectTransform _revealBiographyViewport;
+        private RectTransform _revealBiographyContent;
+        private ScrollRect _revealBiographyScroll;
+        private Scrollbar _revealBiographyScrollbar;
         private Image _revealBar;
         private Image _revealPortrait;
         private RectTransform _collectionViewport;
@@ -189,7 +203,8 @@ namespace AncientWarfare3.ui.windows
             _selectedCrateId = "";
             _selectedRole = HistoricalFigureCardRole.Monarch;
             _inventoryMode = false;
-            _returnToRecycle = false;
+            _detailsReturnInventoryPage = 0;
+            _detailsReturnTarget = DetailsReturnTarget.CrateSelection;
             _selectedTile = null;
             _selectedCity = null;
             _deploymentId = "";
@@ -263,7 +278,8 @@ namespace AncientWarfare3.ui.windows
                 Store.GetOwnedCount(card.CardId) <= 0) return;
             _selectedCard = card;
             _lastReveal = null;
-            _returnToRecycle = false;
+            _detailsReturnInventoryPage = _inventoryPage;
+            _detailsReturnTarget = DetailsReturnTarget.Inventory;
             _state = DrawState.Details;
             Refresh();
         }
@@ -276,7 +292,7 @@ namespace AncientWarfare3.ui.windows
             _selectedCard = null;
             _lastReveal = null;
             _selectedCrateId = crate.Id;
-            _returnToRecycle = false;
+            _detailsReturnTarget = DetailsReturnTarget.CrateContents;
             _inventoryMode = false;
             Refresh();
         }
@@ -296,7 +312,7 @@ namespace AncientWarfare3.ui.windows
             _selectedCard = null;
             _lastReveal = null;
             _selectedCrateId = "";
-            _returnToRecycle = false;
+            _detailsReturnTarget = DetailsReturnTarget.Inventory;
             _inventoryMode = true;
             _inventoryPage = 0;
             _state = DrawState.Idle;
@@ -320,7 +336,11 @@ namespace AncientWarfare3.ui.windows
                 ? pCard.CollectionId : pCrateId;
             _selectedRole = pCard.Role;
             _inventoryMode = false;
-            _returnToRecycle = pReturnToRecycle;
+            _detailsReturnTarget = pReturnToRecycle
+                ? DetailsReturnTarget.Recycle
+                : (_selectedCrateId.Length > 0
+                    ? DetailsReturnTarget.CrateContents
+                    : DetailsReturnTarget.CrateSelection);
             _state = DrawState.Details;
             Open();
         }
@@ -332,12 +352,22 @@ namespace AncientWarfare3.ui.windows
             HistoricalFigureRecycleWindow.Open();
         }
 
-        private void BackToCrates()
+        private void BackToPreviousPage()
         {
             if (_state == DrawState.Rolling || IsPlacementActive) return;
-            if (_returnToRecycle)
+            if (_state == DrawState.Idle)
             {
-                _returnToRecycle = false;
+                _selectedCard = null;
+                _lastReveal = null;
+                _selectedCrateId = "";
+                _inventoryMode = false;
+                _detailsReturnTarget = DetailsReturnTarget.CrateSelection;
+                Refresh();
+                return;
+            }
+            if (_detailsReturnTarget == DetailsReturnTarget.Recycle)
+            {
+                _detailsReturnTarget = DetailsReturnTarget.CrateSelection;
                 _selectedCard = null;
                 _lastReveal = null;
                 _selectedCrateId = "";
@@ -348,8 +378,18 @@ namespace AncientWarfare3.ui.windows
             }
             _selectedCard = null;
             _lastReveal = null;
-            _selectedCrateId = "";
-            _inventoryMode = false;
+            if (_detailsReturnTarget == DetailsReturnTarget.Inventory)
+            {
+                _selectedCrateId = "";
+                _inventoryMode = true;
+                _inventoryPage = _detailsReturnInventoryPage;
+            }
+            else
+            {
+                if (_detailsReturnTarget == DetailsReturnTarget.CrateSelection)
+                    _selectedCrateId = "";
+                _inventoryMode = false;
+            }
             _state = DrawState.Idle;
             Refresh();
         }
@@ -534,9 +574,41 @@ namespace AncientWarfare3.ui.windows
                 TextAnchor.MiddleCenter);
             _revealMeta = MakeText("Meta", _revealPanel.transform, 7,
                 TextAnchor.UpperLeft);
-            _revealBiography = MakeText("Biography", _revealPanel.transform,
+            GameObject biographyViewport = new GameObject(
+                "BiographyViewport", typeof(RectTransform), typeof(Image),
+                typeof(RectMask2D));
+            biographyViewport.transform.SetParent(_revealPanel.transform, false);
+            _revealBiographyViewport =
+                biographyViewport.GetComponent<RectTransform>();
+            Image biographyViewportImage = biographyViewport.GetComponent<Image>();
+            biographyViewportImage.sprite = WhiteSprite();
+            biographyViewportImage.color = new Color(0f, 0f, 0f, .01f);
+            biographyViewportImage.raycastTarget = true;
+            GameObject biographyContent = new GameObject("BiographyContent",
+                typeof(RectTransform));
+            biographyContent.transform.SetParent(_revealBiographyViewport, false);
+            _revealBiographyContent =
+                biographyContent.GetComponent<RectTransform>();
+            _revealBiographyContent.anchorMin = new Vector2(0f, 1f);
+            _revealBiographyContent.anchorMax = new Vector2(0f, 1f);
+            _revealBiographyContent.pivot = new Vector2(0f, 1f);
+            _revealBiography = MakeText("Biography", _revealBiographyContent,
                 7, TextAnchor.UpperLeft);
-            _revealBiography.verticalOverflow = VerticalWrapMode.Truncate;
+            _revealBiography.verticalOverflow = VerticalWrapMode.Overflow;
+            _revealBiographyScroll = biographyViewport.AddComponent<ScrollRect>();
+            _revealBiographyScroll.viewport = _revealBiographyViewport;
+            _revealBiographyScroll.content = _revealBiographyContent;
+            _revealBiographyScroll.horizontal = false;
+            _revealBiographyScroll.vertical = true;
+            _revealBiographyScroll.movementType =
+                ScrollRect.MovementType.Clamped;
+            _revealBiographyScroll.scrollSensitivity = 18f;
+            _revealBiographyScrollbar = CreateVerticalScrollbar(
+                "BiographyScrollbar", _revealPanel.transform);
+            _revealBiographyScroll.verticalScrollbar =
+                _revealBiographyScrollbar;
+            _revealBiographyScroll.verticalScrollbarVisibility =
+                ScrollRect.ScrollbarVisibility.Permanent;
             _revealBar = new GameObject("RarityBar", typeof(RectTransform),
                 typeof(Image)).GetComponent<Image>();
             _revealBar.transform.SetParent(_revealPanel.transform, false);
@@ -565,7 +637,8 @@ namespace AncientWarfare3.ui.windows
             _collectionScroll.vertical = true;
             _collectionScroll.movementType = ScrollRect.MovementType.Clamped;
             _collectionScroll.scrollSensitivity = 22f;
-            _collectionScrollbar = CreateCollectionScrollbar(_root);
+            _collectionScrollbar = CreateVerticalScrollbar(
+                "CollectionScrollbar", _root);
             _collectionScroll.verticalScrollbar = _collectionScrollbar;
             _collectionScroll.verticalScrollbarVisibility =
                 ScrollRect.ScrollbarVisibility.Permanent;
@@ -588,7 +661,7 @@ namespace AncientWarfare3.ui.windows
                 OpenInventory);
             _back = MakeButton("Back", _root,
                 Text("aw_historical_figure_cards_back", "\u8fd4\u56de\u7bb1\u5b50"),
-                BackToCrates);
+                BackToPreviousPage);
             _closeReveal = MakeButton("CloseReveal", _root,
                 Text("aw_historical_figure_cards_close", "\u5173\u95ed"), CloseReveal);
             _openAgain = MakeButton("OpenAgain", _root,
@@ -687,10 +760,9 @@ namespace AncientWarfare3.ui.windows
                 _body.text = CardText(_selectedCard) +
                     "\n\n" + Format("aw_historical_figure_cards_owned",
                     "\u5df2\u62e5\u6709\uff1a{0}", Store.GetOwnedCount(_selectedCard.CardId));
-                SetButtonText(_back, _returnToRecycle
-                    ? Text("aw_historical_figure_cards_recycle_back_to_recycle",
-                        "\u8fd4\u56de\u6c70\u6362")
-                    : Text("aw_historical_figure_cards_back", "\u8fd4\u56de\u7bb1\u5b50"));
+                SetButtonText(_back, Text(
+                    "aw_historical_figure_cards_back_previous",
+                    "\u8fd4\u56de\u4e0a\u4e00\u9875"));
                 return;
             }
 
@@ -699,6 +771,8 @@ namespace AncientWarfare3.ui.windows
                 : (_selectedCrateId.Length == 0
                     ? Text("aw_historical_figure_cards_crates_title", "\u5386\u53f2\u4eba\u7269\u7bb1\u5b50")
                     : Text("aw_historical_figure_cards_crate_title", "\u5386\u53f2\u65f6\u671f\u7bb1\u5b50"));
+            SetButtonText(_back, Text("aw_historical_figure_cards_back",
+                "\u8fd4\u56de\u7bb1\u5b50"));
             if (_inventoryMode)
             {
                 _body.text = Text("aw_historical_figure_cards_inventory_hint",
@@ -1536,9 +1610,10 @@ namespace AncientWarfare3.ui.windows
             _inventoryNextPage.interactable = _inventoryPage < pTotalPages - 1;
         }
 
-        private static Scrollbar CreateCollectionScrollbar(Transform pParent)
+        private static Scrollbar CreateVerticalScrollbar(string pName,
+            Transform pParent)
         {
-            GameObject trackObject = new GameObject("CollectionScrollbar",
+            GameObject trackObject = new GameObject(pName,
                 typeof(RectTransform), typeof(Image), typeof(Scrollbar));
             trackObject.transform.SetParent(pParent, false);
             Image trackImage = trackObject.GetComponent<Image>();
@@ -1676,12 +1751,36 @@ namespace AncientWarfare3.ui.windows
                 _selectedCard.ParentDisplayName(false),
                 _selectedCard.BackgroundSummary ?? "",
                 _selectedCard.DetailedBiography ?? _selectedCard.Biography ?? "");
+            LayoutRevealBiography(true);
             Sprite portrait = string.IsNullOrEmpty(_selectedCard.PortraitPath)
                 ? null
                 : SpriteTextureLoader.getSprite(_selectedCard.PortraitPath);
             _revealPortrait.sprite = portrait ??
                 SpriteTextureLoader.getSprite("ui/icons/iconKings") ??
                 SpriteTextureLoader.getSprite("ui/icons/iconKnowledge");
+        }
+
+        private void LayoutRevealBiography(bool pResetScroll)
+        {
+            if (_revealBiographyViewport == null ||
+                _revealBiographyContent == null ||
+                _revealBiography == null) return;
+            float viewportWidth = Mathf.Max(1f,
+                _revealBiographyViewport.sizeDelta.x);
+            float viewportHeight = Mathf.Max(1f,
+                _revealBiographyViewport.sizeDelta.y);
+            Position(_revealBiography.rectTransform, 0f, 0f,
+                viewportWidth - 2f, viewportHeight);
+            float contentHeight = Mathf.Max(viewportHeight,
+                _revealBiography.preferredHeight + 4f);
+            _revealBiographyContent.sizeDelta = new Vector2(
+                viewportWidth - 2f, contentHeight);
+            Position(_revealBiography.rectTransform, 0f, 0f,
+                viewportWidth - 2f, contentHeight);
+            if (!pResetScroll || _revealBiographyScroll == null) return;
+            _revealBiographyScroll.StopMovement();
+            _revealBiographyContent.anchoredPosition = Vector2.zero;
+            _revealBiographyScroll.verticalNormalizedPosition = 1f;
         }
 
         private void UpdateRevealActionLabels()
@@ -2241,8 +2340,11 @@ namespace AncientWarfare3.ui.windows
                 revealWidth - 164f, 22f);
             Position(_revealMeta.rectTransform, 146f, -80f,
                 revealWidth - 164f, 40f);
-            Position(_revealBiography.rectTransform, 146f, -122f,
-                revealWidth - 164f, 82f);
+            Position(_revealBiographyViewport, 146f, -122f,
+                revealWidth - 166f, 88f);
+            Position(_revealBiographyScrollbar?.GetComponent<RectTransform>(),
+                revealWidth - 15f, -122f, 8f, 88f);
+            LayoutRevealBiography(false);
             Position(_revealBar.rectTransform, 0f, -215f, revealWidth, 7f);
             // Content area starts right under the (compressed) top chrome so
             // the grid owns the bulk of the window. With compactHeader the
