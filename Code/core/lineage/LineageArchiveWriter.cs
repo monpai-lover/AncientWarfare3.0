@@ -892,7 +892,8 @@ namespace AncientWarfare3.core.lineage
                 // \u5F52\u6863\u5C31\u6C38\u4E45\u7559\u5728\u5B58\u6863\u91CC(\u6B7B\u8005\u4E0D\u518D\u91CD\u7B97),\u6240\u4EE5\u5B81\u53EF\u4E0D\u5199\u8FD9\u4E00\u6BB5:
                 // \u4E0A\u9762\u7684\u89D2\u8272\u6BB5\u843D\u5DF2\u7ECF\u591F\u8868\u8FBE\u8EAB\u4EFD\u4E86\u3002
                 if (!CourtOfficeDisplayRules.IsUntranslated(officeName, office))
-                    roles.Add(officeName);
+                    roles.Add(CourtOfficialTitleResolver.Resolve(pActor,
+                        courtKingdom, office, officeName));
                 else if (leaderOffice && !roles.Contains(pCityName + " \u592A\u5B88"))
                     roles.Add(string.IsNullOrEmpty(pCityName)
                         ? "\u592A\u5B88" : pCityName + " \u592A\u5B88");

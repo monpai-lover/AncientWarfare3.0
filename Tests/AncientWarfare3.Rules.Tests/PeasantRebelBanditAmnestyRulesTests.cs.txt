@@ -31,6 +31,26 @@ internal static class PeasantRebelBanditAmnestyRulesTests
         Assert(!PeasantRebelBanditAmnestyRules.CanSelectOffice(
             true, true, false),
             "an ineligible leader cannot receive an office promise");
+        Assert(PeasantRebelBanditAmnestyRules.IsRewardRecipientNaturalized(
+                leaderBelongsToOrigin: true,
+                leaderHasCity: true,
+                leaderCityBelongsToOrigin: true),
+            "a leader settled in an origin city may receive the reward");
+        Assert(PeasantRebelBanditAmnestyRules.IsRewardRecipientNaturalized(
+                leaderBelongsToOrigin: true,
+                leaderHasCity: false,
+                leaderCityBelongsToOrigin: false),
+            "a naturalized leader without a city may still receive a reward");
+        Assert(!PeasantRebelBanditAmnestyRules.IsRewardRecipientNaturalized(
+                leaderBelongsToOrigin: false,
+                leaderHasCity: true,
+                leaderCityBelongsToOrigin: true),
+            "a foreign leader cannot receive a domestic office or fief");
+        Assert(!PeasantRebelBanditAmnestyRules.IsRewardRecipientNaturalized(
+                leaderBelongsToOrigin: true,
+                leaderHasCity: true,
+                leaderCityBelongsToOrigin: false),
+            "a stale foreign residence makes naturalization incomplete");
         Assert(PeasantRebelBanditAmnestyRules.ResolveAiDecision(
                 banditStrength: 151, originStrength: 100) ==
                 BanditAmnestyAiDecision.Amnesty,

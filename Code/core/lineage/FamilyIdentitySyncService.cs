@@ -161,19 +161,18 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 string identity = ResolveIdentity(pAnchor);
+                bool usesLineage = UsesLineageSystem(pAnchor);
                 if (!FamilyIdentitySyncRules.ShouldAdoptLineageName(
-                        UsesLineageSystem(pAnchor), identity))
+                        usesLineage, identity))
                 {
-                    // 两个条件的合取,任一为假就静默保留原版随机名
-                    // (「Hen」「Shufo」这类)。哪一个为假从外面看不出来,
-                    // 诊断开关下把两个值都打出来。
-                    if (pDiagnose &&
+                    // 只报「本该改名却取不到氏」这一种。非夏人
+                    // (usesLineage 为假)保留随机名是正常行为,不值一提 ——
+                    // 那条占了日志绝大多数,报出来只会淹没真正的异常。
+                    if (pDiagnose && usesLineage &&
                         AncientWarfare3.core.performance.AWDiagnosticsGate
                             .Enabled)
-                        ModClass.LogInfo("[AW3 FAMILY] 跳过改名 anchor=" +
+                        ModClass.LogInfo("[AW3 FAMILY] 锚点无氏 anchor=" +
                             (pAnchor.data.name ?? "?") +
-                            " lineage=" + UsesLineageSystem(pAnchor) +
-                            " identity='" + (identity ?? "") + "'" +
                             " current='" + (pFamily.data.name ?? "") + "'");
                     return;
                 }

@@ -304,9 +304,7 @@ namespace AncientWarfare3.ui.windows
         internal static void SelectMapTile(WorldTile pTile)
         {
             if (!IsPickingTile || pTile?.data == null) return;
-            ModClass.LogInfo("[AW3 cards deploy] pick frame=" +
-                UnityEngine.Time.frameCount + " tile=" +
-                pTile.x + "," + pTile.y);            City city = pTile.zone_city;
+            City city = pTile.zone_city;
             bool validCity = city?.data != null && !city.isRekt() &&
                 city.isAlive() && city.kingdom?.data != null &&
                 !city.kingdom.isRekt() && city.kingdom.isCiv() &&
@@ -1084,9 +1082,6 @@ namespace AncientWarfare3.ui.windows
             // 窗口仍然存在的前提下被原版正确判成「点在 UI 上」而放过。
             _pendingHideWindow = true;
             _awaitingPickPress = true;
-            ModClass.LogInfo("[AW3 cards deploy] begin frame=" +
-                UnityEngine.Time.frameCount + " card=" +
-                (_selectedCard?.CardId ?? "null"));
         }
 
         /// <summary>

@@ -86,6 +86,33 @@ namespace AncientWarfare3.core.schools
             return Save(synchronized);
         }
 
+        internal static bool SynchronizeHomeForNaturalization(Actor pActor,
+            Kingdom pNaturalizedKingdom, City pHomeCity)
+        {
+            if (pActor?.data == null || pNaturalizedKingdom?.data == null ||
+                pNaturalizedKingdom.isRekt()) return false;
+            HistoricalSchoolAffiliationSnapshot current = Get(pActor.data.id);
+            if (current == null) return true;
+            City home = pHomeCity?.data != null && !pHomeCity.isRekt() &&
+                        pHomeCity.kingdom == pNaturalizedKingdom
+                ? pHomeCity
+                : pNaturalizedKingdom.capital;
+            if (home?.data == null || home.isRekt() ||
+                home.kingdom != pNaturalizedKingdom) return false;
+            if (current.HomeKingdomId == pNaturalizedKingdom.id &&
+                current.HometownCityId == home.data.id &&
+                current.ResidenceCityId == home.data.id &&
+                current.ServiceKingdomId < 0 &&
+                current.LifecycleState == HistoricalSchoolLifecycleState.AtHome)
+                return true;
+            HistoricalSchoolAffiliationSnapshot naturalized =
+                HistoricalSchoolAffiliationSnapshot.CreateHome(
+                    pActor.data.id, pNaturalizedKingdom.id,
+                    pNaturalizedKingdom.name, home.data.id,
+                    Date.getCurrentYear());
+            return Save(naturalized);
+        }
+
         internal static bool EnsureMemberAffiliation(Actor pActor, long pCityId)
         {
             if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return false;

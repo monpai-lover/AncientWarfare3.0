@@ -66,6 +66,7 @@ namespace AncientWarfare3.core.performance
             // 直接决定接下来该动谁,所以拆开测。
             DeferredBanditPopulation,
             DeferredBanditDisposal,
+            BanditAmnestySettlement,
             DeferredQueueDrain,
             // WarRefugee 同理:按月闸门,202 次调用里绝大多数是廉价早退,真正
             // 干活的那几次把整月的量压在一帧上(合计 712ms,占 28.6%)。三个
@@ -457,6 +458,8 @@ namespace AncientWarfare3.core.performance
                     ProcessAuthorityCycle);
             Step(AuthorityStep.DeferredBanditDisposal,
                 BanditStrongholdCityDisposalService.ProcessAuthorityCycle);
+            Step(AuthorityStep.BanditAmnestySettlement,
+                PeasantRebelBanditAmnestyService.ProcessAuthorityCycle);
             int itemLimit = DeferredRuntimeWorkRules.
                 ResolveItemsPerAuthorityFrame(
                 DeferredRuntimeWorkService.PendingCount);

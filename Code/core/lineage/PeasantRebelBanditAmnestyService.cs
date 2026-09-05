@@ -7,6 +7,7 @@ using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.presentation;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
 
 namespace AncientWarfare3.core.lineage
@@ -229,8 +230,9 @@ namespace AncientWarfare3.core.lineage
             Kingdom origin = ResolveKingdom(pSettlement?.OriginId ?? -1L);
             Actor leader = ResolveActor(pSettlement?.LeaderId ?? -1L);
             PeasantRebelBanditAmnestyOffer offer = pSettlement?.Offer;
-            if (origin?.data == null || leader?.data == null ||
-                leader.kingdom != origin || offer == null) return false;
+            if (origin?.data == null || leader?.data == null || offer == null ||
+                !EnsureRewardRecipientNaturalized(pSettlement, origin,
+                    leader)) return false;
             switch (offer.RewardKind)
             {
                 case BanditAmnestyRewardKind.None:
@@ -257,6 +259,88 @@ namespace AncientWarfare3.core.lineage
                 default:
                     return false;
             }
+        }
+
+        private static bool EnsureRewardRecipientNaturalized(
+            Settlement pSettlement, Kingdom origin, Actor leader)
+        {
+            if (pSettlement == null || origin?.data == null ||
+                leader?.data == null || leader.isRekt() ||
+                !leader.isAlive()) return false;
+
+            Kingdom bandit = ResolveKingdom(pSettlement.BanditId);
+            try
+            {
+                if (bandit?.data != null && bandit.king == leader &&
+                    leader.kingdom == bandit)
+                    bandit.removeKing();
+            }
+            catch { return false; }
+
+            City destination = ResolveNaturalizationCity(
+                pSettlement.MotherId, origin);
+            bool hasCity = leader.city?.data != null &&
+                           !leader.city.isRekt();
+            bool alreadyNaturalized =
+                PeasantRebelBanditAmnestyRules.
+                    IsRewardRecipientNaturalized(
+                        leader.kingdom == origin, hasCity,
+                        hasCity && leader.city.kingdom == origin);
+            if (alreadyNaturalized) return true;
+
+            try
+            {
+                if (destination == null && leader.city?.kingdom != origin)
+                    leader.setCity(null);
+                using (FormalAffiliationTransferScope.Open(leader.data.id,
+                           origin.id, destination?.data?.id ?? -1L))
+                {
+                    if (leader.kingdom != origin)
+                        leader.joinKingdom(origin);
+                    if (destination?.data != null &&
+                        leader.city != destination)
+                        leader.joinCity(destination);
+                }
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Bandit amnesty naturalization failed: " +
+                                    error.Message);
+                return false;
+            }
+
+            // Join operations update the engine pointers first. Persist the
+            // historical home only after both pointers have been accepted, so
+            // a failed transfer cannot leave a false domestic affiliation.
+            if (destination?.data != null &&
+                !HistoricalAffiliationService.SynchronizeHomeForNaturalization(
+                    leader, origin, destination)) return false;
+            hasCity = leader.city?.data != null && !leader.city.isRekt();
+            return PeasantRebelBanditAmnestyRules.
+                IsRewardRecipientNaturalized(
+                    leader.kingdom == origin, hasCity,
+                    hasCity && leader.city.kingdom == origin);
+        }
+
+        private static City ResolveNaturalizationCity(long pMotherCityId,
+            Kingdom pOrigin)
+        {
+            City mother = ResolveCity(pMotherCityId);
+            if (mother?.data != null && !mother.isRekt() &&
+                mother.kingdom == pOrigin) return mother;
+            City capital = pOrigin?.capital;
+            if (capital?.data != null && !capital.isRekt() &&
+                capital.kingdom == pOrigin) return capital;
+            try
+            {
+                foreach (City city in pOrigin?.getCities() ??
+                         Array.Empty<City>())
+                    if (city?.data != null && !city.isRekt() &&
+                        city.kingdom == pOrigin)
+                        return city;
+            }
+            catch { }
+            return null;
         }
 
         private static Settlement CreateSettlement(Kingdom pBandit,
@@ -487,6 +571,13 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActorId < 0L) return null;
             try { return World.world?.units?.get(pActorId); }
+            catch { return null; }
+        }
+
+        private static City ResolveCity(long pCityId)
+        {
+            if (pCityId <= 0L) return null;
+            try { return World.world?.cities?.get(pCityId); }
             catch { return null; }
         }
 

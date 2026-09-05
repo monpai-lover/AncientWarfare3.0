@@ -160,6 +160,24 @@ internal static class HistoricalFigureCardCatalogRulesTests
         Equal("曹嵩", caoCao.FatherDisplayName,
             "Cao Cao records his historical father");
 
+        string[] portraitCardIds =
+        {
+            "shu_han_zhaolie", "three_guan_yu", "three_zhang_fei",
+            "three_zhuge_liang", "wu_dadi", "three_yuan_shao"
+        };
+        True(portraitCardIds.All(id => HistoricalFigureCardCatalog.Get(id) != null),
+            "all six supplied historical portraits have matching cards");
+        True(portraitCardIds.All(id => string.Equals(
+                HistoricalFigureCardCatalog.Get(id).PortraitPath,
+                "ui/historical_cards/" + id, StringComparison.Ordinal)),
+            "all six supplied historical portraits use card-specific resources");
+        True(new[] { "three_guan_yu", "three_zhang_fei", "three_yuan_shao" }
+            .Select(HistoricalFigureCardCatalog.Get)
+            .All(card => card.Role == HistoricalFigureCardRole.Minister &&
+                         card.IsMilitaryGeneral &&
+                         card.CollectionId == "three_six_dynasties"),
+            "Guan Yu, Zhang Fei and Yuan Shao are deployable Three Kingdoms generals");
+
         var sorted = HistoricalFigureCardCatalog.SortForDisplay(all);
         True(sorted[0].FameScore >= sorted[1].FameScore,
             "catalogue display order starts with highest fame");

@@ -258,10 +258,14 @@ namespace AncientWarfare3.content.figures
             M(cards, "three_cao_cao", "曹操", "魏", "三国", 155, 100, true, crate,
                 pFatherDisplayName: "曹嵩", pMotherDisplayName: "不详",
                 pBiography: "东汉末年政治家、军事家和魏国奠基者，统一北方并为曹魏政权建立制度与军事基础。");
+            M(cards, "three_yuan_shao", "袁绍", "汉", "三国", 200, 95, true, crate,
+                pFatherDisplayName: "袁逢", pMotherDisplayName: "不详");
             M(cards, "three_sima_yi", "司马懿", "魏", "三国", 234, 98, true, crate);
             M(cards, "three_zhang_liao", "张辽", "魏", "三国", 215, 91, true, crate);
             M(cards, "three_deng_ai", "邓艾", "魏", "三国", 255, 88, true, crate);
             M(cards, "three_zhuge_liang", "诸葛亮", "蜀汉", "三国", 220, 98, false, crate);
+            M(cards, "three_guan_yu", "关羽", "蜀汉", "三国", 219, 99, true, crate);
+            M(cards, "three_zhang_fei", "张飞", "蜀汉", "三国", 221, 96, true, crate);
             M(cards, "three_pang_tong", "庞统", "蜀汉", "三国", 215, 86, false, crate);
             M(cards, "three_fa_zheng", "法正", "蜀汉", "三国", 215, 82, false, crate);
             M(cards, "three_zhao_yun", "赵云", "蜀汉", "三国", 225, 92, true, crate);
@@ -531,7 +535,8 @@ namespace AncientWarfare3.content.figures
                 RarityForFame(pFame), HistoricalFigureSex.Male,
                 pBiography: biography, pFatherCardId: "",
                 pFatherDisplayName: pFatherDisplayName, pMotherCardId: "",
-                pMotherDisplayName: pMotherDisplayName, pPortraitPath: "",
+                pMotherDisplayName: pMotherDisplayName,
+                pPortraitPath: HistoricalFigureCardCatalog.PortraitPathFor(pId),
                 pLegacyFigureId: "", pLegacyRegistryIndex: -1,
                 pCombatHealth: pMilitary ? 1800 : 1300,
                 pCombatTraits: pMilitary ? new[] { "warrior" } : Array.Empty<string>(),

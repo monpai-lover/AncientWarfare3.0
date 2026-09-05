@@ -2056,8 +2056,10 @@ namespace AncientWarfare3.core.lineage
                     out long courtKingdomId, -1L);
                 Kingdom courtKingdom = World.world?.kingdoms?.get(courtKingdomId) ??
                                         pLive.kingdom;
-                roles.Add(CourtInstitutionService.OfficeName(
-                    courtKingdom, office));
+                string officeName = CourtInstitutionService.OfficeName(
+                    courtKingdom, office);
+                roles.Add(CourtOfficialTitleResolver.Resolve(pLive,
+                    courtKingdom, office, officeName));
             }
 
             string combined = CourtTitleRules.Combine(roles.ToArray());

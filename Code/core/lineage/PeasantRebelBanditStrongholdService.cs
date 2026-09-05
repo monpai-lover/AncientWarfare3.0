@@ -162,13 +162,11 @@ namespace AncientWarfare3.core.lineage
             List<WorldTile> towerTiles = null;
             List<TileZone> wallFallbackInterior = null;
             BanditZoneWallPlan wallFallbackPlan = null;
-            // Precompute territory, roads, and passable land once for all
-            // candidates — each zone-tile scan is O(zones × tiles_per_zone).
-            PeasantRebelBanditZoneWallService.ComputeSharedSets(
-                motherZones,
-                out HashSet<CultiwayWallPoint> sharedTerritory,
-                out HashSet<CultiwayWallPoint> sharedRoads,
-                out HashSet<CultiwayWallPoint> sharedPassable);
+            // Passable terrain can be shared, but each candidate must build
+            // its own territory and road perimeter.
+            HashSet<CultiwayWallPoint> sharedPassable =
+                PeasantRebelBanditZoneWallService.ComputeSharedPassable(
+                    motherZones);
             foreach (IReadOnlyList<string> candidateKeys in candidates)
             {
                 if (candidateKeys.Count != 4) continue;
@@ -178,7 +176,7 @@ namespace AncientWarfare3.core.lineage
                 if (!PeasantRebelBanditZoneWallService.TryPlan(
                         pMother, candidate, strongholdCenter,
                         out BanditZoneWallPlan candidateWall,
-                        sharedPassable, sharedTerritory, sharedRoads) ||
+                        sharedPassable) ||
                     candidateWall.WallPoints.Count == 0) continue;
                 if (wallFallbackInterior == null)
                 {
@@ -187,7 +185,7 @@ namespace AncientWarfare3.core.lineage
                 }
                 List<WorldTile> candidateTowerTiles =
                     FindGateTowerTiles(candidateWall, strongholdCenter,
-                        towerAsset, candidate, sharedTerritory);
+                        towerAsset, candidate);
                 if (!PeasantRebelBanditStrongholdRules.
                         CanUseWallCandidate(true,
                             candidateTowerTiles?.Count ?? 0)) continue;

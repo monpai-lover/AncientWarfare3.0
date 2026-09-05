@@ -717,8 +717,9 @@ namespace AncientWarfare3.ui.items
                     RegionalGovernmentRules.CityName(pNode.CityName),
                     pNode.DisplayTitle);
                 string office = OfficeName(pKingdom, pNode.OfficeId);
-                string localLabel = string.IsNullOrWhiteSpace(place)
-                    ? office : place + " " + office;
+                string localLabel = CourtOfficeDisplayRules.
+                    ComposeJurisdictionalTitle(pNode.OfficeLayer, place,
+                        office);
                 if (!string.IsNullOrEmpty(localLabel)) labels.Add(localLabel);
             }
             else if (pNode.OfficeLayer == CourtOfficeLayer.County &&
@@ -728,7 +729,8 @@ namespace AncientWarfare3.ui.items
                     ? AW_L10n.Text("aw_county_label", "County")
                     : pNode.CityName;
                 string office = OfficeName(pKingdom, pNode.OfficeId);
-                labels.Add(county + " " + office);
+                labels.Add(CourtOfficeDisplayRules.ComposeJurisdictionalTitle(
+                    pNode.OfficeLayer, county, office));
             }
             foreach (string role in pNode.Roles ?? new List<string>())
             {

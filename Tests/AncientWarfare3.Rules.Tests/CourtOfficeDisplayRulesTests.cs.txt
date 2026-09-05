@@ -10,6 +10,7 @@ internal static class CourtOfficeDisplayRulesTests
         RealTranslationSurvives();
         WesternLatinNamesAreNotFalseFlagged();
         EmptyInputsAreHandled();
+        LocalTitlesCarryTheirJurisdiction();
     }
 
     private static void BareOfficeIdIsUntranslated()
@@ -69,6 +70,43 @@ internal static class CourtOfficeDisplayRulesTests
             "no office id means there is nothing to leak");
         Expect(!CourtOfficeDisplayRules.IsUntranslated("郡守", null),
             "a null office id means there is nothing to leak");
+    }
+
+    private static void LocalTitlesCarryTheirJurisdiction()
+    {
+        Equal("颍川郡 长史", ComposeJurisdictionalTitle(
+                CourtOfficeLayer.City, "颍川郡", "长史"),
+            "city officials identify the commandery they serve");
+        Equal("洛阳县 县令", ComposeJurisdictionalTitle(
+                CourtOfficeLayer.County, "洛阳县", "县令"),
+            "county officials identify the county they serve");
+        Equal("楚国 长史", ComposeJurisdictionalTitle(
+                CourtOfficeLayer.Feudatory, "楚国", "长史"),
+            "feudatory officials identify the feudatory they serve");
+        Equal("尚书令", ComposeJurisdictionalTitle(
+                CourtOfficeLayer.Central, "汉", "尚书令"),
+            "central offices are not prefixed with a local jurisdiction");
+        Equal("颍川郡 长史", ComposeJurisdictionalTitle(
+                CourtOfficeLayer.City, "颍川郡", "颍川郡 长史"),
+            "an already-qualified title is not prefixed twice");
+        Equal("长史", ComposeJurisdictionalTitle(
+                CourtOfficeLayer.City, "", "长史"),
+            "missing jurisdiction data keeps the office visible");
+    }
+
+    private static string ComposeJurisdictionalTitle(string pLayer,
+        string pJurisdiction, string pOffice)
+    {
+        return CourtOfficeDisplayRules.ComposeJurisdictionalTitle(pLayer,
+            pJurisdiction, pOffice);
+    }
+
+    private static void Equal(string pExpected, string pActual,
+        string pMessage)
+    {
+        if (!string.Equals(pExpected, pActual, StringComparison.Ordinal))
+            throw new Exception("FAIL: " + pMessage + " expected=" +
+                                pExpected + " actual=" + pActual);
     }
 
     private static void Expect(bool pCondition, string pMessage)

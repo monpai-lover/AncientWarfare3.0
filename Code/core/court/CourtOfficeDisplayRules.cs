@@ -16,6 +16,31 @@ namespace AncientWarfare3.core.court
     /// </summary>
     public static class CourtOfficeDisplayRules
     {
+        public static bool IsJurisdictionalLayer(string pLayer)
+        {
+            return string.Equals(pLayer, CourtOfficeLayer.City,
+                       StringComparison.Ordinal) ||
+                   string.Equals(pLayer, CourtOfficeLayer.County,
+                       StringComparison.Ordinal) ||
+                   string.Equals(pLayer, CourtOfficeLayer.Regional,
+                       StringComparison.Ordinal) ||
+                   string.Equals(pLayer, CourtOfficeLayer.Feudatory,
+                       StringComparison.Ordinal);
+        }
+
+        public static string ComposeJurisdictionalTitle(string pLayer,
+            string pJurisdiction, string pOfficeName)
+        {
+            string office = (pOfficeName ?? string.Empty).Trim();
+            if (office.Length == 0 || !IsJurisdictionalLayer(pLayer))
+                return office;
+
+            string jurisdiction = (pJurisdiction ?? string.Empty).Trim();
+            if (jurisdiction.Length == 0 || office.StartsWith(jurisdiction,
+                    StringComparison.Ordinal)) return office;
+            return jurisdiction + " " + office;
+        }
+
         /// <summary>
         /// <paramref name="pDisplayName"/> 是不是根本没翻出来。
         ///

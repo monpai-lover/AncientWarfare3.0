@@ -55,6 +55,14 @@ namespace AncientWarfare3.core.lineage
             return officeExists && officeVacant && leaderEligible;
         }
 
+        public static bool IsRewardRecipientNaturalized(
+            bool leaderBelongsToOrigin, bool leaderHasCity,
+            bool leaderCityBelongsToOrigin)
+        {
+            return leaderBelongsToOrigin &&
+                   (!leaderHasCity || leaderCityBelongsToOrigin);
+        }
+
         public static bool CanAdvance(BanditAmnestySettlementPhase current,
             BanditAmnestySettlementPhase next)
         {

@@ -227,42 +227,51 @@ namespace AncientWarfare3.patch
                     CourtInstitutionRules.OfficeLocalizationKey(
                         last.InstitutionAtAppointment, last.OfficeId),
                     last.OfficeId);
+                name = CourtOfficialTitleResolver.Resolve(null, last.Layer,
+                    last.CityId, last.CountyId, last.OfficeId, name,
+                    last.CityName);
                 ShowRawRow(pWindow, "aw_former_office_label", former + name);
                 return;
             }
             Kingdom courtKingdom = ResolveCourtKingdom(pActor);
-            if (courtKingdom?.data == null ||
-                !CourtService.HasNineRankSystem(courtKingdom)) return;
+            if (courtKingdom?.data == null) return;
 
             int rank = OfficialCareerStateService.ReadRankFast(pActor);
-            if (rank <= OfficialCareerRankRules.Unranked) return;
+            bool rankedCareer = CourtService.HasNineRankSystem(courtKingdom) &&
+                                rank > OfficialCareerRankRules.Unranked;
             pActor.data.get(LineageKeys.OFFICER_TRACK, out int track,
                 OfficialCareerRankRules.CivilTrack);
             track = OfficialCareerRankRules.ResolveDisplayedTrack(track,
                 usesGeneralFallback);
             pActor.data.get(LineageKeys.OFFICER_MERIT, out float merit, 0f);
 
-            string namedRank = AW_L10n.Text(
-                OfficialCareerRankRules.NamedRankKey(track, rank),
-                OfficialCareerRankRules.NamedRankFallbackEnglish(track, rank));
-            string grade = AW_L10n.Text(
-                OfficialCareerRankRules.RankNameKey(rank),
-                OfficialCareerRankRules.RankFallbackEnglish(rank));
+            string namedRank = rankedCareer
+                ? AW_L10n.Text(
+                    OfficialCareerRankRules.NamedRankKey(track, rank),
+                    OfficialCareerRankRules.NamedRankFallbackEnglish(track,
+                        rank))
+                : "";
+            string grade = rankedCareer
+                ? AW_L10n.Text(
+                    OfficialCareerRankRules.RankNameKey(rank),
+                    OfficialCareerRankRules.RankFallbackEnglish(rank))
+                : "";
             string office = ResolveStyleOfficeName(pActor, courtKingdom,
                 officeId);
-            if (officeId == CourtOfficeId.Governor &&
-                !string.IsNullOrWhiteSpace(pActor.city?.data?.name))
-                office = pActor.city.data.name + " " + office;
-            if (officeId == CourtOfficeId.CountyMagistrate)
-                office = ResolveCountyTitle(pActor, office);
-            string trackTitle = AW_L10n.Text(
-                OfficialCareerRankRules.TrackTitleKey(track),
-                OfficialCareerRankRules.TrackTitleFallbackEnglish(track));
-            string meritTitle = merit > 0f
+            office = CourtOfficialTitleResolver.Resolve(pActor, courtKingdom,
+                officeId, office);
+            string trackTitle = rankedCareer
+                ? AW_L10n.Text(
+                    OfficialCareerRankRules.TrackTitleKey(track),
+                    OfficialCareerRankRules.TrackTitleFallbackEnglish(track))
+                : "";
+            string meritTitle = rankedCareer && merit > 0f
                 ? string.Format(AW_L10n.Text("aw_court_joint_merit",
                     "Merit {0}"), merit.ToString("0.##"))
                 : "";
-            string nobleTitle = NobleRankService.GetDisplayTitle(pActor);
+            string nobleTitle = rankedCareer
+                ? NobleRankService.GetDisplayTitle(pActor)
+                : "";
             string compactTitle = OfficialCareerRankRules.ComposeCareerTitle(
                 namedRank, grade, office, compact: true);
             string fullTitle = OfficialCareerRankRules.ComposeCareerTitle(
@@ -343,34 +352,6 @@ namespace AncientWarfare3.patch
             return string.IsNullOrWhiteSpace(ceremonial)
                 ? AW_L10n.Text("aw_court_office_king", "King")
                 : ceremonial;
-        }
-
-        /// <summary>
-        ///     县令结衔要带上县名 —— 否则十个县的县令在面板上看起来一模一样。
-        ///     县名不写在这一任官员身上,而是登记在
-        ///     <see cref="AncientWarfare3.core.county.CountyAdministrationStore"/>
-        ///     (运行时 JSON 旁车),用 <c>COURT_COUNTY_ID</c> 反查。历史上
-        ///     县令的完整头衔是「县名+县令」(如「洛阳令」),与州牧那种
-        ///     「城名+官职」同构。
-        /// </summary>
-        private static string ResolveCountyTitle(Actor pActor,
-            string pOfficeName)
-        {
-            if (pActor?.data == null || string.IsNullOrEmpty(pOfficeName))
-                return pOfficeName;
-            pActor.data.get(LineageKeys.COURT_COUNTY_ID, out long countyId,
-                -1L);
-            if (countyId < 0L) return pOfficeName;
-            string countyName = null;
-            try
-            {
-                countyName = AncientWarfare3.core.county.
-                    CountyAdministrationStore.FindById(countyId)?.Name;
-            }
-            catch { }
-            if (string.IsNullOrWhiteSpace(countyName))
-                return pOfficeName;
-            return countyName + " " + pOfficeName;
         }
 
         private static string IdentityText(string pStatus)

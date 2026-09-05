@@ -58,6 +58,24 @@ foreach ($token in @('motherZones.Count < 4',
     }
 }
 
+$candidateWallCall = @'
+PeasantRebelBanditZoneWallService.TryPlan(
+                        pMother, candidate, strongholdCenter,
+                        out BanditZoneWallPlan candidateWall,
+                        sharedPassable)
+'@
+if (-not $strongholdService.Contains($candidateWallCall)) {
+    throw 'Candidate wall planning must scope territory and roads to the four selected zones.'
+}
+
+$allMotherWallCall = @'
+out BanditZoneWallPlan candidateWall,
+                        sharedPassable, sharedTerritory, sharedRoads)
+'@
+if ($strongholdService.Contains($allMotherWallCall)) {
+    throw 'Candidate wall planning must not use the all-mother-zone territory set.'
+}
+
 $selectionIndex = $strongholdService.IndexOf('RankFourZoneCandidates(')
 $wallIndex = $strongholdService.IndexOf(
     'PeasantRebelBanditZoneWallService.TryPlan(')

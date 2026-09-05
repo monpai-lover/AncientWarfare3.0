@@ -110,6 +110,12 @@ public static class HistoricalFigureCardCatalog
         private static readonly Dictionary<string, string> PortraitPathByCardId =
             new Dictionary<string, string>(StringComparer.Ordinal)
             {
+                ["shu_han_zhaolie"] = "ui/historical_cards/shu_han_zhaolie",
+                ["three_guan_yu"] = "ui/historical_cards/three_guan_yu",
+                ["three_zhang_fei"] = "ui/historical_cards/three_zhang_fei",
+                ["three_zhuge_liang"] = "ui/historical_cards/three_zhuge_liang",
+                ["wu_dadi"] = "ui/historical_cards/wu_dadi",
+                ["three_yuan_shao"] = "ui/historical_cards/three_yuan_shao",
                 ["ming_taizu"] = "ui/historical_cards/ming_taizu",
                 ["mengpai"] = "ui/historical_cards/mengpai"
             };
@@ -127,6 +133,12 @@ public static class HistoricalFigureCardCatalog
             if (string.IsNullOrWhiteSpace(pCardId)) return null;
             return All.FirstOrDefault(p => p != null &&
                 string.Equals(p.CardId, pCardId.Trim(), StringComparison.Ordinal));
+        }
+
+        internal static string PortraitPathFor(string pCardId)
+        {
+            return PortraitPathByCardId.TryGetValue(pCardId ?? "",
+                out string portraitPath) ? portraitPath : "";
         }
 
         public static IReadOnlyList<HistoricalFigureCardDefinition> GetCards(
@@ -486,9 +498,9 @@ public static class HistoricalFigureCardCatalog
                     HistoricalYear, FameScore, RarityForFame(FameScore),
                     Sex, Biography, "", FatherDisplayName,
                     "", MotherDisplayName,
-                    PortraitPathByCardId.TryGetValue(CardId,
-                        out string portraitPath)
-                        ? portraitPath : pLegacy?.PortraitPath ?? "",
+                    string.IsNullOrEmpty(PortraitPathFor(CardId))
+                        ? pLegacy?.PortraitPath ?? ""
+                        : PortraitPathFor(CardId),
                     pLegacy?.LegacyFigureId, pLegacy?.LegacyRegistryIndex ?? -1,
                     pLegacy?.CombatHealth ?? 1500,
                     pLegacy?.CombatTraits ?? Enumerable.Empty<string>(),
