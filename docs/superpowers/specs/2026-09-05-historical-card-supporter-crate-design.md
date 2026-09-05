@@ -21,12 +21,29 @@ Its headline is `赞助，你也可以进入游戏`. Every distinct person in
 ## Draw Rules
 
 - The crate retains the existing shared gold grand-prize pool.
-- A pink result selects uniformly from the distinct supporter cards. Rank,
-  donation amount, CSV order, and duplicate record count do not affect weight.
+- Rarity is rolled against the complete fixed 10,000-point distribution before
+  a card is selected. Card counts never alter gold, red, pink, purple, or blue
+  odds. If a selected local rarity is empty, it falls toward the next lower
+  available local rarity instead of renormalizing the distribution.
+- Within the selected rarity, every card has equal probability. Adding cards to
+  one rarity never changes another rarity's probability.
+- Distinct supporters are ordered by their aggregated numeric donation amount,
+  then by their earliest leaderboard rank and normalized name. With the current
+  20-person roster, the top 2 are red, the next 3 pink, the next 5 purple, and
+  the remaining 10 blue. Duplicate rows contribute to one person's total.
 - Supporter cards are excluded from historical period crates because their
   collection id is explicit and outside all period ids.
 - The crate is available as a minister crate and does not expose an empty
   monarch variant.
+
+## Author Portrait
+
+- The provided portrait is assigned to the `mengpai` gold card at
+  `ui/historical_cards/mengpai`.
+- The source portrait is downscaled proportionally to 128 by 190 pixels for the
+  game resource. Existing fixed portrait rectangles and `preserveAspect` remain
+  authoritative in crate cards, the opening track, inventory, and details, so
+  the image cannot cover card text or resize the card.
 
 ## Deployment
 
@@ -47,8 +64,8 @@ candidate pool with the normal historical-card minister preference.
 
 - Parser tests cover malformed rows, duplicate-name merging, stable ids, and
   biography aggregation.
-- Draw tests prove every pink supporter occupies exactly one uniform slot while
-  the shared gold pool remains available.
+- Draw tests prove fixed rarity thresholds, deterministic fallback for missing
+  local rarities, equal selection within a rarity, and the shared gold pool.
 - Crate/catalog tests prove all current distinct supporter names are present,
   pink, minister-role cards and excluded from period crates.
 - Build, source guards, local deployment, and source/deployed hash comparison
