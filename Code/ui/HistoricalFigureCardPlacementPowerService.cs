@@ -20,14 +20,24 @@ namespace AncientWarfare3.ui
     /// </summary>
     internal static class HistoricalFigureCardPlacementPowerService
     {
-        internal static void ShowPlacementHint()
+        /// <param name="pMinisterOnly">
+        ///     大臣卡(含武将)只能进已有的文明城市 —— 它们要入朝或入军,
+        ///     没有朝廷可入就无从安置,部署会以
+        ///     <c>minister_requires_existing_city</c> 失败。提示里必须提前说清,
+        ///     否则玩家会一直点无主地然后看着它静默失败。
+        /// </param>
+        internal static void ShowPlacementHint(bool pMinisterOnly = false)
         {
             try
             {
-                WorldTip.showNow(AW_L10n.Text(
+                string text = pMinisterOnly
+                    ? AW_L10n.Text(
+                        "aw_historical_figure_cards_placement_hint_minister",
+                        "请点击地图选择一座文明城市（大臣只能进入已有国家）")
+                    : AW_L10n.Text(
                         "aw_historical_figure_cards_placement_hint",
-                        "请点击地图选择部署位置（文明城市或无主陆地）"),
-                    pTranslate: false, "top", 4f);
+                        "请点击地图选择部署位置（文明城市或无主陆地）");
+                WorldTip.showNow(text, pTranslate: false, "top", 4f);
             }
             catch { }
         }

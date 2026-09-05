@@ -3,7 +3,7 @@ using System;
 namespace AncientWarfare3.core.lineage
 {
     /// <summary>
-    ///     小家庭（原版 <c>Family</c>）与宗族身份的同步规则。
+    ///     小家庭（原版 <c>Family</c>）身份的同步规则。
     ///
     ///     原版 <c>Family.generateName</c>（Family.cs:337）走 <c>NameGenerator</c>
     ///     按物种随机生成家族名，完全不认我们的氏/姓 —— 于是「姬发」成家之后，
@@ -16,6 +16,9 @@ namespace AncientWarfare3.core.lineage
     ///
     ///     同步方向是单向的：个人的氏/姓 → 小家庭名。反向不成立，改小家庭名
     ///     不应该动一个人的宗族归属。
+    ///
+    ///     原版 <c>Clan</c> 的命名不在本类范围内 —— 那由中文名模组的生成器负责，
+    ///     我们不插手。
     /// </summary>
     internal static class FamilyIdentitySyncRules
     {
@@ -51,34 +54,6 @@ namespace AncientWarfare3.core.lineage
             if (desired.Length == 0) return false;
             return !string.Equals((pCurrentName ?? string.Empty).Trim(),
                 desired, StringComparison.Ordinal);
-        }
-
-        /// <summary>
-        ///     原版 <c>Clan</c> 该不该跟随我们的氏。
-        ///
-        ///     <para>
-        ///     **已无调用者，保留仅为其单测。** 宗族命名统一走
-        ///     <c>LineageService.RenameClanByLeader</c> —— 它拼的是
-        ///     「本源城名 + 氏 + 氏」（「乐安国宣氏」），而本类的
-        ///     <see cref="ResolveFamilyName"/> 只给裸氏，那是小家庭的规格。
-        ///     两条链路都挂在建族路径上（<c>Clan.newClan</c> 与外层
-        ///     <c>ClanManager.newClan</c>），后者一旦生效就会把前者的正确
-        ///     名字覆写成裸氏。
-        ///     </para>
-        ///
-        ///     <para>
-        ///     这里的族长条件曾经恒为假 —— 原版建族路径从不写
-        ///     <c>chief_id</c>（<c>setChief</c> 只出现在每帧
-        ///     <c>checkMembersForNewChief</c> 和 <c>tryForgetChief</c> 里），
-        ///     所以覆盖从未发生，一直是 <c>RenameClanByLeader</c> 独占。
-        ///     放宽族长条件反而让覆盖显形，这是它被弃用的原因。
-        ///     </para>
-        /// </summary>
-        internal static bool ShouldAdoptClanName(bool pUsesLineageSystem,
-            bool pIsChief, string pClanIdentity)
-        {
-            return pUsesLineageSystem && pIsChief &&
-                   !string.IsNullOrWhiteSpace(pClanIdentity);
         }
     }
 }

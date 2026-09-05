@@ -93,6 +93,7 @@ aw_historical_figure_cards_recycle_incomplete,请按要求数量选择同品质�
 aw_historical_figure_cards_recycle_failed,汰换失败,Trade-up failed,汰換失敗
 aw_historical_figure_cards_recycle_gold_locked,金色卡不可汰换,Gold cards cannot be traded up,金色卡不可汰換
 aw_historical_figure_cards_placement_hint,请点击地图选择部署位置（文明城市或无主陆地）,Click the map to choose a deployment tile (a civilised city or unclaimed land),請點擊地圖選擇部署位置（文明城市或無主陸地）
+aw_historical_figure_cards_placement_hint_minister,请点击地图选择一座文明城市（大臣只能进入已有国家）,Click the map to choose a civilised city (ministers can only join an existing kingdom),請點擊地圖選擇一座文明城市（大臣只能進入已有國家）
 aw_historical_figure_cards_role_monarch,君主箱,Monarch Crate,君主箱
 aw_historical_figure_cards_role_minister,大臣箱,Minister Crate,大臣箱
 aw_historical_figure_card_recycle Title,历史人物汰换,Historical Figure Trade Up,歷史人物汰換

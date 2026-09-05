@@ -280,9 +280,14 @@ namespace AncientWarfare3.core.lineage
                     (newKingdom.capital != city || newKingdom.king != actor))
                     throw new InvalidOperationException("kingdom_projection_failed");
                 CommitLineagePromotion(actor);
-                if (!HistoricalAncestorService.EnsureCardParentage(actor,
-                        definition, pRequest.DeploymentId))
-                    throw new InvalidOperationException("parentage_commit_failed");
+                // EnsureCardParentage 的返回值语义是「本次真的改了状态」,
+                // 不是「成功与否」—— 卡片没有父母名(赞助者卡就没有)时
+                // Ensure 走 IsAlreadyApplied 合法地返回 false。把它当失败抛,
+                // 会让这类卡片**永远部署不进任何城市**,实测
+                // err=parentage_commit_failed 就是这么来的。
+                // 双亲是可选的展示信息,建不出来也不该回滚整次部署。
+                HistoricalAncestorService.EnsureCardParentage(actor,
+                    definition, pRequest.DeploymentId);
                 RecordHistory(actor, newKingdom, city, definition,
                     pRequest.DeploymentId);
                 if (HistoricalFigureCardRoleRules.IsMinister(definition))

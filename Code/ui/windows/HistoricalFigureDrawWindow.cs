@@ -49,6 +49,11 @@ namespace AncientWarfare3.ui.windows
         private static string _deploymentId = "";
         private static DrawState _state = DrawState.Idle;
         private static bool _pendingConfirmWindow;
+        /// <summary>
+        ///     BeginPlacement 主动关窗期间置真,让 <c>OnDisable</c> 的
+        ///     「关窗即取消」不要把自己那次隐藏当成玩家取消。
+        /// </summary>
+        private static bool _suppressCloseCancel;
         private static string _selectedCrateId = "";
         private static bool _inventoryMode;
         private const int InventoryPageSize = 20;
@@ -220,10 +225,36 @@ namespace AncientWarfare3.ui.windows
                 Instance.Refresh();
         }
 
+        /// <summary>
+        ///     关窗即取消部署。
+        ///
+        ///     <para>
+        ///     确认窗的 X、Escape、以及点窗外关闭都只走原版的关窗流程,不经过
+        ///     <see cref="CancelPlacement"/> —— 于是 <c>_state</c> 留在
+        ///     <c>PlacementConfirm</c>、<c>_pendingConfirmWindow</c> 可能还没被
+        ///     消费,下一帧 <c>TickPendingConfirmWindow</c> 又把窗口开回来。
+        ///     玩家看到的就是「关了又弹出来」。
+        ///     </para>
+        ///
+        ///     <para>
+        ///     部署成功那条路自己会把状态收干净(<c>_state</c> 已是
+        ///     <c>Details</c>),所以这里只处理仍停在部署流程里的情况。
+        ///     </para>
+        /// </summary>
+        private void OnDisable()
+        {
+            // BeginPlacement 自己会 clickHide 一次(它要把地图让出来给玩家
+            // 选点),那次隐藏不是玩家在关窗,不能当成取消。
+            if (_suppressCloseCancel || !IsPlacementActive) return;
+            _selectedTile = null;
+            _selectedCity = null;
+            _pendingConfirmWindow = false;
+            _state = DrawState.Details;
+        }
+
         internal static void SelectMapTile(WorldTile pTile)
         {
-            if (!IsPickingTile || pTile?.data == null) return;
-            City city = pTile.zone_city;
+            if (!IsPickingTile || pTile?.data == null) return;            City city = pTile.zone_city;
             bool validCity = city?.data != null && !city.isRekt() &&
                 city.isAlive() && city.kingdom?.data != null &&
                 !city.kingdom.isRekt() && city.kingdom.isCiv() &&
@@ -930,7 +961,10 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = null;
             _deploymentId = Guid.NewGuid().ToString("N");
             _state = DrawState.Placement;
-            GetComponent<ScrollWindow>()?.clickHide();
+            // BeginPlacement 主动关窗,不是玩家在取消部署;压住 OnDisable 的守卫。
+            _suppressCloseCancel = true;
+            try { GetComponent<ScrollWindow>()?.clickHide(); }
+            finally { _suppressCloseCancel = false; }
             // 关窗后必须把这两样都清掉,否则点图会有肉眼可见的延迟:
             //   1. clickHide 把 controls_lock_timer 设成 0.3s,归零前
             //      updateControls 的整个点击分支被跳过;
@@ -944,7 +978,9 @@ namespace AncientWarfare3.ui.windows
                 World.world.player_control.controls_lock_timer = 0f;
             // 提示必须在关窗之后:clickHide 走原版关窗流程,期间 WorldTip 会被
             // 收起,先弹的提示会被一起吃掉。
-            HistoricalFigureCardPlacementPowerService.ShowPlacementHint();
+            HistoricalFigureCardPlacementPowerService.ShowPlacementHint(
+                HistoricalFigureCardRoleRules.IsMinister(_selectedCard) ||
+                HistoricalFigureCardRoleRules.IsMilitaryGeneral(_selectedCard));
         }
 
         private void ConfirmPlacement()
