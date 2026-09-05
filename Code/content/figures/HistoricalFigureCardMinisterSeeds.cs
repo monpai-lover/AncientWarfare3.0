@@ -107,15 +107,15 @@ namespace AncientWarfare3.content.figures
                 1240, 50, false, "five_song");
             M(cards, "yuan_wu_cheng", "\u5434\u6f84", "\u5143", "\u5143",
                 1300, 50, false, "yuan_ming_qing");
-            M(cards, "yuan_jiexisi", "\u63ed\u5085\u65af", "\u5143", "\u5143",
+            M(cards, "yuan_jiexisi", "\u63ed\u5092\u65af", "\u5143", "\u5143",
                 1320, 50, false, "yuan_ming_qing");
             M(cards, "yuan_yuji", "\u865e\u96c6", "\u5143", "\u5143",
                 1320, 50, false, "yuan_ming_qing");
-            M(cards, "yuan_zhao_mengfu_blue", "\u8d75\u5b5f\u9886", "\u5143", "\u5143",
+            M(cards, "yuan_zhao_mengfu_blue", "\u8d75\u5b5f\u982b", "\u5143", "\u5143",
                 1300, 50, false, "yuan_ming_qing");
             M(cards, "ming_song_lian", "\u5b8b\u6fc2", "\u660e", "\u660e",
                 1380, 50, false, "yuan_ming_qing");
-            M(cards, "ming_fang_xiaoru", "\u65b9\u5b5d\u5b5a", "\u660e", "\u660e",
+            M(cards, "ming_fang_xiaoru", "\u65b9\u5b5d\u5b7a", "\u660e", "\u660e",
                 1400, 50, false, "yuan_ming_qing");
             M(cards, "ming_xie_jin", "\u89e3\u7f19", "\u660e", "\u660e",
                 1400, 50, false, "yuan_ming_qing");

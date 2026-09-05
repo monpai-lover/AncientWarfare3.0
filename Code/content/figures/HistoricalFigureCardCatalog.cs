@@ -271,26 +271,16 @@ public static class HistoricalFigureCardCatalog
             string pDynasty, string pKingdom, int pHistoricalYear,
             string pCardId = "")
         {
-            string era = string.IsNullOrWhiteSpace(pDynasty)
-                ? "\u5386\u53f2\u65f6\u671f" : pDynasty;
-            string kingdom = string.IsNullOrWhiteSpace(pKingdom)
-                ? "\u5176\u5386\u53f2\u653f\u6743" : pKingdom;
-            string focus = HistoricalFigureCardNarratives.Focus(pCardId);
-            return pName + "\u662f" + era + "\u7684" + kingdom + "\u5386\u53f2\u4eba\u7269\uff0c\u5176\u6d3b\u52a8\u4e0e" +
-                focus + "\u5bc6\u5207\u76f8\u5173\u3002";
+            return HistoricalFigureCardNarratives.Background(pCardId, pName,
+                pDynasty, pKingdom);
         }
 
         private static string BuildDetailedBiography(string pCardId, string pName,
             string pDynasty, string pKingdom, int pHistoricalYear,
             string pBiography)
         {
-            string detail = HistoricalFigureCardNarratives.Detailed(
+            return HistoricalFigureCardNarratives.Detailed(
                 pCardId, pName, pDynasty, pKingdom, pBiography);
-            string year = pHistoricalYear == UnknownYear
-                ? "\u5e74\u4ee3\u672a\u8be6" : "\u91cd\u8981\u6d3b\u52a8\u5e74\u4ee3\u7ea6\u4e3a" +
-                pHistoricalYear + "\u5e74";
-            return detail + "\n" + year + "\uff1b\u5386\u53f2\u56fd\u53f7\u4e3a" +
-                pKingdom + "\u3002";
         }
 
         private static HistoricalFigureCardRarity RarityForFame(int pFame)
@@ -338,6 +328,11 @@ public static class HistoricalFigureCardCatalog
                     issues.Add("invalid rarity: " + card.CardId);
                 if (card.FameScore < 0 || card.FameScore > 100)
                     issues.Add("invalid fame score: " + card.CardId);
+                if (!string.Equals(card.CollectionId,
+                        HistoricalFigureCardSupporterSeeds.CollectionId,
+                        StringComparison.Ordinal) &&
+                    !HistoricalFigureCardNarratives.HasDetailed(card.CardId))
+                    issues.Add("missing curated biography: " + card.CardId);
                 if (card.Role == HistoricalFigureCardRole.Minister)
                 {
                     if (card.MinisterType == HistoricalFigureCardMinisterType.None)

@@ -30,6 +30,13 @@
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardCatalog.cs" Link="Production\HistoricalFigureCardCatalog.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardNarratives.cs" Link="Production\HistoricalFigureCardNarratives.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographyCatalog.cs" Link="Production\HistoricalFigureCardBiographyCatalog.cs" />
+		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardCuratedBiographies.cs" Link="Production\HistoricalFigureCardCuratedBiographies.cs" />
+		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographiesPreQin.cs" Link="Production\HistoricalFigureCardBiographiesPreQin.cs" />
+		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographiesHan.cs" Link="Production\HistoricalFigureCardBiographiesHan.cs" />
+		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographiesThreeSix.cs" Link="Production\HistoricalFigureCardBiographiesThreeSix.cs" />
+		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographiesSuiTang.cs" Link="Production\HistoricalFigureCardBiographiesSuiTang.cs" />
+		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographiesFiveSong.cs" Link="Production\HistoricalFigureCardBiographiesFiveSong.cs" />
+		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographiesYuanMingQing.cs" Link="Production\HistoricalFigureCardBiographiesYuanMingQing.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardMinisterSeeds.cs" Link="Production\HistoricalFigureCardMinisterSeeds.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardSupporterSeeds.cs" Link="Production\HistoricalFigureCardSupporterSeeds.cs" />
 		<Compile Include="..\..\Code\content\figures\HistoricalFigureCardCrates.cs" Link="Production\HistoricalFigureCardCrates.cs" />

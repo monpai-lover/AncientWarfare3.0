@@ -73,7 +73,7 @@ namespace AncientWarfare3.content.figures
                 ["ming_zhang_juzheng"] = "张居正任首辅期间主持万历初年改革，推行考成法，整顿赋役并推动一条鞭法，试图提高中央财政和行政效率。他借助高拱、戚继光等力量稳定边防，同时严格控制官僚体系。张居正死后改革受到清算，但其政策延缓了明朝财政危机。",
                 ["ming_qi_jiguang"] = "戚继光在东南抗倭和北方边防中训练新军，制定严密编制、武器与战术，形成戚家军。他重视军纪、后勤和营垒建设，将地方兵源组织成有战斗力的部队。戚继光的军事改革对明代沿海和北方防务都有长期影响。",
                 ["qing_dorgon"] = "多尔衮在清军入关后辅政，联合八旗与汉地官僚稳定北京及北方局势，推动清朝完成对中原主要地区的征服。他在顺治初年掌握实际权力，处理摄政、军政和制度转型。其死后被清算，身后评价随着清代政治变化多次反转。",
-                ["qing_lin_zexu"] = "林则徐在禁烟、河工和地方治理中以执行力著称，任钦差时在广州收缴并销毁鸦片，直接引发中英战争。他主张了解外国情势并整顿海防，虽未能改变战争结局，却成为近代中国面对外来冲击时改革与抵抗的象征。",
+                ["qing_lin_zexu"] = "林则徐在禁烟、河工和地方治理中以执行力著称，任钦差时在广州收缴并销毁鸦片，直接引发中英战争。他主张了解外国情势并整顿海防，虽未能改变战争结局，却成为近代中国面对外来冲击时改革与抵抗的象征。谪戍新疆期间他还考察屯田、水利和边防，晚年再度受命处理地方军政。",
                 ["qing_zeng_guofan"] = "曾国藩组织湘军镇压太平天国，依靠地方士绅、团练和财政网络重建清朝在长江中下游的控制。他重视军纪、教育与家风，战后参与洋务和地方治理。曾国藩的崛起增强了地方督抚和湘系集团的力量，也改变了晚清政治结构。",
                 ["qing_li_hongzhang"] = "李鸿章长期主持淮军、北洋和外交事务，参与镇压内乱、兴办洋务企业并处理列强关系。他推动近代军工、铁路和海军建设，但在甲午战争和多项外交谈判中承受巨大压力。李鸿章体现了晚清在传统国家框架内推进有限现代化的复杂处境。",
                 ["qing_zuo_zongtang"] = "左宗棠在西北平乱和收复新疆过程中组织粮饷、移民与军队，建立长期控制边疆的行政基础。他同时推动福州船政等洋务事业，主张以军事行动维护领土、以生产和制度巩固战果。其边疆经营是晚清国家版图形成的重要一环。"
@@ -104,7 +104,7 @@ namespace AncientWarfare3.content.figures
         public static string Detailed(string pCardId, string pName,
             string pDynasty, string pKingdom, string pBiography)
         {
-            if (DetailedByCardId.TryGetValue(pCardId ?? "", out string curated))
+            if (TryDetailed(pCardId, out string curated))
                 return curated;
             return HistoricalFigureCardBiographyCatalog.Build(
                 pCardId, pName, pDynasty, pKingdom, pDynasty,
@@ -115,7 +115,7 @@ namespace AncientWarfare3.content.figures
         public static string MinisterBiography(string pCardId, string pName,
             string pKingdom, string pEra, bool pMilitary, string pBiography)
         {
-            if (DetailedByCardId.TryGetValue(pCardId ?? "", out string curated))
+            if (TryDetailed(pCardId, out string curated))
                 return curated;
             string supplied = (pBiography ?? "").Trim();
             return HistoricalFigureCardBiographyCatalog.Build(
@@ -127,6 +127,8 @@ namespace AncientWarfare3.content.figures
         public static string MinisterBackground(string pCardId, string pName,
             string pKingdom, string pEra, bool pMilitary)
         {
+            if (TryDetailed(pCardId, out string curated))
+                return HistoricalFigureCardCuratedBiographies.Summary(curated);
             string role = pMilitary ? "武将" : "文臣";
             return pName + "是" + pEra + "时期" + pKingdom + "的重要" + role + "，其活动与" +
                 Focus(pCardId) + "密切相关。";
@@ -137,10 +139,34 @@ namespace AncientWarfare3.content.figures
         {
             string biography = MinisterBiography(pCardId, pName, pKingdom,
                 pEra, pMilitary, pBiography);
-            if (!DetailedByCardId.ContainsKey(pCardId ?? ""))
-                return biography;
-            return biography + "部署后按" + (pMilitary ? "军事官员" : "文官") +
-                "处理，历史身份仍以本卡所属的" + pKingdom + "政权和" + pEra + "时代为准。";
+            return biography;
+        }
+
+        public static bool HasDetailed(string pCardId)
+        {
+            return DetailedByCardId.ContainsKey(pCardId ?? "") ||
+                   HistoricalFigureCardCuratedBiographies.TryGet(pCardId,
+                       out string _);
+        }
+
+        public static bool TryDetailed(string pCardId, out string pBiography)
+        {
+            if (DetailedByCardId.TryGetValue(pCardId ?? "", out pBiography))
+                return true;
+            return HistoricalFigureCardCuratedBiographies.TryGet(pCardId,
+                out pBiography);
+        }
+
+        public static string Background(string pCardId, string pName,
+            string pDynasty, string pKingdom)
+        {
+            if (TryDetailed(pCardId, out string curated))
+                return HistoricalFigureCardCuratedBiographies.Summary(curated);
+            string era = string.IsNullOrWhiteSpace(pDynasty)
+                ? "历史时期" : pDynasty;
+            string kingdom = string.IsNullOrWhiteSpace(pKingdom)
+                ? "其历史政权" : pKingdom;
+            return pName + "是" + era + "的" + kingdom + "历史人物。";
         }
     }
 }

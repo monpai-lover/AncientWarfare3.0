@@ -42,6 +42,83 @@ internal static class HistoricalFigureCardCatalogRulesTests
             "detailed biographies do not use the generic card fallback");
         True(all.Count(p => p.DetailedBiography.Length >= 60) > all.Count / 2,
             "most cards expose paragraph-length historical detail");
+
+        var historicalCards = all.Where(p => !string.Equals(p.CollectionId,
+            HistoricalFigureCardSupporterSeeds.CollectionId,
+            StringComparison.Ordinal)).ToArray();
+        True(historicalCards.All(card =>
+                HistoricalFigureCardNarratives.HasDetailed(card.CardId)),
+            "every historical card has an exact CardId biography; remaining=" +
+            string.Join(",", historicalCards.Where(card =>
+                    !HistoricalFigureCardNarratives.HasDetailed(card.CardId))
+                .Take(12).Select(card => card.CardId)));
+        string[] genericBiographyFragments =
+        {
+            "本条资料按人物所属时代、政权和传记材料整理",
+            "具体事迹需结合不同史料互证",
+            "卡片部署后保留其历史国号",
+            "具体评价应以史料背景而非游戏数值为准",
+            "重要活动年代约为",
+            "历史国号为"
+        };
+        var genericBiographyCards = historicalCards.Where(card =>
+            genericBiographyFragments.Any(fragment =>
+                card.DetailedBiography.Contains(fragment))).ToArray();
+        Equal(0, genericBiographyCards.Length,
+            "every historical card has specific detail; remaining=" +
+            string.Join(",", genericBiographyCards.Take(12)
+                .Select(p => p.CardId)));
+        True(historicalCards.All(card => card.DetailedBiography.Length >= 60 &&
+                                         SentenceCount(card.DetailedBiography) >= 3),
+            "every historical card has at least three detailed sentences");
+        True(historicalCards.All(card =>
+                !card.DetailedBiography.Contains("?") &&
+                !card.DetailedBiography.Contains("-{")),
+            "historical biographies contain no broken glyph or wiki conversion markup");
+        True(historicalCards.All(card =>
+                !card.BackgroundSummary.Contains("其活动与") &&
+                !card.BackgroundSummary.Contains("密切相关")),
+            "every historical card has a person-specific background summary");
+        True(historicalCards.All(card => card.BackgroundSummary.Length >= 12),
+            "every historical card has a substantial background summary");
+        True(!string.Equals(HistoricalFigureCardCatalog.Get("three_liu_yu")
+                    .DetailedBiography,
+                HistoricalFigureCardCatalog.Get("song_wudi").DetailedBiography,
+                StringComparison.Ordinal),
+            "Liu Yu minister and monarch cards have identity-specific detail");
+        True(!string.Equals(HistoricalFigureCardCatalog.Get("sui_an_lushan")
+                    .DetailedBiography,
+                HistoricalFigureCardCatalog.Get("an_lushan").DetailedBiography,
+                StringComparison.Ordinal),
+            "An Lushan minister and monarch cards have identity-specific detail");
+        True(historicalCards.GroupBy(card => card.DisplayName,
+                StringComparer.Ordinal).Where(group => group.Count() > 1)
+            .All(group => group.Select(card => card.DetailedBiography)
+                .Distinct(StringComparer.Ordinal).Count() == group.Count()),
+            "every same-name card identity has distinct biography text");
+        Equal(historicalCards.Length, historicalCards
+                .Select(card => card.DetailedBiography)
+                .Distinct(StringComparer.Ordinal).Count(),
+            "every historical card identity has globally distinct biography text");
+        True(historicalCards.All(card => string.Equals(
+                card.BackgroundSummary,
+                HistoricalFigureCardCuratedBiographies.Summary(
+                    card.DetailedBiography), StringComparison.Ordinal)),
+            "every card background is the first sentence of its own biography");
+        Equal("方孝孺", HistoricalFigureCardCatalog.Get("ming_fang_xiaoru")
+                .DisplayName,
+            "Fang Xiaoru uses the historically attested name");
+        Equal("揭傒斯", HistoricalFigureCardCatalog.Get("yuan_jiexisi")
+                .DisplayName,
+            "Jie Xisi uses the historically attested name");
+        Equal("赵孟頫", HistoricalFigureCardCatalog.Get("yuan_zhao_mengfu_blue")
+                .DisplayName,
+            "Zhao Mengfu uses the historically attested name");
+        True(HistoricalFigureCardCatalog.Get("qin_hanfeizi")
+                .DetailedBiography.StartsWith("韩非", StringComparison.Ordinal) &&
+             !HistoricalFigureCardCatalog.Get("qin_hanfeizi")
+                 .DetailedBiography.StartsWith("《韩非子》", StringComparison.Ordinal),
+            "Han Feizi card describes the person rather than the book");
         True(all.All(p => !HistoricalFigureCardCatalog.HasGeographicPrefix(
             p.HistoricalKingdomName)), "historical names are short kingdom names");
         True(all.Count(p => p.LegacyFigureId != null) >= HistoricalFigureDef.All.Length,
@@ -104,6 +181,11 @@ internal static class HistoricalFigureCardCatalogRulesTests
     private static void True(bool value, string message)
     {
         if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static int SentenceCount(string pText)
+    {
+        return (pText ?? "").Count(p => p == '。');
     }
 
     private static void Equal<T>(T expected, T actual, string message)
