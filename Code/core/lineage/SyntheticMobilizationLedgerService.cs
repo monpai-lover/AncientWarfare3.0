@@ -856,12 +856,17 @@ namespace AncientWarfare3.core.lineage
             if (!IsActiveParticipant(pWarId, kingdom) ||
                 !IsControlledCity(city, kingdom)) return false;
 
-            int knownSynthetic = KnownSyntheticForCity(pCityId);
+            // getPopulationPeople() 返回的已经是**扣除合成兵之后**的真实人口:
+            // AW_SyntheticPopulationPatch 给它挂了后置,用
+            // LiveSyntheticForCity 减掉本城的合成兵。所以这里不能再把
+            // knownSynthetic 传给 Quota —— 那是第二次扣,合成兵越多配额被压得
+            // 越低,极端情况直接归零、征不出兵。Quota 的语义是「原始人口 -
+            // 合成兵」,它的单测覆盖的是那个语义,规则本身没问题。
             int population = Math.Max(0, city.getPopulationPeople());
             int percent = CourtConscriptionLawRules.ReservePercent(
                 CourtAuxiliaryLawService.GetConscriptionLaw(kingdom));
             int quota = SyntheticMobilizationRules.Quota(population,
-                knownSynthetic, percent);
+                knownSynthetic: 0, percent);
             StoreRecord(key, new SyntheticMobilizationRecord
             {
                 WarId = pWarId,

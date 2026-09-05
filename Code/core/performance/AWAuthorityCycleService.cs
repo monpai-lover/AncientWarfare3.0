@@ -31,7 +31,9 @@ namespace AncientWarfare3.core.performance
             NobleHeirPregnancy,
             RulerHouseholdPregnancy,
             ArmyMembershipReconciliation,
+            WarriorArmyMembership,
             EnclosedUnownedZoneRepair,
+            DeJureMaintenance,
             CountyAdministrationRepair,
             CourtVacancyRetryDrain,
             EmptyCityResettlement,
@@ -52,6 +54,7 @@ namespace AncientWarfare3.core.performance
             SyntheticMobilization,
             CityReservePool,
             ArmyReplenishmentOperation,
+            MandateMilitaryStrength,
             WarRefugee,
             DrainAuthorityCompletions,
             FlushPendingWarParticipantSources,
@@ -253,11 +256,15 @@ namespace AncientWarfare3.core.performance
             TemporaryMilitaryReturnService.ClearRuntime();
             WarArmyReturnService.ClearRuntime();
             ArmyRtsAssignmentReconciliationService.Reset();
+            DeJureRegionMaintenanceService.Reset();
             AWEnemyPresenceCache.Clear();
             // 世界切换时放掉后台检查点的连接:它指向的是上一局的运行时库,
             // 留着会挡住 CloseAndDeleteRuntimeDb 删文件。
             core.db.LineageArchiveCheckpointService.Shutdown();
             CityReservePoolService.ClearRuntime();
+            SyntheticMobilizationLedgerService.ClearRuntime();
+            WarriorArmyMembershipService.ClearRuntime();
+            MandateMilitaryStrengthService.ClearRuntime();
             WarForceEliminationSettlementService.ClearRuntime();
             WarTerminalSettlementCoordinator.ClearRuntime();
             SpecialGovernmentWarParticipationService.ClearRuntime();
@@ -306,8 +313,18 @@ namespace AncientWarfare3.core.performance
                 RulerHouseholdPregnancyService.ProcessAuthorityCycle);
             Step(AuthorityStep.ArmyMembershipReconciliation,
                 ArmyMembershipReconciliationService.ProcessFrame);
+            // 把「活着、是战士、却没进任何军队」的 actor 补回军队。它靠 7 处
+            // Enqueue/NotifyArmyAvailable 持续收活,但泵在合并 c39aab9e 时和
+            // 合成兵账本一起被丢掉,于是队列只进不出 —— 掉队的战士永远归不了队。
+            Step(AuthorityStep.WarriorArmyMembership,
+                WarriorArmyMembershipService.ProcessAuthorityCycle);
             Step(AuthorityStep.EnclosedUnownedZoneRepair,
                 EnclosedUnownedZoneRepairService.ProcessAuthorityCycle);
+            // 法理州的脏票据处理。同样在 c39aab9e 丢失(它由 982fc828 接入,
+            // 早于那次合并),而全仓库有 17 处 MarkKingdomDirty/MarkRegionDirty
+            // 在往里塞票据。预算沿用接入时的 2 张/周期。
+            Step(AuthorityStep.DeJureMaintenance,
+                () => DeJureRegionMaintenanceService.ProcessAuthorityCycle(2));
             // 县级重建原本只在世界载入时跑一次(AW3WorldLoadCoordinator 调
             // RepairAfterWorldLoaded),而 RepairDirtyCities 全仓库没有调用者。
             // City.addZone 与 City.newCityEvent 会 MarkCityDirty —— 正好是「该
@@ -391,6 +408,11 @@ namespace AncientWarfare3.core.performance
             Step(AuthorityStep.ArmyReplenishmentOperation,
                 RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
                 ArmyReplenishmentOperationService.ProcessAuthorityCycle);
+            // 天命王国的战时应急征兵。自驱动(每年至多一次、且要求有正在进行
+            // 的战争),同样在 c39aab9e 丢失。
+            Step(AuthorityStep.MandateMilitaryStrength,
+                RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
+                MandateMilitaryStrengthService.ProcessAuthorityCycle);
             argStep = BeginStep();
             try
             {
