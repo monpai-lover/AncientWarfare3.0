@@ -72,7 +72,8 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             if (!CanPassVassalWarRules(pAttacker, pDefender, type, out pReason)) return false;
-            Kingdom queueDefender = ResolveWarMainDefender(pDefender);
+            Kingdom queueDefender = ResolveWarMainDefender(pDefender,
+                pAttacker);
             if (!CanPassAllianceWarRules(pAttacker, queueDefender, type,
                     pSystemWar: false, out pReason)) return false;
             if (queueDefender != pDefender && World.world?.wars?.getWar(
@@ -128,7 +129,8 @@ namespace AncientWarfare3.core.lineage
             if (!PeasantRebelRouteService.CanStartWar(pAttacker,
                     pDefender, out bool routeBypass, out pReason))
                 return false;
-            Kingdom queueDefender = ResolveWarMainDefender(pDefender);
+            Kingdom queueDefender = ResolveWarMainDefender(pDefender,
+                pAttacker);
             try
             {
                 if (World.world?.wars?.getWar(pAttacker, queueDefender,
@@ -410,7 +412,8 @@ namespace AncientWarfare3.core.lineage
                 return null;
             }
             bool independenceWar = type == "independence_war";
-            Kingdom mainDefender = ResolveWarMainDefender(declaredDefender);
+            Kingdom mainDefender = ResolveWarMainDefender(declaredDefender,
+                pAttacker);
             if (!IsCivilKingdom(mainDefender) || mainDefender == pAttacker)
             {
                 pFailureReason = "invalid_main_defender";
@@ -513,13 +516,21 @@ namespace AncientWarfare3.core.lineage
         }
 
         internal static Kingdom ResolveWarMainDefender(
-            Kingdom pDeclaredDefender)
+            Kingdom pDeclaredDefender, Kingdom pAttacker = null)
         {
             if (VassalService.GetSubjectKind(pDeclaredDefender) !=
                 VassalSubjectKind.MilitaryGovernorate)
                 return pDeclaredDefender;
             Kingdom root = VassalService.GetRootSuzerain(pDeclaredDefender);
-            return root?.data != null && !root.isRekt()
+            long defenderId = MilitaryGovernorateWarRules.
+                ResolveMainDefender(pAttacker?.id ?? -1L,
+                    pDeclaredDefender.id,
+                    root?.data != null && !root.isRekt()
+                        ? root.id
+                        : -1L,
+                    VassalSubjectKind.MilitaryGovernorate);
+            return root?.data != null && !root.isRekt() &&
+                   defenderId == root.id
                 ? root
                 : pDeclaredDefender;
         }

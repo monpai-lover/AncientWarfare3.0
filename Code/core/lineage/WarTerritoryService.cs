@@ -1845,7 +1845,8 @@ namespace AncientWarfare3.core.lineage
             bool targetSubject = targetSuzerain?.data != null &&
                                  !targetSuzerain.isRekt();
             return !VassalWarPermissionRules.CanUseOrdinaryWarDecision(
-                sourceSubject, targetSubject);
+                sourceSubject, targetSubject,
+                VassalService.GetSubjectKind(pTarget));
         }
 
         private static bool IsSameAlliance(Kingdom pSource, Kingdom pTarget)

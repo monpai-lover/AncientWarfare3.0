@@ -12,15 +12,30 @@ namespace AncientWarfare3.patch
     {
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Actor), nameof(Actor.setLover))]
-        public static void SetLover_Prefix(Actor __instance, Actor pActor)
+        public static bool SetLover_Prefix(Actor __instance, Actor pActor)
         {
+            if (SyntheticLevyService.IsSynthetic(__instance) ||
+                SyntheticLevyService.IsSynthetic(pActor))
+                return pActor == null;
             NobleHeirPregnancyService.OnLoverChanging(__instance, pActor);
+            return true;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Actor), nameof(Actor.becomeLoversWith))]
+        public static bool BecomeLoversWith_Prefix(Actor __instance,
+            Actor pTarget)
+        {
+            return !SyntheticLevyService.IsSynthetic(__instance) &&
+                   !SyntheticLevyService.IsSynthetic(pTarget);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Actor), nameof(Actor.becomeLoversWith))]
         public static void BecomeLoversWith_Postfix(Actor __instance, Actor pTarget)
         {
+            if (SyntheticLevyService.IsSynthetic(__instance) ||
+                SyntheticLevyService.IsSynthetic(pTarget)) return;
             ChronicleEvents.OnBecameLovers(__instance, pTarget);
             NobleHeirPregnancyService.OnBecameLovers(__instance, pTarget);
         }

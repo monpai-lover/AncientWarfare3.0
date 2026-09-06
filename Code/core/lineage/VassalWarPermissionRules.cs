@@ -55,6 +55,16 @@ namespace AncientWarfare3.core.lineage
             return !pSourceIsSubject && !pTargetIsSubject;
         }
 
+        public static bool CanUseOrdinaryWarDecision(bool pSourceIsSubject,
+            bool pTargetIsSubject,
+            VassalSubjectKind pTargetSubjectKind)
+        {
+            return !pSourceIsSubject &&
+                   (!pTargetIsSubject ||
+                    pTargetSubjectKind ==
+                    VassalSubjectKind.MilitaryGovernorate);
+        }
+
         public static bool CanCreateAlliance(bool pActorIsVassal, out string pReason)
         {
             if (!pActorIsVassal)

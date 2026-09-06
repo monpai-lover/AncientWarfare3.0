@@ -70,6 +70,9 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (pBaby?.data == null) return;
+            if (SyntheticLevyService.IsSynthetic(pParent1) ||
+                SyntheticLevyService.IsSynthetic(pParent2) ||
+                SyntheticLevyService.IsSynthetic(pBaby)) return;
             if (SyntheticLevyService.SuppressPersonalHistory(pBaby)) return;
             try { WarRefugeeService.OnActorBorn(pBaby, pParent1, pParent2); }
             catch (System.Exception e)

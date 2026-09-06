@@ -16,13 +16,14 @@ namespace AncientWarfare3.patch
             if (pID != "pregnant" ||
                 AW_NobleHeirPregnancyPatch.IsNonSexualPregnancyScope ||
                 AW3MultiplayerReplicaScope.IsReplicaSession ||
-                !(__instance is Actor mother) ||
-                !FamilyExpansionService.ShouldDeliverCivilianImmediately(
-                    mother, out Actor father)) return true;
+                !(__instance is Actor mother)) return true;
 
-            // 合成兵不参与生育，跳过时仍然返回 false（拦截 pregnant 状态本身）。
-            if (SyntheticLevyService.IsSynthetic(mother) ||
-                SyntheticLevyService.IsSynthetic(father)) return false;
+            // Synthetic actors must be rejected before vanilla adds pregnancy.
+            if (SyntheticLevyService.IsSynthetic(mother)) return false;
+            if (!FamilyExpansionService.ShouldDeliverCivilianImmediately(
+                    mother, out Actor father))
+                return SyntheticLevyService.IsSynthetic(father) ? false : true;
+            if (SyntheticLevyService.IsSynthetic(father)) return false;
             mother.birthEvent();
             BabyMaker.makeBaby(mother, father, ActorSex.None,
                 pCloneTraits: false, 0, null, pAddToFamily: true);

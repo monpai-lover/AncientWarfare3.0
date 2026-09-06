@@ -29,6 +29,7 @@ namespace AncientWarfare3.patch
             // Large mode this leaves a newborn in its default/wild kingdom
             // while the actor batch continues; establish the explicit birth
             // affiliation at the creation boundary.
+            if (SyntheticLevyService.IsSynthetic(__result)) return;
             ActorBirthAffiliationService.Reconcile(__result, pCity);
         }
 
@@ -38,6 +39,9 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__result?.data == null) return;
+            if (SyntheticLevyService.IsSynthetic(pParent1) ||
+                SyntheticLevyService.IsSynthetic(pParent2) ||
+                SyntheticLevyService.IsSynthetic(__result)) return;
             ActorBirthAffiliationService.Reconcile(__result, pParent1, pParent2);
             if (!LineageService.IsXia(__result) &&
                 !LineageService.UsesAwLineageSystem(__result) &&

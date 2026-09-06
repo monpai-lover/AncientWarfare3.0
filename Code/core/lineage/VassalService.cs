@@ -1287,9 +1287,9 @@ namespace AncientWarfare3.core.lineage
             Kingdom defender = pWar.getMainDefender();
             if (attacker?.data == null || defender?.data == null) return;
 
-            BreakDirectVassalRelationForWar(attacker, defender);
-
-            if (type == "independence_war")
+            bool independenceWar = type == "independence_war";
+            if (independenceWar &&
+                GetSuzerain(attacker) == defender)
             {
                 BeginIndependenceSuspension(pWar, attacker, defender);
                 LeaveSuzerainWarsForIndependence(pWar, attacker, defender);
@@ -1300,6 +1300,8 @@ namespace AncientWarfare3.core.lineage
                     pAllowNewDecisions: true);
                 return;
             }
+
+            BreakDirectVassalRelationForWar(attacker, defender, pWar);
 
             Kingdom attackerRoot = GetRootSuzerain(attacker);
             Kingdom defenderRoot = GetRootSuzerain(defender);
@@ -1314,12 +1316,21 @@ namespace AncientWarfare3.core.lineage
         }
 
         internal static void BreakDirectVassalRelationForWar(
-            Kingdom pAttacker, Kingdom pDefender)
+            Kingdom pAttacker, Kingdom pDefender, War pWar = null)
         {
             if (pAttacker?.data == null || pDefender?.data == null ||
                 pAttacker == pDefender) return;
             try
             {
+                bool independenceWar = GetWarType(pWar) ==
+                                       "independence_war";
+                bool suzerainAttacksMilitaryGovernorate =
+                    GetSubjectKind(pDefender) ==
+                        VassalSubjectKind.MilitaryGovernorate &&
+                    GetSuzerain(pDefender) == pAttacker;
+                if (!MilitaryGovernorateWarRules.
+                        ShouldBreakDirectRelationForWar(independenceWar,
+                            suzerainAttacksMilitaryGovernorate)) return;
                 if (GetSuzerain(pAttacker) == pDefender)
                     EndVassal(pAttacker, "war_against_suzerain");
                 if (GetSuzerain(pDefender) == pAttacker)
@@ -1341,20 +1352,41 @@ namespace AncientWarfare3.core.lineage
             Kingdom defender = pWar.getMainDefender();
             bool hasExplicitGoal = WarTerritoryService.HasWarGoal(pWar.data.id);
 
+            bool governorateIsAttacker =
+                GetSubjectKind(attacker) ==
+                    VassalSubjectKind.MilitaryGovernorate &&
+                GetSuzerain(attacker) == defender;
+            bool governorateIsDefender =
+                GetSubjectKind(defender) ==
+                    VassalSubjectKind.MilitaryGovernorate &&
+                GetSuzerain(defender) == attacker;
+            Kingdom governorate = governorateIsAttacker
+                ? attacker
+                : governorateIsDefender
+                    ? defender
+                    : null;
+
             if (type == "independence_war")
                 EndIndependenceSuspension(pWar, attacker);
 
-            if (type == "independence_war" &&
-                pWinner == WarWinner.Defenders &&
-                GetSubjectKind(attacker) ==
-                VassalSubjectKind.MilitaryGovernorate &&
-                GetSuzerain(attacker) == defender &&
-                MilitaryGovernorateStore.TryGetActive(attacker,
+            if (MilitaryGovernorateWarRules.
+                    ShouldExecuteGovernorForFailedIndependenceWar(
+                        type == "independence_war", governorateIsAttacker,
+                        pWinner == WarWinner.Defenders))
+                ExecuteFailedIndependenceGovernor(governorate);
+
+            if (governorate?.data != null &&
+                MilitaryGovernorateWarRules.
+                    ShouldAllowGovernorReplacement(type == "independence_war",
+                        governorateIsAttacker,
+                        pWinner == WarWinner.Attackers,
+                        pWinner == WarWinner.Defenders) &&
+                MilitaryGovernorateStore.TryGetActive(governorate,
                     out MilitaryGovernorateSnapshot governorateState) &&
                 MilitaryGovernorateStore.SetReplacementAllowed(
                     governorateState.StateId, true))
             {
-                attacker.data.set(
+                governorate.data.set(
                     LineageKeys.MILITARY_GOVERNORATE_REPLACEMENT_ALLOWED,
                     true);
             }
@@ -1384,6 +1416,18 @@ namespace AncientWarfare3.core.lineage
 
             if (type == "reclaim" && pWinner == WarWinner.Attackers && !WarTerritoryService.HasWarGoal(pWar.data.id))
                 RoyalClaimService.OnReclaimWarWon(attacker, defender, pWar.data.id);
+        }
+
+        private static void ExecuteFailedIndependenceGovernor(
+            Kingdom pGovernorate)
+        {
+            Actor governor = pGovernorate?.king;
+            if (governor?.data == null || !governor.isAlive() ||
+                governor.isRekt()) return;
+            governor.data.set(LineageKeys.DEATH_CAUSE,
+                HistoryLocalizationRules.Text(
+                    "aw_death_cause_military_governorate_rebellion_execution"));
+            governor.die(false, AttackType.Other, false, false);
         }
 
         public static void OnKingdomYear(Kingdom pKingdom)

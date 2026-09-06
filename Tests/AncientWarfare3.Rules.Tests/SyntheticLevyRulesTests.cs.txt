@@ -144,17 +144,43 @@ internal static class SyntheticLevyRulesTests
 
         string reproduction = File.ReadAllText(Path.Combine(root, "Code",
             "patch", "AW_DynasticReproductionPatch.cs"));
-        Equal(true, reproduction.Contains(
+        int reproductionPrefix = reproduction.IndexOf(
+            "private static bool MakeBaby_Prefix(", StringComparison.Ordinal);
+        int reproductionPostfix = reproduction.IndexOf(
+            "[HarmonyPostfix]", reproductionPrefix,
+            StringComparison.Ordinal);
+        string reproductionBody = reproduction.Substring(reproductionPrefix,
+            reproductionPostfix - reproductionPrefix);
+        Equal(true, reproductionBody.Contains(
                 "SyntheticLevyService.IsSynthetic(pParent1)",
                 StringComparison.Ordinal),
             "the first direct parent cannot be synthetic");
-        Equal(true, reproduction.Contains(
+        Equal(true, reproductionBody.Contains(
                 "SyntheticLevyService.IsSynthetic(pParent2)",
                 StringComparison.Ordinal),
             "the second direct parent cannot be synthetic");
-        Equal(true, reproduction.Contains("ref Actor __result",
+        Equal(true, reproductionBody.Contains("return false;",
+                StringComparison.Ordinal),
+            "synthetic two-parent reproduction is rejected at the vanilla entry point");
+        Equal(true, reproductionBody.Contains("ref Actor __result",
                 StringComparison.Ordinal),
             "blocked reproduction returns no child");
+
+        string lovers = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_LoversPatch.cs"));
+        int loverPrefix = lovers.IndexOf(
+            "SetLover_Prefix", StringComparison.Ordinal);
+        int loverPostfix = lovers.IndexOf(
+            "[HarmonyPostfix]", loverPrefix, StringComparison.Ordinal);
+        string loverBody = lovers.Substring(loverPrefix,
+            loverPostfix - loverPrefix);
+        Equal(true, loverBody.Contains("public static bool",
+                StringComparison.Ordinal) && loverBody.Contains(
+                "return false;", StringComparison.Ordinal),
+            "synthetic actors are rejected before vanilla lover assignment");
+        Equal(true, lovers.Contains(
+                "BecomeLoversWith_Prefix", StringComparison.Ordinal),
+            "direct vanilla lover formation is rejected before execution");
 
         string ledger = File.ReadAllText(Path.Combine(root, "Code", "core",
             "lineage", "SyntheticMobilizationLedgerService.cs"));

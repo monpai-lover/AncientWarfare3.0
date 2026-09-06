@@ -120,7 +120,7 @@ namespace AncientWarfare3.patch
             {
                 if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
                 VassalService.BreakDirectVassalRelationForWar(
-                    mainAttacker, mainDefender);
+                    mainAttacker, mainDefender, __result);
                 ZhuluWarService.PersistDeclaredDefender(__result,
                     ZhuluWarDeclarationScope.CurrentDefenderId);
                 ZhuluWarService.OnWarStarted(__result);
@@ -652,7 +652,7 @@ namespace AncientWarfare3.patch
                 }
                 catch { }
                 VassalService.BreakDirectVassalRelationForWar(
-                    pKingdom, opponent);
+                    pKingdom, opponent, pWar);
                 OnKingdomJoinedWar(pWar, pKingdom, pDefender);
             }
         }

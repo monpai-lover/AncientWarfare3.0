@@ -186,19 +186,6 @@ namespace AncientWarfare3.core.lineage
         internal static void ReconcileLoadedActor(Actor actor)
         {
             if (!IsSynthetic(actor)) return;
-            try
-            {
-                Actor lover = actor.lover;
-                if (lover?.lover == actor) lover.lover = null;
-                actor.lover = null;
-            }
-            catch { }
-            try
-            {
-                if (actor.hasStatus("pregnant"))
-                    actor.finishStatusEffect("pregnant");
-            }
-            catch { }
             SyntheticMobilizationLedgerService.OnSyntheticMaterialized(
                 actor);
         }

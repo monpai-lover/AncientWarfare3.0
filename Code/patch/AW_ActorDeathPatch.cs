@@ -105,7 +105,8 @@ namespace AncientWarfare3.patch
                 // CopySnapshot。这里与其他军事索引一同清理。
                 ArmyMilitaryMovementPriorityIndex.Unregister(__instance.data.id);
                 SlavePopulationIndexService.Deactivate(__instance);
-                DynasticLivingSonIndexService.OnActorDying(__instance);
+                if (!SyntheticLevyService.IsSynthetic(__instance))
+                    DynasticLivingSonIndexService.OnActorDying(__instance);
                 SuccessionRelationshipIndex.OnDying(__instance);
                 HeirService.MarkSuccessionDirtyForActor(__instance);
                 if (__state.DyingKingdom?.data != null &&

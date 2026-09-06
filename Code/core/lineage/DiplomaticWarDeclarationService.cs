@@ -216,7 +216,8 @@ namespace AncientWarfare3.core.lineage
                     out pFailureReason);
             bool independenceWar = pWarType == "independence_war";
             Kingdom mainDefender =
-                WarDecisionService.ResolveWarMainDefender(pDefender);
+                WarDecisionService.ResolveWarMainDefender(pDefender,
+                    pAttacker);
             bool activeTreaty = DiplomacyProposalService.HasActiveWarBlocker(
                 pAttacker, pDefender) || mainDefender != pDefender &&
                 DiplomacyProposalService.HasActiveWarBlocker(
@@ -414,7 +415,7 @@ namespace AncientWarfare3.core.lineage
                 Kingdom declaredDefender = FindKingdom(
                     record?.DefenderId ?? -1L);
                 Kingdom mainDefender = WarDecisionService
-                    .ResolveWarMainDefender(declaredDefender);
+                    .ResolveWarMainDefender(declaredDefender, pAttacker);
                 if (record?.DefenderId != pDefender.id &&
                     mainDefender != pDefender) continue;
                 TerminateRecord(pAttacker, record, "cancelled", pReason);

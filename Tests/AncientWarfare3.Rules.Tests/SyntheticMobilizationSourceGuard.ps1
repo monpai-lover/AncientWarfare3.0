@@ -33,6 +33,17 @@ $scheduler = Read-Source 'Code/core/performance/ArmyRtsSchedulingService.cs'
 $runner = Read-Source 'Code/core/performance/AWCooperativeSimulationRunner.cs'
 $director = Read-Source 'Code/core/lineage/KingdomWarDirectorService.cs'
 $cityPatch = Read-Source 'Code/patch/AW_CityReservePoolPatch.cs'
+$syntheticLevy = Read-Source 'Code/core/lineage/SyntheticLevyService.cs'
+$reproduction = Read-Source 'Code/patch/AW_DynasticReproductionPatch.cs'
+$birth = Read-Source 'Code/patch/AW_BirthPatch.cs'
+$babyName = Read-Source 'Code/patch/AW_BabyNamePatch.cs'
+$civilianBirth = Read-Source 'Code/patch/AW_CivilianInstantBirthPatch.cs'
+$pregnancy = Read-Source 'Code/patch/AW_NobleHeirPregnancyPatch.cs'
+$figure = Read-Source 'Code/patch/AW_FigurePatch.cs'
+$lovers = Read-Source 'Code/patch/AW_LoversPatch.cs'
+$death = Read-Source 'Code/patch/AW_ActorDeathPatch.cs'
+$familyExpansion = Read-Source 'Code/core/lineage/FamilyExpansionService.cs'
+$dynasticReproduction = Read-Source 'Code/core/lineage/DynasticReproductionService.cs'
 $restorePipeline = Read-Source `
     'Code/core/multiplayer/AW3RuntimeRestorePipeline.cs'
 
@@ -54,6 +65,47 @@ Require-Text $ledger 'SyntheticLevyService.ReconcileLoadedActor(' `
     'Load reconciliation must rebuild actor membership from persisted metadata.'
 Require-Text $ledger 'OrphanSyntheticActorIds' `
     'Unrecoverable synthetic actors need bounded post-scan cleanup.'
+Reject-Text $syntheticLevy 'ClearParentage(actor);' `
+    'Synthetic soldiers must not overwrite vanilla parent fields.'
+Reject-Text $syntheticLevy 'actor.data.parent_id_1 = -1L;' `
+    'Synthetic parent slot one belongs to vanilla.'
+Reject-Text $syntheticLevy 'actor.data.parent_id_2 = -1L;' `
+    'Synthetic parent slot two belongs to vanilla.'
+$loadReconcile = Section $syntheticLevy `
+    'internal static void ReconcileLoadedActor(Actor actor)' `
+    'internal static void PromoteToPermanentCommand(Actor actor)'
+Reject-Text $loadReconcile 'actor.lover' `
+    'Loaded synthetic soldiers must not rewrite vanilla lover state.'
+Reject-Text $loadReconcile 'finishStatusEffect("pregnant")' `
+    'Loaded synthetic soldiers must not rewrite vanilla pregnancy state.'
+Require-Text $reproduction 'SyntheticLevyService.IsSynthetic(pParent1)' `
+    'Synthetic parents must be detected before custom reproduction changes.'
+Require-Text $reproduction 'return false;' `
+    'Synthetic two-parent reproduction must be rejected at the vanilla entry point.'
+Require-Text $reproduction 'pParent2 == null' `
+    'Single-parent miracle paths must retain the vanilla return contract.'
+Require-Text $birth 'SyntheticLevyService.IsSynthetic(pParent1)' `
+    'Birth history hooks must skip synthetic parents.'
+Require-Text $babyName 'SyntheticLevyService.IsSynthetic(pParent1)' `
+    'Baby naming hooks must skip synthetic parents.'
+Require-Text $civilianBirth 'SyntheticLevyService.IsSynthetic(mother)) return false;' `
+    'Synthetic civilian pregnancy must be rejected before vanilla pregnancy.'
+Require-Text $pregnancy 'SyntheticLevyService.IsSynthetic(pActor)) return false;' `
+    'Synthetic pregnancy delivery must be rejected before vanilla delivery.'
+Require-Text $figure 'SyntheticLevyService.IsSynthetic(__result)' `
+    'Historical figure birth hooks must skip synthetic actors.'
+Require-Text $lovers 'SyntheticLevyService.IsSynthetic(__instance)' `
+    'Synthetic lover hooks must not write custom relationship data.'
+Require-Text $lovers 'BecomeLoversWith_Prefix' `
+    'Synthetic lover formation must be blocked before vanilla execution.'
+Require-Text $death 'if (!SyntheticLevyService.IsSynthetic(__instance))' `
+    'Synthetic deaths must not update reproduction parent indexes.'
+Require-Text $babyName 'SyntheticLevyService.IsSynthetic(__result)' `
+    'Synthetic creation must not receive custom birth affiliation data.'
+Require-Text $familyExpansion 'SyntheticLevyService.IsSynthetic(pActor)' `
+    'Synthetic actors must bypass custom family expansion weighting.'
+Require-Text $dynasticReproduction 'SyntheticLevyService.IsSynthetic(pActor)' `
+    'Synthetic actors must bypass custom dynastic reproduction rules.'
 Require-Text $ledger 'DemobilizationBatchLimit' `
     'Post-war generated-actor removal must remain bounded.'
 Require-Text $ledger 'OnCityKingdomChanged(City pCity,' `

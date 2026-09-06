@@ -7,6 +7,8 @@ namespace AncientWarfare3.core.lineage
         internal static float ReproductionDecisionWeight(Actor pActor,
             float pOriginalWeight)
         {
+            if (SyntheticLevyService.IsSynthetic(pActor))
+                return pOriginalWeight;
             float result = DynasticReproductionService
                 .ReproductionDecisionWeight(pActor, pOriginalWeight);
             Actor partner = LivingMutualPartner(pActor);
@@ -18,6 +20,8 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool NeedsExpansion(Actor pFirst, Actor pSecond)
         {
+            if (SyntheticLevyService.IsSynthetic(pFirst) ||
+                SyntheticLevyService.IsSynthetic(pSecond)) return false;
             if (!IsCivilizedActor(pFirst)) return false;
             FamilyExpansionTier tier = ResolveTier(pFirst, pSecond);
             int livingChildren = Math.Max(CountLivingChildren(pFirst),
@@ -46,6 +50,8 @@ namespace AncientWarfare3.core.lineage
             out Actor pFather)
         {
             pFather = LivingMutualPartner(pMother);
+            if (SyntheticLevyService.IsSynthetic(pMother) ||
+                SyntheticLevyService.IsSynthetic(pFather)) return false;
             if (pFather?.data == null || !pFather.isSexMale() ||
                 !pMother.isSexFemale() || !IsCivilizedActor(pMother) ||
                 !IsCivilizedActor(pFather)) return false;

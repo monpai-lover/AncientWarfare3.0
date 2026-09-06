@@ -646,6 +646,7 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_captive_executed_captor_mid", " \u5904\u51b3\u91cd\u8981\u4fd8\u864f", " executed important captive ", " \u8655\u6c7a\u91cd\u8981\u4fd8\u865c"),
             new Entry("aw_hist_captive_executed_captor_suffix", "\uff0c\u65f6\u5b98\u573a\u4e3b\u5bfc\u4e3a", "; dominant court school: ", "\uff0c\u6642\u5b98\u5834\u4e3b\u5c0e\u70ba"),
             new Entry("aw_death_cause_captive_execution", "\u4fd8\u540e\u88ab\u5904\u51b3", "executed after capture", "\u4fd8\u5f8c\u88ab\u8655\u6c7a"),
+            new Entry("aw_death_cause_military_governorate_rebellion_execution", "\u53db\u4e71\u5931\u8d25\u88ab\u5904\u6b7b", "executed after a failed military governorate rebellion", "\u53db\u4e82\u5931\u6557\u88ab\u8655\u6b7b"),
             new Entry("aw_death_cause_captive_execution_school", "\uff1b\u4e3b\u5bfc\u5b66\u6d3e\uff1a", "; school: ", "\uff1b\u4e3b\u5c0e\u5b78\u6d3e\uff1a"),
             new Entry("aw_death_cause_captive_execution_by", "\uff1b\u6267\u884c\u8005\uff1a", "; executor: ", "\uff1b\u57f7\u884c\u8005\uff1a"),
             new Entry("aw_hist_retired_soldier", " 退伍为老兵，不再应征", " retired as a veteran and will not be conscripted again", " 退伍為老兵，不再應徵"),

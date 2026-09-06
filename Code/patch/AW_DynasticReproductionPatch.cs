@@ -51,6 +51,8 @@ namespace AncientWarfare3.patch
         private static bool ReachedPersonalOffspringLimit(Actor pActor)
         {
             if (pActor == null) return true;
+            if (SyntheticLevyService.IsSynthetic(pActor))
+                return true;
             if (!pActor.hasReachedOffspringLimit()) return false;
             Actor partner = pActor.lover;
             return !DynasticMaleLineContinuityService.NeedsContinuation(
@@ -65,8 +67,9 @@ namespace AncientWarfare3.patch
             Actor pParent2, ref Actor __result,
             ref ActorSex pForcedSexType)
         {
-            // pParent2 == null 是神迹/孢子等单亲路径（调用方链裸解引用返回值，
-            // 设 __result=null 会直接崩）；只拦截两亲都在场的有性繁殖。
+            // 单亲神迹/孢子路径的调用方会直接链式使用返回值，不能返回
+            // null；两亲路径才在原版入口直接拒绝合成兵繁殖。
+            if (pParent2 == null) return true;
             if (pParent2 != null &&
                 (SyntheticLevyService.IsSynthetic(pParent1) ||
                  SyntheticLevyService.IsSynthetic(pParent2)))
@@ -105,6 +108,9 @@ namespace AncientWarfare3.patch
         private static void MakeBaby_Postfix(Actor pParent1,
             Actor pParent2, Actor __result)
         {
+            if (SyntheticLevyService.IsSynthetic(pParent1) ||
+                SyntheticLevyService.IsSynthetic(pParent2) ||
+                SyntheticLevyService.IsSynthetic(__result)) return;
             NobleHeirPregnancyService.OnLoverHeirChildBorn(
                 __result, pParent1, pParent2);
             DynasticLivingSonIndexService.OnChildBorn(

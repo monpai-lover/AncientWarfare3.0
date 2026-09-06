@@ -33,21 +33,24 @@ namespace AncientWarfare3.patch
         [HarmonyPrefix]
         [HarmonyPatch(typeof(BaseSimObject), "addStatusEffect",
             new[] { typeof(string), typeof(float), typeof(bool) })]
-        private static void AddStatusEffect_Prefix(BaseSimObject __instance,
+        private static bool AddStatusEffect_Prefix(BaseSimObject __instance,
             string pID, ref float pOverrideTimer,
             out PregnancyStartState __state)
         {
             __state = default;
-            if (NonSexualPregnancyDepth > 0 || pID != "pregnant" ||
-                !(__instance is Actor mother) ||
-                !NobleHeirPregnancyService.TryPreparePregnancy(mother,
+            if (pID != "pregnant" || !(__instance is Actor mother))
+                return true;
+            if (SyntheticLevyService.IsSynthetic(mother)) return false;
+            if (NonSexualPregnancyDepth > 0) return true;
+            if (!NobleHeirPregnancyService.TryPreparePregnancy(mother,
                     out long fatherId,
                     out RulerHouseholdConceptionKind conceptionKind))
-                return;
+                return true;
 
             pOverrideTimer = NobleHeirPregnancyRules.TenMonthPregnancySeconds;
             __state = new PregnancyStartState(mother, fatherId,
                 conceptionKind);
+            return true;
         }
 
         [HarmonyPostfix]
@@ -67,6 +70,7 @@ namespace AncientWarfare3.patch
             nameof(BabyMaker.makeBabyFromPregnancy))]
         private static bool PregnancyDelivery_Prefix(Actor pActor)
         {
+            if (SyntheticLevyService.IsSynthetic(pActor)) return false;
             return !RulerHouseholdPregnancyService
                 .TryDeliverConsortPregnancy(pActor);
         }
@@ -76,6 +80,7 @@ namespace AncientWarfare3.patch
             nameof(BabyMaker.makeBabyFromPregnancy))]
         private static void PregnancyDelivery_Postfix(Actor pActor)
         {
+            if (SyntheticLevyService.IsSynthetic(pActor)) return;
             NobleHeirPregnancyService.OnPregnancyDeliveryCompleted(pActor);
         }
 
@@ -83,6 +88,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(ActorManager), nameof(ActorManager.loadObject))]
         private static void ActorLoad_Postfix(Actor __result)
         {
+            if (SyntheticLevyService.IsSynthetic(__result)) return;
             NobleHeirPregnancyService.OnActorLoaded(__result);
             DynasticMaleLineContinuityService.OnActorLoaded(__result);
             RulerHouseholdService.OnActorLoaded(__result);

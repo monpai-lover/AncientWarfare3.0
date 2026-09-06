@@ -6,6 +6,7 @@ namespace AncientWarfare3.core.lineage
             Actor pActor)
         {
             if (pActor?.data == null) return false;
+            if (SyntheticLevyService.IsSynthetic(pActor)) return false;
             Actor partner = LivingPartner(pActor);
             return DynasticReproductionRules
                 .ShouldProtectFromOrdinaryMilitaryService(
@@ -29,6 +30,7 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldReleaseExistingMilitaryRole(Actor pActor)
         {
             if (pActor?.data == null) return false;
+            if (SyntheticLevyService.IsSynthetic(pActor)) return false;
             bool warrior;
             try { warrior = pActor.isWarrior(); }
             catch { return false; }
@@ -62,6 +64,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null || !pActor.isAlive() ||
                 pActor.isRekt()) return pOriginalWeight;
+            if (SyntheticLevyService.IsSynthetic(pActor))
+                return pOriginalWeight;
             bool usesDynasticSystem = UsesDynasticSystem(pActor);
             bool isRuler;
             try { isRuler = pActor.isKing(); }

@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using System.IO;
 
 internal static class MilitaryGovernorateWarRulesTests
 {
@@ -18,14 +19,82 @@ internal static class MilitaryGovernorateWarRulesTests
             "war permission admits an external military-governorate target");
         Equal("", reason,
             "military-governorate target permission has no failure reason");
+        Equal(true, VassalWarPermissionRules.CanUseOrdinaryWarDecision(
+                false, true, VassalSubjectKind.MilitaryGovernorate),
+            "a central or external realm may select a governorate war target");
+        Equal(false, VassalWarPermissionRules.CanUseOrdinaryWarDecision(
+                false, true, VassalSubjectKind.Ordinary),
+            "ordinary subjects remain administrative-only targets");
+        Equal(false, VassalWarPermissionRules.CanUseOrdinaryWarDecision(
+                true, true, VassalSubjectKind.MilitaryGovernorate),
+            "a subject cannot gain ordinary state warfare through a governorate target");
         Equal(10L, MilitaryGovernorateWarRules.ResolveMainDefender(
-                20L, 10L, VassalSubjectKind.MilitaryGovernorate),
+                30L, 20L, 10L,
+                VassalSubjectKind.MilitaryGovernorate),
             "root suzerain leads a governorate defensive war");
         Equal(20L, MilitaryGovernorateWarRules.ResolveMainDefender(
-                20L, 10L, VassalSubjectKind.Ordinary),
+                10L, 20L, 10L,
+                VassalSubjectKind.MilitaryGovernorate),
+            "the suzerain may directly suppress its governorate");
+        Equal(20L, MilitaryGovernorateWarRules.ResolveMainDefender(
+                30L, 20L, 10L, VassalSubjectKind.Ordinary),
             "ordinary targets retain existing defender resolution");
+        Equal(false,
+            MilitaryGovernorateWarRules.ShouldBreakDirectRelationForWar(
+                true, false),
+            "independence war suspends rather than deletes its relation");
+        Equal(false,
+            MilitaryGovernorateWarRules.ShouldBreakDirectRelationForWar(
+                false, true),
+            "central suppression preserves governorate state for settlement");
+        Equal(true,
+            MilitaryGovernorateWarRules.ShouldBreakDirectRelationForWar(
+                false, false),
+            "unrelated illegal direct warfare still breaks a relation");
+        Equal(true,
+            MilitaryGovernorateWarRules.ShouldAllowGovernorReplacement(
+                independenceWar: true, governorateIsAttacker: true,
+                attackersWon: false,
+                defendersWon: true),
+            "a defended independence revolt permits central replacement");
+        Equal(true,
+            MilitaryGovernorateWarRules.ShouldAllowGovernorReplacement(
+                independenceWar: true, governorateIsAttacker: false,
+                attackersWon: true,
+                defendersWon: false),
+            "a central suppression victory permits governor replacement");
+        Equal(false,
+            MilitaryGovernorateWarRules.ShouldAllowGovernorReplacement(
+                independenceWar: true, governorateIsAttacker: false,
+                attackersWon: false,
+                defendersWon: false),
+            "white peace does not permit governor replacement");
+        Equal(false,
+            MilitaryGovernorateWarRules.ShouldAllowGovernorReplacement(
+                independenceWar: false, governorateIsAttacker: false,
+                attackersWon: true, defendersWon: false),
+            "ordinary wars do not permit post-war governor replacement");
+        Equal(true,
+            MilitaryGovernorateWarRules.
+                ShouldExecuteGovernorForFailedIndependenceWar(
+                    independenceWar: true, governorateIsAttacker: true,
+                    defendersWon: true),
+            "a failed governorate independence rebellion executes its governor");
+        Equal(false,
+            MilitaryGovernorateWarRules.
+                ShouldExecuteGovernorForFailedIndependenceWar(
+                    independenceWar: true, governorateIsAttacker: true,
+                    defendersWon: false),
+            "a successful governorate independence rebellion does not execute its governor");
+        Equal(false,
+            MilitaryGovernorateWarRules.
+                ShouldExecuteGovernorForFailedIndependenceWar(
+                    independenceWar: false, governorateIsAttacker: true,
+                    defendersWon: true),
+            "ordinary wars do not execute a governor through this rule");
+        FailedIndependenceRebellionExecutesGovernor();
         Equal(10L, MilitaryGovernorateWarRules.ResolvePeaceController(
-                20L, 10L, VassalSubjectKind.MilitaryGovernorate),
+            20L, 10L, VassalSubjectKind.MilitaryGovernorate),
             "root suzerain controls governorate peace");
         Equal(true, MilitaryGovernorateRules.MustJoinSuzerainWar(
                 VassalSubjectKind.MilitaryGovernorate),
@@ -45,6 +114,73 @@ internal static class MilitaryGovernorateWarRulesTests
                 VassalSubjectKind.Ordinary,
                 VassalSubjectKind.Ordinary),
             "ordinary diplomacy remains unchanged");
+        IndependenceWarKeepsGovernorateRelationUntilSettlement();
+        IndependenceOnlyAllowsReplacement();
+    }
+
+    private static void FailedIndependenceRebellionExecutesGovernor()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "VassalService.cs"));
+        Equal(true, source.Contains(
+                "ShouldExecuteGovernorForFailedIndependenceWar(",
+                StringComparison.Ordinal),
+            "a failed governorate independence rebellion must execute its governor");
+        Equal(true, source.Contains(
+                "aw_death_cause_military_governorate_rebellion_execution",
+                StringComparison.Ordinal),
+            "failed governorate rebellions must persist a localized execution cause");
+    }
+
+    private static void IndependenceWarKeepsGovernorateRelationUntilSettlement()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "VassalService.cs"));
+        int start = source.IndexOf("public static void OnWarStarted(War pWar)",
+            StringComparison.Ordinal);
+        int end = source.IndexOf(
+            "internal static void BreakDirectVassalRelationForWar(", start,
+            StringComparison.Ordinal);
+        string body = source.Substring(start, end - start);
+        int independence = body.IndexOf(
+            "if (independenceWar &&",
+            StringComparison.Ordinal);
+        int relationBreak = body.IndexOf(
+            "BreakDirectVassalRelationForWar(attacker, defender, pWar);",
+            StringComparison.Ordinal);
+        Equal(true, independence >= 0 && relationBreak > independence,
+            "independence suspension must be established before any generic relation break");
+
+        string patch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_WarPatch.cs")).Replace("\r\n", "\n");
+        Equal(true, patch.Contains(
+                "BreakDirectVassalRelationForWar(\n" +
+                "                    pKingdom, opponent, pWar);",
+                StringComparison.Ordinal),
+            "participant initialization must pass war context to the relation guard");
+    }
+
+    private static void IndependenceOnlyAllowsReplacement()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "VassalService.cs"));
+        int start = source.IndexOf("public static void OnWarEnded(War pWar",
+            StringComparison.Ordinal);
+        int end = source.IndexOf("public static void OnKingdomYear(", start,
+            StringComparison.Ordinal);
+        string body = source.Substring(start, end - start);
+        Equal(true, body.Contains(
+                "ShouldAllowGovernorReplacement(type == \"independence_war\"",
+                StringComparison.Ordinal),
+            "governor replacement must be gated by independence war type");
+        Equal(true, body.Contains(
+                "if (type == \"independence_war\" && pWinner == WarWinner.Attackers)",
+                StringComparison.Ordinal),
+            "only a successful independence revolt may end the vassal relation");
     }
 
     private static void Equal<T>(T expected, T actual, string message)

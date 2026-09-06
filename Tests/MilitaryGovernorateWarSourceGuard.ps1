@@ -9,7 +9,7 @@ $declaration = Get-Content -Raw -LiteralPath (Join-Path $root `
 
 foreach ($token in @(
     'Kingdom declaredDefender = pDefender;',
-    'ResolveMilitaryGovernorateMainDefender(declaredDefender)',
+    'ResolveWarMainDefender(declaredDefender,',
     'mainDefender, asset);',
     'ConsumeClaim(pAttacker, declaredDefender, type)',
     'RecordWarDecision(pAttacker, declaredDefender'
