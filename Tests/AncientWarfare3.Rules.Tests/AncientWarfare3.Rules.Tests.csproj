@@ -67,6 +67,7 @@
 		<Compile Include="..\..\Code\core\historyapi\AW3HistoryDtoMapper.cs" Link="Production\AW3HistoryDtoMapper.cs" />
 		<Compile Include="..\..\Code\core\historyapi\AW3HistorySubscriptionRegistry.cs" Link="Production\AW3HistorySubscriptionRegistry.cs" />
 		<Compile Include="..\..\Code\core\historyapi\AW3HistoryEventIdentityRules.cs" Link="Production\AW3HistoryEventIdentityRules.cs" />
+		<Compile Include="AW3HistoryEventPublisherTestStub.cs.txt" />
 		<Compile Include="MandateCapitalBuildingTextureRulesTests.cs.txt" />
 		<Compile Include="..\..\Code\core\presentation\MandateCapitalBuildingTextureRules.cs" Link="Production\MandateCapitalBuildingTextureRules.cs" />
 		<Compile Include="CountyRenameRulesTests.cs.txt" />

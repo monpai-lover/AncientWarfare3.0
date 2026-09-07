@@ -9072,8 +9072,8 @@ True(MandateDecisionAiRules.Score(
         "aw_mandate_decision_centralize_1", false),
     "the specifically preferred sacrifice remains the highest ritual priority");
 
-Equal(16, KingdomAnnualWorkRules.StageCount,
-    "annual kingdom work is split across sixteen bounded frame slices");
+Equal(19, KingdomAnnualWorkRules.StageCount,
+    "annual kingdom work is split across nineteen bounded frame slices");
 Equal(KingdomAnnualWorkStage.RoyalAsylum,
     KingdomAnnualWorkRules.NextStage(KingdomAnnualWorkStage.Succession),
     "succession advances to the separate royal asylum slice");
@@ -9108,12 +9108,21 @@ Equal(KingdomAnnualWorkStage.StateEconomy,
     KingdomAnnualWorkRules.NextStage(
         KingdomAnnualWorkStage.DiplomaticOperation),
     "diplomatic operations advance to state economy");
-Equal(KingdomAnnualWorkStage.StateGovernment,
+Equal(KingdomAnnualWorkStage.StateGovernmentExam,
     KingdomAnnualWorkRules.NextStage(KingdomAnnualWorkStage.StateEconomy),
-    "economy advances to government maintenance");
+    "economy advances to the government exam slice");
+Equal(KingdomAnnualWorkStage.StateGovernmentCareer,
+    KingdomAnnualWorkRules.NextStage(KingdomAnnualWorkStage.StateGovernmentExam),
+    "government exam advances to the career slice");
+Equal(KingdomAnnualWorkStage.StateGovernmentMinisterial,
+    KingdomAnnualWorkRules.NextStage(KingdomAnnualWorkStage.StateGovernmentCareer),
+    "government career advances to the ministerial slice");
+Equal(KingdomAnnualWorkStage.StateGovernmentTribute,
+    KingdomAnnualWorkRules.NextStage(KingdomAnnualWorkStage.StateGovernmentMinisterial),
+    "government ministerial work advances to the tribute slice");
 Equal(KingdomAnnualWorkStage.StateRealm,
-    KingdomAnnualWorkRules.NextStage(KingdomAnnualWorkStage.StateGovernment),
-    "government maintenance advances to realm maintenance");
+    KingdomAnnualWorkRules.NextStage(KingdomAnnualWorkStage.StateGovernmentTribute),
+    "government tribute advances to realm maintenance");
 Equal(KingdomAnnualWorkStage.StrategyMandate,
     KingdomAnnualWorkRules.NextStage(KingdomAnnualWorkStage.StateRealm),
     "realm maintenance advances to mandate strategy");

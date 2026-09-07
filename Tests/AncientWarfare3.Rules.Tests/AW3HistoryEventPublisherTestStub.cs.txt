@@ -1,0 +1,61 @@
+using System;
+using AncientWarfare3.api.history;
+
+namespace AncientWarfare3.core.historyapi
+{
+    // The rules test project does not host the runtime archive database. Keep
+    // the publisher boundary available while leaving database-backed reads to
+    // the production assembly.
+    internal static class AW3HistoryEventPublisher
+    {
+        private static readonly AW3HistorySubscriptionRegistry Registry =
+            new AW3HistorySubscriptionRegistry();
+
+        public static IDisposable Subscribe(AW3HistorySubscription filter,
+            Action<AW3HistoryEvent> handler)
+        {
+            return Registry.Subscribe(filter, handler);
+        }
+
+        public static void PublishCommitted(AW3HistoryEvent item)
+        {
+            Registry.PublishCommitted(item);
+        }
+
+        public static void PublishDiplomacy(long recordId, string eventType,
+            long firstKingdomId, long secondKingdomId, double worldTime,
+            int worldYear, string yearText, string status, string content)
+        {
+        }
+
+        public static void PublishDiplomacy(long recordId, string source,
+            string eventType, long firstKingdomId, long secondKingdomId,
+            double worldTime, int worldYear, string yearText, string status,
+            string content)
+        {
+        }
+
+        public static void PublishCareerRecord(long officerId, string eventType)
+        {
+        }
+
+        public static void PublishFailed(AW3HistoryEvent item)
+        {
+            Registry.PublishFailed(item);
+        }
+
+        public static int Drain(int maximumEvents = 64)
+        {
+            return Registry.Drain(maximumEvents);
+        }
+
+        public static void Clear()
+        {
+            Registry.Clear();
+        }
+
+        public static void PublishHistoryRow(string table, long eventId)
+        {
+        }
+    }
+}

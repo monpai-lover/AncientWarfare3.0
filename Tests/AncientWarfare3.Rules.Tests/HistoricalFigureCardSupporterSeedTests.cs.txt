@@ -44,6 +44,9 @@ internal static class HistoricalFigureCardSupporterSeedTests
 
         var currentRoster = SupporterRosterData.Read();
         var currentCards = HistoricalFigureCardSupporterSeeds.Build(currentRoster);
+        var mingxian = currentRoster.Single(p => p.Name == "明仙");
+        Equal("20", mingxian.Amount,
+            "明仙 is included with the requested sponsorship amount");
         Equal(currentRoster.Select(p => p.Name)
                 .Distinct(StringComparer.OrdinalIgnoreCase).Count(),
             currentCards.Count,
@@ -54,8 +57,8 @@ internal static class HistoricalFigureCardSupporterSeedTests
             "the supporter pool contains three pink cards");
         Equal(5, Count(currentCards, HistoricalFigureCardRarity.Purple),
             "the supporter pool contains five purple cards");
-        Equal(10, Count(currentCards, HistoricalFigureCardRarity.Blue),
-            "the supporter pool contains ten blue cards");
+        Equal(11, Count(currentCards, HistoricalFigureCardRarity.Blue),
+            "the supporter pool contains eleven blue cards");
         Equal(0, Count(currentCards, HistoricalFigureCardRarity.Gold),
             "the supporter pool keeps gold exclusive to the shared prize pool");
 
