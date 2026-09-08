@@ -38,7 +38,16 @@ foreach ($dir in $productionDirectories) {
         continue
     }
     $dst = Join-Path $DestinationRoot $dir
-    robocopy $src $dst /MIR /XD bin obj /XF *.pdb /NFL /NDL /NJH /NJS /NP | Out-Null
+    # GameResources may contain user-added assets that are intentionally not
+    # tracked in the source worktree (for example custom Han emperor skins).
+    # Keep those files during deployment; all code/resource directories remain
+    # mirrored as before.
+    if ($dir -eq 'GameResources') {
+        robocopy $src $dst /E /XD bin obj /XF *.pdb /NFL /NDL /NJH /NJS /NP | Out-Null
+    }
+    else {
+        robocopy $src $dst /MIR /XD bin obj /XF *.pdb /NFL /NDL /NJH /NJS /NP | Out-Null
+    }
     if ($LASTEXITCODE -ge 8) { throw "robocopy failed for $dir (exit $LASTEXITCODE)" }
     Write-Output "Mirrored: $dir"
 }
