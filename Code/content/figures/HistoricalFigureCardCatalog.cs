@@ -117,6 +117,21 @@ public static class HistoricalFigureCardCatalog
                 ["wu_dadi"] = "ui/historical_cards/wu_dadi",
                 ["three_yuan_shao"] = "ui/historical_cards/three_yuan_shao",
                 ["ming_taizu"] = "ui/historical_cards/ming_taizu",
+                ["ming_huidi"] = "ui/historical_cards/ming_huidi",
+                ["ming_chengzu"] = "ui/historical_cards/ming_chengzu",
+                ["ming_renzong"] = "ui/historical_cards/ming_renzong",
+                ["ming_xuanzong"] = "ui/historical_cards/ming_xuanzong",
+                ["ming_yingzong"] = "ui/historical_cards/ming_yingzong",
+                ["ming_daizong"] = "ui/historical_cards/ming_daizong",
+                ["ming_xianzong"] = "ui/historical_cards/ming_xianzong",
+                ["ming_xiaozong"] = "ui/historical_cards/ming_xiaozong",
+                ["ming_wuzong"] = "ui/historical_cards/ming_wuzong",
+                ["ming_shizong"] = "ui/historical_cards/ming_shizong",
+                ["ming_muzong"] = "ui/historical_cards/ming_muzong",
+                ["ming_shenzong"] = "ui/historical_cards/ming_shenzong",
+                ["ming_guangzong"] = "ui/historical_cards/ming_guangzong",
+                ["ming_xizong"] = "ui/historical_cards/ming_xizong",
+                ["ming_sizong"] = "ui/historical_cards/ming_sizong",
                 ["mengpai"] = "ui/historical_cards/mengpai"
             };
 

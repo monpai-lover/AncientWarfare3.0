@@ -21,6 +21,8 @@ namespace AncientWarfare3.patch
                 return false;
             if (TryGetBanditCivilianTexturePath(__instance, out __result))
                 return false;
+            if (TryGetHanEmperorKingTexturePath(__instance, out __result))
+                return false;
 
             ActorVisualRole role = ActorVisualRoleResolver.Resolve(__instance);
             if (role == ActorVisualRole.Default ||
@@ -313,6 +315,26 @@ namespace AncientWarfare3.patch
                 return false;
             pPath = textureAsset.texture_path_base + "bandit_general";
             return true;
+        }
+
+        private static bool TryGetHanEmperorKingTexturePath(Actor pActor,
+            out string pPath)
+        {
+            pPath = null;
+            if (pActor?.asset == null || pActor.isEgg() || pActor.isBaby() ||
+                !pActor.isKing() ||
+                !string.Equals(pActor.asset.id, XiaRace.ID,
+                    System.StringComparison.Ordinal) ||
+                !HistoricalFigureCardIdentityService.IsHanEmperorCardActor(
+                    pActor))
+                return false;
+
+            ActorTextureSubAsset textureAsset = pActor.getTextureAsset();
+            if (textureAsset == null || !textureAsset.has_advanced_textures)
+                return false;
+            pPath = textureAsset.texture_path_base +
+                XiaActorTextureRules.ResolveKingHanBodyPath();
+            return !string.IsNullOrEmpty(pPath);
         }
 
         private static void ApplyHeadId(Actor pActor, Sprite[] pHeads)

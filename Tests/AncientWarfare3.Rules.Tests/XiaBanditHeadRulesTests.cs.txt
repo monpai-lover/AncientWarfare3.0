@@ -50,6 +50,25 @@ internal static class XiaBanditHeadRulesTests
              actorPatch.Contains("return ApplyBanditHead(__instance);",
                 StringComparison.Ordinal),
             "map bandit head resolution precedes the default-role early return");
+        int textureMethodStart = actorPatch.IndexOf(
+            "public static bool GetUnitTexturePathPrefix", StringComparison.Ordinal);
+        int textureMethodEnd = actorPatch.IndexOf(
+            "[HarmonyPrefix]", textureMethodStart + 1,
+            StringComparison.Ordinal);
+        string textureMethod = textureMethodStart >= 0 &&
+                               textureMethodEnd > textureMethodStart
+            ? actorPatch.Substring(textureMethodStart,
+                textureMethodEnd - textureMethodStart)
+            : "";
+        True(textureMethod.Contains("IsHanEmperorCardActor",
+                    StringComparison.Ordinal) &&
+             textureMethod.Contains("ResolveKingHanBodyPath",
+                    StringComparison.Ordinal) &&
+             textureMethod.IndexOf("IsHanEmperorCardActor",
+                    StringComparison.Ordinal) <
+             textureMethod.IndexOf("ActorVisualRole role =",
+                    StringComparison.Ordinal),
+            "Han emperor body switching runs before the default visual-role fallback");
     }
 
     private static void True(bool value, string message)

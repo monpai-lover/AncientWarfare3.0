@@ -177,6 +177,17 @@ internal static class HistoricalFigureCardCatalogRulesTests
                 HistoricalFigureCardCatalog.Get(id).PortraitPath,
                 "ui/historical_cards/" + id, StringComparison.Ordinal)),
             "all six supplied historical portraits use card-specific resources");
+        string[] mingEmperorPortraitIds =
+        {
+            "ming_taizu", "ming_huidi", "ming_chengzu", "ming_renzong",
+            "ming_xuanzong", "ming_yingzong", "ming_daizong", "ming_xianzong",
+            "ming_xiaozong", "ming_wuzong", "ming_shizong", "ming_muzong",
+            "ming_shenzong", "ming_guangzong", "ming_xizong", "ming_sizong"
+        };
+        True(mingEmperorPortraitIds.All(id => string.Equals(
+                HistoricalFigureCardCatalog.Get(id).PortraitPath,
+                "ui/historical_cards/" + id, StringComparison.Ordinal)),
+            "all Ming emperor cards use ordered card-specific portraits");
         True(new[] { "three_guan_yu", "three_zhang_fei", "three_yuan_shao" }
             .Select(HistoricalFigureCardCatalog.Get)
             .All(card => card.Role == HistoricalFigureCardRole.Minister &&
