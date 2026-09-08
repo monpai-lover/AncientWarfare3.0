@@ -27,6 +27,9 @@ namespace AncientWarfare3.core.presentation
         /// <summary>国王身体帧所在的贴图目录后缀,用来认出高分辨率动画容器。</summary>
         public const string KingTexturePathSuffix = "/king";
 
+        /// <summary>汉代国王身体帧所在的高分辨率贴图目录后缀。</summary>
+        public const string KingHanTexturePathSuffix = "/king_han";
+
         /// <summary>
         ///     检视面板里国王画像的下移量,单位是头像的**局部**像素
         ///     (4× 空间,身体帧高 44,所以 44 ≈ 一整个身高)。
@@ -71,8 +74,12 @@ namespace AncientWarfare3.core.presentation
         public static bool IsHighResolutionTexturePath(string pTexturePath)
         {
             if (string.IsNullOrEmpty(pTexturePath)) return false;
-            return pTexturePath.Replace('\\', '/')
-                       .EndsWith(KingTexturePathSuffix, StringComparison.Ordinal)
+            string normalized = pTexturePath.Replace('\\', '/');
+            bool isKingBody = normalized.EndsWith(KingTexturePathSuffix,
+                                       StringComparison.Ordinal) ||
+                              normalized.EndsWith(KingHanTexturePathSuffix,
+                                       StringComparison.Ordinal);
+            return isKingBody
                    && pTexturePath.IndexOf(XiaRace.ID,
                        StringComparison.Ordinal) >= 0;
         }

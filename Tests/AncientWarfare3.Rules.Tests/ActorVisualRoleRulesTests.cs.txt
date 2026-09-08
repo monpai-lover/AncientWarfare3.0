@@ -67,6 +67,18 @@ internal static class ActorVisualRoleRulesTests
             XiaKingScaleRules.UsesHighResolutionBody("Human",
                 pIsKing: true, pIsBaby: false),
             "non-Xia kings keep normal avatar scaling");
+        Equal(true,
+            XiaKingScaleRules.IsHighResolutionTexturePath(
+                "actors/species/civs/Xia/king"),
+            "the generic Xia king body uses high-resolution scaling");
+        Equal(true,
+            XiaKingScaleRules.IsHighResolutionTexturePath(
+                "actors/species/civs/Xia/king_han"),
+            "the Han Xia king body uses the same high-resolution scaling");
+        Equal(false,
+            XiaKingScaleRules.IsHighResolutionTexturePath(
+                "actors/species/civs/Xia/leader_1"),
+            "non-king Xia bodies keep normal scaling");
 
         Equal(ActorVisualRole.Warrior,
             ActorVisualRoleRules.ResolveMilitaryGovernorateRole(
