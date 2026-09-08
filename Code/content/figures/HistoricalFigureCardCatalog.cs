@@ -304,6 +304,15 @@ public static class HistoricalFigureCardCatalog
             return HistoricalFigureCardRarity.Blue;
         }
 
+        private static HistoricalFigureCardRarity RarityForCardId(
+            string pCardId, int pFame)
+        {
+            if (string.Equals(pCardId, "ming_taizu",
+                StringComparison.Ordinal))
+                return HistoricalFigureCardRarity.Purple;
+            return RarityForFame(pFame);
+        }
+
         private static string ParentAt(string[] pParents, int pIndex)
         {
             return pParents != null && pIndex < pParents.Length
@@ -495,7 +504,7 @@ public static class HistoricalFigureCardCatalog
                 return new HistoricalFigureCardDefinition(
                     CardId, DisplayName, family, clan, given, DynastyName,
                     HistoricalKingdomName, HistoricalEra, BirthYear, DeathYear,
-                    HistoricalYear, FameScore, RarityForFame(FameScore),
+                    HistoricalYear, FameScore, RarityForCardId(CardId, FameScore),
                     Sex, Biography, "", FatherDisplayName,
                     "", MotherDisplayName,
                     string.IsNullOrEmpty(PortraitPathFor(CardId))

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -23,7 +24,7 @@ namespace AncientWarfare3.core.lineage
         public static bool CanSelectSeat(City pSeat, out string pReason)
         {
             pReason = "invalid_city";
-            Kingdom suzerain = pSeat?.kingdom;
+            Kingdom suzerain = ResolveSuzerainForSeat(pSeat);
             if (!CanCreateFor(suzerain))
             {
                 pReason = "realm_not_eligible";
@@ -51,12 +52,14 @@ namespace AncientWarfare3.core.lineage
                 return result;
             int limit = BoundedLimit(pLimit,
                 MilitaryGovernorateRules.CityScanBudget);
-            int cityCount = pSuzerain.cities.Count;
+            List<City> seatPool = GetSeatPool(pSuzerain);
+            int cityCount = seatPool.Count;
+            if (cityCount == 0) return result;
             int start = Math.Max(0, pStartIndex) % cityCount;
             int scanCount = Math.Min(limit, cityCount);
             for (int offset = 0; offset < scanCount; offset++)
             {
-                City city = pSuzerain.cities[(start + offset) % cityCount];
+                City city = seatPool[(start + offset) % cityCount];
                 if (!IsEligibleSeat(city, pSuzerain)) continue;
                 result.Add(new MilitaryGovernorateSeatCandidate
                 {
@@ -110,23 +113,25 @@ namespace AncientWarfare3.core.lineage
         public static bool TryCreate(City pSeat, Actor pGeneral,
             out Kingdom pSubject, out string pReason)
         {
-            Kingdom suzerain = pSeat?.kingdom;
+            Kingdom suzerain = ResolveSuzerainForSeat(pSeat);
             List<MilitaryGovernorateGeneralCandidate> candidates =
                 GetGeneralCandidates(suzerain,
                     MilitaryGovernorateRules.GeneralScanBudget);
             return TryCreateFromCandidateBatch(pSeat, pGeneral, candidates,
-                out pSubject, out pReason);
+                out pSubject, out pReason, suzerain);
         }
 
         internal static bool TryCreateFromCandidateBatch(City pSeat,
             Actor pGeneral,
             IReadOnlyList<MilitaryGovernorateGeneralCandidate> pCandidates,
-            out Kingdom pSubject, out string pReason)
+            out Kingdom pSubject, out string pReason,
+            Kingdom pRequestedSuzerain = null)
         {
             pSubject = null;
             pReason = "invalid_city";
-            Kingdom suzerain = pSeat?.kingdom;
-            if (!CanSelectSeat(pSeat, out pReason)) return false;
+            Kingdom suzerain = pRequestedSuzerain ??
+                ResolveSuzerainForSeat(pSeat);
+            if (!CanSelectSeat(pSeat, suzerain, out pReason)) return false;
             if (!ContainsGeneralCandidate(pCandidates, pGeneral) ||
                 !IsEligibleGeneral(pGeneral, suzerain))
             {
@@ -165,7 +170,7 @@ namespace AncientWarfare3.core.lineage
                         out pSubject, out pReason);
                 stage = MilitaryGovernorateCreationStage.CapitalAssigned;
 
-                string commandName = MilitaryGovernorateRules.CommandName(
+                string commandName = MilitaryGovernorateRules.CanonicalCommandName(
                     pSeat.data.name, "\u519b");
                 subject.setName(commandName);
                 if (!VassalService.SetMilitaryGovernorate(subject,
@@ -174,6 +179,12 @@ namespace AncientWarfare3.core.lineage
                         subject, suzerain, pSeat, pGeneral, originalCity,
                         out pSubject, out pReason);
                 stage = MilitaryGovernorateCreationStage.RelationCreated;
+
+                if (!KingdomPolicyService.SetGovernmentState(subject,
+                        MilitaryGovernorateRules.GovernmentState))
+                    return Fail("government_state_failed", stage, stateId,
+                        subject, suzerain, pSeat, pGeneral, originalCity,
+                        out pSubject, out pReason);
 
                 subject.data.get(LineageKeys.VASSAL_RELATION_ID,
                     out long relationId, -1L);
@@ -229,23 +240,88 @@ namespace AncientWarfare3.core.lineage
                 !pSuzerain.isCiv() || pSuzerain.isNeutral()) return false;
             bool xiaSystem = XiaizationService.GetLevel(pSuzerain) >=
                              XiaizationService.LevelXiaizedDynasty;
+            pSuzerain.data.get(LineageKeys.MANDATE_AUTHORITY,
+                out int centralPower, 100);
             return MilitaryGovernorateRules.CanCreate(xiaSystem,
-                pSuzerain.countCities(), pSuzerain.getMaxCities());
+                pSuzerain.countCities(), pSuzerain.getMaxCities(), centralPower,
+                pSuzerainIsVassal: VassalService.IsVassalKingdom(pSuzerain),
+                pSuzerainIsMilitaryGovernorate:
+                    VassalService.GetSubjectKind(pSuzerain) ==
+                    VassalSubjectKind.MilitaryGovernorate);
+        }
+
+        private static bool CanSelectSeat(City pSeat, Kingdom pSuzerain,
+            out string pReason)
+        {
+            pReason = "invalid_city";
+            if (pSuzerain?.data == null ||
+                ResolveSuzerainForSeat(pSeat) != pSuzerain) return false;
+            if (!CanCreateFor(pSuzerain))
+            {
+                pReason = "realm_not_eligible";
+                return false;
+            }
+            if (!IsEligibleSeat(pSeat, pSuzerain)) return false;
+            pReason = "";
+            return true;
+        }
+
+        internal static Kingdom ResolveSuzerainForSeat(City pSeat)
+        {
+            Kingdom owner = pSeat?.kingdom;
+            if (owner?.data == null) return null;
+            if (VassalService.GetSubjectKind(owner) !=
+                VassalSubjectKind.MilitaryGovernorate)
+                return owner;
+            Kingdom suzerain = VassalService.GetSuzerain(owner);
+            return suzerain?.data == null || suzerain.isRekt()
+                ? null
+                : suzerain;
+        }
+
+        private static List<City> GetSeatPool(Kingdom pSuzerain)
+        {
+            var result = new List<City>();
+            var seen = new HashSet<long>();
+            if (pSuzerain?.cities != null)
+                foreach (City city in pSuzerain.cities)
+                    if (city?.data != null && seen.Add(city.id))
+                        result.Add(city);
+            foreach (Kingdom child in VassalService.GetVassals(pSuzerain))
+            {
+                if (child?.data == null || child.isRekt() ||
+                    VassalService.GetSubjectKind(child) !=
+                        VassalSubjectKind.MilitaryGovernorate ||
+                    child.cities == null) continue;
+                foreach (City city in child.cities)
+                    if (city?.data != null && seen.Add(city.id))
+                        result.Add(city);
+            }
+            result.Sort((a, b) => a.id.CompareTo(b.id));
+            return result;
         }
 
         private static bool IsEligibleSeat(City pSeat, Kingdom pSuzerain)
         {
             if (pSeat?.data == null || pSuzerain?.data == null) return false;
+            Kingdom owner = pSeat.kingdom;
+            bool directGovernorate = owner?.data != null && owner != pSuzerain &&
+                VassalService.GetSuzerain(owner) == pSuzerain &&
+                VassalService.GetSubjectKind(owner) ==
+                    VassalSubjectKind.MilitaryGovernorate &&
+                owner.capital != pSeat && owner.cities != null &&
+                owner.cities.Count >= 2;
+            bool owned = owner == pSuzerain || directGovernorate;
             pSeat.data.get(LineageKeys.CITY_FEUDATORY_ID,
                 out long feudatoryId, -1L);
             bool external = CentralizationBorderDeploymentService.
                 HasExternalLandBorderForRoot(pSeat, pSuzerain);
             return !pSeat.isRekt() && pSeat.isAlive() &&
                    MilitaryPrefectureCandidateService.IsCandidate(
-                       pSuzerain, pSeat) &&
+                       owner, pSeat) &&
                    MilitaryGovernorateRules.IsEligibleSeat(
-                       pSeat.kingdom == pSuzerain,
-                       pSuzerain.capital == pSeat,
+                       owned,
+                       pSuzerain.capital == pSeat || owner?.capital == pSeat,
                        feudatoryId >= 0, external);
         }
 

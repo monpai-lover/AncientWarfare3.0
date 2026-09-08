@@ -6,10 +6,16 @@ internal static class HistoricalFigureCardCatalogRulesTests
 {
     public static void Run()
     {
-        Equal(0.0026f, HistoricalFigureCardRarity.Gold.Probability,
-            "gold probability is stable");
-        Equal(0.0064f, HistoricalFigureCardRarity.Red.Probability,
-            "red probability is stable");
+        Equal(0.0030f, HistoricalFigureCardRarity.Gold.Probability,
+            "gold probability uses the slightly increased draw odds");
+        Equal(0.0075f, HistoricalFigureCardRarity.Red.Probability,
+            "red probability uses the slightly increased draw odds");
+        Equal(0.0350f, HistoricalFigureCardRarity.Pink.Probability,
+            "pink probability uses the slightly increased draw odds");
+        Equal(0.1750f, HistoricalFigureCardRarity.Purple.Probability,
+            "purple probability uses the slightly increased draw odds");
+        Equal(0.7795f, HistoricalFigureCardRarity.Blue.Probability,
+            "blue probability balances the increased rare odds");
         Equal(1f, HistoricalFigureCardRarity.TotalProbability,
             "rarity probabilities total one");
 

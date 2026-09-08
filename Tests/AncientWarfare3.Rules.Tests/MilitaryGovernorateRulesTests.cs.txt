@@ -4,11 +4,17 @@ internal static class MilitaryGovernorateRulesTests
 {
     public static void Run()
     {
-        Equal(true, MilitaryGovernorateRules.CanCreate(true, 7, 6),
+        Equal(true, MilitaryGovernorateRules.CanCreate(true, 7, 6, 0),
             "Xia realm over direct limit may create a governorate");
-        Equal(false, MilitaryGovernorateRules.CanCreate(true, 6, 6),
+        Equal(true, MilitaryGovernorateRules.CanCreate(true, 7, 6, 59),
+            "governorate release is allowed below the central power threshold");
+        Equal(false, MilitaryGovernorateRules.CanCreate(true, 7, 6, 60),
+            "central power at the threshold keeps direct rule");
+        Equal(false, MilitaryGovernorateRules.CanCreate(true, 7, 6, 80),
+            "strong central power prevents governorate release");
+        Equal(false, MilitaryGovernorateRules.CanCreate(true, 6, 6, 0),
             "realm at limit is not over limit");
-        Equal(false, MilitaryGovernorateRules.CanCreate(false, 9, 6),
+        Equal(false, MilitaryGovernorateRules.CanCreate(false, 9, 6, 0),
             "non-Xia realm cannot create a governorate");
         Equal(true, MilitaryGovernorateRules.IsEligibleSeat(
                 true, false, false, true),
@@ -91,6 +97,10 @@ internal static class MilitaryGovernorateRulesTests
             "frontier candidate reads stay bounded");
         Equal(32, MilitaryGovernorateRules.GeneralScanBudget,
             "general candidate reads stay bounded");
+        Equal(60, MilitaryGovernorateRules.CentralPowerReleaseThreshold,
+            "central power threshold is explicit and stable");
+        Equal(80, MilitaryGovernorateRules.CentralPowerReclaimThreshold,
+            "central power reclaim threshold is explicit and stable");
 
         VassalEffectiveTerms militaryTerms = VassalContractTierRules.TermsFor(
             VassalContractTierRules.Outer,
@@ -120,6 +130,14 @@ internal static class MilitaryGovernorateRulesTests
         Equal(false, VassalRelationRules.CanSetMilitaryGovernorate(
                 true, true, false, false),
             "rebel subject cannot become a military governorate");
+        Equal(false, VassalRelationRules.CanSetMilitaryGovernorate(
+                true, false, false, false,
+                true, false, false, false),
+            "an existing vassal cannot be promoted into a governorate");
+        Equal(false, VassalRelationRules.CanSetMilitaryGovernorate(
+                true, false, false, false,
+                false, false, true, false),
+            "a vassal suzerain cannot establish a governorate");
 
         int frontierSeat = MilitaryGovernorateCreationRules.SeatScore(
             true, 10, 2);
@@ -197,6 +215,40 @@ internal static class MilitaryGovernorateRulesTests
         Equal(true, MilitaryGovernorateRules.ShouldTransferIndependenceToUpper(
                 VassalSubjectKind.Ordinary),
             "ordinary nested vassals retain the existing transfer behavior");
+        Equal(false, MilitaryGovernorateRules.CanCreate(true, 7, 6, 0,
+                pSuzerainIsVassal: true,
+                pSuzerainIsMilitaryGovernorate: false),
+            "a vassal suzerain cannot establish a military governorate");
+        Equal(false, MilitaryGovernorateRules.CanCreate(true, 7, 6, 0,
+                pSuzerainIsVassal: false,
+                pSuzerainIsMilitaryGovernorate: true),
+            "a military governorate cannot establish another governorate");
+        Equal(true, MilitaryGovernorateRules.CanCreate(true, 7, 6, 0,
+                pSuzerainIsVassal: false,
+                pSuzerainIsMilitaryGovernorate: false),
+            "an independent mother kingdom may establish a governorate");
+        Equal(false, MilitaryGovernorateRules.CanSplitCity(
+                true, true, true, 3),
+            "governorate seat cannot be split into another governorate");
+        Equal(false, MilitaryGovernorateRules.CanSplitCity(
+                true, true, false, 1),
+            "a one-city governorate cannot be split");
+        Equal(true, MilitaryGovernorateRules.CanSplitCity(
+                true, true, false, 2),
+            "a mother kingdom may split a non-seat governorate city");
+        Equal(false, MilitaryGovernorateRules.CanReclaimCity(
+                true, true, true, 2),
+            "governorate seat cannot be reclaimed while the command exists");
+        Equal(true, MilitaryGovernorateRules.CanReclaimCity(
+                true, true, false, 2),
+            "a mother kingdom may reclaim one non-seat city");
+        Equal(true, MilitaryGovernorateRules.CanReclaimCity(
+                true, true, true, 1),
+            "a mother kingdom may reclaim the final seat by ending the governorate");
+        Equal(false, MilitaryGovernorateRules.ShouldAiReclaim(79),
+            "AI does not reclaim below the high central power threshold");
+        Equal(true, MilitaryGovernorateRules.ShouldAiReclaim(80),
+            "AI reclaims at high central power");
     }
 
     private static void Equal<T>(T expected, T actual, string message)

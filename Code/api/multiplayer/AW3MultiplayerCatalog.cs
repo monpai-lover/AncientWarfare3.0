@@ -250,6 +250,10 @@ namespace AncientWarfare3.api.multiplayer
                     AW3WindowCategory.Realm, Country() |
                     AW3WindowContextRequirement.TargetCountry |
                     AW3WindowContextRequirement.Actor),
+                Command(AW3CommandKind.ReclaimMilitaryGovernorateCity,
+                    AW3WindowCategory.Realm, Country() |
+                    AW3WindowContextRequirement.TargetCountry |
+                    AW3WindowContextRequirement.City),
                 Command(AW3CommandKind.ApplyCustomCourtTemplate,
                     AW3WindowCategory.Domestic, Country()),
                 Command(AW3CommandKind.GrantBanditAmnesty,

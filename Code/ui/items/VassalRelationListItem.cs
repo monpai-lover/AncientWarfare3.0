@@ -21,6 +21,7 @@ namespace AncientWarfare3.ui.items
         private GameObject _designateObj;
         private GameObject _replaceObj;
         private GameObject _renameObj;
+        private GameObject _manageObj;
         private TipButton _absorbTip;
         private LayoutElement _layout;
         private TipButton _tip;
@@ -50,7 +51,8 @@ namespace AncientWarfare3.ui.items
             bool hasGovernorateActions =
                 pObject.can_designate_governorate_successor ||
                 pObject.can_replace_governorate_governor ||
-                pObject.can_rename_governorate;
+                pObject.can_rename_governorate ||
+                pObject.can_manage_governorate_territory;
             float rightInset = hasGovernorateActions
                 ? -150f
                 : pObject.can_absorb_by_context ? -44f : -8f;
@@ -165,6 +167,10 @@ namespace AncientWarfare3.ui.items
                 "aw_military_governorate_rename_short",
                 "aw_military_governorate_rename", "\u540D",
                 OpenKingdomRenameFlow);
+            _manageObj = CreateActionButton("ManageTerritory", -149f,
+                "aw_military_governorate_manage_short",
+                "aw_military_governorate_manage", "\u5730",
+                OpenGovernorateAdministration);
         }
 
         private GameObject CreateActionButton(string pName, float pX,
@@ -367,6 +373,7 @@ namespace AncientWarfare3.ui.items
                 pObject.can_designate_governorate_successor);
             _replaceObj.SetActive(pObject.can_replace_governorate_governor);
             _renameObj.SetActive(pObject.can_rename_governorate);
+            _manageObj.SetActive(pObject.can_manage_governorate_territory);
             if (pObject.subject_kind == VassalSubjectKind.MilitaryGovernorate)
                 _absorbObj.SetActive(false);
         }
@@ -390,6 +397,13 @@ namespace AncientWarfare3.ui.items
         private void OpenKingdomRenameFlow()
         {
             VassalRelationWindow.OpenKingdomRenameFlow(_kingdomId);
+        }
+
+        private void OpenGovernorateAdministration()
+        {
+            Kingdom suzerain = FindKingdom(_contextKingdomId);
+            Kingdom subject = FindKingdom(_kingdomId);
+            MilitaryGovernorateWindow.OpenAdministration(suzerain, subject);
         }
 
         private static string ContractTierLabel(int pTier)

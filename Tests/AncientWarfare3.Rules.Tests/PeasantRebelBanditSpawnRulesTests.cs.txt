@@ -37,6 +37,9 @@ internal static class PeasantRebelBanditSpawnRulesTests
             PeasantRebelBanditSpawnRules.ResolveSuppressionExpiryYear(
                 100, false),
             "ordinary government cleanup creates no cooldown");
+        Equal(150,
+            PeasantRebelBanditSpawnRules.ResolveCitySuppressionExpiryYear(100),
+            "every city cleared of bandits receives a fifty-year cooldown");
 
         string strongholdService = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "core", "lineage",
@@ -46,8 +49,10 @@ internal static class PeasantRebelBanditSpawnRulesTests
             "GodPowerLibrary.cs"));
         Contains(strongholdService,
             "MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR");
+        Contains(strongholdService,
+            "CITY_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR");
         Contains(strongholdService, "pIgnoreSuppressionCooldown");
-        Contains(strongholdService, "ResolveSuppressionExpiryYear");
+        Contains(strongholdService, "ResolveCitySuppressionExpiryYear");
         Contains(godPower, "pIgnoreSuppressionCooldown: true");
     }
 

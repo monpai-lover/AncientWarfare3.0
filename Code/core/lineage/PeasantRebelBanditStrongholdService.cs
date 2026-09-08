@@ -95,8 +95,12 @@ namespace AncientWarfare3.core.lineage
                 World.world?.cities == null ||
                 TopTileLibrary.wall_wild == null) return false;
             pMother.data.get(
-                LineageKeys.MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
+                LineageKeys.CITY_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
                 out int suppressionUntilYear, int.MinValue);
+            if (suppressionUntilYear == int.MinValue)
+                pMother.data.get(
+                    LineageKeys.MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
+                    out suppressionUntilYear, int.MinValue);
             if (!PeasantRebelBanditSpawnRules.CanCreateInCity(
                     Date.getCurrentYear(), suppressionUntilYear,
                     pIgnoreSuppressionCooldown))
@@ -1104,6 +1108,16 @@ namespace AncientWarfare3.core.lineage
                         pStronghold.getID());
                     PeasantRebelBanditStateStore.Write(pDefender, pState);
                 }
+                int suppressionUntilYear =
+                    PeasantRebelBanditSpawnRules.ResolveCitySuppressionExpiryYear(
+                        Date.getCurrentYear());
+                pStronghold.data.set(
+                    LineageKeys.CITY_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
+                    suppressionUntilYear);
+                // Preserve legacy persistence compatibility for older saves.
+                pStronghold.data.set(
+                    LineageKeys.MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
+                    suppressionUntilYear);
                 HistoryWriter.TryRecordCity(pStronghold, pAttacker,
                     CityEvent.BANDIT_STRONGHOLD_ESTABLISHED,
                     HistoryText.City(pStronghold, pAttacker) +
@@ -1329,12 +1343,15 @@ namespace AncientWarfare3.core.lineage
                 if (!PeasantRebelBanditStateStore.Write(pBandit, pState))
                     return false;
                 int suppressionUntilYear = PeasantRebelBanditSpawnRules.
-                    ResolveSuppressionExpiryYear(Date.getCurrentYear(),
-                        pRecordSuppressionChronicle);
-                if (suppressionUntilYear != int.MinValue)
-                    mother.data.set(LineageKeys.
-                        MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
-                        suppressionUntilYear);
+                    ResolveCitySuppressionExpiryYear(Date.getCurrentYear());
+                mother.data.set(LineageKeys.
+                    CITY_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
+                    suppressionUntilYear);
+                // Preserve the legacy key so existing saves retain the same
+                // cooldown if they are loaded by an older build.
+                mother.data.set(LineageKeys.
+                    MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
+                    suppressionUntilYear);
                 if (!pStronghold.isRekt())
                     BanditStrongholdCityDisposalService.Schedule(
                         pStronghold.getID(),

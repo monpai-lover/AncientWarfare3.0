@@ -5914,7 +5914,7 @@ namespace AncientWarfare3.core.lineage
             string reason = string.IsNullOrWhiteSpace(pFailureReason)
                 ? "unspecified"
                 : pFailureReason;
-            AncientWarfare3.ModClass.LogError(
+            AncientWarfare3.ModClass.LogWarning(
                 "[Army RTS route failure] army=" +
                 (pArmy?.id ?? -1L) +
                 " state=" + state +

@@ -230,6 +230,7 @@ namespace AncientWarfare3.core.lineage
 
             bool alreadyKing = IsLivingRuler(pSuccessor, pSubject) &&
                                pSubject.king == pSuccessor;
+            Actor recordedGovernor = FindActor(pState.GovernorActorId);
             if (!alreadyKing && !IsEligibleDesignated(
                     pSuccessor, pSubject, pSuzerain)) return false;
 
@@ -267,6 +268,8 @@ namespace AncientWarfare3.core.lineage
                     pSubject.setKing(pSuccessor);
                     MilitaryGovernorateAppearanceService.OnGovernorChanged(
                         oldGovernorActorId, pSuccessor.data.id);
+                    ReturnFormerGovernorToGeneral(recordedGovernor,
+                        pSuzerain, pSubject, pSuccessor);
                 }
                 pSuccessor.setProfession(UnitProfession.King);
                 if (pSubject.king != pSuccessor) return false;
@@ -290,10 +293,33 @@ namespace AncientWarfare3.core.lineage
             ProjectSuccessor(pSubject, -1L);
             pSubject.data.set(
                 LineageKeys.MILITARY_GOVERNORATE_REPLACEMENT_ALLOWED,
-                false);
+                true);
             try { WorldLog.logNewKing(pSubject); }
             catch { }
             return true;
+        }
+
+        private static void ReturnFormerGovernorToGeneral(Actor pFormer,
+            Kingdom pSuzerain, Kingdom pSubject, Actor pSuccessor)
+        {
+            if (pFormer?.data == null || pFormer == pSuccessor ||
+                pFormer.isRekt() || !pFormer.isAlive() ||
+                pSuzerain?.data == null || pSubject?.data == null) return;
+            try
+            {
+                if (pFormer.kingdom != pSuzerain)
+                    pFormer.joinKingdom(pSuzerain);
+                if (pSuzerain.capital?.data != null &&
+                    pFormer.city != pSuzerain.capital)
+                    pFormer.joinCity(pSuzerain.capital);
+                GeneralService.PromoteToGeneral(pFormer);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "Former military governor general restoration failed: " +
+                    error.Message);
+            }
         }
 
         private static bool TryReadManagedState(Kingdom pSuzerain,

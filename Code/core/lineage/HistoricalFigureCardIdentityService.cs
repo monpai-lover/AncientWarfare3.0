@@ -15,6 +15,20 @@ namespace AncientWarfare3.core.lineage
             return !string.IsNullOrWhiteSpace(cardId);
         }
 
+        public static bool IsHanEmperorCardActor(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            pActor.data.get(LineageKeys.HISTORICAL_CARD_ID,
+                out string cardId, "");
+            if (string.IsNullOrWhiteSpace(cardId) ||
+                !cardId.StartsWith("han_", StringComparison.Ordinal))
+                return false;
+
+            HistoricalFigureCardDefinition definition =
+                HistoricalFigureCardCatalog.Get(cardId);
+            return HistoricalFigureCardRoleRules.IsMonarch(definition);
+        }
+
         public static bool IsMinisterCardActor(Actor pActor)
         {
             if (!IsCardActor(pActor)) return false;

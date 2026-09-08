@@ -100,6 +100,17 @@ namespace AncientWarfare3.core.lineage
             return NormalizeSubjectKind(kind);
         }
 
+        public static bool IsMilitaryGovernorate(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            if (GetSubjectKind(pKingdom) ==
+                VassalSubjectKind.MilitaryGovernorate) return true;
+            pKingdom.data.get(LineageKeys.POLICY_GOVERNMENT_STATE, out string state,
+                "default");
+            return string.Equals(state, MilitaryGovernorateRules.GovernmentState,
+                StringComparison.Ordinal);
+        }
+
         public static bool IsTributaryKingdom(Kingdom pKingdom)
         {
             return GetTributarySuzerainId(pKingdom) >= 0;
@@ -807,7 +818,13 @@ namespace AncientWarfare3.core.lineage
                 basicValid,
                 basicValid && MandateRebelService.IsRebelKingdom(pSubject),
                 basicValid && MandateRebelService.IsRebelKingdom(pSuzerain),
-                basicValid && WouldCreateCycle(pSubject, pSuzerain));
+                basicValid && WouldCreateCycle(pSubject, pSuzerain),
+                basicValid && IsVassalKingdom(pSubject),
+                basicValid && GetSubjectKind(pSubject) ==
+                    VassalSubjectKind.MilitaryGovernorate,
+                basicValid && IsVassalKingdom(pSuzerain),
+                basicValid && GetSubjectKind(pSuzerain) ==
+                    VassalSubjectKind.MilitaryGovernorate);
         }
 
         internal static bool WouldCreateVassalCycle(Kingdom pVassal,
@@ -1815,6 +1832,7 @@ namespace AncientWarfare3.core.lineage
                     MilitaryGovernorateSuccessionService.
                         CanReplaceGovernorForReadModel(target);
                 row.can_rename_governorate = directGovernorate;
+                row.can_manage_governorate_territory = directGovernorate;
             }
         }
 
@@ -2685,6 +2703,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(
                 LineageKeys.MILITARY_GOVERNORATE_REPLACEMENT_ALLOWED,
                 false);
+            KingdomPolicyService.SetGovernmentState(pKingdom, "default");
             if (wasMilitaryGovernorate)
                 MilitaryGovernorateAppearanceService.OnProjectionChanged(
                     pKingdom, true, oldSuccessorActorId, false, -1L);
@@ -2808,6 +2827,15 @@ namespace AncientWarfare3.core.lineage
                 HierarchicalVassalMapModeService.MarkHierarchyDirty();
             }
             catch { }
+        }
+
+        internal static void NotifyTerritoryChanged(Kingdom pSubject,
+            Kingdom pSuzerain)
+        {
+            InvalidateRelationPresentation(pSubject);
+            DirtyVassalMap();
+            KingdomStrategyRevisionService.MarkChanged(
+                pSubject?.id ?? -1L, pSuzerain?.id ?? -1L);
         }
     }
 }

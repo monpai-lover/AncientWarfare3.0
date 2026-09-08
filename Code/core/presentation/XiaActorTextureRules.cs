@@ -6,6 +6,8 @@ namespace AncientWarfare3.core.presentation
     public static class XiaActorTextureRules
     {
         public const string KingHeadPath = "heads_special/head_king/head_0";
+        public const string KingHanHeadPath = "heads_special/head_king/head_han";
+        public const string KingHanBodyPath = "king_han";
 
         public const int NoOfficialTier = 0;
         public const int LowOfficialTier = 1;
@@ -73,6 +75,16 @@ namespace AncientWarfare3.core.presentation
         public static string ResolveKingHeadPath()
         {
             return KingHeadPath;
+        }
+
+        public static string ResolveKingHanHeadPath()
+        {
+            return KingHanHeadPath;
+        }
+
+        public static string ResolveKingHanBodyPath()
+        {
+            return KingHanBodyPath;
         }
 
         public static string ResolveWarriorHeadPath(long pActorId)

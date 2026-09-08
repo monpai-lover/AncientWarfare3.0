@@ -155,6 +155,8 @@ namespace AncientWarfare3.core.lineage
             "aw_mandate_rebel_bandit_spawn_last_year";
         public const string MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR =
             "aw_bandit_suppression_until_year";
+        public const string CITY_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR =
+            "aw_city_bandit_suppression_until_year";
         public const string MANDATE_REBEL_BANDIT_ENTRY_CITY_IDS =
             "aw_mandate_rebel_bandit_entry_city_ids";
         public const string MANDATE_REBEL_BANDIT_STRONGHOLD_STATE =

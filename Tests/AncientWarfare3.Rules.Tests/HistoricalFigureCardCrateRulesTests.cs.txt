@@ -68,7 +68,7 @@ internal static class HistoricalFigureCardCrateRulesTests
                     HistoricalFigureCardRarity.Red))
                 ? HistoricalFigureCardRarity.Red
                 : HistoricalFigureCardRarity.Pink,
-            HistoricalFigureCardDrawService.RarityForRoll(26, dividedCards,
+            HistoricalFigureCardDrawService.RarityForRoll(30, dividedCards,
                 globalGold),
             "the roll follows the first available local rarity bucket");
         var reveal = HistoricalFigureCardDrawService.BuildReveal(dividedCards,

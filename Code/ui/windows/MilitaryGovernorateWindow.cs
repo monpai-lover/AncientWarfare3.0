@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui.items;
@@ -16,7 +17,8 @@ namespace AncientWarfare3.ui.windows
         {
             Creation,
             Successor,
-            Replacement
+            Replacement,
+            Administration
         }
 
         private static long _seatCityId = -1;
@@ -56,6 +58,12 @@ namespace AncientWarfare3.ui.windows
             Kingdom pSubject)
         {
             OpenManagement(pSuzerain, pSubject, WindowMode.Replacement);
+        }
+
+        public static void OpenAdministration(Kingdom pSuzerain,
+            Kingdom pSubject)
+        {
+            OpenManagement(pSuzerain, pSubject, WindowMode.Administration);
         }
 
         private static void OpenManagement(Kingdom pSuzerain,
@@ -110,6 +118,11 @@ namespace AncientWarfare3.ui.windows
         private void Refresh()
         {
             ClearList();
+            if (_mode == WindowMode.Administration)
+            {
+                RefreshAdministration();
+                return;
+            }
             if (_mode != WindowMode.Creation)
             {
                 RefreshManagementCandidates();
@@ -141,7 +154,8 @@ namespace AncientWarfare3.ui.windows
             });
             List<MilitaryGovernorateGeneralCandidate> candidates =
                 MilitaryGovernorateCreationService.GetGeneralCandidates(
-                    city.kingdom,
+                    MilitaryGovernorateCreationService.
+                        ResolveSuzerainForSeat(city),
                     MilitaryGovernorateRules.GeneralScanBudget);
             if (candidates.Count == 0)
             {
@@ -179,6 +193,70 @@ namespace AncientWarfare3.ui.windows
                     action = () => Create(actorId)
                 });
             }
+        }
+
+        private void RefreshAdministration()
+        {
+            Kingdom suzerain = FindKingdom(_suzerainKingdomId);
+            Kingdom subject = FindKingdom(_subjectKingdomId);
+            if (suzerain?.data == null || subject?.data == null ||
+                VassalService.GetSuzerain(subject) != suzerain ||
+                VassalService.GetSubjectKind(subject) !=
+                    VassalSubjectKind.MilitaryGovernorate)
+            {
+                AddMessage(AW_L10n.Text(
+                    "aw_military_governorate_failure_invalid_governorate",
+                    "Invalid military governorate."), true);
+                return;
+            }
+            AddItemToList(new WarDecisionTargetRow
+            {
+                is_header = true,
+                text = AW_L10n.Text("aw_military_governorate_manage",
+                    "Manage governorate territory")
+            });
+            List<City> cities = subject.cities == null
+                ? new List<City>()
+                : subject.cities.Where(c => c?.data != null && !c.isRekt())
+                    .OrderBy(c => c.id).ToList();
+            foreach (City city in cities)
+            {
+                bool seat = subject.capital == city;
+                bool canReclaim = MilitaryGovernorateAdministrationService.
+                    CanReclaimCity(suzerain, subject, city);
+                string tooltipDesc = "";
+                if (seat && !canReclaim)
+                    tooltipDesc = AW_L10n.Text(
+                        "aw_military_governorate_failure_already_capital",
+                        "The seat cannot be reclaimed.");
+                AddItemToList(new WarDecisionTargetRow
+                {
+                    text = city.data.name ?? "",
+                    stats = seat ? AW_L10n.Text(
+                        "aw_military_governorate_label_seat", "Seat") :
+                        AW_L10n.Text("aw_military_governorate_marker", "Military command"),
+                    tooltip_title = city.data.name ?? "",
+                    tooltip_desc = tooltipDesc,
+                    button_text = canReclaim ? AW_L10n.Text(
+                        "aw_military_governorate_reclaim_city", "Reclaim") : "",
+                    icon_path = "ui/icons/iconKingdom",
+                    enabled = canReclaim,
+                    sort_order = cities.IndexOf(city),
+                    sort_name = city.data.name ?? "",
+                    action = canReclaim ? () => ReclaimCity(city.id) : null
+                });
+            }
+        }
+
+        private static void ReclaimCity(long pCityId)
+        {
+            AW3CommandResult result =
+                AW3MultiplayerCommandFacade.DispatchFromUi(
+                    AW3CommandRequest.ReclaimMilitaryGovernorateCity(
+                        _suzerainKingdomId, _subjectKingdomId, pCityId));
+            _feedbackKey = result.MessageKey;
+            _feedbackError = result.Status != AW3CommandStatus.Accepted;
+            Instance?.Refresh();
         }
 
         private void RefreshManagementCandidates()
@@ -351,7 +429,8 @@ namespace AncientWarfare3.ui.windows
         private static void Create(long pActorId)
         {
             City city = FindCity(_seatCityId);
-            Kingdom country = city?.kingdom;
+            Kingdom country = MilitaryGovernorateCreationService.
+                ResolveSuzerainForSeat(city);
             if (country?.data == null)
             {
                 _feedbackKey = "aw_military_governorate_failure_invalid_city";

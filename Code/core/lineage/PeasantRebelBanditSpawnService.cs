@@ -23,11 +23,25 @@ namespace AncientWarfare3.core.lineage
 
             var candidates = new List<BanditLoyaltyCityCandidate>();
             var cities = new Dictionary<long, City>();
+            int currentYear = Date.getCurrentYear();
             try
             {
                 foreach (City city in pKingdom.getCities())
                 {
                     if (city?.data == null || city.isRekt()) continue;
+                    // The cooldown is a cheap city-data read.  Skip the
+                    // loyalty lookup and all later candidate work while the
+                    // city's post-suppression timer is still active.
+                    city.data.get(
+                        LineageKeys.CITY_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
+                        out int suppressionUntilYear, int.MinValue);
+                    if (suppressionUntilYear == int.MinValue)
+                        city.data.get(
+                            LineageKeys.MANDATE_REBEL_BANDIT_SUPPRESSION_UNTIL_YEAR,
+                            out suppressionUntilYear, int.MinValue);
+                    if (!PeasantRebelBanditSpawnRules.CanCreateInCity(
+                            currentYear, suppressionUntilYear,
+                            pManualBypass: false)) continue;
                     int loyalty;
                     try { loyalty = city.getLoyalty(); }
                     catch { continue; }

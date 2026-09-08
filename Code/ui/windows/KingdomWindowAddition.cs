@@ -973,8 +973,8 @@ namespace AncientWarfare3.ui.windows
                         bool republic = RepublicGovernmentService.IsRepublic(kingdom);
                         bool mandate = MandateService.IsRuntimeMandateKingdom(kingdom);
                         bool empireRank = KingdomTitleService.IsEmperor(kingdom);
-                        bool militaryGovernorate = VassalService.GetSubjectKind(
-                            kingdom) == VassalSubjectKind.MilitaryGovernorate;
+                        bool militaryGovernorate = VassalService.IsMilitaryGovernorate(
+                            kingdom);
                         bool bandit = PeasantRebelRouteService.IsBandit(kingdom);
                         bool ceremonialEmperor = empireRank || mandate;
                         string key = GovernmentTitleRules.RulerKey(republic);
@@ -1020,8 +1020,8 @@ namespace AncientWarfare3.ui.windows
             if (_heirCol != null && _heirAvatar != null)
             {
                 _heirCol.SetActive(true);
-                bool militaryGovernorate = VassalService.GetSubjectKind(
-                    kingdom) == VassalSubjectKind.MilitaryGovernorate;
+                bool militaryGovernorate = VassalService.IsMilitaryGovernorate(
+                    kingdom);
                 Actor heir = militaryGovernorate
                     ? MilitaryGovernorateSuccessionService.
                         GetDesignatedSuccessorForReadModel(kingdom)

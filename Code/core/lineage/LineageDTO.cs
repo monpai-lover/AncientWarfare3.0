@@ -140,6 +140,7 @@ namespace AncientWarfare3.core.lineage
         public bool can_designate_governorate_successor;
         public bool can_replace_governorate_governor;
         public bool can_rename_governorate;
+        public bool can_manage_governorate_territory;
     }
 
     internal sealed class CentralPowerVassalInfo

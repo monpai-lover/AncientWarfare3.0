@@ -128,5 +128,17 @@ namespace AncientWarfare3.core.lineage
             return pBasicValid && !pSubjectIsRebel && !pSuzerainIsRebel &&
                    !pCycleDetected;
         }
+
+        public static bool CanSetMilitaryGovernorate(bool pBasicValid,
+            bool pSubjectIsRebel, bool pSuzerainIsRebel,
+            bool pCycleDetected, bool pSubjectIsVassal,
+            bool pSubjectIsMilitaryGovernorate, bool pSuzerainIsVassal,
+            bool pSuzerainIsMilitaryGovernorate)
+        {
+            return pBasicValid && !pSubjectIsRebel && !pSuzerainIsRebel &&
+                   !pCycleDetected && !pSubjectIsVassal &&
+                   !pSubjectIsMilitaryGovernorate && !pSuzerainIsVassal &&
+                   !pSuzerainIsMilitaryGovernorate;
+        }
     }
 }

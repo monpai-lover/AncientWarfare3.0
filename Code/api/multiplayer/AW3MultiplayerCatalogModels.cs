@@ -353,7 +353,8 @@ namespace AncientWarfare3.api.multiplayer
         FillCentralCourtVacancies = 37,
         MergeDeJureRegions = 38,
         RenameCounty = 39,
-        RenameCityState = 40
+        RenameCityState = 40,
+        ReclaimMilitaryGovernorateCity = 41
     }
 
     public enum AW3CommandStatus : byte
@@ -697,6 +698,13 @@ namespace AncientWarfare3.api.multiplayer
             targetCountryId: Positive(subjectCountryId,
                 nameof(subjectCountryId)),
             actorId: Positive(governorActorId, nameof(governorActorId)));
+
+        public static AW3CommandRequest ReclaimMilitaryGovernorateCity(
+            long countryId, long subjectCountryId, long cityId) => Create(
+            AW3CommandKind.ReclaimMilitaryGovernorateCity, countryId,
+            targetCountryId: Positive(subjectCountryId,
+                nameof(subjectCountryId)),
+            cityId: Positive(cityId, nameof(cityId)));
 
         public static AW3CommandRequest ApplyCustomCourtTemplate(
             long countryId, string templateId, int templateRevision,

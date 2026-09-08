@@ -24,15 +24,15 @@ namespace AncientWarfare3.content.figures
     public sealed class HistoricalFigureCardRarity : IEquatable<HistoricalFigureCardRarity>
     {
         public static readonly HistoricalFigureCardRarity Gold =
-            new HistoricalFigureCardRarity("gold", "金", "帝统", "#FFD700", 0.0026f);
+            new HistoricalFigureCardRarity("gold", "金", "帝统", "#FFD700", 0.0030f);
         public static readonly HistoricalFigureCardRarity Red =
-            new HistoricalFigureCardRarity("red", "红", "雄主", "#eb4b4b", 0.0064f);
+            new HistoricalFigureCardRarity("red", "红", "雄主", "#eb4b4b", 0.0075f);
         public static readonly HistoricalFigureCardRarity Pink =
-            new HistoricalFigureCardRarity("pink", "粉", "显赫", "#d32ce6", 0.0320f);
+            new HistoricalFigureCardRarity("pink", "粉", "显赫", "#d32ce6", 0.0350f);
         public static readonly HistoricalFigureCardRarity Purple =
-            new HistoricalFigureCardRarity("purple", "紫", "名世", "#8847ff", 0.1598f);
+            new HistoricalFigureCardRarity("purple", "紫", "名世", "#8847ff", 0.1750f);
         public static readonly HistoricalFigureCardRarity Blue =
-            new HistoricalFigureCardRarity("blue", "蓝", "史载", "#4b69ff", 0.7992f);
+            new HistoricalFigureCardRarity("blue", "蓝", "史载", "#4b69ff", 0.7795f);
 
         public static readonly IReadOnlyList<HistoricalFigureCardRarity> All =
             new[] { Gold, Red, Pink, Purple, Blue };

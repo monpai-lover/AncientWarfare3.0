@@ -259,6 +259,17 @@ namespace AncientWarfare3.core.policy
             return true;
         }
 
+        public static bool SetGovernmentState(Kingdom pKingdom,
+            string pGovernmentState)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
+                string.IsNullOrWhiteSpace(pGovernmentState)) return false;
+            pKingdom.data.set(LineageKeys.POLICY_GOVERNMENT_STATE,
+                pGovernmentState.Trim());
+            KingdomPolicyEffectService.Invalidate(pKingdom);
+            return true;
+        }
+
         public static void EnsureInitialized(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;

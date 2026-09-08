@@ -45,8 +45,7 @@ namespace AncientWarfare3.core.lineage
             if (PeasantRebelRouteService.IsBandit(pKingdom))
                 return PeasantRebelBanditStrongholdService.
                     ComposeCeremonialTitle(pKingdom, false);
-            bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
-                                       VassalSubjectKind.MilitaryGovernorate;
+            bool militaryGovernorate = VassalService.IsMilitaryGovernorate(pKingdom);
             if (militaryGovernorate)
                 return AW_L10n.Text("aw_military_governorate_ruler",
                     RulerAppellationRules.LivingMilitaryGovernorate());
@@ -252,8 +251,7 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || pKingdom.isRekt()) return "";
             string stateName = SuccessionDisputeService.GetDisplayName(
                 pKingdom);
-            bool militaryGovernorate = VassalService.GetSubjectKind(pKingdom) ==
-                                       VassalSubjectKind.MilitaryGovernorate;
+            bool militaryGovernorate = VassalService.IsMilitaryGovernorate(pKingdom);
             bool rebel = MandateRebelService.IsRebelKingdom(pKingdom);
             bool originalXia = LineageService.IsXiaKingdom(pKingdom);
             bool displaySuffix = XiaizedKingdomNamingRules.

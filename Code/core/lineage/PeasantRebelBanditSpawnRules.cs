@@ -57,6 +57,11 @@ namespace AncientWarfare3.core.lineage
             bool pSuppressionCompleted)
         {
             if (!pSuppressionCompleted) return int.MinValue;
+            return ResolveCitySuppressionExpiryYear(pCurrentYear);
+        }
+
+        internal static int ResolveCitySuppressionExpiryYear(int pCurrentYear)
+        {
             return pCurrentYear > int.MaxValue - SuppressionCooldownYears
                 ? int.MaxValue
                 : pCurrentYear + SuppressionCooldownYears;

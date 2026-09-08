@@ -111,10 +111,21 @@ namespace AncientWarfare3.patch
                     if (string.Equals(__instance.asset?.id, XiaRace.ID,
                         System.StringComparison.Ordinal))
                     {
-                        __instance.cached_sprite_head =
-                            SpriteTextureLoader.getSprite(
+                        string kingHeadPath = HistoricalFigureCardIdentityService
+                            .IsHanEmperorCardActor(__instance)
+                            ? XiaActorTextureRules.ResolveKingHanHeadPath()
+                            : XiaActorTextureRules.ResolveKingHeadPath();
+                        Sprite kingHead = SpriteTextureLoader.getSprite(
+                            textureAsset.texture_path_base + kingHeadPath);
+                        if (kingHead == null && !string.Equals(kingHeadPath,
+                                XiaActorTextureRules.ResolveKingHeadPath(),
+                                System.StringComparison.Ordinal))
+                        {
+                            kingHead = SpriteTextureLoader.getSprite(
                                 textureAsset.texture_path_base +
                                 XiaActorTextureRules.ResolveKingHeadPath());
+                        }
+                        __instance.cached_sprite_head = kingHead;
                         return false;
                     }
                     path = textureAsset.texture_head_king;

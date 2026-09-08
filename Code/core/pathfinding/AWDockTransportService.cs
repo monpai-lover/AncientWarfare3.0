@@ -61,7 +61,23 @@ namespace AncientWarfare3.core.pathfinding
             EnsureTopology();
             if (TryResolveDockRoute(pStart, pTarget, out pCandidate))
                 return true;
-            return TryResolveShoreFallback(pStart, pTarget, out pCandidate);
+            if (TryResolveShoreFallback(pStart, pTarget, out pCandidate))
+                return true;
+            // Runtime world edits can mark the traversal cache dirty after
+            // the previous transport index was built. The normal rebuild is
+            // deferred while dirty tiles are pending, but a failed live route
+            // must refresh once before being reported unavailable; otherwise
+            // armies can remain stuck while valid docks already exist.
+            if (_topologyDirty)
+            {
+                RebuildTopology();
+                _lastTopologyRebuildFrame = Time.frameCount;
+                if (TryResolveDockRoute(pStart, pTarget, out pCandidate))
+                    return true;
+                if (TryResolveShoreFallback(pStart, pTarget,
+                        out pCandidate)) return true;
+            }
+            return false;
         }
 
         // Compatibility entry point for temporary-boat provisioning. It uses

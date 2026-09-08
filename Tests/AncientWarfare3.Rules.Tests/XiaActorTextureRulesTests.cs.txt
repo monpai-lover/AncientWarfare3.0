@@ -60,6 +60,12 @@ internal static class XiaActorTextureRulesTests
         Equal("heads_warrior/head_0",
             XiaActorTextureRules.ResolveWarriorHeadPath(0L),
             "warriors use the first custom head variant for actor id zero");
+        Equal("heads_special/head_king/head_han",
+            XiaActorTextureRules.ResolveKingHanHeadPath(),
+            "Han emperors use the head_han sprite under the king head set");
+        Equal("king_han",
+            XiaActorTextureRules.ResolveKingHanBodyPath(),
+            "Han emperors use the king_han body directory");
         string warriorHead = XiaActorTextureRules.ResolveWarriorHeadPath(-71L);
         Equal(true,
             warriorHead == "heads_warrior/head_0" ||

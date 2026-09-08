@@ -22,8 +22,13 @@ namespace AncientWarfare3.core.lineage
 
             bool xiaSystem = XiaizationService.GetLevel(pKingdom) >=
                              XiaizationService.LevelXiaizedDynasty;
+            pKingdom.data.get(LineageKeys.MANDATE_AUTHORITY,
+                out int centralPower, 100);
+            if (MilitaryGovernorateRules.ShouldAiReclaim(centralPower) &&
+                TryReclaimOneCity(pKingdom))
+                return;
             bool overLimit = MilitaryGovernorateRules.CanCreate(xiaSystem,
-                pKingdom.countCities(), pKingdom.getMaxCities());
+                pKingdom.countCities(), pKingdom.getMaxCities(), centralPower);
             if (!overLimit)
             {
                 pKingdom.data.set(
@@ -75,6 +80,33 @@ namespace AncientWarfare3.core.lineage
         {
             try { return Date.getCurrentYear(); }
             catch { return -1; }
+        }
+
+        private static bool TryReclaimOneCity(Kingdom pSuzerain)
+        {
+            List<Kingdom> governorates = VassalService.GetVassals(pSuzerain)
+                .FindAll(k => k?.data != null && !k.isRekt() &&
+                    VassalService.GetSubjectKind(k) ==
+                        VassalSubjectKind.MilitaryGovernorate);
+            governorates.Sort((a, b) => a.id.CompareTo(b.id));
+            foreach (Kingdom governorate in governorates)
+            {
+                var cities = new List<City>();
+                if (governorate.cities != null)
+                    foreach (City city in governorate.cities)
+                        if (city?.data != null && !city.isRekt() &&
+                            city != governorate.capital)
+                            cities.Add(city);
+                cities.Sort((a, b) => a.id.CompareTo(b.id));
+                if (cities.Count > 0)
+                    return MilitaryGovernorateAdministrationService.
+                        TryReclaimCity(pSuzerain, governorate, cities[0], out _);
+                if (MilitaryGovernorateAdministrationService.CanEndGovernorate(
+                        pSuzerain, governorate))
+                    return MilitaryGovernorateAdministrationService.
+                        TryEndGovernorate(pSuzerain, governorate, out _);
+            }
+            return false;
         }
     }
 }

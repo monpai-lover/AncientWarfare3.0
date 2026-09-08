@@ -25,6 +25,8 @@ namespace AncientWarfare3.core.multiplayer.commands
                     return DesignateMilitaryGovernorateSuccessor(request);
                 case AW3CommandKind.ReplaceMilitaryGovernorateGovernor:
                     return ReplaceMilitaryGovernorateGovernor(request);
+                case AW3CommandKind.ReclaimMilitaryGovernorateCity:
+                    return ReclaimMilitaryGovernorateCity(request);
                 default:
                     return Invalid();
             }
@@ -86,7 +88,9 @@ namespace AncientWarfare3.core.multiplayer.commands
             City city = FindCity(request.CityId);
             Actor general = FindActor(request.ActorId);
             if (country?.data == null || city?.data == null ||
-                general?.data == null || city.kingdom != country ||
+                general?.data == null ||
+                MilitaryGovernorateCreationService.ResolveSuzerainForSeat(city) !=
+                    country ||
                 general.kingdom != country) return NotFound();
             bool created = MilitaryGovernorateCreationService.TryCreate(
                 city, general, out Kingdom subject, out string reason);
@@ -137,6 +141,24 @@ namespace AncientWarfare3.core.multiplayer.commands
                     governor.data.id)
                 : Rejected("aw_military_governorate_failure_" +
                            (reason ?? "replacement_failed"));
+        }
+
+        private static AW3CommandResult ReclaimMilitaryGovernorateCity(
+            AW3CommandRequest request)
+        {
+            Kingdom suzerain = FindKingdom(request.CountryId);
+            Kingdom subject = FindKingdom(request.TargetCountryId);
+            City city = FindCity(request.CityId);
+            if (suzerain?.data == null || subject?.data == null ||
+                city?.data == null || city.kingdom != subject)
+                return NotFound();
+            bool changed = MilitaryGovernorateAdministrationService.
+                TryReclaimCity(suzerain, subject, city, out string reason);
+            return changed
+                ? AW3CommandResult.Success(
+                    "aw_military_governorate_city_reclaimed", city.id)
+                : Rejected("aw_military_governorate_failure_" +
+                           (reason ?? "reclaim_failed"));
         }
 
         private static Kingdom FindKingdom(long id)

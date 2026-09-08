@@ -60,9 +60,21 @@ namespace AncientWarfare3.patch
 
             if (pKing)
             {
+                string kingHeadPath = actor != null &&
+                    HistoricalFigureCardIdentityService.IsHanEmperorCardActor(actor)
+                    ? XiaActorTextureRules.ResolveKingHanHeadPath()
+                    : XiaActorTextureRules.ResolveKingHeadPath();
                 Sprite kingHead = SpriteTextureLoader.getSprite(
                     tex.texture_path_base +
-                    XiaActorTextureRules.ResolveKingHeadPath());
+                    kingHeadPath);
+                if (kingHead == null && !string.Equals(kingHeadPath,
+                        XiaActorTextureRules.ResolveKingHeadPath(),
+                        System.StringComparison.Ordinal))
+                {
+                    kingHead = SpriteTextureLoader.getSprite(
+                        tex.texture_path_base +
+                        XiaActorTextureRules.ResolveKingHeadPath());
+                }
                 if (kingHead != null) __result = kingHead;
                 return;
             }

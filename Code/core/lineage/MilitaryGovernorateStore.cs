@@ -98,7 +98,7 @@ namespace AncientWarfare3.core.lineage
                         "REPLACEMENT_ALLOWED,ACTIVE," +
                         "END_TIME,END_REASON) VALUES (@state,@relation," +
                         "@subject,@suzerain,@seat,@governor,-1,-1,@name," +
-                        "@year,0,0,1,-1,'')";
+                        "@year,0,1,1,-1,'')";
                     insert.Parameters.AddWithValue("@state", pStateId);
                     insert.Parameters.AddWithValue("@relation", pRelationId);
                     insert.Parameters.AddWithValue("@subject", pSubject.id);
@@ -117,7 +117,7 @@ namespace AncientWarfare3.core.lineage
                 }
 
                 transaction.Commit();
-                Project(pSubject, pStateId, -1L, false);
+                Project(pSubject, pStateId, -1L, true);
                 return true;
             }
             catch (Exception error)
@@ -300,7 +300,7 @@ namespace AncientWarfare3.core.lineage
                 command.CommandText = "UPDATE " +
                     MilitaryGovernorateStateTableItem.GetTableName() +
                     " SET GOVERNOR_ACTOR_ID=@governor,SUCCESSOR_ACTOR_ID=-1," +
-                    "SUCCESSION_STATE=0,REPLACEMENT_ALLOWED=0 " +
+                    "SUCCESSION_STATE=0,REPLACEMENT_ALLOWED=1 " +
                     "WHERE STATE_ID=@state AND ACTIVE=1";
                 command.Parameters.AddWithValue("@governor", pGovernorId);
                 command.Parameters.AddWithValue("@state", pStateId);

@@ -115,9 +115,7 @@ namespace AncientWarfare3.patch
                             System.StringComparison.Ordinal))
                         {
                             __instance.cached_sprite_head =
-                                SpriteTextureLoader.getSprite(
-                                    textureAsset.texture_path_base +
-                                    XiaActorTextureRules.ResolveKingHeadPath());
+                                LoadXiaKingHeadSprite(__instance, textureAsset);
                             return false;
                         }
                         specialPath = textureAsset.texture_head_king;
@@ -210,7 +208,11 @@ namespace AncientWarfare3.patch
                     pPath = textureAsset.texture_path_leader;
                     return !string.IsNullOrEmpty(pPath);
                 case ActorVisualRole.King:
-                    pPath = textureAsset.texture_path_king;
+                    pPath = HistoricalFigureCardIdentityService
+                        .IsHanEmperorCardActor(pActor)
+                        ? textureAsset.texture_path_base +
+                          XiaActorTextureRules.ResolveKingHanBodyPath()
+                        : textureAsset.texture_path_king;
                     return !string.IsNullOrEmpty(pPath);
                 default:
                     return false;
@@ -417,9 +419,8 @@ namespace AncientWarfare3.patch
 
             if (pActor.isKing())
             {
-                pActor.cached_sprite_head = SpriteTextureLoader.getSprite(
-                    textureAsset.texture_path_base +
-                    XiaActorTextureRules.ResolveKingHeadPath());
+                pActor.cached_sprite_head = LoadXiaKingHeadSprite(
+                    pActor, textureAsset);
                 return true;
             }
 
@@ -433,7 +434,12 @@ namespace AncientWarfare3.patch
         private static string ResolveXiaSpecialHeadPath(Actor pActor)
         {
             if (pActor.isKing())
-                return XiaActorTextureRules.ResolveKingHeadPath();
+            {
+                return HistoricalFigureCardIdentityService
+                    .IsHanEmperorCardActor(pActor)
+                    ? XiaActorTextureRules.ResolveKingHanHeadPath()
+                    : XiaActorTextureRules.ResolveKingHeadPath();
+            }
             if (IsXiaHeir(pActor)) return "heads_heir/head_0";
 
             pActor.data.get(LineageKeys.OFFICER_RANK, out int rank,
@@ -452,6 +458,25 @@ namespace AncientWarfare3.patch
             if (!pActor.isWarrior()) return null;
 
             return XiaActorTextureRules.ResolveWarriorHeadPath(pActor.data.id);
+        }
+
+        private static Sprite LoadXiaKingHeadSprite(Actor pActor,
+            ActorTextureSubAsset pTextureAsset)
+        {
+            if (pTextureAsset == null) return null;
+            string preferredPath = HistoricalFigureCardIdentityService
+                .IsHanEmperorCardActor(pActor)
+                ? XiaActorTextureRules.ResolveKingHanHeadPath()
+                : XiaActorTextureRules.ResolveKingHeadPath();
+            Sprite sprite = SpriteTextureLoader.getSprite(
+                pTextureAsset.texture_path_base + preferredPath);
+            if (sprite != null || string.Equals(preferredPath,
+                    XiaActorTextureRules.ResolveKingHeadPath(),
+                    System.StringComparison.Ordinal))
+                return sprite;
+            return SpriteTextureLoader.getSprite(
+                pTextureAsset.texture_path_base +
+                XiaActorTextureRules.ResolveKingHeadPath());
         }
 
         private static bool IsXiaHeir(Actor pActor)

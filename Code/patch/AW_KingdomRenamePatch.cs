@@ -45,8 +45,12 @@ namespace AncientWarfare3.patch
                     StringComparison.Ordinal) &&
                 MilitaryGovernorateStore.TryGetActive(kingdom,
                     out MilitaryGovernorateSnapshot governorateState))
+            {
+                string commandName = MilitaryGovernorateRules.CanonicalCommandName(
+                    committedName, "\u519b");
                 MilitaryGovernorateStore.SetCommandName(
-                    governorateState.StateId, committedName);
+                    governorateState.StateId, commandName);
+            }
             if (AWLocalizedNameProjectionChangeRules.ShouldInvalidate(
                     __state, committedName) &&
                 AWLocalizedNameProjectionRefreshScope.
