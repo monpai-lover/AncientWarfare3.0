@@ -62,8 +62,10 @@ namespace AncientWarfare3.core.presentation
         public static bool UsesHighResolutionBody(string pAssetId, bool pIsKing,
             bool pIsBaby)
         {
-            return pIsKing && !pIsBaby && string.Equals(pAssetId, XiaRace.ID,
-                StringComparison.Ordinal);
+            return XiaHighResolutionTextureRegistry.TryGetAvatarProfile(
+                pAssetId, pIsKing, pIsBaby,
+                out XiaHighResolutionTextureProfile profile) &&
+                   profile.Enabled && profile.ScaleAvatar;
         }
 
         /// <summary>
@@ -73,15 +75,7 @@ namespace AncientWarfare3.core.presentation
         /// </summary>
         public static bool IsHighResolutionTexturePath(string pTexturePath)
         {
-            if (string.IsNullOrEmpty(pTexturePath)) return false;
-            string normalized = pTexturePath.Replace('\\', '/');
-            bool isKingBody = normalized.EndsWith(KingTexturePathSuffix,
-                                       StringComparison.Ordinal) ||
-                              normalized.EndsWith(KingHanTexturePathSuffix,
-                                       StringComparison.Ordinal);
-            return isKingBody
-                   && pTexturePath.IndexOf(XiaRace.ID,
-                       StringComparison.Ordinal) >= 0;
+            return XiaHighResolutionTextureRegistry.IsEnabled(pTexturePath);
         }
 
         /// <summary>
@@ -97,7 +91,19 @@ namespace AncientWarfare3.core.presentation
         public static float ResolveAvatarScale(float pInspectAvatarScale,
             float pAvatarSize)
         {
-            return pInspectAvatarScale * pAvatarSize / BodyResolutionFactor;
+            return ResolveAvatarScale(pInspectAvatarScale, pAvatarSize,
+                BodyResolutionFactor);
+        }
+
+        public static float ResolveAvatarScale(float pInspectAvatarScale,
+            float pAvatarSize, float pResolutionFactor)
+        {
+            float factor = pResolutionFactor > 0f &&
+                           !float.IsNaN(pResolutionFactor) &&
+                           !float.IsInfinity(pResolutionFactor)
+                ? pResolutionFactor
+                : BodyResolutionFactor;
+            return pInspectAvatarScale * pAvatarSize / factor;
         }
     }
 }

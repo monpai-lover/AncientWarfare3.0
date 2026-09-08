@@ -30,8 +30,8 @@ namespace AncientWarfare3.patch
     {
         // 身体帧精灵的引用集合。createFinalSprite 只拿得到身体精灵,
         // 拿不到 Actor 也拿不到路径,所以在动画容器加载时把它们记下来。
-        private static readonly HashSet<Sprite> HighResolutionBodies =
-            new HashSet<Sprite>();
+        private static readonly Dictionary<Sprite, float> HighResolutionBodies =
+            new Dictionary<Sprite, float>();
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ActorAnimationLoader), "createAnimationContainer")]
@@ -39,14 +39,18 @@ namespace AncientWarfare3.patch
             AnimationContainerUnit __result)
         {
             if (__result == null ||
-                !XiaKingScaleRules.IsHighResolutionTexturePath(pTexturePath))
+                !XiaHighResolutionTextureRegistry.TryGet(pTexturePath,
+                    out XiaHighResolutionTextureProfile profile) ||
+                !profile.Enabled || profile.ResolutionFactor <= 1f)
                 return;
 
-            RegisterBodies(__result);
-            ScaleDownFrameOffsets(__result);
+            RegisterBodies(__result, profile.ResolutionFactor);
+            if (profile.ScaleFrameOffsets)
+                ScaleDownFrameOffsets(__result, profile.ResolutionFactor);
         }
 
-        private static void RegisterBodies(AnimationContainerUnit pContainer)
+        private static void RegisterBodies(AnimationContainerUnit pContainer,
+            float pResolutionFactor)
         {
             if (pContainer.sprites == null) return;
             lock (HighResolutionBodies)
@@ -54,7 +58,7 @@ namespace AncientWarfare3.patch
                 foreach (KeyValuePair<string, Sprite> entry in pContainer.sprites)
                 {
                     if (entry.Value != null)
-                        HighResolutionBodies.Add(entry.Value);
+                        HighResolutionBodies[entry.Value] = pResolutionFactor;
                 }
             }
         }
@@ -64,10 +68,12 @@ namespace AncientWarfare3.patch
         ///     容器每条路径只创建一次(ActorAnimationLoader._dict_units 缓存),
         ///     所以不会重复缩小。
         /// </summary>
-        private static void ScaleDownFrameOffsets(AnimationContainerUnit pContainer)
+        private static void ScaleDownFrameOffsets(
+            AnimationContainerUnit pContainer, float pResolutionFactor)
         {
             if (pContainer.dict_frame_data == null) return;
-            const float factor = XiaKingScaleRules.BodyResolutionFactor;
+            if (pResolutionFactor <= 1f) return;
+            float factor = pResolutionFactor;
             foreach (KeyValuePair<string, AnimationFrameData> entry in
                      pContainer.dict_frame_data)
             {
@@ -93,19 +99,22 @@ namespace AncientWarfare3.patch
             ref Sprite __result)
         {
             if (__result == null || pMain == null) return;
+            float factor;
             lock (HighResolutionBodies)
             {
-                if (!HighResolutionBodies.Contains(pMain)) return;
+                if (!HighResolutionBodies.TryGetValue(pMain, out factor))
+                    return;
             }
 
             Rect rect = __result.rect;
             if (rect.width <= 0f || rect.height <= 0f) return;
+            if (factor <= 1f) return;
 
             Vector2 normalizedPivot = new Vector2(
                 __result.pivot.x / rect.width,
                 __result.pivot.y / rect.height);
             Sprite scaled = Sprite.Create(__result.texture, rect,
-                normalizedPivot, XiaKingScaleRules.BodyResolutionFactor);
+                normalizedPivot, factor);
             scaled.name = __result.name;
             __result = scaled;
         }

@@ -39,11 +39,12 @@ namespace AncientWarfare3.patch
         {
             if (__instance == null || __instance._died) return;
             ActorAvatarData data = __instance.getData();
-            if (!XiaKingScaleRules.UsesHighResolutionBody(data?.asset?.id,
-                    data?.is_king ?? false, !(data?.is_adult ?? true))) return;
+            if (!TryGetAvatarProfile(__instance,
+                    out XiaHighResolutionTextureProfile profile)) return;
 
             float scale = XiaKingScaleRules.ResolveAvatarScale(
-                data.asset.inspect_avatar_scale, __instance.avatarSize);
+                data.asset.inspect_avatar_scale, __instance.avatarSize,
+                profile.ResolutionFactor);
             __instance.transform.localScale = new Vector3(scale, scale, 0f);
 
             // 原版把边框反向缩放以保持它在屏幕上大小恒定
@@ -81,14 +82,13 @@ namespace AncientWarfare3.patch
             if (!isActor && !ReferenceEquals(pImage, __instance._item_image))
                 return;
 
-            ActorAvatarData data = __instance.getData();
-            if (!XiaKingScaleRules.UsesHighResolutionBody(data?.asset?.id,
-                    data?.is_king ?? false, !(data?.is_adult ?? true))) return;
+            if (!TryGetAvatarProfile(__instance,
+                    out XiaHighResolutionTextureProfile profile)) return;
 
             RectTransform rt = pImage.rectTransform;
             Vector2 pos = rt.anchoredPosition;
-            float x = pos.x * XiaKingScaleRules.BodyResolutionFactor;
-            float y = pos.y * XiaKingScaleRules.BodyResolutionFactor -
+            float x = pos.x * profile.ResolutionFactor;
+            float y = pos.y * profile.ResolutionFactor -
                       XiaKingScaleRules.InspectPortraitOffsetY;
 
             if (!isActor)
@@ -97,10 +97,21 @@ namespace AncientWarfare3.patch
                 // sizeDelta(:487),整个头像又被 ÷4 —— 身体是 4× 帧缩完刚好,
                 // 手持物是 1× 帧就被白缩了四倍,尺寸要乘回来。
                 // pivot 是归一化的,放大绕 pivot 进行,不影响这里定好的位置。
-                rt.sizeDelta *= XiaKingScaleRules.BodyResolutionFactor;
+                rt.sizeDelta *= profile.ResolutionFactor;
             }
 
             rt.anchoredPosition = new Vector2(x, y);
+        }
+
+        private static bool TryGetAvatarProfile(UnitAvatarLoader pLoader,
+            out XiaHighResolutionTextureProfile pProfile)
+        {
+            pProfile = null;
+            ActorAvatarData data = pLoader?.getData();
+            if (data?.asset == null) return false;
+            return XiaHighResolutionTextureRegistry.TryGetAvatarProfile(
+                data.asset.id, data.is_king, !(data.is_adult),
+                out pProfile);
         }
     }
 }

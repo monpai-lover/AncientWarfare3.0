@@ -54,10 +54,11 @@ git commit -m "Add centralized Xia high-resolution texture registry"
 **Files:**
 - Create: `Tests/AncientWarfare3.Rules.Tests/XiaHighResolutionTextureRegistryTests.cs.txt`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj`
+- Modify: `Tests/AncientWarfare3.Rules.Tests/Program.cs.txt`
 
 - [ ] **Step 1: 编写失败测试**
 
-`Run()` 断言：反斜杠和首尾分隔符能命中 `king_han`、倍率为 4；未知 `leader_1` 未启用；未登记路径不能 `SetEnabled`；禁用/恢复 `king_han` 生效；重复注册 `test` 更新倍率和开关；未知路径使用 fallback；非 Xia、幼年国王不返回头像 profile，成年 Xia 国王返回 profile。另用 `ExpectThrows` 验证空路径和 0 倍率抛出 `ArgumentException`。测试工程链接新 registry 源文件。
+`Run()` 断言：反斜杠和首尾分隔符能命中 `king_han`、倍率为 4；未知 `leader_1` 未启用；未登记路径不能 `SetEnabled`；禁用/恢复 `king_han` 生效；重复注册 `test` 更新倍率和开关；未知路径使用 fallback；非 Xia、幼年国王不返回头像 profile，成年 Xia 国王返回 profile。另用 `ExpectThrows` 验证空路径和 0 倍率抛出 `ArgumentException`。测试工程链接新 registry 源文件，并在 `Program.cs.txt` 调用 `XiaHighResolutionTextureRegistryTests.Run()`。
 
 - [ ] **Step 2: 运行测试确认先失败，再实现后重跑**
 

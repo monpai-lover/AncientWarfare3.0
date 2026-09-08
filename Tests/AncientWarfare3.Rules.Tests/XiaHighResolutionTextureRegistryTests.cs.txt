@@ -1,0 +1,98 @@
+using System;
+using AncientWarfare3.core.presentation;
+
+internal static class XiaHighResolutionTextureRegistryTests
+{
+    public static void Run()
+    {
+        Equal(true,
+            XiaHighResolutionTextureRegistry.TryGet(
+                "\\actors\\species\\civs\\Xia\\king_han/",
+                out XiaHighResolutionTextureProfile han),
+            "normalized Han path is registered");
+        Equal(4f, han.ResolutionFactor,
+            "Han profile keeps the default four-times factor");
+        Equal(true, han.ScaleAvatar,
+            "Han profile scales avatars by default");
+        Equal(true,
+            XiaHighResolutionTextureRegistry.IsEnabled(
+                "/actors/species/civs/Xia/king/"),
+            "normalized generic king path is enabled");
+        Equal(false,
+            XiaHighResolutionTextureRegistry.IsEnabled(
+                "actors/species/civs/Xia/leader_1"),
+            "unknown Xia paths stay on vanilla scaling");
+        Equal(false,
+            XiaHighResolutionTextureRegistry.SetEnabled(
+                "actors/species/civs/Xia/leader_1", true),
+            "unknown paths cannot be toggled");
+
+        Equal(true,
+            XiaHighResolutionTextureRegistry.SetEnabled(
+                "actors/species/civs/Xia/king_han", false),
+            "registered paths can be disabled");
+        Equal(false,
+            XiaHighResolutionTextureRegistry.IsEnabled(
+                "actors/species/civs/Xia/king_han"),
+            "disabled profile is not reported as enabled");
+        Equal(true,
+            XiaHighResolutionTextureRegistry.SetEnabled(
+                "actors/species/civs/Xia/king_han", true),
+            "disabled profiles can be restored");
+
+        XiaHighResolutionTextureRegistry.Register(
+            "actors/species/civs/Xia/test", 2f, false, true, true);
+        XiaHighResolutionTextureRegistry.Register(
+            "actors/species/civs/Xia/test", 3f, true, false, true);
+        Equal(3f,
+            XiaHighResolutionTextureRegistry.ResolveFactor(
+                "actors/species/civs/Xia/test", 1f),
+            "duplicate registration updates the existing profile");
+        Equal(1f,
+            XiaHighResolutionTextureRegistry.ResolveFactor(
+                "actors/species/civs/Xia/unknown", 1f),
+            "unknown paths use the caller fallback factor");
+
+        Equal(false,
+            XiaHighResolutionTextureRegistry.TryGetAvatarProfile(
+                "Human", true, false, out _),
+            "non-Xia avatar has no high-resolution profile");
+        Equal(true,
+            XiaHighResolutionTextureRegistry.TryGetAvatarProfile(
+                "Xia", true, false, out _),
+            "adult Xia king avatar uses a high-resolution profile");
+        Equal(false,
+            XiaHighResolutionTextureRegistry.TryGetAvatarProfile(
+                "Xia", true, true, out _),
+            "baby Xia king avatar keeps vanilla scaling");
+
+        ExpectThrows<ArgumentException>(() =>
+            XiaHighResolutionTextureRegistry.Register("", 4f),
+            "empty paths are rejected");
+        ExpectThrows<ArgumentOutOfRangeException>(() =>
+            XiaHighResolutionTextureRegistry.Register("x", 0f),
+            "non-positive factors are rejected");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void ExpectThrows<TException>(Action pAction,
+        string pMessage) where TException : Exception
+    {
+        try
+        {
+            pAction();
+        }
+        catch (TException)
+        {
+            return;
+        }
+        throw new InvalidOperationException(
+            $"{pMessage}: expected {typeof(TException).Name}");
+    }
+}

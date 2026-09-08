@@ -882,6 +882,7 @@ if (args.Length == 1 && args[0] == "--kingdom-founder-safety")
 HistoricalWriteModeRulesTests.Run();
 AWThirdPartySchedulerFaultRulesTests.Run();
 ActorVisualRoleRulesTests.Run();
+XiaHighResolutionTextureRegistryTests.Run();
 MilitaryGovernorateCourtRulesTests.Run();
 if (args.Length == 1 &&
     args[0] == "--diplomatic-war-treaty-gate")
