@@ -40,22 +40,14 @@ foreach ($dir in $productionDirectories) {
     $dst = Join-Path $DestinationRoot $dir
     # GameResources may contain user-added assets that are intentionally not
     # tracked in the source worktree (for example custom Han emperor skins).
-    # Keep those files during deployment. Assemblies are produced under bin/
-    # by the build and must never be mirrored from the normally-empty source
-    # Assemblies directory.
+    # Keep those files during deployment. This mod is compiled from Code/ by
+    # NeoModLoader at runtime, so deployment must preserve dependency assemblies
+    # and must not copy the locally built AncientWarfare3.dll into the mod.
     if ($dir -eq 'GameResources') {
         robocopy $src $dst /E /XD bin obj /XF *.pdb /NFL /NDL /NJH /NJS /NP | Out-Null
     }
     elseif ($dir -eq 'Assemblies') {
-        $builtAssembly = Join-Path $SourceRoot 'bin\Debug\net48\AncientWarfare3.dll'
-        if (Test-Path -LiteralPath $builtAssembly) {
-            New-Item -ItemType Directory -Path $dst -Force | Out-Null
-            Copy-Item -LiteralPath $builtAssembly -Destination $dst -Force
-            Write-Output "Copied built assembly: AncientWarfare3.dll"
-        }
-        else {
-            Write-Output "SKIP missing built assembly: $builtAssembly"
-        }
+        Write-Output "Preserved: Assemblies (runtime dependencies only)"
     }
     else {
         robocopy $src $dst /MIR /XD bin obj /XF *.pdb /NFL /NDL /NJH /NJS /NP | Out-Null
