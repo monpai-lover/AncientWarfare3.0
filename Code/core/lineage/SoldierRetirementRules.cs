@@ -2,7 +2,7 @@ namespace AncientWarfare3.core.lineage
 {
     public static class SoldierRetirementRules
     {
-        public const float HardRetirementAge = 65f;
+        public const float HardRetirementAge = 75f;
 
         public static bool IsOrdinaryServiceAgeAllowed(float age)
         {

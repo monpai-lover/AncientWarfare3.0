@@ -169,17 +169,17 @@ internal static class Regression20260721Tests
                         "PeasantRebelRouteService.CanAcquireCity("),
             "direct captured-city transfers also use the vassal recipient rule");
 
-        Equal(true, SoldierRetirementRules.IsOrdinaryServiceAgeAllowed(64f),
-            "a person below sixty-five may perform ordinary military service");
-        Equal(false, SoldierRetirementRules.IsOrdinaryServiceAgeAllowed(65f),
-            "sixty-five is the hard upper limit for ordinary military service");
+        Equal(true, SoldierRetirementRules.IsOrdinaryServiceAgeAllowed(74f),
+            "a person below seventy-five may perform ordinary military service");
+        Equal(false, SoldierRetirementRules.IsOrdinaryServiceAgeAllowed(75f),
+            "seventy-five is the hard upper limit for ordinary military service");
         Equal(true, SoldierRetirementRules.HasReachedHardRetirementAge(101f),
             "centenarian ordinary soldiers must retire regardless of lifespan bonuses");
         Equal(true, SoldierRetirementRules.ShouldDeferTemporaryServiceRetirement(
-                temporaryService: true, age: 64f),
+                temporaryService: true, age: 74f),
             "temporary soldiers below the hard age remain mobilized until demobilization");
         Equal(false, SoldierRetirementRules.ShouldDeferTemporaryServiceRetirement(
-                temporaryService: true, age: 65f),
+                temporaryService: true, age: 75f),
             "temporary service cannot exempt a soldier from the hard retirement age");
         Equal(false, SoldierRetirementRules.CanConsiderForRetirement(
                 isSupportedActor: true, isRekt: false, isWarrior: true,

@@ -28,6 +28,21 @@ internal static class XiaHighResolutionTextureRegistryTests
             "unknown paths cannot be toggled");
 
         Equal(true,
+            XiaHighResolutionTextureRegistry.TryGet(
+                "actors/species/civs/Xia/male_4",
+                out XiaHighResolutionTextureProfile male4),
+            "male_4 high-resolution body is registered");
+        Equal(4f, male4.ResolutionFactor,
+            "male_4 keeps the four-times body factor");
+        Equal(true,
+            XiaHighResolutionTextureRegistry.TryGetBoundHeadPath(
+                "actors/species/civs/Xia/male_4",
+                out string male4Head),
+            "male_4 exposes a bound head path");
+        Equal("actors/species/civs/Xia/male_4/head_male", male4Head,
+            "male_4 resolves to its matching head sprite");
+
+        Equal(true,
             XiaHighResolutionTextureRegistry.SetEnabled(
                 "actors/species/civs/Xia/king_han", false),
             "registered paths can be disabled");

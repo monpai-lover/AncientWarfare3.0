@@ -109,6 +109,20 @@ namespace AncientWarfare3.patch
             pProfile = null;
             ActorAvatarData data = pLoader?.getData();
             if (data?.asset == null) return false;
+            try
+            {
+                Actor actor = World.world?.units?.get(data.actor_id);
+                if (actor != null &&
+                    XiaHighResolutionTextureRegistry.TryGet(
+                        actor.getUnitTexturePath(),
+                        out XiaHighResolutionTextureProfile actorProfile) &&
+                    actorProfile.Enabled && actorProfile.ScaleAvatar)
+                {
+                    pProfile = actorProfile;
+                    return true;
+                }
+            }
+            catch { }
             return XiaHighResolutionTextureRegistry.TryGetAvatarProfile(
                 data.asset.id, data.is_king, !(data.is_adult),
                 out pProfile);

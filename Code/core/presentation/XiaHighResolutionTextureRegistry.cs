@@ -15,10 +15,19 @@ namespace AncientWarfare3.core.presentation
         public bool ScaleAvatar { get; }
         public bool ScaleFrameOffsets { get; }
         public bool Enabled { get; }
+        public string BoundHeadPath { get; }
 
         public XiaHighResolutionTextureProfile(string pPath,
             float pResolutionFactor, bool pScaleAvatar,
             bool pScaleFrameOffsets, bool pEnabled)
+            : this(pPath, pResolutionFactor, pScaleAvatar,
+                pScaleFrameOffsets, pEnabled, null)
+        {
+        }
+
+        public XiaHighResolutionTextureProfile(string pPath,
+            float pResolutionFactor, bool pScaleAvatar,
+            bool pScaleFrameOffsets, bool pEnabled, string pBoundHeadPath)
         {
             if (string.IsNullOrWhiteSpace(pPath))
                 throw new ArgumentException("高清贴图路径不能为空。", nameof(pPath));
@@ -35,6 +44,10 @@ namespace AncientWarfare3.core.presentation
             ScaleAvatar = pScaleAvatar;
             ScaleFrameOffsets = pScaleFrameOffsets;
             Enabled = pEnabled;
+            BoundHeadPath = string.IsNullOrWhiteSpace(pBoundHeadPath)
+                ? string.Empty
+                : XiaHighResolutionTextureRegistry.NormalizePath(
+                    pBoundHeadPath);
         }
     }
 
@@ -54,16 +67,18 @@ namespace AncientWarfare3.core.presentation
         {
             Register(DefaultKingBodyPath);
             Register("actors/species/civs/Xia/king_han");
+            Register("actors/species/civs/Xia/male_4", 4f,
+                pBoundHeadPath: "actors/species/civs/Xia/male_4/head_male");
         }
 
         public static void Register(string pPath, float pResolutionFactor = 4f,
             bool pScaleAvatar = true, bool pScaleFrameOffsets = true,
-            bool pEnabled = true)
+            bool pEnabled = true, string pBoundHeadPath = null)
         {
             string path = NormalizePath(pPath);
             var profile = new XiaHighResolutionTextureProfile(path,
                 pResolutionFactor, pScaleAvatar, pScaleFrameOffsets,
-                pEnabled);
+                pEnabled, pBoundHeadPath);
             lock (RegistrationGate)
             {
                 var next = new Dictionary<string,
@@ -91,7 +106,8 @@ namespace AncientWarfare3.core.presentation
                 {
                     [path] = new XiaHighResolutionTextureProfile(path,
                         current.ResolutionFactor, current.ScaleAvatar,
-                        current.ScaleFrameOffsets, pEnabled)
+                        current.ScaleFrameOffsets, pEnabled,
+                        current.BoundHeadPath)
                 };
                 Volatile.Write(ref _profiles, next);
                 return true;
@@ -120,6 +136,18 @@ namespace AncientWarfare3.core.presentation
                    profile.Enabled
                 ? profile.ResolutionFactor
                 : pFallback;
+        }
+
+        public static bool TryGetBoundHeadPath(string pBodyPath,
+            out string pHeadPath)
+        {
+            pHeadPath = string.Empty;
+            if (!TryGet(pBodyPath,
+                    out XiaHighResolutionTextureProfile profile) ||
+                !profile.Enabled || string.IsNullOrEmpty(profile.BoundHeadPath))
+                return false;
+            pHeadPath = profile.BoundHeadPath;
+            return true;
         }
 
         public static bool TryGetAvatarProfile(string pAssetId, bool pIsKing,

@@ -48,6 +48,8 @@ namespace AncientWarfare3.patch
                 return ApplyBanditKingHead(__instance);
             if (ShouldUseBanditHead(__instance))
                 return ApplyBanditHead(__instance);
+            if (TryApplyBoundHighResolutionHead(__instance))
+                return false;
             ActorVisualRole role = ActorVisualRoleResolver.Resolve(__instance);
             if (role == ActorVisualRole.Default)
                 return !TryApplyXiaSpecialHead(__instance);
@@ -480,6 +482,32 @@ namespace AncientWarfare3.patch
             if (!pActor.isWarrior()) return null;
 
             return XiaActorTextureRules.ResolveWarriorHeadPath(pActor.data.id);
+        }
+
+        private static bool TryApplyBoundHighResolutionHead(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.asset == null ||
+                pActor.isEgg() || pActor.isBaby() || !pActor.isSexMale())
+                return false;
+            string bodyPath;
+            try { bodyPath = pActor.getUnitTexturePath(); }
+            catch { return false; }
+            if (!XiaHighResolutionTextureRegistry.TryGetBoundHeadPath(
+                    bodyPath, out string headPath))
+                return false;
+            if (!pActor.dirty_sprite_head) return true;
+
+            pActor.dirty_sprite_head = false;
+            AnimationContainerUnit container = pActor.animation_container;
+            if (pActor.frame_data == null || !pActor.frame_data.show_head ||
+                container == null || container.heads == null ||
+                container.heads.Length == 0 || pActor.isEgg())
+                return true;
+            Sprite head = SpriteTextureLoader.getSprite(headPath);
+            if (head == null) return false;
+            pActor.data.head = 0;
+            pActor.cached_sprite_head = head;
+            return true;
         }
 
         private static Sprite LoadXiaKingHeadSprite(Actor pActor,
