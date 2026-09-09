@@ -13,6 +13,10 @@ Require-Text $cycle 'CivilServiceExamService.OnKingdomYear' 'civil exam dispatch
 Require-Text $cycle 'MilitaryExamService.OnKingdomYear' 'military exam dispatch'
 Require-Text $cycle 'ExamCycleRules.IsCycleYear' 'shared cycle gate'
 Require-Text $cycle 'ExamCycleRules.IdempotencyKey' 'shared idempotency key'
+$military = Read-Source 'Code/core/court/MilitaryExamService.cs'
+$militaryPersistence = Read-Source 'Code/core/court/MilitaryExamPersistence.cs'
+Require-Text $military 'PopulateCandidates' 'military candidate generation'
+Require-Text $militaryPersistence 'MilitaryExamCandidateTableItem.GetTableName()' 'military candidate persistence'
 Require-Text $annual 'ExamCycleService.OnKingdomYear' 'annual shared entry point'
 $run = [regex]::Match($annual, 'private static void RunStateGovernmentExam\(Kingdom pKingdom\)(?<body>[\s\S]*?)\n        }')
 if (-not $run.Success) { throw 'RunStateGovernmentExam body not found' }

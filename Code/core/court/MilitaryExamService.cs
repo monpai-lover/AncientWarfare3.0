@@ -43,6 +43,7 @@ namespace AncientWarfare3.core.court
                 OpenWorldDay = openDay,
                 NextDueWorldDay = openDay,
                 HostRulerId = pKingdom.king?.data?.id ?? -1L,
+                CandidateCursor = 0,
                 GeneralTarget = generalTarget,
                 LocalTarget = localTarget,
                 GeneralVacancies = generalVacancies,
@@ -51,7 +52,82 @@ namespace AncientWarfare3.core.court
                 AdmissionQuota = generalVacancies + localVacancies + reserveTarget,
                 UpdatedTime = LineageService.CurTime()
             };
-            MilitaryExamPersistence.TryCreateSession(DB, session);
+            if (MilitaryExamPersistence.TryCreateSession(DB, session))
+                PopulateCandidates(pKingdom, session);
+        }
+
+        private static void PopulateCandidates(Kingdom pKingdom,
+            MilitaryExamSessionRecord pSession)
+        {
+            if (pKingdom?.data == null || pSession == null || pSession.Id < 0L) return;
+            int target = Math.Min(64, Math.Max(0, pSession.ReserveTarget));
+            if (target == 0) return;
+            var candidates = new List<MilitaryExamCandidateRecord>();
+            try
+            {
+                foreach (Actor actor in pKingdom.getUnits())
+                {
+                    if (actor?.data == null || actor.kingdom != pKingdom ||
+                        actor.isRekt() || !actor.isAlive() || !actor.isSexMale() ||
+                        !actor.isAdult() || actor.getAge() >= MilitaryExamRules.RetirementAge ||
+                        actor.isKing() || HeirService.PeekRegisteredHeir(pKingdom) == actor ||
+                        FeudatoryService.IsActivePrince(actor) ||
+                        SlaveService.IsSlave(actor) || GeneralService.IsGeneral(actor) ||
+                        IsArmyCaptain(actor)) continue;
+                    int warfare = Stat(actor, "warfare");
+                    int damage = Stat(actor, "damage");
+                    int strength = Stat(actor, "strength");
+                    int speed = Stat(actor, "speed");
+                    int diplomacy = Stat(actor, "diplomacy");
+                    int merit = Math.Max(0, Math.Min(100, GeneralService.GetMerit(actor)));
+                    candidates.Add(new MilitaryExamCandidateRecord
+                    {
+                        SessionId = pSession.Id,
+                        KingdomId = pKingdom.id,
+                        ActorId = actor.data.id,
+                        ActorName = actor.getName() ?? "",
+                        HomeCityId = actor.city?.data?.id ?? -1L,
+                        HomeCityName = actor.city?.data?.name ?? "",
+                        AgeSnapshot = Math.Max(0, (int)Math.Round((double)actor.getAge())),
+                        WarfareScore = warfare,
+                        DamageScore = damage,
+                        StrengthScore = strength,
+                        SpeedScore = speed,
+                        DiplomacyScore = diplomacy,
+                        MilitaryMeritScore = merit,
+                        TotalScore = MilitaryExamRules.Score(warfare, damage, strength,
+                            speed, diplomacy, merit),
+                        UpdatedTime = LineageService.CurTime()
+                    });
+                }
+            }
+            catch { return; }
+            candidates.Sort((left, right) =>
+            {
+                int score = right.TotalScore.CompareTo(left.TotalScore);
+                return score != 0 ? score : left.ActorId.CompareTo(right.ActorId);
+            });
+            if (candidates.Count > target) candidates.RemoveRange(target,
+                candidates.Count - target);
+            MilitaryExamPersistence.InsertCandidates(DB, candidates);
+        }
+
+        private static bool IsArmyCaptain(Actor pActor)
+        {
+            try { if (pActor.isArmyGroupLeader()) return true; } catch { }
+            try { return pActor.hasArmy() && pActor.army?.getCaptain() == pActor; }
+            catch { return false; }
+        }
+
+        private static int Stat(Actor pActor, string pKey)
+        {
+            try
+            {
+                float value = pActor.stats?[pKey] ?? 0f;
+                if (float.IsNaN(value) || float.IsInfinity(value)) return 0;
+                return Math.Max(0, Math.Min(100, (int)Math.Round(value)));
+            }
+            catch { return 0; }
         }
 
         private static bool TryResolveDemand(Kingdom pKingdom,
@@ -95,7 +171,7 @@ namespace AncientWarfare3.core.court
                 localTarget, 0, lockedLocal);
             reserveTarget = (generalTarget + localTarget) > 0
                 ? MilitaryExamRules.CandidateReserveTarget(
-                    generalVacancies, localVacancies, hasMilitaryEstablishment: true)
+                    generalVacancies, localVacancies, hasMilitaryOrganization: true)
                 : 0;
             return true;
         }

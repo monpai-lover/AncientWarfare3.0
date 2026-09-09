@@ -33,6 +33,7 @@ foreach ($field in @('session_id', 'actor_id', 'age_snapshot', 'warfare_score',
         'appointment_status')) {
     Require-Text $candidate $field "candidate field $field"
 }
+Require-Text $candidate 'total_score' 'candidate total score'
 
 Require-Text $officer '[TableDef("MilitaryOfficerRecord")]' 'officer table'
 foreach ($field in @('actor_id', 'kingdom_id', 'tier', 'slot_key', 'city_id',

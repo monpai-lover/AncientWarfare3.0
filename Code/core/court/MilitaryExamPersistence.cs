@@ -27,10 +27,35 @@ namespace AncientWarfare3.core.court
         public double UpdatedTime = -1d;
     }
 
+    internal sealed class MilitaryExamCandidateRecord
+    {
+        public long Id = -1L;
+        public long SessionId = -1L;
+        public long KingdomId = -1L;
+        public long ActorId = -1L;
+        public string ActorName = "";
+        public long HomeCityId = -1L;
+        public string HomeCityName = "";
+        public int AgeSnapshot = -1;
+        public int WarfareScore = -1;
+        public int DamageScore = -1;
+        public int StrengthScore = -1;
+        public int SpeedScore = -1;
+        public int DiplomacyScore = -1;
+        public int MilitaryMeritScore = -1;
+        public int TotalScore = -1;
+        public string Qualification = "none";
+        public string AppointmentTier = "none";
+        public string AppointmentStatus = "pending";
+        public double UpdatedTime = -1d;
+    }
+
     internal static class MilitaryExamPersistence
     {
         private static readonly string SessionTable =
             MilitaryExamSessionTableItem.GetTableName();
+        private static readonly string CandidateTable =
+            MilitaryExamCandidateTableItem.GetTableName();
 
         public static bool TryCreateSession(SQLiteConnection pDb,
             MilitaryExamSessionRecord pSession)
@@ -86,10 +111,67 @@ namespace AncientWarfare3.core.court
             finally { transaction?.Dispose(); }
         }
 
+        public static bool InsertCandidates(SQLiteConnection pDb,
+            System.Collections.Generic.IReadOnlyList<MilitaryExamCandidateRecord> pCandidates)
+        {
+            if (pDb == null || pCandidates == null || pCandidates.Count == 0) return true;
+            SQLiteTransaction transaction = null;
+            try
+            {
+                transaction = pDb.BeginTransaction();
+                foreach (MilitaryExamCandidateRecord candidate in pCandidates)
+                {
+                    if (candidate == null || candidate.SessionId < 0L || candidate.ActorId < 0L) continue;
+                    if (candidate.Id < 0L) candidate.Id = NextCandidateId(pDb, transaction);
+                    using var command = new SQLiteCommand(pDb) { Transaction = transaction };
+                    command.CommandText = "INSERT OR IGNORE INTO " + CandidateTable +
+                        " (ID,SESSION_ID,KINGDOM_ID,ACTOR_ID,ACTOR_NAME,HOME_CITY_ID," +
+                        "HOME_CITY_NAME,AGE_SNAPSHOT,WARFARE_SCORE,DAMAGE_SCORE," +
+                        "STRENGTH_SCORE,SPEED_SCORE,DIPLOMACY_SCORE,MILITARY_MERIT_SCORE," +
+                        "TOTAL_SCORE,QUALIFICATION,APPOINTMENT_TIER,APPOINTMENT_STATUS," +
+                        "UPDATED_TIME) VALUES (@id,@session,@kingdom,@actor,@name,@city," +
+                        "@city_name,@age,@warfare,@damage,@strength,@speed,@diplomacy," +
+                        "@merit,@total,@qualification,@tier,@status,@time)";
+                    command.Parameters.AddWithValue("@id", candidate.Id);
+                    command.Parameters.AddWithValue("@session", candidate.SessionId);
+                    command.Parameters.AddWithValue("@kingdom", candidate.KingdomId);
+                    command.Parameters.AddWithValue("@actor", candidate.ActorId);
+                    command.Parameters.AddWithValue("@name", candidate.ActorName ?? "");
+                    command.Parameters.AddWithValue("@city", candidate.HomeCityId);
+                    command.Parameters.AddWithValue("@city_name", candidate.HomeCityName ?? "");
+                    command.Parameters.AddWithValue("@age", candidate.AgeSnapshot);
+                    command.Parameters.AddWithValue("@warfare", candidate.WarfareScore);
+                    command.Parameters.AddWithValue("@damage", candidate.DamageScore);
+                    command.Parameters.AddWithValue("@strength", candidate.StrengthScore);
+                    command.Parameters.AddWithValue("@speed", candidate.SpeedScore);
+                    command.Parameters.AddWithValue("@diplomacy", candidate.DiplomacyScore);
+                    command.Parameters.AddWithValue("@merit", candidate.MilitaryMeritScore);
+                    command.Parameters.AddWithValue("@total", candidate.TotalScore);
+                    command.Parameters.AddWithValue("@qualification", candidate.Qualification ?? "none");
+                    command.Parameters.AddWithValue("@tier", candidate.AppointmentTier ?? "none");
+                    command.Parameters.AddWithValue("@status", candidate.AppointmentStatus ?? "pending");
+                    command.Parameters.AddWithValue("@time", candidate.UpdatedTime);
+                    command.ExecuteNonQuery();
+                }
+                transaction.Commit();
+                return true;
+            }
+            catch { try { transaction?.Rollback(); } catch { } return false; }
+            finally { transaction?.Dispose(); }
+        }
+
         private static long NextId(SQLiteConnection pDb, SQLiteTransaction pTransaction)
         {
             using var command = new SQLiteCommand(pDb) { Transaction = pTransaction };
             command.CommandText = "SELECT IFNULL(MAX(ID),0)+1 FROM " + SessionTable;
+            return System.Convert.ToInt64(command.ExecuteScalar());
+        }
+
+        private static long NextCandidateId(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction)
+        {
+            using var command = new SQLiteCommand(pDb) { Transaction = pTransaction };
+            command.CommandText = "SELECT IFNULL(MAX(ID),0)+1 FROM " + CandidateTable;
             return System.Convert.ToInt64(command.ExecuteScalar());
         }
     }
