@@ -25,6 +25,11 @@ namespace AncientWarfare3.core.court
         public CourtPyramidNodeModel LeaderNode { get; set; }
         public int ActiveSeats { get; set; }
         public int TotalSeats { get; set; }
+        public List<GeneralReadModelEntry> MilitaryGenerals { get; set; } =
+            new List<GeneralReadModelEntry>();
+        public int MilitaryGeneralTarget { get; set; }
+        public int MilitaryGeneralVacancies { get; set; }
+        public string MilitaryCommandName { get; set; } = string.Empty;
         public float Efficiency { get; set; }
         public string LocalSchoolId { get; set; } = string.Empty;
         public CorruptionCountrySnapshot CountryCorruption { get; set; }

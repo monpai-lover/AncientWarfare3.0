@@ -46,6 +46,17 @@ namespace AncientWarfare3.ui.components
             _governorName.text = AW_L10n.Text("aw_local_office_zhoumu", "郡守") +
                 ": " + (pModel.RegionalSuperiorNode?.ActorName ??
                     AW_L10n.Text("aw_court_vacancy", "Vacant"));
+            if (pModel.MilitaryGeneralTarget > 0)
+            {
+                string commander = pModel.MilitaryGenerals.Count > 0
+                    ? pModel.MilitaryGenerals[0]?.Actor?.getName() ??
+                      AW_L10n.Text("aw_court_vacancy", "Vacant")
+                    : AW_L10n.Text("aw_court_vacancy", "Vacant");
+                _governorName.text += "\n" +
+                    (pModel.MilitaryCommandName ?? "Local military command") +
+                    ": " + commander + " (" + pModel.MilitaryGeneralVacancies +
+                    " " + AW_L10n.Text("aw_court_vacancy", "vacancies") + ")";
+            }
             _summary.text = string.Format(
                 AW_L10n.Text("aw_local_court_card_summary",
                     "Officials {0}/{1}  Efficiency {2}"),

@@ -221,6 +221,7 @@ namespace AncientWarfare3.core.court
                         row.city_id == pCity.data.id).ToList();
             AddLocalNodes(model, pKingdom, pCity, seats, officers,
                 localTemplate, pCareerStates);
+            AddLocalMilitaryGenerals(model, pKingdom, pCity);
             AddCountyNodes(model, pKingdom, pCity, pOfficers, pCareerStates);
             AddRegionalSuperiorNode(model, pKingdom, pCity);
             // The regional superior is part of the local court graph and must
@@ -236,6 +237,26 @@ namespace AncientWarfare3.core.court
                 node?.OfficeLayer == CourtOfficeLayer.City &&
                 node.ActorId == pCity.leader?.data?.id);
             return model;
+        }
+
+        private static void AddLocalMilitaryGenerals(LocalCourtReadModel pModel,
+            Kingdom pKingdom, City pCity)
+        {
+            if (pModel == null || pKingdom?.data == null || pCity?.data == null) return;
+            List<GeneralReadModelEntry> all = GeneralService.
+                GetActiveGeneralsForReadModel(pKingdom, pAllowUnitFallback: true);
+            pModel.MilitaryGenerals = all.Where(entry =>
+                entry?.Actor?.data != null && entry.Actor.kingdom == pKingdom &&
+                entry.Actor.city == pCity && entry.Actor.isAlive() &&
+                !entry.Actor.isRekt() && entry.Actor.getAge() <
+                SoldierRetirementRules.HardRetirementAge).ToList();
+            int target = pCity.hasArmy() ? 1 : 0;
+            pModel.MilitaryGeneralTarget = target;
+            pModel.MilitaryGeneralVacancies = MilitaryEstablishmentRules.Vacancies(
+                target, pModel.MilitaryGenerals.Count, 0);
+            pModel.MilitaryCommandName = target > 0
+                ? AW_L10n.Text("aw_military_local_command", "Local military command")
+                : string.Empty;
         }
 
         private static void EnsurePersistedLocalLeader(Kingdom pKingdom,

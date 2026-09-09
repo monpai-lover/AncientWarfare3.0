@@ -11,8 +11,10 @@
     <Compile Include="MilitaryExamRulesTests.cs" />
     <Compile Include="ExamCycleRulesTests.cs" />
     <Compile Include="MilitaryEstablishmentRulesTests.cs" />
+    <Compile Include="MilitaryExamAppointmentRulesTests.cs" />
     <Compile Include="..\..\Code\core\court\ExamCycleRules.cs" Link="Production\ExamCycleRules.cs" />
     <Compile Include="..\..\Code\core\court\MilitaryEstablishmentRules.cs" Link="Production\MilitaryEstablishmentRules.cs" />
     <Compile Include="..\..\Code\core\court\MilitaryExamRules.cs" Link="Production\MilitaryExamRules.cs" />
+    <Compile Include="..\..\Code\core\court\MilitaryExamAppointmentRules.cs" Link="Production\MilitaryExamAppointmentRules.cs" />
   </ItemGroup>
 </Project>

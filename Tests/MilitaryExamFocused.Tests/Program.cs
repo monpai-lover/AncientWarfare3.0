@@ -7,6 +7,7 @@ internal static class Program
         MilitaryExamRulesTests.Run();
         ExamCycleRulesTests.Run();
         MilitaryEstablishmentRulesTests.Run();
+        MilitaryExamAppointmentRulesTests.Run();
         Console.WriteLine("Military exam focused tests passed.");
     }
 }
