@@ -350,7 +350,11 @@ namespace AncientWarfare3.core.policy
         {
             long examAge = UpdateAgeBenchmark.Begin();
             long examRecent = RecentFeatureBenchmark.Begin();
-            try { CivilServiceExamService.OnKingdomYear(pKingdom); }
+            try
+            {
+                OfficialMilitaryRetirementService.OnKingdomYear(pKingdom);
+                ExamCycleService.OnKingdomYear(pKingdom);
+            }
             finally
             {
                 UpdateAgeBenchmark.End(

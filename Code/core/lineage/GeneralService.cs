@@ -256,6 +256,12 @@ namespace AncientWarfare3.core.lineage
             EndGeneral(pActor, "card_deployment_failed");
         }
 
+        internal static void RetireForAge(Actor pActor)
+        {
+            if (pActor?.data == null || !IsGeneral(pActor)) return;
+            EndGeneral(pActor, "age_retirement");
+        }
+
         public static List<Actor> GetActiveGenerals(Kingdom pKingdom)
         {
             var result = new List<Actor>();
