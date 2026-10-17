@@ -300,7 +300,10 @@ namespace AncientWarfare3.core.performance
                     ? AWPausedFrameAction.AbortReplicaCycle
                     : AWPausedFrameAction.RefreshPresentation;
             if (paused && modCycleActive)
-                return AWPausedFrameAction.CompleteActiveCycle;
+                // Opening a menu must not drain every remaining simulation
+                // pass on the render thread. Resume the cycle after unpausing;
+                // saving still drains explicitly through ResolveSaveBoundary.
+                return AWPausedFrameAction.RefreshPresentation;
             if (paused && pMode != AWSimulationMode.Native)
                 return AWPausedFrameAction.RefreshPresentation;
             return AWPausedFrameAction.Continue;

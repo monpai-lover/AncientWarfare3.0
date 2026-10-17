@@ -399,11 +399,28 @@ internal static class InheritanceLawRulesTests
         Equal(false, candidateServiceSource.Contains("getUnits()"),
             "inheritance candidate discovery never scans kingdom population");
         Equal(true, candidateServiceSource.Contains(
-                "SuccessionRelationshipIndex.GetLivingLineageMemberIds"),
-            "collateral discovery uses the bounded runtime relationship index");
-        Equal(false, candidateServiceSource.Contains(
-                "LineageQuery.GetLivingLineageMemberIds"),
-            "succession candidate discovery does not query SQLite living members");
+                "LineageQuery.GetLivingLineageMemberIds(lineageId,") &&
+            candidateServiceSource.Contains("LineageQuery.GetLivingShiMemberIds(shiId,"),
+            "collateral discovery reads AW genealogy, including archived parent chains");
+        Equal(false, candidateServiceSource.Contains("SuccessionRelationshipIndex."),
+            "succession must not substitute vanilla parent fields for AW genealogy");
+        string querySource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "LineageQuery.cs"));
+        foreach (string method in new[] { "GetLivingLineageMemberIds", "GetLivingShiMemberIds" })
+        {
+            int start = querySource.IndexOf("public static List<long> " + method,
+                StringComparison.Ordinal);
+            Equal(true, start >= 0, method + " archive query exists");
+            int end = querySource.IndexOf("\n        }", start,
+                StringComparison.Ordinal);
+            Equal(true, end > start, method + " archive query boundary exists");
+            string body = querySource.Substring(start, end - start);
+            Equal(true, body.Contains("IS_ALIVE=1") &&
+                body.Contains("ORDER BY BIRTH_TIME ASC,ID ASC LIMIT @limit") &&
+                body.Contains("AddWithValue(\"@limit\", pLimit)"),
+                method + " remains alive-only, deterministic and SQL-limited");
+        }
         Equal(true, candidateServiceSource.Contains(
                 "InheritanceCandidateRules.MaximumArchiveIds"),
             "runtime discovery consumes the same hard archive cap as pure rules");

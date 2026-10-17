@@ -11,6 +11,7 @@ internal static class OfficialCareerHistorySqlTests
         Execute(db, "CREATE TABLE CourtOfficer (" +
             "OFFICER_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
             "ACTOR_ID INTEGER,ACTOR_NAME TEXT,CITY_ID INTEGER," +
+            "COUNTY_ID INTEGER DEFAULT -1," +
             "LAYER TEXT,OFFICE_ID TEXT,SCHOOL_ID TEXT,INFLUENCE REAL," +
             "APPOINTED_YEAR INTEGER,APPOINTED_TIME REAL," +
             "INSTITUTION_AT_APPOINTMENT TEXT," +
@@ -38,6 +39,36 @@ internal static class OfficialCareerHistorySqlTests
         True(rows[0].IsCurrent, "current row is retained");
         Equal(2L, rows[1].OfficerId,
             "history is ordered by appointment identity descending");
+        Equal(-1L, rows[0].CountyId,
+            "city appointments retain the no-county identity");
+
+        Insert(db, 5, 7, 105, "本县前任", 3, "county",
+            "county_magistrate", 110, 6600d, 129, 0, "term_expired", 41);
+        Insert(db, 6, 7, 106, "本县现任", 3, "county",
+            "county_magistrate", 130, 7800d, -1, 1, "", 41);
+        Insert(db, 7, 7, 107, "邻县现任", 3, "county",
+            "county_magistrate", 131, 7860d, -1, 1, "", 42);
+        Insert(db, 8, 7, 108, "其他城市", 4, "county",
+            "county_magistrate", 131, 7860d, -1, 1, "", 41);
+        Insert(db, 9, 8, 109, "其他国家", 3, "county",
+            "county_magistrate", 131, 7860d, -1, 1, "", 41);
+        Insert(db, 10, 7, 110, "缺少县份", 3, "county",
+            "county_magistrate", 131, 7860d, -1, 1, "");
+
+        IReadOnlyList<OfficialCareerHistoryRow> countyRows =
+            OfficialCareerHistoryQuery.Read(db,
+                new OfficialCareerHistoryScope(7, 3, "county",
+                    "county_magistrate", countyId: 41), limit: 32);
+        Equal(2, countyRows.Count,
+            "county history excludes sibling, unscoped and other city or kingdom appointments");
+        Equal(6L, countyRows[0].OfficerId,
+            "county history keeps the newest incumbent first");
+        Equal(5L, countyRows[1].OfficerId,
+            "county history preserves the former term");
+        True(countyRows[0].IsCurrent && !countyRows[1].IsCurrent,
+            "county history includes current and ended appointments");
+        True(countyRows.All(row => row.CountyId == 41L),
+            "county history rows preserve the selected county identity");
 
         Console.WriteLine("Office history SQL tests passed.");
     }
@@ -45,17 +76,24 @@ internal static class OfficialCareerHistorySqlTests
     private static void Insert(SQLiteConnection pDb, long pOfficerId,
         long pKingdomId, long pActorId, string pActorName, long pCityId,
         string pLayer, string pOfficeId, int pStartYear, double pStartTime,
-        int pEndYear, int pActive, string pEndReason)
+        int pEndYear, int pActive, string pEndReason, long pCountyId = -1L)
     {
         using var command = new SQLiteCommand(
-            "INSERT INTO CourtOfficer VALUES (@id,@kingdom,@actor,@name," +
-            "@city,@layer,@office,'ru',0,@startYear,@startTime,'zhou'," +
+            "INSERT INTO CourtOfficer (OFFICER_ID,KINGDOM_ID,ACTOR_ID," +
+            "ACTOR_NAME,CITY_ID,COUNTY_ID,LAYER,OFFICE_ID,SCHOOL_ID," +
+            "INFLUENCE,APPOINTED_YEAR,APPOINTED_TIME," +
+            "INSTITUTION_AT_APPOINTMENT,RANK_AT_APPOINTMENT," +
+            "LOCAL_GRADE_AT_APPOINTMENT,IS_ACTING,ENDED_YEAR," +
+            "ENDED_TIME,ACTIVE,END_REASON,UPDATED_TIME) VALUES " +
+            "(@id,@kingdom,@actor,@name,@city,@county,@layer,@office," +
+            "'ru',0,@startYear,@startTime,'zhou'," +
             "6,5,0,@endYear,-1,@active,@reason,@startTime)", pDb);
         command.Parameters.AddWithValue("@id", pOfficerId);
         command.Parameters.AddWithValue("@kingdom", pKingdomId);
         command.Parameters.AddWithValue("@actor", pActorId);
         command.Parameters.AddWithValue("@name", pActorName);
         command.Parameters.AddWithValue("@city", pCityId);
+        command.Parameters.AddWithValue("@county", pCountyId);
         command.Parameters.AddWithValue("@layer", pLayer);
         command.Parameters.AddWithValue("@office", pOfficeId);
         command.Parameters.AddWithValue("@startYear", pStartYear);

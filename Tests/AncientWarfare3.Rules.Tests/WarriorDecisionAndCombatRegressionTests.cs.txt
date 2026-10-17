@@ -34,7 +34,7 @@ internal static class WarriorDecisionAndCombatRegressionTests
             "internal static bool HasOwnership(Actor pActor)",
             StringComparison.Ordinal);
         int ownershipEnd = bridge.IndexOf(
-            "internal static string DescribeDiagnosticState",
+            "internal static string DescribeRuntimeState",
             ownershipStart, StringComparison.Ordinal);
         string ownershipBody = ownershipStart >= 0 &&
             ownershipEnd > ownershipStart
@@ -48,10 +48,10 @@ internal static class WarriorDecisionAndCombatRegressionTests
                    StringComparison.Ordinal),
             "path ownership queries must be side-effect free and leave finder result consumption to IsUsing/Update");
         int diagnosticStart = bridge.IndexOf(
-            "internal static string DescribeDiagnosticState(Actor pActor)",
+            "internal static string DescribeRuntimeState(Actor pActor)",
             StringComparison.Ordinal);
         int diagnosticEnd = bridge.IndexOf(
-            "internal static bool HasOperationalOwnership(Actor pActor)",
+            "internal static bool ShouldPollNow(Actor pActor)",
             diagnosticStart, StringComparison.Ordinal);
         string diagnosticBody = diagnosticStart >= 0 &&
             diagnosticEnd > diagnosticStart
@@ -60,22 +60,40 @@ internal static class WarriorDecisionAndCombatRegressionTests
             : string.Empty;
         Assert(!diagnosticBody.Contains("Finder.Poll(",
                    StringComparison.Ordinal) &&
-               diagnosticBody.Contains("TerminalPolls.TryGetValue(",
+               diagnosticBody.Contains("finder.ReadState(actorId)",
                    StringComparison.Ordinal),
             "path diagnostics must inspect cached ownership state without consuming finder results");
-        Assert(safety.Contains("AWPathMovementBridge.Cancel(pActor,",
+        int decisionStart = safety.IndexOf("public static bool MakeDecisionFor_Prefix(",
+            StringComparison.Ordinal);
+        int decisionEnd = safety.IndexOf("[HarmonyPostfix]", decisionStart,
+            StringComparison.Ordinal);
+        string decision = safety.Substring(decisionStart, decisionEnd - decisionStart);
+        Assert(decision.Contains("ShouldAllowVanillaDecisionEvaluation(",
                    StringComparison.Ordinal) &&
-               safety.Contains("!rtsOwnsActor", StringComparison.Ordinal) &&
-               safety.Contains("!nativeMilitaryMovement",
-                   StringComparison.Ordinal),
-            "vanilla peaceful decision entry must release stale RTS path ownership");
+               !decision.Contains("AWPathMovementBridge.Cancel(", StringComparison.Ordinal),
+            "peaceful decision evaluation preserves valid global movement ownership");
         string controller = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "ArmyRtsControllerService.cs"));
-        Assert(controller.Contains("pActor.setTask(\"fighting\"",
-                   StringComparison.Ordinal) &&
-               controller.Contains("pActor.beh_actor_target =",
+        int releaseStart = controller.IndexOf("public static void ReleaseActor(Actor pActor)",
+            StringComparison.Ordinal);
+        int releaseEnd = controller.IndexOf("public static ", releaseStart + 1,
+            StringComparison.Ordinal);
+        string release = controller.Substring(releaseStart, releaseEnd - releaseStart);
+        Assert(release.Contains("if (!ownsRtsTask) return;", StringComparison.Ordinal) &&
+               release.Contains("pActor.clearTileTarget();", StringComparison.Ordinal) &&
+               release.Contains("pActor.ai.setJob(pActor.getNextJob());", StringComparison.Ordinal),
+            "ending an RTS task clears its stale target before restoring ordinary job selection");
+        int isUsingStart = bridge.IndexOf("public static bool IsUsing(Actor pActor)",
+            StringComparison.Ordinal);
+        string isUsing = bridge.Substring(isUsingStart, ownershipStart - isUsingStart);
+        Assert(isUsing.Contains("if (pActor.tile_target?.data == null)", StringComparison.Ordinal) &&
+               isUsing.Contains("Cancel(pActor, AWPathFailureReason.CancelledByNewRequest)",
                    StringComparison.Ordinal),
-            "RTS member handoff must enter the vanilla fighting task and preserve its actor target");
+            "the path owner releases an ended RTS task's cleared target on consumption");
+        Assert(content.Contains("new BehArmyRtsMemberCombat()", StringComparison.Ordinal) &&
+               behaviour.Contains("pActor.beh_actor_target = target;", StringComparison.Ordinal) &&
+               controller.Contains("taskId = ArmyRtsContent.MemberCombatTaskId;", StringComparison.Ordinal),
+            "field-combat members preserve their validated target through the shared RTS task chain");
     }
 
     private static void Assert(bool condition, string message)

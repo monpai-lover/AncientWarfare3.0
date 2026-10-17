@@ -8,11 +8,16 @@ if (-not [IO.File]::Exists($path)) {
 
 $source = [IO.File]::ReadAllText($path)
 foreach ($needle in @(
-    'private void ProcessActorMetaBatch()',
+    'private static ActorMetaPartitionKind GetActorMetaPartition(',
     'kingdom == null || kingdom.data == null',
-    'ActorKingdomSafetyService.QueueRepair(actor)',
-    '_world.units.units_only_dying.Add(actor)',
-    'if (kingdom.wild)')) {
+    'ActorKingdomSafetyService.QueueRepair(pActor)',
+    'return ActorMetaPartitionKind.Dying;',
+    'return ActorMetaPartitionKind.Invalid;',
+    'ClassifyActorMetaRange',
+    'ScatterActorMetaRange',
+    'ApplyActorMetaPartitionChanges',
+    'AddActorRange(_world.units.units_only_dying,',
+    '? ActorMetaPartitionKind.AliveWild')) {
     if (-not $source.Contains($needle)) {
         throw "Actor meta null-kingdom quarantine is missing '$needle'."
     }

@@ -10,19 +10,24 @@ internal static class PathGeneratorBoundsRegressionSourceGuardTests
             "core", "pathfinding", "AWStreamingPathGenerator.cs"));
 
         int buildStart = source.IndexOf(
-            "AWPathStep[] fullRoute = workspace.BuildPath(result.NodeIndex);",
+            "int stepCount = workspace.BuildPath(result.NodeIndex);",
             StringComparison.Ordinal);
         int copyStart = source.IndexOf(
-            "private static AWPathStep[] CopyPrefix",
+            "var fullRoute = new AWPathStep[stepCount];",
             StringComparison.Ordinal);
         if (buildStart < 0 || copyStart < 0 || buildStart >= copyStart)
             throw new InvalidOperationException(
                 "search results must be materialized before a path view can be published");
 
-        if (source.Contains("workspace.PathStep(i)", StringComparison.Ordinal) ||
+        if (!source.Contains("for (int i = 0; i < stepCount; i++)", StringComparison.Ordinal) ||
+            !source.Contains("fullRoute[i] = workspace.PathStep(i);", StringComparison.Ordinal) ||
+            !source.Contains("Math.Min(stepCount, maximumSteps)", StringComparison.Ordinal) ||
+            !source.Contains("var steps = new AWPathStep[outputCount];", StringComparison.Ordinal) ||
+            !source.Contains("steps[i] = fullRoute[i];", StringComparison.Ordinal) ||
+            !source.Contains("pRequest.CacheRoute(fullRoute, outputCount);", StringComparison.Ordinal) ||
             source.Contains("workspace.PathView(outputCount)", StringComparison.Ordinal))
             throw new InvalidOperationException(
-                "published segments must not read the mutable workspace path view");
+                "published segments and cached tails must own copies of the bounded workspace path");
 
         string requestSource = File.ReadAllText(Path.Combine(root, "Code",
             "core", "pathfinding", "AWPathRequest.cs"));

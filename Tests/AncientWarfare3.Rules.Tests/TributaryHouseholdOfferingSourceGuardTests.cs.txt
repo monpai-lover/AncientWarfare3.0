@@ -14,24 +14,41 @@ internal static class TributaryHouseholdOfferingSourceGuardTests
             "core", "lineage", "TributarySettlementService.cs"));
         False(offering.Contains("World.world.units"),
             "offering cannot scan world actors");
-        True(offering.Contains("SuccessionRelationshipIndex.GetChildIds"),
-            "offering reads indexed direct sons");
+        True(offering.Contains("LineageQuery.GetChildIds(king.data.id)"),
+            "offering reads the king's direct sons from AW genealogy");
+        False(offering.Contains("SuccessionRelationshipIndex."),
+            "offering must include AW family edges absent from vanilla parent fields");
+        True(offering.Contains("acceptedPrinceCandidates < MaximumRecipientCandidates") &&
+             offering.Contains("if (AddCandidate(candidates, kingdom, prince,"),
+            "only eligible princes consume the bounded recipient budget");
         True(offering.Contains("TryCommitTributaryConsort("),
             "offering uses explicit-owner household commit");
         True(offering.Contains("acceptedPrinceCandidates"),
              "invalid princes do not exhaust the bounded recipient page");
-        True(offering.Contains("pSourceKind") &&
-             offering.Contains("vassal_offering"),
-             "subject offering source kind is persisted distinctly");
+        True(offering.Contains("recipient.Capacity, out string reason, pSourceKind)"),
+             "subject offering forwards its source kind to the household commit");
+        string household = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "lineage", "RulerHouseholdService.cs"));
+        int commitStart = household.IndexOf("internal static bool TryCommitTributaryConsort(",
+            StringComparison.Ordinal);
+        int commitEnd = household.IndexOf("internal static bool IsEligibleTributaryOwner(",
+            StringComparison.Ordinal);
+        True(commitStart >= 0 && commitEnd > commitStart,
+            "the household offering commit boundary exists");
+        string commit = household.Substring(commitStart, commitEnd - commitStart);
+        True(commit.Contains("pOwnerRoleAtEntry, pSourceKind ?? \"tributary_offering\", pRelationId"),
+            "subject offering persists the forwarded source kind on its relationship");
         string vassal = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "VassalService.cs"));
         True(vassal.Contains("TributaryHouseholdOfferingService.TryOffer") &&
              vassal.Contains("vassal_offering"),
              "formal vassals trigger household offering after annual tribute");
-        True(offering.Contains("SUBJECT_CONSORT_OFFERED") ||
-             offering.Contains("RecordHouseholdHistory"),
+        True(commit.Contains("PersonEvent.SUBJECT_CONSORT_OFFERED") &&
+             commit.Contains("RecordHouseholdHistory") &&
+             commit.Contains("string.Equals(pSourceKind, \"vassal_offering\""),
              "subject consort offering writes dedicated history");
-        True(settlement.IndexOf("MarkPaid", StringComparison.Ordinal) <
+        True(settlement.IndexOf("MarkPaid", StringComparison.Ordinal) >= 0 &&
+             settlement.IndexOf("MarkPaid", StringComparison.Ordinal) <
              settlement.IndexOf("TributaryHouseholdOfferingService.TryOffer",
                  StringComparison.Ordinal),
             "offering occurs only after paid renewal");

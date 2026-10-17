@@ -341,11 +341,15 @@ internal static class LineageFamilyArchiveMigrationTests
             "new AW3RestoreStage(\"lineage_family_archive_migration\"",
             "new AW3RestoreStage(\"western_lineage_migration\""
         }, "generated archive migration restore order");
-        OrderedTokens(coordinator, new[]
+        string normalRestore = coordinator.Substring(coordinator.IndexOf(
+            "private static void RestoreNormalWorld(", StringComparison.Ordinal));
+        OrderedTokens(normalRestore, new[]
         {
+            "AW3RuntimeRestorePipeline.TryInitializeGeneratedWorld(",
             "AW3RuntimeRestorePipeline.TryRestoreFromDirectory(",
-            "if (result.Success) AWAsyncWorldLifecycle.StartWorld();"
-        }, "restored database migration completes before async writer start");
+            "if (result.Success)",
+            "AWAsyncWorldLifecycle.StartWorld();"
+        }, "saved and generated database migrations finish successfully before async writer start");
 
         Contains(bulk, "ArchiveResolution = strings.Take(",
             "bulk projection retains archive resolution");

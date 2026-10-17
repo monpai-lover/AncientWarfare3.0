@@ -7,13 +7,21 @@ internal static class ActorBatchSchedulerSourceGuardTests
         string root = Directory.GetCurrentDirectory();
         string runner = File.ReadAllText(Path.Combine(root, "Code", "core",
             "performance", "AWCooperativeBatchRunner.cs"));
-        if (!runner.Contains(
-                "public bool WaitingForPresentationDispatch => false;") ||
-            runner.Contains("AWSimulationCoordinatorThread"))
+        if (!runner.Contains("public bool WaitingForPresentationDispatch =>") ||
+            !runner.Contains("_deferParallelToPresentationForCycle &&") ||
+            !runner.Contains("if (!WaitingForPresentationDispatch) return false;") ||
+            !runner.Contains("AWSimulationCoordinatorThread.Instance.Begin("))
             throw new InvalidOperationException(
-                "actor batches must use the Cultiway single scheduler channel");
+                "b actor batches must gate deferred presentation work before coordinator dispatch");
 
-        if (!runner.Contains("FindNextMainThreadBatchIndex",
+        if (!runner.Contains("AWSimulationCoordinatorThread.Instance.Wait(ticket);") ||
+            !runner.Contains("AWSimulationCoordinatorThread.Instance.Complete(") ||
+            !runner.Contains("AWSimulationCoordinatorThread.Instance.WaitAndDiscard(") ||
+            !runner.Contains("_parallelStageTicket = default;"))
+            throw new InvalidOperationException(
+                "coordinator work must be joined before completion or abort clears its ticket");
+
+        if (!runner.Contains("TryRunNextMainThreadBatch",
                 StringComparison.Ordinal) ||
             !runner.Contains(".parallel.", StringComparison.Ordinal))
             throw new InvalidOperationException(

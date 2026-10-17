@@ -37,7 +37,7 @@ Require $courtWindow 'BuildLocalOrthogonalLinks\(' `
     'shared court window does not render built-in local hierarchy links'
 Require $courtWindow 'public static void OpenCity\(' `
     'shared court window has no city-context entry'
-Require $courtWindow 'CourtCityGovernmentCard' `
+Require $courtWindow 'CourtRegionalGovernmentFolder' `
     'national court view does not use city-government cards'
 Require $courtWindow 'AWStringDropdown' `
     'city court context has no shared template selector'

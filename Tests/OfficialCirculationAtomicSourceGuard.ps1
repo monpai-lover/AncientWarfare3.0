@@ -25,23 +25,13 @@ function Reject-Text([string]$source, [string]$needle, [string]$label) {
 }
 
 Require-Text $service `
-    'bool circulatingOfficials = CourtService.HasNineRankSystem(pKingdom);' `
-    'rotation unlock follows Nine-Rank'
-Require-Text $cityPatch `
-    'bool hasNineRankSystem = CourtService.HasNineRankSystem(kingdom);' `
-    'vacancy search reads the Nine-Rank unlock'
-Require-Text $cityPatch `
-    'ShouldUseCivilServiceGovernorPipeline(hasNineRankSystem);' `
-    'single-city vacancies keep the civil-service appointment gate'
-Require-Text $cityPatch `
-    'ShouldUseIntercityGovernorCirculation(hasNineRankSystem,' `
-    'intercity vacancy search follows the Nine-Rank circulation rule'
+    'bool nineRankSystem = CourtService.HasNineRankSystem(pKingdom);' `
+    'career evaluation reads the Nine-Rank unlock'
 Reject-Text $service `
     'bool circulatingOfficials = CourtService.HasOfficialCourt(pKingdom);' `
     'official-court early rotation gate'
-Reject-Text $cityPatch `
-    'bool circulating = CourtService.HasOfficialCourt(kingdom) &&' `
-    'official-court early vacancy gate'
+Require-Text $promotionPatch 'CourtVacancyReconciliationService.RegisterCityVacancies(' `
+    'city leader vacancy discovery uses the shared coordinator'
 
 Require-Text $service 'OfficialCirculationRules.TryBuildRotationPlan(' `
     'complete pure rotation plan'
@@ -85,37 +75,22 @@ else {
         $rotationEnd - $rotationStart)
     $commit = $rotation.IndexOf('CommitGovernorRotationPersistence(',
         [System.StringComparison]::Ordinal)
-    $catch = $rotation.IndexOf('catch (Exception',
-        [System.StringComparison]::Ordinal)
-    $restore = $rotation.IndexOf('RestoreGovernorRotation(',
-        [System.StringComparison]::Ordinal)
     $retry = $rotation.IndexOf('ScheduleGovernorRotationRetry(',
         [System.StringComparison]::Ordinal)
     $failureReturn = if ($retry -ge 0) {
-        $rotation.IndexOf('return;', $retry,
-            [System.StringComparison]::Ordinal)
-    }
-    else { -1 }
+        $rotation.IndexOf('return;', $retry, [System.StringComparison]::Ordinal)
+    } else { -1 }
     $publish = $rotation.IndexOf('PublishCommittedGovernorRotation(',
         [System.StringComparison]::Ordinal)
-    if ($commit -lt 0 -or $catch -le $commit -or
-        $restore -le $catch -or $retry -le $restore -or
+    if ($commit -lt 0 -or $retry -le $commit -or
         $failureReturn -le $retry -or $publish -le $failureReturn) {
-        $failures.Add(
-            'rotation must return after pre-commit rollback and publish only beyond the commit catch boundary')
+        $failures.Add('rotation must commit durable state before publishing runtime placement, and return after a rejected transaction')
     }
-    if ($rotation.Contains('item.Actor.data.set(LineageKeys.COURT_CITY_ID')) {
-        $failures.Add(
-            'committed governor projections must be isolated from the pre-commit transaction block')
+    $beforeCommit = $rotation.Substring(0, [Math]::Max(0, $commit))
+    foreach ($mutation in @('.removeLeader(', '.setLeader(', '.joinCity(')) {
+        Reject-Text $beforeCommit $mutation 'rotation cannot mutate runtime placement before persistence'
     }
-    if (-not $rotation.Contains(
-            'bool restored = RestoreGovernorRotation(pPlan);')) {
-        $failures.Add(
-            'pre-commit rollback must verify that every former governor projection was restored')
-    }
-    Require-Text $rotation `
-        'if (!restored) ScheduleGovernorRotationRuntimeRepair(' `
-        'incomplete runtime rollback enters bounded deferred repair'
+
 }
 
 $publishStart = $service.IndexOf(
@@ -263,49 +238,21 @@ if ($planIndex -lt 0 -or $removeIndex -le $planIndex) {
     $failures.Add('no leader may be removed before a complete plan exists')
 }
 
-Require-Text $cityPatch 'TryGetActingLocalLeader(' `
-    'educated local acting fallback'
-Require-Text $cityPatch 'HistoricalSchoolEducationService.CanAppoint(' `
-    'acting fallback education gate'
-Require-Text $cityPatch 'City previousCity = actor.city;' `
-    'vacancy appointment remembers the original city'
-Require-Text $cityPatch 'bool appointed = acting' `
-    'vacancy appointment observes the persistence result'
-Require-Text $cityPatch 'if (appointed)' `
-    'successful vacancy appointment enters committed placement'
-Require-Text $cityPatch 'else' `
-    'failed vacancy appointment enters rollback branch'
-Require-Text $cityPatch 'if (pCity.leader == actor)' `
-    'failed vacancy appointment only removes its tentative leader'
-Require-Text $cityPatch 'pCity.removeLeader();' `
-    'failed vacancy appointment clears the tentative leader'
-Require-Text $cityPatch 'actor.joinCity(previousCity);' `
-    'failed vacancy appointment restores the original city'
-
-$selectionStart = $cityPatch.IndexOf(
-    'if (actor != null)', [System.StringComparison]::Ordinal)
-$selectionEnd = $cityPatch.IndexOf(
-    'if (civilServiceCareer) return false;', $selectionStart,
-    [System.StringComparison]::Ordinal)
-if ($selectionStart -lt 0 -or $selectionEnd -le $selectionStart) {
-    $failures.Add('vacancy appointment segment could not be located')
+$placement = [IO.File]::ReadAllText((Join-Path $root 'Code/core/court/ManualLocalChiefAppointmentService.cs'))
+foreach ($required in @('using (GovernorRotationRuntimeScope.Enter())',
+    'Actor formerLeader = pCity.leader;', 'City formerCandidateCity = pCandidate.city;',
+    'pCity.setLeader(pCandidate, pNew: true);', '!pPersistAppointment()',
+    'RestoreRuntimePlacement(', 'pCity.removeLeader();',
+    'pCandidate.joinCity(restoreCity);', 'pCity.setLeader(pFormerLeader, pNew: false);',
+    'CityGovernorPlacementService.OnCommittedAssignment(')) {
+    Require-Text $placement $required 'atomic local chief placement and rollback'
 }
-else {
-    $selection = $cityPatch.Substring($selectionStart,
-        $selectionEnd - $selectionStart)
-    $setLeader = $selection.IndexOf('pCity.setLeader(actor, pNew: true);',
-        [System.StringComparison]::Ordinal)
-    $appointment = $selection.IndexOf('bool appointed = acting',
-        [System.StringComparison]::Ordinal)
-    $committed = $selection.IndexOf('if (appointed)',
-        [System.StringComparison]::Ordinal)
-    $rollback = $selection.IndexOf('if (pCity.leader == actor)',
-        $committed, [System.StringComparison]::Ordinal)
-    if ($setLeader -lt 0 -or $appointment -le $setLeader -or
-        $committed -le $appointment -or $rollback -le $committed) {
-        $failures.Add(
-            'vacancy leader projection must be followed by checked appointment and rollback')
-    }
+$leader = $placement.IndexOf('pCity.setLeader(pCandidate, pNew: true);')
+$persist = $placement.IndexOf('!pPersistAppointment()')
+$rollback = $placement.IndexOf('RestoreRuntimePlacement(', $persist)
+$published = $placement.IndexOf('CityGovernorPlacementService.OnCommittedAssignment(')
+if ($leader -lt 0 -or $persist -le $leader -or $rollback -le $persist -or $published -le $rollback) {
+    $failures.Add('local chief placement must validate persistence, roll back failures and publish only after success')
 }
 
 if ($failures.Count -gt 0) {

@@ -32,7 +32,7 @@ function Require-Order([string]$source, [string]$first, [string]$second,
 }
 
 foreach ($required in @(
-        'BuildIndexedFormalCandidateRoster(pKingdom)',
+        'BuildIndexedFormalCandidateRoster(pKingdom, pRoster)',
         'CivilServiceExamCandidateTableItem.GetTableName()',
         'CivilServiceExamSessionTableItem.GetTableName()',
         'CivilServiceExamRules.CandidateSourceLimit',
@@ -42,7 +42,7 @@ foreach ($required in @(
     Require-Text $court $required "bounded formal candidate index"
 }
 
-$fillStart = $court.IndexOf('private static void FillCentralOffice(',
+$fillStart = $court.IndexOf('private static bool FillCentralOffice(',
     [StringComparison]::Ordinal)
 $fillEnd = $court.IndexOf('private static Actor FindBestCandidate(',
     $fillStart, [StringComparison]::Ordinal)
@@ -56,16 +56,13 @@ Require-Text $fill 'HasExaminationSystem(pKingdom)' `
 if (-not [regex]::IsMatch($fill,
         'FindBestCandidate\(\s*pKingdom,\s*pRoster,\s*pOfficeId,\s*' +
         'pPreferredSchool,\s*pAllowVacancyPromotion:\s*true,\s*' +
-        'pUnavailableActorIds,\s*pLayer\)')) {
+        'pUnavailableActorIds,\s*pLayer,\s*pCandidateCache\)')) {
     $failures.Add(
         'vacant central offices must promote qualified domestic candidates outside the bounded index')
 }
-if (-not [regex]::IsMatch($fill,
-        'FindBestCandidate\([\s\S]*?pUnavailableActorIds,\s*pLayer\);\s*' +
-        'vacancyPromotion\s*=\s*candidate\s*!=\s*null;')) {
-    $failures.Add(
-        'full-roster vacancy promotions must persist their promotion state')
-}
+Require-Order $fill 'candidate = BetterCandidate(pKingdom, indexedFallback,' `
+    'vacancyPromotion = candidate != null;' `
+    'full-roster vacancy promotions persist their promotion state'
 Require-Text $fill 'allowActing: pAllowActing' `
     'local acting fallback runs only during the explicit acting pass'
 Require-Text $court 'BuildActiveOfficerActorSet()' `
@@ -74,7 +71,7 @@ Require-Text $court 'pUnavailableActorIds.Contains(pActor.data.id)' `
     'all central candidate paths reject an actor already holding a central office'
 Require-Text $fill 'pUnavailableActorIds?.Add(candidate.data.id);' `
     'a committed appointment reserves the actor for the rest of the batch'
-Require-Text $court 'runtimeOffice == pOfficeId' `
+Require-Text $court 'runtimeOffice != pOfficeId' `
     'a durable central-office row remains active only for the exact projected office'
 if (-not [regex]::IsMatch($court,
         'IsValidActiveOfficeActor\(actor,\s*pKingdom,\s*row\.layer,\s*' +
@@ -89,36 +86,17 @@ if (-not [regex]::IsMatch($court,
         'vacancy occupancy must ignore durable rows that do not match the actor projection')
 }
 
-$examFillStart = $court.IndexOf(
-    'public static void FillVacanciesAfterCivilServiceExam(',
-    [StringComparison]::Ordinal)
-$examFillEnd = $court.IndexOf('private static void ValidateOfficers(',
-    $examFillStart, [StringComparison]::Ordinal)
-$examFill = if ($examFillStart -ge 0 -and
-    $examFillEnd -gt $examFillStart) {
-    $court.Substring($examFillStart, $examFillEnd - $examFillStart)
-} else { '' }
-Require-Text $examFill 'HashSet<long> occupiedActors = BuildActiveOfficerActorSet();' `
-    'exam vacancy pass starts from authoritative occupied actors'
-$guestIndex = $examFill.LastIndexOf(
-    'SchoolGuestOfficeService.FillVacanciesAfterCivilServiceExam(',
-    [StringComparison]::Ordinal)
-$rebuiltActorIndex = if ($guestIndex -ge 0) {
-    $examFill.IndexOf('occupiedActors = BuildActiveOfficerActorSet();',
-        $guestIndex, [StringComparison]::Ordinal)
-} else { -1 }
-$actingFillIndex = if ($rebuiltActorIndex -ge 0) {
-    $examFill.IndexOf('EnsureMinimumCourt(pKingdom, roster, occupied, tier,',
-        $rebuiltActorIndex, [StringComparison]::Ordinal)
-} else { -1 }
-if ($guestIndex -lt 0 -or $rebuiltActorIndex -le $guestIndex) {
-    $failures.Add(
-        'guest appointments must commit before actor reservations are rebuilt')
-}
-if ($actingFillIndex -le $rebuiltActorIndex) {
-    $failures.Add(
-        'acting fallback must use the rebuilt authoritative actor set')
-}
+$session = [IO.File]::ReadAllText((Join-Path $root 'Code/core/court/CourtCandidateSession.cs'))
+Require-Text $session 'BuildActiveOfficerActorSetForKingdom(pKingdom)' `
+    'vacancy session starts from authoritative occupied actors'
+Require-Text $court 'pSession.ReservedActorIds' `
+    'all domestic passes reuse authoritative actor reservations'
+Require-Text $court 'pSession.GuestCandidates(pKingdom)' `
+    'guest candidates and pending reservations are shared within the cycle'
+Require-Text $guestOffice 'pSession.AppointedActors.Add(candidate.Actor.data.id);' `
+    'accepted guest appointments reserve their actor before the next seat'
+Require-Text $guestOffice 'IsOfficeReserved(pHost.id, pOfficeId)' `
+    'guest pending writes reserve the office before domestic fallback'
 
 Require-Text $career 'OfficialCareerPersistence.Appoint(db, appointment,' `
     'central acting appointment supplies an atomic state stage'
@@ -130,7 +108,7 @@ if ([regex]::IsMatch($career, 'if\s*\(\s*pActing\s*\)\s*stageState\s*=')) {
     $failures.Add('formal and acting appointments must both stage state atomically')
 }
 if (-not [regex]::IsMatch($career,
-        'stageState\s*=\s*\(connection,\s*transaction\)\s*=>\s*\r?\n\s*stateProjection\s*=\s*OfficialCareerStateService\.StageAppointment\([\s\S]*?pActing,\s*pVacancyPromotion\);')) {
+        'stageState\s*=\s*\(connection,\s*transaction\)\s*=>\s*\r?\n\s*stateProjection\s*=\s*OfficialCareerStateService\.StageAppointment\([\s\S]*?pActing,\s*pVacancyPromotion,\s*pAllowLocalLowerQualification\);')) {
     $failures.Add('career appointment must pass the actual acting and vacancy-promotion flags into unconditional state staging')
 }
 Require-Text $persistence 'Action<SQLiteConnection, SQLiteTransaction>' `

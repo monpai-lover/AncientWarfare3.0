@@ -13,6 +13,7 @@ namespace AncientWarfare3.core.court
         private const string RetryPrefix = "de_jure_new_city:";
         private const string WorldRepairRetryKey = "de_jure_world_repair";
         private const int MaxWorldRepairDeferrals = 600;
+        private const int MaxCityAssignmentDeferrals = 600;
         private static readonly HashSet<long> RetryIds = new HashSet<long>();
         private static bool _worldRepairCompleted;
         private static int _worldRepairDeferrals;
@@ -73,7 +74,8 @@ namespace AncientWarfare3.core.court
             }
         }
 
-        private static bool TryAssign(City pCity, bool allowRetry)
+        private static bool TryAssign(City pCity, bool allowRetry,
+            int pDeferrals = 0)
         {
             if (pCity?.data == null || pCity.data.id < 0L || pCity.isRekt())
                 return false;
@@ -82,7 +84,7 @@ namespace AncientWarfare3.core.court
             Kingdom kingdom = pCity.kingdom;
             if (kingdom?.data == null)
             {
-                QueueRetry(pCity, allowRetry);
+                QueueRetry(pCity, allowRetry, pDeferrals);
                 return false;
             }
             if (kingdom.isRekt() || kingdom.isNeutral())
@@ -102,7 +104,7 @@ namespace AncientWarfare3.core.court
 
             if (!PrepareNeighbours(pCity))
             {
-                QueueRetry(pCity, allowRetry);
+                QueueRetry(pCity, allowRetry, pDeferrals);
                 return false;
             }
 
@@ -112,7 +114,7 @@ namespace AncientWarfare3.core.court
                 if (!DeJureRegionStore.CreateState(pCity,
                         "city_created_isolated_region", out _, out _))
                 {
-                    QueueRetry(pCity, allowRetry);
+                    QueueRetry(pCity, allowRetry, pDeferrals);
                     return false;
                 }
                 RetryIds.Remove(pCity.data.id);
@@ -127,10 +129,10 @@ namespace AncientWarfare3.core.court
                 if (error == "already_assigned") return false;
                 if (error == "invalid_city")
                 {
-                    QueueRetry(pCity, allowRetry);
+                    QueueRetry(pCity, allowRetry, pDeferrals);
                     return false;
                 }
-                QueueRetry(pCity, allowRetry);
+                QueueRetry(pCity, allowRetry, pDeferrals);
                 return false;
             }
 
@@ -336,11 +338,23 @@ namespace AncientWarfare3.core.court
             catch { return long.MaxValue; }
         }
 
-        private static void QueueRetry(City pCity, bool allowRetry)
+        private static void QueueRetry(City pCity, bool allowRetry,
+            int pDeferrals)
         {
             if (!allowRetry || pCity?.data == null ||
                 !RetryIds.Add(pCity.data.id)) return;
             long cityId = pCity.data.id;
+            // Each callback creates a new work item, so the deferred queue's
+            // exception retry limit cannot bound this initialization chain.
+            // Give native ownership/zones the same grace as world repair,
+            // then stop until a later event explicitly requests assignment.
+            if (pDeferrals >= MaxCityAssignmentDeferrals)
+            {
+                RetryIds.Remove(cityId);
+                ModClass.LogWarning("De jure city assignment deferred too " +
+                    "long: city=" + cityId);
+                return;
+            }
             DeferredRuntimeWorkService.EnqueueCoalesced(
                 RetryPrefix + cityId, DeferredWorkClass.Runtime,
                 () =>
@@ -349,7 +363,8 @@ namespace AncientWarfare3.core.court
                     // The first retry can still race city/zone initialization;
                     // keep the same bounded coalesced retry contract until
                     // the native city graph is ready.
-                    TryAssign(World.world?.cities?.get(cityId), true);
+                    TryAssign(World.world?.cities?.get(cityId), true,
+                        pDeferrals + 1);
                 });
         }
 

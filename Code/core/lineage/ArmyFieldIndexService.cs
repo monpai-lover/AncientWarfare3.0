@@ -14,14 +14,13 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnArmyChanged(Army pArmy)
         {
+            // Army.id reads data.id, so late notifications cannot use a disposed object.
+            if (pArmy?.data == null) return;
             Kingdom changedKingdom = SafeKingdom(pArmy);
             if (!IsFieldArmy(pArmy, out Kingdom kingdom))
             {
-                if (pArmy != null)
-                {
-                    Index.Remove(pArmy.id);
-                    RemoveCityMapping(pArmy.id);
-                }
+                Index.Remove(pArmy.id);
+                RemoveCityMapping(pArmy.id);
                 StandingArmyService.OnFieldArmyChanged(changedKingdom);
                 return;
             }
@@ -32,12 +31,10 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnArmyDisposed(Army pArmy)
         {
+            if (pArmy?.data == null) return;
             Kingdom kingdom = SafeKingdom(pArmy);
-            if (pArmy != null)
-            {
-                Index.Remove(pArmy.id);
-                RemoveCityMapping(pArmy.id);
-            }
+            Index.Remove(pArmy.id);
+            RemoveCityMapping(pArmy.id);
             StandingArmyService.OnFieldArmyChanged(kingdom);
         }
 

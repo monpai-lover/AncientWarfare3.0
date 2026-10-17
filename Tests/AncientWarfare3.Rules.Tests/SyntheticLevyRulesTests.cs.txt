@@ -174,10 +174,11 @@ internal static class SyntheticLevyRulesTests
             "[HarmonyPostfix]", loverPrefix, StringComparison.Ordinal);
         string loverBody = lovers.Substring(loverPrefix,
             loverPostfix - loverPrefix);
-        Equal(true, loverBody.Contains("public static bool",
+        Equal(true, loverBody.Contains("SyntheticLevyService.IsSynthetic(__instance)",
                 StringComparison.Ordinal) && loverBody.Contains(
-                "return false;", StringComparison.Ordinal),
-            "synthetic actors are rejected before vanilla lover assignment");
+                "SyntheticLevyService.IsSynthetic(pActor)", StringComparison.Ordinal) &&
+            loverBody.Contains("return pActor == null;", StringComparison.Ordinal),
+            "synthetic actors reject a new lover while allowing the existing lover to be cleared");
         Equal(true, lovers.Contains(
                 "BecomeLoversWith_Prefix", StringComparison.Ordinal),
             "direct vanilla lover formation is rejected before execution");

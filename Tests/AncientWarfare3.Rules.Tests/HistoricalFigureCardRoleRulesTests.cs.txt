@@ -26,9 +26,12 @@ internal static class HistoricalFigureCardRoleRulesTests
             "minister category has cards");
         Equal(50, HistoricalFigureCardRoleRules.MinisterCandidateBonus,
             "minister bonus is stable and positive");
-        Equal(50, HistoricalFigureCardRoleRules.ApplyCandidateBonus(10,
+        Equal(60, HistoricalFigureCardRoleRules.ApplyCandidateBonus(10,
             HistoricalFigureCardRole.Minister),
-            "minister receives the fixed candidate bonus");
+            "minister bonus is added to the existing candidate score");
+        Equal(150, HistoricalFigureCardRoleRules.ApplyCandidateBonus(100,
+            HistoricalFigureCardRole.Minister),
+            "minister bonus preserves differences in candidate merit");
         Equal(10, HistoricalFigureCardRoleRules.ApplyCandidateBonus(10,
             HistoricalFigureCardRole.Monarch),
             "monarch receives no minister bonus");

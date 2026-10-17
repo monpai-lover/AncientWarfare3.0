@@ -15,8 +15,11 @@ $model = Get-Content -Raw -Encoding UTF8 $modelPath
 $store = Get-Content -Raw -Encoding UTF8 $storePath
 $keys = Get-Content -Raw -Encoding UTF8 $keysPath
 
+if ($model -notmatch 'CurrentSchemaVersion\s*=\s*(\d+)' -or
+    [int]$Matches[1] -lt 4) {
+    throw 'Tower persistence requires schema version 4 or newer'
+}
 $requiredModelTokens = @(
-    'CurrentSchemaVersion = 4',
     'SchemaVersion', 'Phase', 'StrongholdCityId', 'MotherCityId',
     'OriginKingdomId', 'FixedZoneKeys', 'WallPoints', 'Raid',
     'BanditStrongholdTower', 'TowerBuildingId', 'AssetId',
@@ -38,6 +41,14 @@ foreach ($token in @('TryRead(', 'Write(', 'Clear(', 'TryResolveActive(',
     if ($store -notmatch [regex]::Escape($token)) {
         throw "Bandit state store is missing $token"
     }
+}
+
+if ($store -notmatch 'pState\.SchemaVersion\s*>\s*0' -or
+    $store -notmatch ('pState\.SchemaVersion\s*<=\s*' +
+        'PeasantRebelBanditStrongholdState\.CurrentSchemaVersion') -or
+    $store -notmatch ('pState\.SchemaVersion\s*=\s*' +
+        'PeasantRebelBanditStrongholdState\.CurrentSchemaVersion')) {
+    throw 'Persistence must read supported older schemas and write the current version'
 }
 
 Write-Output 'Bandit stronghold persistence source guard passed.'

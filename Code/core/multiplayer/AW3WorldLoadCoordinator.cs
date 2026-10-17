@@ -18,6 +18,7 @@ namespace AncientWarfare3.core.multiplayer
         private static string _normalLoadDirectory = string.Empty;
         private static bool _normalWorldDataQueued;
         private static bool _generatedWorldQueued;
+        private static bool _worldLoadedHandled;
 
         [ThreadStatic]
         private static int _strictDispatchDepth;
@@ -43,6 +44,7 @@ namespace AncientWarfare3.core.multiplayer
                 _normalLoadDirectory = string.Empty;
                 _normalWorldDataQueued = false;
                 _generatedWorldQueued = false;
+                _worldLoadedHandled = false;
                 _strictDispatchDepth = 0;
             }
             CityReservePoolService.EndWorldLoadRestore();
@@ -67,6 +69,7 @@ namespace AncientWarfare3.core.multiplayer
                 _normalLoadDirectory = string.Empty;
                 _normalWorldDataQueued = false;
                 _generatedWorldQueued = false;
+                _worldLoadedHandled = false;
             }
 
             try
@@ -76,8 +79,14 @@ namespace AncientWarfare3.core.multiplayer
             }
             catch (Exception error)
             {
-                operation.FailWorldLoadFallback(
-                    "WorldBox load invocation failed: " + error.Message);
+                lock (Gate)
+                {
+                    AW3MultiplayerWorldLoadSnapshot before = operation.Snapshot;
+                    if (operation.FailWorldLoadFallback(
+                            "WorldBox load invocation failed: " + error.Message) &&
+                        ReferenceEquals(_operation, operation))
+                        PreservePendingWorldLoad(before);
+                }
             }
 
             return AW3MultiplayerWorldLoadStartResult.Success(
@@ -106,20 +115,34 @@ namespace AncientWarfare3.core.multiplayer
 
                 AW3MultiplayerWorldLoadSnapshot before = _operation.Snapshot;
                 bool cancelled = _operation.Cancel();
-                if (cancelled &&
-                    before.State == AW3MultiplayerWorldLoadState.LoadingWorld)
-                {
-                    _normalLoadDirectory = before.GenerationDirectory;
-                    _normalWorldDataQueued = true;
-                }
+                if (cancelled) PreservePendingWorldLoad(before);
                 return cancelled;
             }
         }
 
         internal static void Tick()
         {
+            Tick(DateTime.UtcNow);
+        }
+
+        internal static void Tick(DateTime utcNow)
+        {
             lock (Gate)
-                _operation?.TryTimeout(DateTime.UtcNow);
+            {
+                if (_operation == null) return;
+                AW3MultiplayerWorldLoadSnapshot before = _operation.Snapshot;
+                if (_operation.TryTimeout(utcNow)) PreservePendingWorldLoad(before);
+            }
+        }
+
+        private static void PreservePendingWorldLoad(AW3MultiplayerWorldLoadSnapshot before)
+        {
+            // Cancelling/timing out the AW3 operation cannot cancel WorldBox's queue.
+            // Restore its archive normally if that already dispatched world arrives later.
+            if (before.State != AW3MultiplayerWorldLoadState.AwaitingWorldData &&
+                before.State != AW3MultiplayerWorldLoadState.LoadingWorld) return;
+            _normalLoadDirectory = before.GenerationDirectory;
+            _normalWorldDataQueued = before.State == AW3MultiplayerWorldLoadState.LoadingWorld;
         }
 
         internal static void ObserveLoadWorldStarted(string path)
@@ -133,9 +156,12 @@ namespace AncientWarfare3.core.multiplayer
                         canonical, StringComparison.OrdinalIgnoreCase))
                     return;
 
+                _operation?.FailWorldLoadFallback(
+                    "WorldBox started a different world-load request.");
                 _normalLoadDirectory = canonical;
                 _normalWorldDataQueued = false;
                 _generatedWorldQueued = false;
+                _worldLoadedHandled = false;
             }
         }
 
@@ -169,6 +195,7 @@ namespace AncientWarfare3.core.multiplayer
                 _normalLoadDirectory = string.Empty;
                 _normalWorldDataQueued = false;
                 _generatedWorldQueued = true;
+                _worldLoadedHandled = false;
             }
             CityReservePoolService.EndWorldLoadRestore();
         }
@@ -183,6 +210,7 @@ namespace AncientWarfare3.core.multiplayer
 
             lock (Gate)
             {
+                if (_worldLoadedHandled) return;
                 AW3MultiplayerWorldLoadOperation candidate = _operation;
                 if (candidate != null && candidate.ObserveWorldLoaded())
                 {
@@ -203,144 +231,131 @@ namespace AncientWarfare3.core.multiplayer
                     _normalLoadDirectory = string.Empty;
                     _normalWorldDataQueued = false;
                 }
+                else if (HasLiveOperation(candidate) ||
+                         !string.IsNullOrEmpty(_normalLoadDirectory))
+                    return;
                 else if (AWAsyncRuntime.State == AWAsyncLifecycleState.Stopped)
                     startUntrackedWorld = true;
+                _worldLoadedHandled = true;
             }
 
-            if (operation != null)
+            try
             {
-                AW3RestoreResult result;
-                try
+                if (operation != null)
                 {
-                    result = AW3RuntimeRestorePipeline.TryRestoreFromDirectory(
-                        strictDirectory, strict: true);
-                }
-                catch (Exception error)
-                {
-                    ModClass.LogWarning(
-                        "AW3 strict restore failed for operation " +
-                        operation.Snapshot.OperationId + ": " + error);
-                    operation.FailAw3Restore(
-                        "runtime_restore: " + error.Message);
-                    CityReservePoolService.EndWorldLoadRestore();
-                    DeJureRegionStore.RepairAfterWorldLoaded();
-                    CountyAdministrationStore.RepairAfterWorldLoaded();
-                    // 必须紧跟在县级重建之后:restore 管线里的
-                    // court_vacancies 阶段跑在县被重建出来之前,那一遍
-                    // 发现不到靠 zone 推导出来的县。之后不再扫描,
-                    // 席位空出来由 RegisterVacancy 事件驱动补缺。
-                    CourtVacancyReconciliationService
-                        .InitializeCountyVacancies();
-                    SocialIdentityMigrationService.RepairAfterWorldLoaded();
-                    ClanMembershipSyncService.RepairAfterWorldLoaded();
-                    FamilyIdentitySyncService.RepairAfterWorldLoaded();
-                    return;
-                }
-                if (result.Success)
-                {
-                    lock (Gate)
+                    AW3RestoreResult result;
+                    try
                     {
-                        if (!ReferenceEquals(_operation, operation) ||
-                            operation.Snapshot.State !=
-                            AW3MultiplayerWorldLoadState.RestoringAw3)
+                        result = AW3RuntimeRestorePipeline.TryRestoreFromDirectory(
+                            strictDirectory, strict: true);
+                    }
+                    catch (Exception error)
+                    {
+                        ModClass.LogWarning(
+                            "AW3 strict restore failed for operation " +
+                            operation.Snapshot.OperationId + ": " + error);
+                        operation.FailAw3Restore(
+                            "runtime_restore: " + error.Message);
+                        return;
+                    }
+                    if (result.Success)
+                    {
+                        lock (Gate)
                         {
-                            CityReservePoolService.EndWorldLoadRestore();
-                            DeJureRegionStore.RepairAfterWorldLoaded();
-                            CountyAdministrationStore.RepairAfterWorldLoaded();
-                            // 必须紧跟在县级重建之后:restore 管线里的
-                            // court_vacancies 阶段跑在县被重建出来之前,那一遍
-                            // 发现不到靠 zone 推导出来的县。之后不再扫描,
-                            // 席位空出来由 RegisterVacancy 事件驱动补缺。
-                            CourtVacancyReconciliationService
-                                .InitializeCountyVacancies();
-                            SocialIdentityMigrationService.RepairAfterWorldLoaded();
-                            ClanMembershipSyncService.RepairAfterWorldLoaded();
-                            FamilyIdentitySyncService.RepairAfterWorldLoaded();
-                            return;
-                        }
-                        try
-                        {
-                            AWAsyncWorldLifecycle.StartWorld();
-                            operation.CompleteRestore();
-                        }
-                        catch (Exception error)
-                        {
-                            operation.FailAw3Restore(
-                                "async_world_start: " + error.Message);
+                            if (!ReferenceEquals(_operation, operation) ||
+                                operation.Snapshot.State !=
+                                AW3MultiplayerWorldLoadState.RestoringAw3)
+                                return;
+                            try
+                            {
+                                AWAsyncWorldLifecycle.StartWorld();
+                                operation.CompleteRestore();
+                            }
+                            catch (Exception error)
+                            {
+                                operation.FailAw3Restore(
+                                    "async_world_start: " + error.Message);
+                            }
                         }
                     }
+                    else
+                        operation.FailAw3Restore(RestoreFailureDetail(result));
+                    return;
                 }
-                else
-                    operation.FailAw3Restore(RestoreFailureDetail(result));
-                CityReservePoolService.EndWorldLoadRestore();
-                DeJureRegionStore.RepairAfterWorldLoaded();
-                CountyAdministrationStore.RepairAfterWorldLoaded();
-                // 必须紧跟在县级重建之后:restore 管线里的
-                // court_vacancies 阶段跑在县被重建出来之前,那一遍
-                // 发现不到靠 zone 推导出来的县。之后不再扫描,
-                // 席位空出来由 RegisterVacancy 事件驱动补缺。
-                CourtVacancyReconciliationService
-                    .InitializeCountyVacancies();
-                SocialIdentityMigrationService.RepairAfterWorldLoaded();
-                ClanMembershipSyncService.RepairAfterWorldLoaded();
-                FamilyIdentitySyncService.RepairAfterWorldLoaded();
-                return;
-            }
 
-            if (initializeGeneratedWorld)
-            {
-                AW3RestoreResult result =
-                    AW3RuntimeRestorePipeline.TryInitializeGeneratedWorld(
-                        strict: false);
-                if (result.Success) AWAsyncWorldLifecycle.StartWorld();
-                LogNormalFailure("generated world", result);
-                CityReservePoolService.EndWorldLoadRestore();
-                DeJureRegionStore.RepairAfterWorldLoaded();
-                CountyAdministrationStore.RepairAfterWorldLoaded();
-                // 必须紧跟在县级重建之后:restore 管线里的
-                // court_vacancies 阶段跑在县被重建出来之前,那一遍
-                // 发现不到靠 zone 推导出来的县。之后不再扫描,
-                // 席位空出来由 RegisterVacancy 事件驱动补缺。
-                CourtVacancyReconciliationService
-                    .InitializeCountyVacancies();
-                SocialIdentityMigrationService.RepairAfterWorldLoaded();
-                ClanMembershipSyncService.RepairAfterWorldLoaded();
-                FamilyIdentitySyncService.RepairAfterWorldLoaded();
-                return;
-            }
-
-            if (!string.IsNullOrEmpty(normalDirectory))
-            {
-                AW3RestoreResult result =
-                    AW3RuntimeRestorePipeline.TryRestoreFromDirectory(
-                        normalDirectory, strict: false);
-                if (result.Success) AWAsyncWorldLifecycle.StartWorld();
-                LogNormalFailure("save load", result);
-            }
-            else if (startUntrackedWorld)
-            {
-                try
+                if (initializeGeneratedWorld ||
+                    !string.IsNullOrEmpty(normalDirectory))
+                    RestoreNormalWorld(normalDirectory, initializeGeneratedWorld);
+                else if (startUntrackedWorld)
                 {
+                    try
+                    {
+                        AWAsyncWorldLifecycle.StartWorld();
+                    }
+                    catch (Exception error)
+                    {
+                        ModClass.LogWarning(
+                            "AW3 untracked world async start failed: " + error);
+                    }
+                }
+            }
+            finally
+            {
+                RunPostLoadRepair("reserve_pool_cleanup",
+                    CityReservePoolService.EndWorldLoadRestore);
+                RunPostLoadRepair("de_jure_regions",
+                    DeJureRegionStore.RepairAfterWorldLoaded);
+                RunPostLoadRepair("county_administration",
+                    CountyAdministrationStore.RepairAfterWorldLoaded);
+                // County reconstruction can create seats that the earlier restore
+                // pipeline could not see. Register vacancies before identity sync.
+                RunPostLoadRepair("county_vacancies",
+                    CourtVacancyReconciliationService.InitializeCountyVacancies);
+                RunPostLoadRepair("social_identity", () =>
+                    SocialIdentityMigrationService.RepairAfterWorldLoaded());
+                RunPostLoadRepair("clan_membership", () =>
+                    ClanMembershipSyncService.RepairAfterWorldLoaded());
+                RunPostLoadRepair("family_identity",
+                    FamilyIdentitySyncService.RepairAfterWorldLoaded);
+            }
+        }
+
+        private static void RestoreNormalWorld(string directory, bool generated)
+        {
+            string context = generated ? "generated world" : "save load";
+            string stage = "runtime_restore";
+            try
+            {
+                AW3RestoreResult result = generated
+                    ? AW3RuntimeRestorePipeline.TryInitializeGeneratedWorld(
+                        strict: false)
+                    : AW3RuntimeRestorePipeline.TryRestoreFromDirectory(
+                        directory, strict: false);
+                if (result.Success)
+                {
+                    stage = "async_world_start";
                     AWAsyncWorldLifecycle.StartWorld();
                 }
-                catch (Exception error)
-                {
-                    ModClass.LogWarning(
-                        "AW3 untracked world async start failed: " + error);
-                }
+                LogNormalFailure(context, result);
             }
-            CityReservePoolService.EndWorldLoadRestore();
-            DeJureRegionStore.RepairAfterWorldLoaded();
-            CountyAdministrationStore.RepairAfterWorldLoaded();
-            // 必须紧跟在县级重建之后:restore 管线里的
-            // court_vacancies 阶段跑在县被重建出来之前,那一遍
-            // 发现不到靠 zone 推导出来的县。之后不再扫描,
-            // 席位空出来由 RegisterVacancy 事件驱动补缺。
-            CourtVacancyReconciliationService
-                .InitializeCountyVacancies();
-            SocialIdentityMigrationService.RepairAfterWorldLoaded();
-            ClanMembershipSyncService.RepairAfterWorldLoaded();
-            FamilyIdentitySyncService.RepairAfterWorldLoaded();
+            catch (Exception error)
+            {
+                ModClass.LogWarning("AW3 " + context + " failed at " +
+                                    stage + ": " + error);
+            }
+        }
+
+        private static void RunPostLoadRepair(string stage, Action repair)
+        {
+            try
+            {
+                repair();
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("AW3 post-load repair failed at " +
+                                    stage + ": " + error);
+            }
         }
 
         private static void LogNormalFailure(string context,

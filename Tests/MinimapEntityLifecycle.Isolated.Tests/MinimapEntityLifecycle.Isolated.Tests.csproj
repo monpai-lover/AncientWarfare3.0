@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Code/patch/AW_FigurePatch.cs" Link="Production/AW_FigurePatch.cs" />
+    <Compile Include="../../Code/patch/AW_HeirMinimapPatch.cs" Link="Production/AW_HeirMinimapPatch.cs" />
+    <Compile Include="../../Code/content/figures/HistoricalFigureMinimapRules.cs" Link="Production/HistoricalFigureMinimapRules.cs" />
+    <Compile Include="../../Code/core/lineage/HeirMinimapMarkerIndex.cs" Link="Production/HeirMinimapMarkerIndex.cs" />
+    <Compile Include="../../Code/core/lineage/HeirMinimapVisualRules.cs" Link="Production/HeirMinimapVisualRules.cs" />
+    <Compile Include="../../Code/core/lineage/HeirMinimapScaleRules.cs" Link="Production/HeirMinimapScaleRules.cs" />
+    <Compile Include="../../Code/core/lineage/MinimapActorMarkerRules.cs" Link="Production/MinimapActorMarkerRules.cs" />
+    <Compile Include="../../Code/core/lineage/XiaMinimapVisualRules.cs" Link="Production/XiaMinimapVisualRules.cs" />
+  </ItemGroup>
+</Project>

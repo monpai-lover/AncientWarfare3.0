@@ -5,11 +5,13 @@ $building = Get-Content -Raw (Join-Path $root 'Code\patch\AW_BuildingNullSafetyP
 $cityBuild = Get-Content -Raw (Join-Path $root 'Code\patch\AW_CityBuildNullSafetyPatch.cs')
 $visual = Get-Content -Raw (Join-Path $root 'Code\patch\AW_ActorVisualRolePatch.cs')
 
-if (-not $enemy.Contains('kingdom.asset == null')) {
+if (-not $enemy.Contains('pKingdom != null && pKingdom.asset != null')) {
     throw 'EnemyFinder guard must reject kingdoms with missing assets.'
 }
-if (-not $enemy.Contains('ClearNegativeKeys')) {
-    throw 'EnemyFinder cleanup must remain wired.'
+if (-not $enemy.Contains('__result = EmptyResult;') -or
+    -not $enemy.Contains('__exception is NullReferenceException') -or
+    $enemy.Contains('ClearNegativeKeys')) {
+    throw 'EnemyFinder must fail closed for invalid inputs without restoring the retired negative cache.'
 }
 if (-not $building.Contains('__instance.asset != null') -or
     -not $building.Contains('__instance.data != null')) {

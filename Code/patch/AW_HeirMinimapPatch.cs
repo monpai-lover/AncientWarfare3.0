@@ -47,7 +47,8 @@ namespace AncientWarfare3.patch
                 if (createdThisFrame > 2) break;
                 Kingdom kingdom = World.world?.kingdoms?.get(
                     candidateKingdomIds[index]);
-                if (kingdom == null || !kingdom.isCiv() || kingdom.isRekt() ||
+                if (kingdom?.data == null || kingdom.asset == null ||
+                    !kingdom.isCiv() || kingdom.isRekt() ||
                     !kingdom.hasCities())
                 {
                     HeirMinimapMarkerIndex.Remove(candidateKingdomIds[index]);
@@ -73,10 +74,12 @@ namespace AncientWarfare3.patch
                     continue;
 
                 Kingdom currentKingdom = unit.kingdom;
+                if (currentKingdom?.data == null || currentKingdom.asset == null)
+                    currentKingdom = null;
                 long visualKingdomId = HeirMinimapVisualRules.ResolveVisualKingdomId(
                     kingdom.id,
-                    currentKingdom?.id ?? -1L);
-                Kingdom visualKingdom = currentKingdom?.id == visualKingdomId
+                    currentKingdom?.data?.id ?? -1L);
+                Kingdom visualKingdom = currentKingdom?.data?.id == visualKingdomId
                     ? currentKingdom
                     : kingdom.id == visualKingdomId
                         ? kingdom

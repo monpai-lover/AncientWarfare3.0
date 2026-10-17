@@ -539,8 +539,15 @@ namespace AncientWarfare3.core.db
                     long sequence = completion.Sequences[index];
                     Action<long, object> callback;
                     Action<long, string> failureCallback;
-                    Callbacks.Take(sequence, out callback,
-                        out failureCallback);
+                    lock (Gate)
+                    {
+                        // A previous callback can restart the world. Sequence IDs
+                        // restart with it, so an old batch must not take callbacks
+                        // belonging to the replacement writer.
+                        if (!ReferenceEquals(_worker, worker)) return;
+                        Callbacks.Take(sequence, out callback,
+                            out failureCallback);
+                    }
                     try
                     {
                         if (completion.IsCommitted)

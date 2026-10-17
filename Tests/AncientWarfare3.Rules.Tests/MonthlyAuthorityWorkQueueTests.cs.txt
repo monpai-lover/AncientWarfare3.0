@@ -12,6 +12,8 @@ internal static class MonthlyAuthorityWorkQueueTests
         CatchUpUsesOneBatchPerMonth();
         ClearDropsPendingWorkAndResetsTheMonthGate();
         FailedItemDoesNotDropLaterPendingWork();
+        QueuedSnapshotsSurviveSourceMutation();
+        ExtremeMonthKeysRemainBoundedAndDeduplicated();
         ExposesDedicatedMonthlyBenchmarkIds();
     }
 
@@ -130,6 +132,50 @@ internal static class MonthlyAuthorityWorkQueueTests
         int remaining = -1;
         queue.Drain(1, (month, value) => remaining = value);
         Equal(2, remaining, "later work remains drainable after a failure");
+    }
+
+    private static void QueuedSnapshotsSurviveSourceMutation()
+    {
+        var queue = new MonthlyAuthorityWorkQueue<int>();
+        var source = new List<int> { 1, 2 };
+        queue.ScheduleMonth(10, source);
+        source.Clear();
+        source.Add(99);
+        queue.ScheduleMonth(12, source);
+        source.Add(100);
+        var processed = new List<string>();
+        queue.Drain(20, (month, value) => processed.Add(month + ":" + value));
+        Equal("10:1,10:2,11:99,12:99", string.Join(",", processed),
+            "queued months retain scheduling-time values and counts");
+        Equal(0, queue.PendingCount,
+            "source mutation does not strand pending counts");
+        Equal(0, queue.PendingBatchCount, "all snapshot batches drain");
+    }
+
+    private static void ExtremeMonthKeysRemainBoundedAndDeduplicated()
+    {
+        // Bound the regression itself: the old inclusive int cursor spins
+        // forever even for an empty snapshot at the maximum month key.
+        var empty = new MonthlyAuthorityWorkQueue<int>();
+        var completion = System.Threading.Tasks.Task.Run(() =>
+            empty.ScheduleMonth(int.MaxValue, Array.Empty<int>()));
+        True(completion.Wait(TimeSpan.FromSeconds(2)),
+            "maximum month completes without overflowing the loop cursor");
+
+        var queue = new MonthlyAuthorityWorkQueue<int>();
+        True(queue.ScheduleMonth(int.MinValue, new[] { 1 }),
+            "minimum month is a valid first observation");
+        Equal(false, queue.ScheduleMonth(int.MinValue, new[] { 2 }),
+            "minimum month does not collide with an uninitialized sentinel");
+        queue.ScheduleMonth(int.MaxValue, new[] { 3 });
+        Equal(13, queue.PendingCount,
+            "extreme jump retains the first batch and only twelve catch-up months");
+        int lastMonth = 0;
+        queue.Drain(20, (month, _) => lastMonth = month);
+        Equal(int.MaxValue, lastMonth, "maximum month is included once");
+        Equal(false, queue.ShouldScheduleMonth(int.MaxValue),
+            "maximum month is also deduplicated");
+        Equal(0, queue.PendingCount, "extreme month batches fully drain");
     }
 
     private static void ExposesDedicatedMonthlyBenchmarkIds()

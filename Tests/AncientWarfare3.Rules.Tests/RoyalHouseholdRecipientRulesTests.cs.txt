@@ -29,9 +29,20 @@ internal static class RoyalHouseholdRecipientRulesTests
         Equal(4, RoyalHouseholdRecipientRules.Capacity(
             RoyalHouseholdOwnerRole.King,
             RulerHouseholdRealmTier.Kingdom), "kingdom ruler capacity");
-        Equal(8, RoyalHouseholdRecipientRules.Capacity(
+        // The fixed imperial ranks reserve one empress plus nine consort seats.
+        Equal(9, RoyalHouseholdRecipientRules.Capacity(
             RoyalHouseholdOwnerRole.King,
             RulerHouseholdRealmTier.Empire), "emperor capacity");
+        True(new RoyalHouseholdRecipientCandidate(6L,
+            RoyalHouseholdOwnerRole.King, true, 8,
+            RoyalHouseholdRecipientRules.Capacity(
+                RoyalHouseholdOwnerRole.King, RulerHouseholdRealmTier.Empire),
+            true, 1d).HasVacancy, "the ninth imperial seat accepts an offering");
+        False(new RoyalHouseholdRecipientCandidate(6L,
+            RoyalHouseholdOwnerRole.King, true, 9,
+            RoyalHouseholdRecipientRules.Capacity(
+                RoyalHouseholdOwnerRole.King, RulerHouseholdRealmTier.Empire),
+            true, 1d).HasVacancy, "all nine imperial seats block another offering");
         Equal(2, RoyalHouseholdRecipientRules.Capacity(
             RoyalHouseholdOwnerRole.Heir,
             RulerHouseholdRealmTier.Empire), "heir capacity");

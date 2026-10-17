@@ -264,6 +264,7 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(institution, "CustomCourtRuntime.OfficeDisplayName(");
         Contains(store, "TryImport");
         Contains(powers, "BanditAmnestyIconPath");
+        Contains(powers, "\"ui/Icons/aw_bandit_amnesty\"");
         Contains(lineageTab, "BanditAmnestyIconPath");
         Contains(modConfigPatch, "class AW_ModConfigWindowTitlePatch");
         Contains(modConfigPatch,
@@ -279,7 +280,7 @@ internal static class CustomCourtWorkflowSourceGuardTests
         Contains(window, "EnsureRegionalLayerRootEdge");
         Contains(window, "_regionTitleLabel?.gameObject.SetActive(true)");
         Contains(window, "if (_template?.RegionalGovernmentLayer != null)");
-        RequiresFile(Path.Combine(root, "GameResources", "ui", "icons",
+        RequiresFile(Path.Combine(root, "GameResources", "ui", "Icons",
             "aw_bandit_amnesty.png"));
         HasLocalizationKey(localization, "aw_custom_court_workflow");
         HasLocalizationKey(localization, "aw_custom_court_workflow Title");

@@ -73,15 +73,26 @@ namespace AncientWarfare3.core.court
             if (!Entries.TryGetValue(pKingdom.id, out Entry entry)) return;
             long actorId = pActor.data.id;
             if (entry.Ids.Contains(actorId)) return;
+            // Native disposal may clear data before the removal event reaches
+            // this cache. Compact the replacement snapshot before comparing
+            // IDs; keep existing readers on their unchanged list.
+            var next = new List<Actor>(entry.Actors.Count + 1);
+            var nextIds = new HashSet<long>();
+            foreach (Actor other in entry.Actors)
+            {
+                if (other?.data == null) continue;
+                next.Add(other);
+                nextIds.Add(other.data.id);
+            }
             // 表按 rank 降序、同 rank 按 id 升序。二分定位保持这个不变量,
             // 免得为了加一个人再排一次序。
             int rank = OfficialCareerStateService.ReadRankFast(pActor);
             int low = 0;
-            int high = entry.Actors.Count;
+            int high = next.Count;
             while (low < high)
             {
                 int middle = low + ((high - low) >> 1);
-                Actor other = entry.Actors[middle];
+                Actor other = next[middle];
                 int otherRank = OfficialCareerStateService.ReadRankFast(other);
                 bool sortsBefore = otherRank > rank ||
                                    (otherRank == rank &&
@@ -89,10 +100,8 @@ namespace AncientWarfare3.core.court
                 if (sortsBefore) low = middle + 1;
                 else high = middle;
             }
-            var next = new List<Actor>(entry.Actors.Count + 1);
-            next.AddRange(entry.Actors);
             next.Insert(low, pActor);
-            var nextIds = new HashSet<long>(entry.Ids) { actorId };
+            nextIds.Add(actorId);
             Entries[pKingdom.id] = new Entry
             {
                 Actors = next, Ids = nextIds
@@ -151,6 +160,16 @@ namespace AncientWarfare3.core.court
             // 兜底重建是整套池子的,城官池一起丢 —— 否则「补不上 → 重建」
             // 只重建了一半,漏收的人仍然进不来。
             CityCandidatePool.Invalidate(pKingdom);
+        }
+
+        internal static IEnumerable<Actor> EnumerateWithData(
+            IEnumerable<Actor> pActors)
+        {
+            if (pActors == null) yield break;
+            // Cached references can outlive native disposal. Dead actors with
+            // intact data still participate in durable office cleanup.
+            foreach (Actor actor in pActors)
+                if (actor?.data != null) yield return actor;
         }
 
         internal static void ClearRuntime()

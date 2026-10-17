@@ -27,6 +27,8 @@
     <Compile Include="..\..\Code\core\court\OfficialCareerRankRules.cs" Link="Production\OfficialCareerRankRules.cs" />
     <Compile Include="..\..\Code\core\court\OfficialCareerBiographyRules.cs" Link="Production\OfficialCareerBiographyRules.cs" />
     <Compile Include="..\..\Code\core\court\OfficialCirculationRules.cs" Link="Production\OfficialCirculationRules.cs" />
+    <Compile Include="..\..\Code\core\court\LocalCourtOfficeRules.cs" Link="Production\LocalCourtOfficeRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtProfileId.cs" Link="Production\CourtProfileId.cs" />
     <Compile Include="..\..\Code\core\court\OfficialCareerAppointmentResult.cs" Link="Production\OfficialCareerAppointmentResult.cs" />
     <Compile Include="..\..\Code\core\court\GovernorRotationRuntimeScope.cs" Link="Production\GovernorRotationRuntimeScope.cs" />
     <Compile Include="..\..\Code\core\court\CourtIds.cs" Link="Production\CourtIds.cs" />

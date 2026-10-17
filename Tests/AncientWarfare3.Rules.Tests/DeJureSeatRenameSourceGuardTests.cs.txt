@@ -11,7 +11,8 @@ internal static class DeJureSeatRenameSourceGuardTests
         Contains(store,
             "internal static bool SyncSeatName(City pCity, string pCommittedName,");
         Contains(store, "pTrackedRename");
-        Contains(store, "ShouldApplyTrackedSeatRename");
+        Contains(store, "CityStateRenameRules.ShouldSyncStateName(");
+        Contains(store, "pIsSeat: true, pTrackedRename, region.SeatLocked");
         Contains(store, "DeJureRegionRenamedFromSeat");
         Contains(store, "\"\\u5dde\")");
         Contains(store, "p != null && p.Active &&");
@@ -19,10 +20,21 @@ internal static class DeJureSeatRenameSourceGuardTests
         Contains(store, "RegionNameSource");
         Contains(store, "ManualSeatRename");
         Contains(store, "RegionalGovernmentAggregationService.Clear()");
-        Contains(renamePatch,
-            "DeJureRegionStore.SyncSeatName(city, committedCityName,");
+        Contains(renamePatch, "if (!CityStateRenameService.IsNativeSeatSyncSuppressed)");
+        Contains(renamePatch, "DeJureRegionStore.SyncSeatName(city,");
+        Contains(renamePatch, "committedCityName, pTrack)");
         Contains(renamePatch,
             "HierarchicalVassalMapModeService.MarkCityDirty(city)");
+        foreach (string method in new[] { "internal static bool CreateState(",
+                     "private static void EnsureKingdomCapitalSeatLocked(" })
+        {
+            int methodStart = store.IndexOf(method, StringComparison.Ordinal);
+            int creation = store.IndexOf("var region = new DeJureRegion",
+                methodStart, StringComparison.Ordinal);
+            int creationEnd = store.IndexOf("};", creation, StringComparison.Ordinal);
+            Contains(store.Substring(creation, creationEnd - creation),
+                "SeatLocked = true");
+        }
     }
 
     private static string Read(string pPath) => File.ReadAllText(

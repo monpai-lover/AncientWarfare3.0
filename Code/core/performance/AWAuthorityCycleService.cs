@@ -56,6 +56,7 @@ namespace AncientWarfare3.core.performance
             CityReservePool,
             ArmyReplenishmentOperation,
             MandateMilitaryStrength,
+            BanditRaids,
             WarRefugee,
             DrainAuthorityCompletions,
             FlushPendingWarParticipantSources,
@@ -245,6 +246,7 @@ namespace AncientWarfare3.core.performance
             _nativeCycleToken = 0L;
             AWMilitaryFrontLaneScheduler.Reset();
             ArmyRtsSchedulingService.Reset();
+            PeasantRebelBanditRaidService.ResetRuntime();
             NobleHeirPregnancyService.Reset();
             RulerHouseholdPregnancyService.Reset();
             DynasticMaleLineContinuityService.Reset();
@@ -278,6 +280,7 @@ namespace AncientWarfare3.core.performance
             WesternLineageMigrationService.Reset();
             KingdomInstitutionalXiaizationService.Reset();
             ReigningRoyalLineageIndex.Reset();
+            SuccessionRelationshipIndex.Reset();
             SuccessionDisputePersistenceService.Reset();
             ActorDeathArchiveService.Reset();
             PeasantRebelBanditStrongholdPopulationService.Clear();
@@ -419,6 +422,8 @@ namespace AncientWarfare3.core.performance
             Step(AuthorityStep.MandateMilitaryStrength,
                 RecentFeatureBenchmarkRules.ArmyRtsLogisticsIndex,
                 MandateMilitaryStrengthService.ProcessAuthorityCycle);
+            Step(AuthorityStep.BanditRaids,
+                PeasantRebelBanditRaidService.ProcessAuthorityCycle);
             argStep = BeginStep();
             try
             {
@@ -454,10 +459,10 @@ namespace AncientWarfare3.core.performance
         private static void DrainDeferredAuthorityWork()
         {
             Step(AuthorityStep.DeferredBanditPopulation,
-                PeasantRebelBanditStrongholdPopulationService.
-                    ProcessAuthorityCycle);
+                () => PeasantRebelBanditStrongholdPopulationService.
+                    ProcessAuthorityCycle(1));
             Step(AuthorityStep.DeferredBanditDisposal,
-                BanditStrongholdCityDisposalService.ProcessAuthorityCycle);
+                () => BanditStrongholdCityDisposalService.ProcessAuthorityCycle(1));
             Step(AuthorityStep.BanditAmnestySettlement,
                 PeasantRebelBanditAmnestyService.ProcessAuthorityCycle);
             int itemLimit = DeferredRuntimeWorkRules.

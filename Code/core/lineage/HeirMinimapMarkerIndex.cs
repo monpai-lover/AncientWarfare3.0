@@ -29,7 +29,8 @@ namespace AncientWarfare3.core.lineage
                 !ReferenceEquals(_indexedWorld, World.world)) return;
             pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID,
                 out long heirId, -1L);
-            if (heirId >= 0L && !pKingdom.isRekt() && pKingdom.isCiv() &&
+            if (heirId >= 0L && pKingdom.asset != null &&
+                !pKingdom.isRekt() && pKingdom.isCiv() &&
                 pKingdom.hasCities())
                 Add(pKingdom.id);
             else
@@ -58,7 +59,7 @@ namespace AncientWarfare3.core.lineage
             if (currentWorld?.kingdoms == null) return;
             foreach (Kingdom kingdom in currentWorld.kingdoms)
             {
-                if (kingdom?.data == null || kingdom.isRekt() ||
+                if (kingdom?.data == null || kingdom.asset == null || kingdom.isRekt() ||
                     !kingdom.isCiv() || !kingdom.hasCities()) continue;
                 kingdom.data.get(LineageKeys.KINGDOM_HEIR_ID,
                     out long heirId, -1L);

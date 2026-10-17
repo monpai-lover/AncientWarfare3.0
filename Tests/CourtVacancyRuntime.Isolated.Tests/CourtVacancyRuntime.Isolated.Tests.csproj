@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Code/core/court/CourtAppointmentContext.cs" Link="Production/CourtAppointmentContext.cs" />
+    <Compile Include="../../Code/core/court/CityCandidatePool.cs" Link="Production/CityCandidatePool.cs" />
+    <Compile Include="../../Code/core/court/CandidatePoolBehavior.cs" Link="Production/CandidatePoolBehavior.cs" />
+    <Compile Include="../../Code/core/court/CountyShortlistRules.cs" Link="Production/CountyShortlistRules.cs" />
+    <Compile Include="../../Code/core/court/CityShortlistRules.cs" Link="Production/CityShortlistRules.cs" />
+    <Compile Include="../../Code/core/court/CountyFillDiagnostics.cs" Link="Production/CountyFillDiagnostics.cs" />
+    <Compile Include="../../Code/core/court/CourtAppointmentFailureBackoffRules.cs" Link="Production/CourtAppointmentFailureBackoffRules.cs" />
+    <Compile Include="../../Code/core/court/CourtVacancyPoolMemoRules.cs" Link="Production/CourtVacancyPoolMemoRules.cs" />
+    <Compile Include="../../Code/core/court/LocalCourtAppointmentService.cs" Link="Production/LocalCourtAppointmentService.cs" />
+    <Compile Include="../../Code/core/court/OfficerCandidateCatalog.cs" Link="Production/OfficerCandidateCatalog.cs" />
+    <Compile Include="../../Code/core/court/CourtCandidateSession.cs" Link="Production/CourtCandidateSession.cs" />
+    <Compile Include="../../Code/core/court/CourtVacancyRules.cs" Link="Production/CourtVacancyRules.cs" />
+    <Compile Include="../../Code/core/court/CourtVacancyReconciliationService.cs" Link="Production/CourtVacancyReconciliationService.cs" />
+    <Compile Include="../../Code/core/court/CourtVacancyRegistry.cs" Link="Production/CourtVacancyRegistry.cs" />
+    <Compile Include="../../Code/core/court/CourtIds.cs" Link="Production/CourtIds.cs" />
+    <Compile Include="../../Code/core/court/LocalOfficialCandidateRules.cs" Link="Production/LocalOfficialCandidateRules.cs" />
+    <Compile Include="../../Code/core/court/LocalLowOfficeVacancyRules.cs" Link="Production/LocalLowOfficeVacancyRules.cs" />
+    <Compile Include="../../Code/patch/AW_CityLeaderPatch.cs" Link="Production/AW_CityLeaderPatch.cs" />
+    <Reference Include="System.Data.SQLite"><HintPath>../../Assemblies/System.Data.SQLite.dll</HintPath><Private>true</Private></Reference>
+  </ItemGroup>
+</Project>

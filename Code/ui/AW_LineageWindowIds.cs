@@ -46,9 +46,11 @@ namespace AncientWarfare3.ui
             "aw_military_governorate_window";
         public const string DE_JURE_REGION_MERGE =
             "aw_de_jure_region_merge";
-        public const string COUNTY_RENAME = "aw_county_rename";
-        public const string HISTORICAL_FIGURE_CARDS = "aw_historical_figure_cards";
-        public const string HISTORICAL_FIGURE_CARD_RECYCLE =
+        // This editor requires a county selection supplied by its local caller.
+        internal const string COUNTY_RENAME = "aw_county_rename";
+        // These windows edit local card inventory, outside world multiplayer routing.
+        internal const string HISTORICAL_FIGURE_CARDS = "aw_historical_figure_cards";
+        internal const string HISTORICAL_FIGURE_CARD_RECYCLE =
             "aw_historical_figure_card_recycle";
 
         public static void SafeShow(string pWindowId, System.Action pRefreshIfCurrent = null)

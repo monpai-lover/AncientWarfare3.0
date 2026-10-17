@@ -64,11 +64,23 @@ if ($actorCaptureStart -lt 0 -or $generateValueStart -le $actorCaptureStart) {
 }
 $actorCapture = $localizedNameService.Substring($actorCaptureStart,
     $generateValueStart - $actorCaptureStart)
-if ($actorCapture -match 'CHINESE_FAMILY_NAME|FamilyComponent') {
+# The native-Sinitic profile deliberately persists its complete surname-first
+# identity. The single-given-name contract applies to the remaining profiles.
+$nativeCapture = [regex]::Match($actorCapture,
+    '(?s)if\s*\(IsNativeSiniticActor\(pActor\)\)\s*\{(?<body>.*?)\n\s*\}')
+if (-not $nativeCapture.Success -or
+    $nativeCapture.Groups['body'].Value -notmatch
+        'LineageKeys\.CLAN_NAME,\s*pParts\.FamilyName' -or
+    $nativeCapture.Groups['body'].Value -notmatch 'return;\s*$') {
+    throw 'Native Sinitic actor creation must preserve its family identity in a separate terminating branch.'
+}
+$ordinaryCapture = $actorCapture.Substring(
+    $nativeCapture.Index + $nativeCapture.Length)
+if ($ordinaryCapture -match 'CHINESE_FAMILY_NAME|FamilyComponent') {
     throw 'Actor creation must not persist a template surname before AW3 creates a family branch.'
 }
-if ($actorCapture -notmatch 'pSelectedName' -or
-    $actorCapture -notmatch 'LineageKeys\.GIVEN_NAME') {
+if ($ordinaryCapture -notmatch 'pSelectedName' -or
+    $ordinaryCapture -notmatch 'LineageKeys\.GIVEN_NAME') {
     throw 'Actor creation must persist the selected single name for later family projection.'
 }
 if ($actorNamePatch -notmatch 'UsesAwLineageSystem\s*\(' -or
@@ -118,11 +130,14 @@ if ($migration -notmatch `
     'bool\s+Enqueue\s*\(\s*string\s+pMetaType,\s*long\s+pObjectId') {
     throw 'The bounded identity write gate must report whether it accepted a commit.'
 }
-if ($migration -notmatch `
-    'while\s*\(remaining\s*>\s*0\)[\s\S]*PendingWrites\.Count\s*>\s*0' -or
-    $migration -notmatch `
-    'PendingWrites\.Flush[\s\S]*if\s*\(!?_pending\)') {
-    throw 'Targeted identity writes must flush before migration reads old rows.'
+# Whole-population name migration was retired. Targeted writes now flush a
+# bounded batch into the shared asynchronous historical writer.
+if ($migration -notmatch 'pBudget\s*<=\s*0' -or
+    $migration -notmatch '!HistoricalWriteService\.Ready' -or
+    $migration -notmatch
+        'lock\s*\(Gate\)\s*PendingWrites\.Flush\(pBudget,\s*TrySubmitAsync\)' -or
+    $migration -notmatch 'HistoricalWriteService\.TryUpsertState\(') {
+    throw 'Targeted identity writes must use a bounded, readiness-gated asynchronous batch.'
 }
 foreach ($method in @('TryRenameKingdom',
         'TryApplyFullyXiaizedKingdomName')) {

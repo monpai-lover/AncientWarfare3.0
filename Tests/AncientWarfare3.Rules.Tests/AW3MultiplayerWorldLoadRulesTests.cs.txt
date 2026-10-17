@@ -21,18 +21,19 @@ internal static class AW3MultiplayerWorldLoadRulesTests
     private static void CompletesOnlyAfterMatchingWorldDataAndRestore()
     {
         Guid operationId = Guid.NewGuid();
-        string root = Path.GetFullPath(@"C:\snapshots\verified");
+        string root = VerifiedDirectory();
         var operation = new AW3MultiplayerWorldLoadOperation(
             operationId, root,
             deadlineUtc: new DateTime(2030, 1, 1, 0, 2, 0,
                 DateTimeKind.Utc));
 
-        Equal(false, operation.ObserveWorldDataQueued(@"C:\other"),
+        Equal(false, operation.ObserveWorldDataQueued(
+                Path.Combine(Path.GetTempPath(), "other")),
             "wrong world path is ignored");
         Equal(0L, operation.Snapshot.Revision,
             "wrong world path does not advance revision");
         Equal(true, operation.ObserveWorldDataQueued(
-                @"C:\snapshots\verified\"),
+                root + Path.DirectorySeparatorChar),
             "canonical target path is accepted");
         Equal(true, operation.ObserveWorldLoaded(),
             "world-loaded callback enters restoration");
@@ -60,19 +61,19 @@ internal static class AW3MultiplayerWorldLoadRulesTests
             DateTimeKind.Utc);
         Throws<ArgumentException>(() =>
                 new AW3MultiplayerWorldLoadOperation(Guid.Empty,
-                    Path.GetFullPath(@"C:\verified"), deadline),
+                    VerifiedDirectory(), deadline),
             "empty operation ID rejected");
         Throws<ArgumentException>(() =>
                 new AW3MultiplayerWorldLoadOperation(Guid.NewGuid(),
-                    @"relative\verified", deadline),
+                    Path.Combine("relative", "verified"), deadline),
             "relative generation directory rejected");
         Throws<ArgumentException>(() =>
                 new AW3MultiplayerWorldLoadOperation(Guid.NewGuid(),
-                    @"C:\verified\..\verified", deadline),
+                    Path.Combine(VerifiedDirectory(), "..", "verified"), deadline),
             "noncanonical generation directory rejected");
         Throws<ArgumentException>(() =>
                 new AW3MultiplayerWorldLoadOperation(Guid.NewGuid(),
-                    Path.GetFullPath(@"C:\verified"),
+                    VerifiedDirectory(),
                     DateTime.SpecifyKind(deadline, DateTimeKind.Local)),
             "non-UTC deadline rejected");
     }
@@ -245,7 +246,13 @@ internal static class AW3MultiplayerWorldLoadRulesTests
         deadline = new DateTime(2030, 1, 1, 0, 2, 0,
             DateTimeKind.Utc);
         return new AW3MultiplayerWorldLoadOperation(Guid.NewGuid(),
-            Path.GetFullPath(@"C:\snapshots\verified"), deadline);
+            VerifiedDirectory(), deadline);
+    }
+
+    private static string VerifiedDirectory()
+    {
+        return Path.GetFullPath(Path.Combine(Path.GetTempPath(),
+            "snapshots", "verified"));
     }
 
     private static void Equal<T>(T expected, T actual, string name)

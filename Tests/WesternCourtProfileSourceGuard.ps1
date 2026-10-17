@@ -37,7 +37,7 @@ Require 'institution profile resolution' $institution `
 Require 'institution Western policy effect' $institution `
     'WesternCourtUnlocked'
 Require 'institution Western government state' $institution `
-    'POLICY_GOVERNMENT_STATE'
+    'KingdomPolicyEffectService.Read(pKingdom)'
 
 $career = Read-Source 'Code/core/court/OfficialCareerStateService.cs'
 Require 'profile office grade' $career `
@@ -59,18 +59,16 @@ Require 'election per-office candidate budget' $election `
 Require 'election bounded candidate selection' $election `
     'WesternCourtElectionRules.SelectWinner(candidates)'
 Require 'election atomic appointment bridge' $election `
-    'CourtService.TryElectCentralOfficer('
+    'CourtService.TryElectOfficer('
 
-Require 'court elective annual queue' $court `
-    'WesternCourtElectionService.QueueKingdomVacancies(pKingdom)'
-Require-Regex 'court elective skips bounded AI' $court `
-    '(?s)if \(IsWesternElective\(pKingdom\)\).*?QueueKingdomVacancies\(pKingdom\).*?else.*?EnsureMinimumCourt\('
-Require-Regex 'exam elective only queues' $court `
-    '(?s)FillVacanciesAfterCivilServiceExam\(.*?IsWesternElective\(pKingdom\).*?QueueKingdomVacancies\(pKingdom\).*?return;'
+Require-Regex 'manual elective vacancy queue' $court `
+    'WesternCourtElectionService\s*\.QueueKingdomVacancies\(pKingdom\)'
+Require-Regex 'registered elective vacancies queue before domestic appointment' $court `
+    '(?s)TryFillRegisteredCentralVacancy\(.*?if \(IsWesternElective\(pKingdom\)\).*?WesternCourtElectionService\.EnqueueVacancy\(pKingdom,.*?return CourtVacancyOutcome.NoCandidate;.*?FillCentralOffice\('
 Require 'court exposed atomic election appointment' $court `
     'internal static bool TryElectCentralOfficer('
 Require 'court elective manual appointment gate' $court `
-    'WesternCourtElectionRules.CanManualAppoint('
+    'CourtManualAppointmentRules.CanUseManualAppointment('
 Require 'court feudal landed noble preference' $court `
     'FiefService.GetFiefCityId(pActor)'
 Require 'court feudal education preference' $court `
@@ -83,7 +81,7 @@ Require 'career elective expiry path' $career `
 Require 'career expiry vacancy queue' $career `
     'WesternCourtElectionService.EnqueueVacancy('
 Require 'career elective bypasses lifetime migration' $career `
-    'bool migratedLifetime = !westernElectiveCentral &&'
+    '!westernElectiveCentral &&'
 Require 'career term due uses normalized term' $career `
     'mutation.TermEndYear <= year;'
 Require 'elective expiry uses close-first dismissal' $court `
@@ -92,8 +90,8 @@ Require-Regex 'elective guest expiry uses durable guest end' $court `
     '(?s)TryExpireWesternElectiveCentralOfficial\(.*?CourtAffiliationResolver\.IsValidGuestService\(\s*pActor, pKingdom\).*?return EndGuestOfficer\(pActor, pKingdom,\s*"elective_term_ended", Date\.getCurrentYear\(\)\);.*?return TryDismissOfficer\('
 
 $guest = Read-Source 'Code/core/schools/SchoolGuestOfficeService.cs'
-Require-Regex 'guest annual AI defers elective vacancies' $guest `
-    '(?s)ProcessHostAppointments\(Kingdom pHost.*?if \(CourtService\.IsWesternElective\(pHost\)\).*?WesternCourtElectionService\.QueueKingdomVacancies\(pHost\);.*?return;'
+Require-Regex 'guest registered vacancies use the live appointment gate' $guest `
+    '(?s)TryFillRegisteredVacancy\(.*?TryAppointAndRecord\('
 Require-Regex 'guest appointment API rejects elective' $court `
     '(?s)CanAppointGuestOfficer\(Actor pActor, Kingdom pKingdom,.*?if \(IsWesternElective\(pKingdom\)\) return false;'
 Require-Regex 'pending guest live eligibility helper' $guest `
@@ -111,13 +109,15 @@ Require-Regex 'elective vacancy enqueue follows guest end completion' $guest `
 Require-Regex 'guest write transaction live institution gate' $guest `
     '(?s)class GuestStartWriteOperation.*?Execute\(.*?if \(!CanCommitPendingGuestStart\(actor, host, residence,\s*_pending\)\).*?return HistoricalSchoolTeachingPersistenceOutcome\.CleanFailure;.*?GuestOfficePersistence\.StartInTransaction\('
 Require-Regex 'committed guest end retries failed career cleanup' $court `
-    '(?s)ApplyCommittedGuestOfficerEnd\(.*?if \(frozenProjectionStillLive\).*?ClearOfficer\(.*?else if \(!OfficialCareerStateService\.ClearCurrentOffice\(pActor,\s*pHostKingdomId, pOfficeId\)\)\s*return false;'
-Require-Regex 'career cleanup treats absent or changed office as reconciled' $career `
-    '(?s)ClearCurrentOffice\(Actor pActor, long pKingdomId,\s*string pOfficeId\).*?if \(state == null \|\| state\.KingdomId != pKingdomId \|\|.*?state\.OfficeId != pOfficeId\)\).*?transaction\.Rollback\(\);\s*return true;'
+    '(?s)ApplyCommittedGuestOfficerEnd\(.*?if \(frozenProjectionStillLive\).*?ClearOfficer\(.*?else if \(!runtimeAlreadyCleared &&\s*!OfficialCareerStateService\.ClearCurrentOffice\(pActor,\s*pHostKingdomId, pOfficeId\)\)\s*return false;'
+Require-Regex 'career cleanup leaves absent or changed office untouched' $career `
+    '(?s)StageClearCurrentOffice\(\s*SQLiteConnection.*?if \(state == null \|\| state\.KingdomId != pKingdomId \|\|.*?state\.OfficeId != pOfficeId\)\s*return null;'
+Require-Regex 'career cleanup publishes only after the transaction commits' $career `
+    '(?s)ClearCurrentOffice\(Actor pActor, long pKingdomId,\s*string pOfficeId\).*?StageClearCurrentOffice\(DB,.*?transaction\.Commit\(\);\s*PublishClearedCurrentOffice\(pActor, state\);\s*return true;'
 
 $authority = Read-Source 'Code/core/performance/AWAuthorityCycleService.cs'
 Require-Regex 'election runs after authority gate' $authority `
-    '(?s)if \(!pGate\.TryEnter\(pCycleToken, allowed\)\) return;.*?WesternCourtElectionService\.ProcessAuthorityCycle\(\);'
+    '(?s)if \(!pGate\.TryEnter\(pCycleToken, allowed\)\)\s*return;.*?Step\(AuthorityStep\.WesternCourtElection,\s*WesternCourtElectionService\.ProcessAuthorityCycle\);'
 Require 'election runtime reset' $authority `
     'WesternCourtElectionService.Reset();'
 

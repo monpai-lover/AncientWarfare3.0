@@ -19,10 +19,16 @@ $electionService = Read-Source `
 $replenishmentService = Read-Source `
     'Code/core/lineage/ArmyReplenishmentOperationService.cs'
 
-$warGate = $warService.IndexOf('MonthlyWork.ShouldScheduleMonth(monthKey)')
-$warList = $warService.IndexOf('var liveWarIds = new List<long>()')
-if ($warGate -lt 0 -or $warList -lt 0 -or $warGate -gt $warList) {
-    $failures.Add('war settlement must reject an already scheduled month before allocating live-war collections')
+$terminal = Read-Source 'Code/core/lineage/WarTerminalSettlementCoordinator.cs'
+$warGate = $terminal.IndexOf('if (_recoveryCyclesUntilScan > 0)')
+$warList = $terminal.IndexOf('wars.checkLists();')
+if (-not $warService.Contains('WarTerminalSettlementCoordinator.ProcessAuthorityCycle();') -or
+    $warGate -lt 0 -or $warList -lt 0 -or $warGate -gt $warList -or
+    -not $terminal.Contains('WarsPerAuthorityCycle = 8') -or
+    -not $terminal.Contains('inspected < WarsPerAuthorityCycle') -or
+    -not $terminal.Contains('RecoveryScanIntervalCycles = 4') -or
+    $terminal.Contains('new List<War>')) {
+    $failures.Add('terminal settlement recovery must gate and bound live-war scans without allocating snapshots')
 }
 
 $electionMethod = $electionService.IndexOf(

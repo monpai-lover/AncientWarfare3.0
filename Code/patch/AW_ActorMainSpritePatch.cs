@@ -200,6 +200,8 @@ namespace AncientWarfare3.patch
 
         private static bool TryGetFallback(AnimationContainerUnit pContainer, out Sprite pSprite)
         {
+            pSprite = null;
+            if (pContainer == null) return false;
             if (TryGetFirst(pContainer.idle, out pSprite)) return true;
             if (TryGetFirst(pContainer.walking, out pSprite)) return true;
             if (TryGetFirst(pContainer.swimming, out pSprite)) return true;
@@ -223,10 +225,18 @@ namespace AncientWarfare3.patch
         private static bool TryGetKnownXiaFallback(out Sprite pSprite)
         {
             pSprite = null;
-            Sprite[] sprites = SpriteTextureLoader.getSpriteList(XiaRace.TEXTURE_PATH + "male_1", true);
-            if (sprites == null || sprites.Length == 0) return false;
-            pSprite = sprites[0];
-            return pSprite != null;
+            try
+            {
+                Sprite[] sprites = SpriteTextureLoader.getSpriteList(XiaRace.TEXTURE_PATH + "male_1", true);
+                if (sprites == null || sprites.Length == 0) return false;
+                pSprite = sprites[0];
+                return pSprite != null;
+            }
+            catch
+            {
+                // A failed recovery must not replace the original rendering exception.
+                return false;
+            }
         }
 
         private static bool TryGetActorFallback(Actor pActor,

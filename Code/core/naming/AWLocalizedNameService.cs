@@ -565,7 +565,7 @@ namespace AncientWarfare3.core.naming
             string family = ActorLocalizedNameBoundaryRules
                 .ResolveTemplateFamily(chineseFamily, lineageFamily);
             if (!string.IsNullOrWhiteSpace(family)) return family.Trim();
-            foreach (Actor parent in pActor.getParents())
+            foreach (Actor parent in AWActorNamingContext.GetParents(pActor))
             {
                 if (parent?.data == null || parent.data.sex != ActorSex.Male)
                     continue;

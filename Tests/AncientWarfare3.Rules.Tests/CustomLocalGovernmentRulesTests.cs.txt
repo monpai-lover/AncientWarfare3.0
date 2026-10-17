@@ -119,7 +119,7 @@ internal static class CustomLocalGovernmentRulesTests
         string court = File.ReadAllText(Path.Combine(root, "Code", "core",
             "court", "CourtService.cs"));
         string leader = File.ReadAllText(Path.Combine(root, "Code", "patch",
-            "AW_CityLeaderPatch.cs"));
+            "AW_PromotionPatch.cs"));
         string death = File.ReadAllText(Path.Combine(root, "Code", "patch",
             "AW_HistoricalSchoolPatch.cs"));
         True(annual.Contains("DiscoverVacancies",
@@ -130,7 +130,7 @@ internal static class CustomLocalGovernmentRulesTests
             "court lifecycle must publish committed vacancies");
         True(leader.Contains("RegisterCityVacancies",
                 StringComparison.Ordinal),
-            "new city leaders must trigger local vacancy registration");
+            "native leader removal must trigger local vacancy registration");
         True(death.Contains("RequestLocalOfficerDeathReconcile",
                 StringComparison.Ordinal),
             "dead local officials must trigger local vacancy reconciliation");

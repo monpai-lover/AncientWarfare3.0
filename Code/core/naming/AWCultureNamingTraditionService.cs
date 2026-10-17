@@ -305,12 +305,7 @@ namespace AncientWarfare3.core.naming
 
         private static Culture ResolveActorCulture(Actor pActor)
         {
-            if (pActor == null) return null;
-            if (pActor.hasCulture()) return pActor.culture;
-            foreach (Actor parent in pActor.getParents())
-                if (parent != null && parent.hasCulture())
-                    return parent.culture;
-            return null;
+            return AWActorNamingContext.ResolveCulture(pActor);
         }
 
         private static AWCultureNamingTradition Empty =>

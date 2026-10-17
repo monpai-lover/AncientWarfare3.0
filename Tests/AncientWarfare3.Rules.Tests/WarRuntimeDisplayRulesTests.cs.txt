@@ -87,7 +87,7 @@ internal static class WarRuntimeDisplayRulesTests
              proposals.Contains("WarRuntimeDisplayService.Resolve("),
             "automatic truce rows persist the resolved live war name");
 
-        string locales = File.ReadAllText(Path.Combine(root, "locales",
+        string locales = File.ReadAllText(Path.Combine(root, "Locales",
             "aw3_diplomacy.csv"));
         True(locales.Contains("aw_diplomacy_unnamed_war,") &&
              locales.Contains("aw_diplomacy_named_war_ended,") &&

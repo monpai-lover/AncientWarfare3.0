@@ -54,7 +54,7 @@ $resolveRegion = if ($resolveStart -ge 0 -and $resolveEnd -gt $resolveStart) {
 } else { '' }
 $validKingdom = $resolveRegion.IndexOf(
     'if (!IsValidKingdom(pPhysicalKingdom)) return null;')
-$cityLayer = $resolveRegion.IndexOf('if (IsCityLayer)')
+$cityLayer = $resolveRegion.IndexOf('if (IsCityCountyLayer)')
 if ($validKingdom -lt 0 -or $cityLayer -lt 0 -or
     $validKingdom -gt $cityLayer) {
     throw 'city layer publishes neutral or invalid kingdom cities'

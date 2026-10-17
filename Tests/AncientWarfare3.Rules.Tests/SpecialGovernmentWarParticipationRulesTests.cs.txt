@@ -109,8 +109,8 @@ internal static class SpecialGovernmentWarParticipationRulesTests
              !runtime.Contains("HeirService.FindHeirReadOnly"),
             "RTS hot-path checks use cached war state and direct heir ids");
         True(runtime.Contains("ParticipationBatch = 64") &&
-             authority.Contains(
-                 "SpecialGovernmentWarParticipationService.ProcessAuthorityCycle"),
+             System.Text.RegularExpressions.Regex.IsMatch(authority,
+                 @"Step\(AuthorityStep\.SpecialGovernmentWarParticipation,\s*RecentFeatureBenchmarkRules\.ArmyRtsLogisticsIndex,\s*SpecialGovernmentWarParticipationService\.\s*ProcessAuthorityCycle\)"),
             "special roster attachment and cleanup are bounded per cycle");
     }
 

@@ -480,9 +480,10 @@ namespace AncientWarfare3.core.lineage
             Actor captain = null;
             try { captain = pArmy?.getCaptain(); }
             catch { }
-            if (pArmy?.data == null || captain?.current_tile?.data == null ||
+            if (pArmy?.data == null || captain?.data == null ||
+                captain.current_tile?.data == null ||
                 pTarget?.data == null)
-                return ArmyRouteHandle.Rejected(pArmy?.id ?? -1L,
+                return ArmyRouteHandle.Rejected(pArmy?.data?.id ?? -1L,
                     "invalid_route_input");
             var request = new ArmyRouteRequest(pArmy.id,
                 captain.current_tile.data.tile_id,

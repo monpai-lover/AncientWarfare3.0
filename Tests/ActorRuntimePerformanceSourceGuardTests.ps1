@@ -16,7 +16,10 @@ function Require-Contains([string]$name, [string]$source,
 
 $runtime = Read-Source 'Code/core/policy/RuntimePerformanceDiagnostic.cs'
 $ai = Read-Source 'Code/patch/AW_ActorAiBenchmarkPatch.cs'
-$batch = Read-Source 'Code/patch/AW_ActorBatchBenchmarkPatch.cs'
+$batchPath = Join-Path $root 'Code/patch/AW_ActorBatchBenchmarkPatch.cs'
+if (Test-Path -LiteralPath $batchPath) {
+    throw 'Redundant Actor batch instrumentation must remain removed.'
+}
 $age = Read-Source 'Code/patch/AW_AgePatch.cs'
 
 $racePatchPath = Join-Path $root 'Code/patch/AW_ActorRacePerformancePatch.cs'
@@ -36,8 +39,9 @@ if ($gate -lt 0 -or $task -lt 0 -or $task -lt $gate) {
     throw 'Actor task lookup must occur after the disabled diagnostic gate.'
 }
 
-Require-Contains 'Actor batch diagnostics' $batch `
-    'ShouldCollectActorBatch()'
+if ($runtime.Contains('ActorBatchPerformance')) {
+    throw 'Removed batch instrumentation must not remain in runtime diagnostics.'
+}
 
 Require-Contains 'Actor age patch' $age `
     'ActorAgeWorkService.Process(__instance);'
@@ -50,7 +54,7 @@ if ($age.Contains('DynasticTitleService.OnAgeUpdated(__instance);') -or
 $pathRequest = Read-Source 'Code/core/pathfinding/AWPathRequest.cs'
 $pathFinder = Read-Source 'Code/core/pathfinding/AWPathFinder.cs'
 Require-Contains 'Actor path request' $pathRequest `
-    'public AWPathReuseKey ReuseKey { get; private set; }'
+    'public AWPathReuseKey ReuseKey { get; }'
 Require-Contains 'Actor path finder' $pathFinder `
     'AWPathRequestReuseRules.CanReuse('
 Require-Contains 'Actor path finder' $pathFinder 'pRequest.ReuseKey'

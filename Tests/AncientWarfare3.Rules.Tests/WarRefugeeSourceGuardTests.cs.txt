@@ -3,183 +3,155 @@ using System.IO;
 
 internal static class WarRefugeeSourceGuardTests
 {
+    // d7438057 deliberately retired persisted journeys. Native joinCity owns
+    // movement/population; refugee origins live on actor data until war end.
     internal static void Run()
     {
         string root = FindRoot();
         string service = Read(root, "Code/core/lineage/WarRefugeeService.cs");
-        string persistence = Read(root,
-            "Code/core/lineage/WarRefugeePersistence.cs");
-        string threat = Read(root, "Code/core/lineage/WarRefugeeThreatService.cs");
-        string journey = Read(root, "Code/core/lineage/WarRefugeeJourneyService.cs");
         string authority = Read(root, "Code/core/performance/AWAuthorityCycleService.cs");
         string patch = Read(root, "Code/patch/AW_WarRefugeePatch.cs");
+        string warPatch = Read(root, "Code/patch/AW_WarPatch.cs");
         string birthPatch = Read(root, "Code/patch/AW_BirthPatch.cs");
-        Require(service, "ProcessAuthorityCycle(", "authority coordinator exists");
-        Require(service, "WarRefugeeThreatService.ProcessMonthly(",
-            "threat phase is monthly");
-        Require(service, "WarRefugeeJourneyService.ProcessMonthly(",
-            "journey phase is monthly");
-        Require(threat, "CityBudget", "city budget is explicit");
-        Require(threat, "WorldBudget", "world budget is explicit");
-        Require(journey, "HouseholdBudget", "household budget is explicit");
-        Require(journey, "ShouldUseAbstractJourney(",
-            "unreachable journeys have an abstract fallback");
-        Require(journey, "destination reservation",
-            "journey service documents reservation ownership");
+        string restore = Read(root, "Code/core/multiplayer/AW3RuntimeRestorePipeline.cs");
+
+        string monthly = Section(service, "internal static void ProcessAuthorityCycle(",
+            "internal static void OnWarStarted(");
+        Require(monthly, "pPaused || pCycleToken == _lastMonthToken",
+            "paused or repeated authority cycles do not generate refugees");
+        Require(monthly, "if (currentMonth == _month) return;",
+            "departure work runs once per game month");
+        Require(monthly, "if (!CanMutate()) return;",
+            "only the authority mutates refugee settlement");
+        Require(monthly, "RefreshMonthlyReservations", "monthly capacity accounting resets");
+        Require(monthly, "CaptureThreatenedCities(currentMonth,",
+            "monthly processing consumes the threatened-city workset");
+        Reject(monthly, "BuildDestinationSnapshot(",
+            "monthly departure work does not rebuild the world destination index");
+        Reject(monthly, "ResolveRefugeesForEndedWar(",
+            "assimilation cannot become a monthly actor scan");
         Require(authority, "WarRefugeeService.ProcessAuthorityCycle(",
-            "authority cycle owns refugee processing");
-        Require(patch, "ActorJoinCity_Postfix", "city arrival lifecycle hook exists");
-        Require(patch, "MapBox.clearWorld", "world reset clears refugee runtime");
+            "authority cycle owns bounded refugee departure processing");
+        foreach (string retired in new[] { "WarRefugeePersistence", "ProcessPersistedJourneys",
+            "LoadActiveJourneys", "WarRefugeeJourneyService.ProcessMonthly(",
+            "TryStepFollowerDirect(", "ProcessEveryFrame" })
+            Reject(service, retired, "the retired journey pipeline must stay out of runtime: " + retired);
+
+        string departures = Section(service, "private static void CaptureThreatenedCities(",
+            "private static int SettleHousehold(");
+        Require(service, "CityBudgetPerMonth", "monthly city budget remains explicit");
+        Require(departures, "processed++ < pBudget && remainingWorldBudget > 0",
+            "both city and world departure budgets bound processing");
+        Require(departures, "WarRefugeeRules.DeparturePermille(",
+            "departure probabilities retain the shared threat rules");
+        Require(departures, "WarRefugeeRules.DepartureQuota(",
+            "departure quotas retain minimum population and capacity rules");
+        Require(departures, "remainingWorldBudget -= Math.Max(0, settled)",
+            "successful departures consume one shared world budget");
+        Require(departures, "AddMonthlyReservation(destination.id, settled)",
+            "capacity accounting records successfully settled people");
+        Require(departures, "new List<long>(ThreatenedCityIds)",
+            "departure work snapshots event-maintained threatened cities");
         Reject(service, "ArmyRtsControllerService.SnapshotMissions()",
-            "refugee threat state is not rebuilt from RTS missions");
-        Reject(service, "isInDanger()",
-            "refugee threat state is written by capture events");
-        Require(service, "VassalService.GetDiplomaticSuzerain(",
-            "diplomatic suzerain relation is considered for protected partners");
-        Require(service, "TributaryProtectionService.IsProtectedPair(",
-            "tributary protection is considered bidirectionally");
-        Require(service, "CountActiveMembers(",
-            "arrival checks the complete active household");
-        Require(service, "TryTransitionHouseholdTerminalAtomic(",
-            "journey terminal transitions release reservations atomically");
-        Require(service, "SettleJourney(", "arrival has one household commit point");
-        Require(service, "Returning", "post-arrival return lifecycle is implemented");
-        Reject(service, "target_attack_city", "origin attack target is not a refugee threat fact");
-        Reject(service, "target_attack_zone", "origin attack zone is not a refugee threat fact");
-        Reject(service, "Math.Max(1, SafePopulation(candidate))", "capacity is not fabricated from population");
-        Reject(patch, "Birth_Postfix", "birth coordination is not a parallel refugee postfix");
-        Reject(patch, "applyParentsMeta", "birth coordination is owned by AW_BirthPatch");
+            "refugee threat facts must not rebuild from RTS missions");
+        Reject(service, "target_attack_city", "attack targets are not refugee threat facts");
+        Reject(service, "target_attack_zone", "attack zones are not refugee threat facts");
+        Require(service, "OnCityThreatStateChanged(", "capture events update threat membership");
+
+        string settlement = Section(service, "private static int SettleHousehold(",
+            "private static void ResolveRefugeesForEndedWar(");
+        Require(settlement, "Math.Min(Math.Min(HouseholdLimit, pQuota)",
+            "immediate settlement still respects household and quota bounds");
+        foreach (string key in new[] { "WAR_REFUGEE_ORIGIN_KINGDOM_ID",
+            "WAR_REFUGEE_ORIGIN_CITY_ID", "WAR_REFUGEE_DEPARTURE_MONTH" })
+            Before(settlement, "actor.data.set(LineageKeys." + key,
+                "actor.joinCity(pDestination)", "origin metadata is saved before native settlement");
+        Before(settlement, "actor.joinCity(pDestination)", "settled++",
+            "only successful native settlement consumes quota");
+        Reject(settlement, "setCulture(", "departure preserves culture until the war-end decision");
+
+        string endedWar = Section(service, "private static void ResolveRefugeesForEndedWar(",
+            "private static void ResolveRefugee(");
+        Require(endedWar, "IsUnresolvedRefugee(actor)",
+            "only actors with unresolved origin metadata enter war-end processing");
+        Require(endedWar, "IsWarParticipant(pWar, origin)",
+            "war end only resolves refugees from participating origin kingdoms");
+        Before(endedWar, "pending.Add(actor)", "ResolveRefugee(pending[i], currentMonth)",
+            "war-end resolution snapshots actors before native city transfers");
+        string resolution = Section(service, "private static void ResolveRefugee(",
+            "private static bool RollReturn(");
+        Require(resolution, "IsLivingCity(originCity)", "return requires a surviving origin city");
+        Require(resolution, "IsLivingKingdom(originCity.kingdom)",
+            "return requires a surviving origin kingdom");
+        Require(resolution, "!ThreatenedCityIds.Contains(originCityId)",
+            "return does not send refugees back into a threatened origin");
+        Before(resolution, "pActor.joinCity(originCity)", "ClearRefugeeKeys(pActor)",
+            "return clears refugee identity after the native transfer succeeds");
+        Require(resolution, "if (host?.culture != null) pActor.setCulture(host.culture)",
+            "refugees who stay adopt the host culture");
+        Require(service, "ReturnBasePermille - years * ReturnDecayPermillePerYear",
+            "return probability decreases with years away");
+        Require(service, "Math.Max(ReturnMinimumPermille,",
+            "return probability retains its minimum floor");
+        string terminal = Section(service, "private static void ClearRefugeeKeys(",
+            "private static bool IsWarParticipant(");
+        foreach (string key in new[] { "WAR_REFUGEE_ORIGIN_KINGDOM_ID",
+            "WAR_REFUGEE_ORIGIN_CITY_ID", "WAR_REFUGEE_DEPARTURE_MONTH" })
+            Require(terminal, "LineageKeys." + key, "terminal resolution clears " + key);
+        int regularWar = warPatch.IndexOf("long settlementStarted =", StringComparison.Ordinal);
+        if (regularWar < 0) throw new InvalidOperationException("war-end settlement boundary not found");
+        Require(warPatch.Substring(0, regularWar), "WarRefugeeService.OnWarEnded(pWar)",
+            "Zhulu early-return war end dispatches refugee resolution");
+        Require(warPatch.Substring(regularWar), "WarRefugeeService.OnWarEnded(pWar)",
+            "regular war end dispatches refugee resolution");
+
+        Require(service, "KINGDOM_HEIR_ID", "heirs remain excluded from refugee households");
+        Require(service, "CourtService.CaptureRuntimeOfficerProjection(pActor)",
+            "active officials remain excluded from refugee households");
+        Require(service, "return !IsUnresolvedRefugee(pActor)",
+            "unresolved refugees cannot depart repeatedly");
+        string destination = Section(service, "private static City SelectDestination(",
+            "private static bool AreAllied(");
+        Require(destination, "DestinationCityIdsByKingdom.TryGetValue(pOwner.id",
+            "destination selection reads only the origin country's index");
+        Require(destination, "candidate.kingdom.id != pOwner.id",
+            "selection rechecks live destination ownership");
+        Require(destination, "WarRefugeeRules.CanReceive(facts, pBatchSize)",
+            "native settlement still enforces safety and capacity");
+        Require(destination, "WarRefugeeRules.CompareDestinations(facts,",
+            "destination ranking remains deterministic");
+        Reject(destination, "World.world.cities", "households cannot scan the world destination list");
+        string removal = Section(service, "private static void RemoveDestination(",
+            "private static void RemoveDestinationFromKingdom(");
+        Require(removal, "DestinationOwnerByCity.TryGetValue(pCityId",
+            "ownership changes remove stale indexed ownership");
+
+        Require(patch, "MapBox.clearWorld", "world reset clears refugee runtime indexes");
+        Require(patch, "WarRefugeeService.Reset()", "the reset hook dispatches refugee cleanup");
+        Require(restore, "WarRefugeeService.RebuildRuntime", "world load rebuilds destination indexes");
         Require(birthPatch, "WarRefugeeService.OnActorBorn(",
-            "AW_BirthPatch coordinates host-born refugee culture");
-        Require(service, "OnCityThreatStateChanged(",
-            "capture transitions own refugee threat state");
-        Require(service, "HasLeaderReachedDestination(",
-            "physical arrival is decided by leader distance");
-        Require(service, "AggregateFollowers(",
-            "followers use bounded leader cohesion");
-        Require(service, "RouteRetries", "physical route failures are persisted");
-        Require(service, "TryCreateHouseholdAtomic(",
-            "journey and all members are created atomically");
-        Require(service, "TryCommitHouseholdArrival(",
-            "arrival persistence has one atomic household write");
-        Require(service, "SelectDestination(", "invalid destinations rerank before cancellation");
-        Require(service, "Alliance.isSame(", "allied kingdoms are protected partners");
-        Require(service, "CollectHousehold(", "runtime selection groups a household");
-        Require(service, "KINGDOM_HEIR_ID", "runtime household selection excludes heirs");
-        Require(service, "remainingWorldBudget", "world departure budget is shared across cities");
-        Require(service, "OnWarStarted(",
-            "war start initializes the refugee destination index once");
-        Require(service, "OnCityOwnerChanged(",
-            "city ownership events update refugee destinations incrementally");
-        Require(service, "DestinationCityIdsByKingdom",
-            "refugee destinations are indexed by their owning kingdom");
-        Require(service, "ThreatenedCityIds",
-            "capture events maintain the bounded threatened-city workset");
-        int authorityStart = service.IndexOf(
-            "internal static void ProcessAuthorityCycle(", StringComparison.Ordinal);
-        int authorityEnd = service.IndexOf(
-            "internal static void OnWarStarted(", authorityStart,
-            StringComparison.Ordinal);
-        if (authorityStart < 0 || authorityEnd <= authorityStart)
-            throw new InvalidOperationException(
-                "refugee authority-cycle boundary remains inspectable");
-        string authoritySource = service.Substring(authorityStart,
-            authorityEnd - authorityStart);
-        Reject(authoritySource, "BuildDestinationSnapshot(",
-            "monthly refugee processing cannot rebuild escape destinations");
-        int removalStart = service.IndexOf(
-            "private static void RemoveDestination(", StringComparison.Ordinal);
-        int removalEnd = service.IndexOf(
-            "private static bool HasAnyWar(", removalStart,
-            StringComparison.Ordinal);
-        if (removalStart < 0 || removalEnd <= removalStart)
-            throw new InvalidOperationException(
-                "destination removal boundary remains inspectable");
-        string removalSource = service.Substring(removalStart,
-            removalEnd - removalStart);
-        Require(removalSource,
-            "DestinationOwnerByCity.TryGetValue(pCityId",
-            "ownership changes remove a city from its indexed owner even when the event owner is stale");
-        int destinationStart = service.IndexOf(
-            "private static City SelectDestination(", StringComparison.Ordinal);
-        int destinationEnd = service.IndexOf(
-            "private static bool CanReceiveDestination(", destinationStart,
-            StringComparison.Ordinal);
-        if (destinationStart < 0 || destinationEnd <= destinationStart)
-            throw new InvalidOperationException(
-                "destination selection boundary remains inspectable");
-        string destinationSource = service.Substring(destinationStart,
-            destinationEnd - destinationStart);
-        Reject(destinationSource, "foreach (City candidate in World.world.cities)",
-            "each refugee household rerank must not rescan every world city");
-        Reject(destinationSource, "LoadActiveReservations(",
-            "each refugee household rerank must not repeat the reservation query");
-        Require(destinationSource,
-            "DestinationCityIdsByKingdom.TryGetValue(pOwner.id",
-            "refugees inspect only destinations still owned by their country");
-        Reject(destinationSource,
-            "DestinationCityIdsByKingdom.Values",
-            "refugees do not enumerate every country's destination index");
-        Reject(service,
-            "try { foreach (City value in World.world.cities) cities.Add(value); }",
-            "monthly refugee processing must not copy the world city list");
-        Reject(service, "RefreshThreatSnapshot()",
-            "monthly refugee processing must not rebuild threat state from RTS missions");
-        Require(service, "RecoverActiveJourneys(", "load recovery rebuilds refugee ownership");
-        Require(service, "_journeyCursor", "active journey processing rotates fairly");
-        Require(service, "TryTransitionHouseholdTerminalAtomic(",
-            "all terminal states release ownership in one database transaction");
-        Require(service, "ConsecutiveDangerMonths",
-            "continuous origin danger is persisted independently");
-        Require(service, "WarRefugeeLifecycleResult ProcessArrivedLifecycle(",
-            "post-arrival lifecycle reports transition and persistence failure");
-        Require(service,
-            "result != WarRefugeeLifecycleResult.RemainsArrived",
-            "transitions and persistence failures skip same-cycle assimilation");
-        Require(service, "DeferDestinationRetry(",
-            "no destination keeps ownership and schedules another rerank");
-        Require(service, "NextRetryMonth",
-            "destination rerank retry has an independent persisted deadline");
-        Reject(service, "pJourney.ArrivalYear = pMonthKey + 1",
-            "rerank retry deadline cannot masquerade as abstract arrival");
-        Require(persistence,
-            "ConditionalWeakTable<SQLiteConnection, SchemaState>",
-            "refugee schema readiness is cached for each database connection");
-        Require(persistence, "if (state.Ready) return;",
-            "hot persistence calls skip repeated schema DDL and PRAGMA work");
-        Require(persistence, "LoadActiveReservations(",
-            "destination reservations are loaded in one grouped query");
-        Require(persistence, "GROUP BY DESTINATION_CITY_ID",
-            "destination reservation snapshot aggregates by city");
-        Require(service, "WarRefugeeDestinationFacts bestFacts",
-            "destination ranking caches the best facts without rebuilding them");
-        Reject(service, "facts, BuildDestinationFacts(best",
-            "destination comparison cannot repeat reservation reads for best");
-        Require(service,
-            "WarRefugeeLifecycleResult ProcessArrivedLifecycle(",
-            "post-arrival processing reports transition and persistence failure distinctly");
-        Require(service,
-            "WarRefugeeJourneySnapshot transition = CopyJourney(pJourney);",
-            "return routing is prepared on a detached journey snapshot");
-        Require(service, "ApplyJourneySnapshot(pJourney, transition);",
-            "return routing becomes visible only after persistence succeeds");
-        Require(service, "ClearActorJourneyKeys(",
-            "terminal actor keys are cleared through isolated best-effort writes");
-        Require(service, "ReconcileStaleActorJourneyKeys(",
-            "load recovery removes actor keys without active database ownership");
-        Require(service, "HasActiveJourneyInDatabase(",
-            "runtime ownership checks use the database as source of truth");
-        Require(service, "HandleUnexpectedCityChange(",
-            "non-target city changes revalidate the journey");
-        Require(service, "journey.ReservedCapacity = living",
-            "load recovery rebuilds reservation from living active members");
-        Require(service, "attempted++", "join rollback includes the actor being attempted");
-        Require(service, "AWArmyMarchService.TryStepFollowerDirect(",
-            "followers use the existing bounded direct-step movement primitive");
-        Reject(service, "follower.goTo(",
-            "followers never request independent paths");
-        Reject(service, "P0", "refugees are outside military P0");
-        Reject(service, "ProcessEveryFrame", "refugees cannot be per-frame");
+            "the shared birth hook handles children of refugees");
+        Reject(patch, "Birth_Postfix", "refugees do not register a duplicate birth hook");
+        Require(service, "IsUnresolvedRefugee(pParent1) ||",
+            "host-born child culture uses parental refugee identity");
+        Require(service, "pBaby.setCulture(pBaby.city.culture)",
+            "children of refugees adopt the host city's culture");
+    }
+
+    private static string Section(string source, string start, string end)
+    {
+        int first = source.IndexOf(start, StringComparison.Ordinal);
+        int last = first < 0 ? -1 : source.IndexOf(end, first, StringComparison.Ordinal);
+        if (first < 0 || last <= first)
+            throw new InvalidOperationException("missing lifecycle section: " + start);
+        return source.Substring(first, last - first);
+    }
+
+    private static void Before(string source, string first, string second, string message)
+    {
+        int left = source.IndexOf(first, StringComparison.Ordinal);
+        int right = source.IndexOf(second, StringComparison.Ordinal);
+        if (left < 0 || right <= left) throw new InvalidOperationException(message);
     }
 
     private static string FindRoot()

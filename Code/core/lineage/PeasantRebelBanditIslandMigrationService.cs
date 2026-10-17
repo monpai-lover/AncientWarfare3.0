@@ -63,9 +63,23 @@ namespace AncientWarfare3.core.lineage
                 List<Actor> members = ResolveMembers(state.Migration.MemberActorIds);
                 Actor leader = ResolveActor(state.Migration.LeaderActorId) ??
                     members.FirstOrDefault();
-                if (oldCity?.data == null || landing?.data == null ||
-                    leader?.data == null || members.Count == 0) continue;
-                IslandEscapeService.TryBegin(new IslandEscapeGroupSpec
+                if (oldCity?.data == null || oldCity.isRekt() ||
+                    landing?.data == null || members.Count == 0)
+                {
+                    FailMigration(bandit, state, "restore_state_invalid");
+                    continue;
+                }
+                if (leader?.data == null || !members.Contains(leader))
+                    leader = members[0];
+                IslandEscapeStage restoredStage = state.Migration.Stage switch
+                {
+                    BanditMigrationStage.Evaluating => IslandEscapeStage.Evaluating,
+                    BanditMigrationStage.Boarding => IslandEscapeStage.Boarding,
+                    BanditMigrationStage.Voyaging => IslandEscapeStage.Voyaging,
+                    BanditMigrationStage.Founding => IslandEscapeStage.Founding,
+                    _ => IslandEscapeStage.None
+                };
+                if (!IslandEscapeService.TryRestore(new IslandEscapeGroupSpec
                 {
                     GroupKey = "bandit:island:" + bandit.getID(),
                     OriginCity = oldCity,
@@ -85,7 +99,14 @@ namespace AncientWarfare3.core.lineage
                         }, survivors),
                     OnFailed = (next, reason) => FailMigration(bandit, state,
                         reason)
-                }, out _);
+                }, restoredStage, out IslandEscapeGroupState restored))
+                    FailMigration(bandit, state, "restore_registration_failed");
+                else
+                {
+                    state.Migration.LeaderActorId = restored.LeaderActorId;
+                    state.Migration.MemberActorIds = restored.MemberActorIds.ToList();
+                    PeasantRebelBanditStateStore.Write(bandit, state);
+                }
             }
         }
 

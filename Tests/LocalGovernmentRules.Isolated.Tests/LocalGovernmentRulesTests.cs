@@ -258,9 +258,9 @@ internal static class LocalGovernmentRulesTests
             Directory.GetCurrentDirectory(), "Code", "core", "court",
             "CityBureauAnnualWorkService.cs"));
         True(annualWorkSource.Contains(
-                "LocalCourtAppointmentService.ReconcileCity(",
+                "LocalCourtAppointmentService.DiscoverVacancies(",
                 StringComparison.Ordinal),
-            "annual maintenance migrates legacy city state through real appointments");
+            "annual maintenance discovers legacy city vacancies for the shared appointment coordinator");
         True(annualWorkSource.Contains(
                 "HistoricalWriteService.TryUpsertState(",
                 StringComparison.Ordinal),

@@ -60,15 +60,22 @@ internal static class XiaBanditHeadRulesTests
             ? actorPatch.Substring(textureMethodStart,
                 textureMethodEnd - textureMethodStart)
             : "";
-        True(textureMethod.Contains("IsHanEmperorCardActor",
-                    StringComparison.Ordinal) &&
-             textureMethod.Contains("ResolveKingHanBodyPath",
-                    StringComparison.Ordinal) &&
-             textureMethod.IndexOf("IsHanEmperorCardActor",
-                    StringComparison.Ordinal) <
+        int hanCheck = textureMethod.IndexOf("TryGetHanEmperorKingTexturePath",
+            StringComparison.Ordinal);
+        True(hanCheck >= 0 && hanCheck <
              textureMethod.IndexOf("ActorVisualRole role =",
                     StringComparison.Ordinal),
             "Han emperor body switching runs before the default visual-role fallback");
+        int hanStart = actorPatch.IndexOf(
+            "private static bool TryGetHanEmperorKingTexturePath", StringComparison.Ordinal);
+        int hanEnd = actorPatch.IndexOf("private static void ApplyHeadId", hanStart,
+            StringComparison.Ordinal);
+        string hanMethod = actorPatch.Substring(hanStart, hanEnd - hanStart);
+        True(hanMethod.Contains("IsHanEmperorCardActor", StringComparison.Ordinal) &&
+             hanMethod.Contains("ResolveKingHanBodyPath", StringComparison.Ordinal) &&
+             hanMethod.Contains("!pActor.isKing()", StringComparison.Ordinal) &&
+             hanMethod.Contains("pActor.isEgg() || pActor.isBaby()", StringComparison.Ordinal),
+            "Han body helper checks card identity and only applies to adult kings");
     }
 
     private static void True(bool value, string message)

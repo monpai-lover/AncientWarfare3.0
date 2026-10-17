@@ -311,6 +311,16 @@ internal static class IntegratedNamingRulesTests
         var libraries = new AWWordLibraryManager();
         libraries.Submit("surname", new[] { "冯", "德" });
         libraries.Submit("given", new[] { "安", "平" });
+        libraries.Submit("separator", new[] { "\u200a" });
+        Equal("First\u200aLast", AWNameTemplate.Create(
+                "#First#<separator>#Last#").GenerateName(
+                new AWNameGenerationContext(1L), libraries),
+            "the legacy hair-space library preserves name separators");
+        libraries.Submit("normalized", new[] { " Paris ", "Paris", "", " \t", null });
+        Equal(1, libraries.GetWords("normalized").Count,
+            "word libraries still trim ordinary entries and drop duplicates and blank lines");
+        Equal("Paris", libraries.GetWords("normalized")[0],
+            "ordinary word normalization remains unchanged");
 
         var legacyLibraries = new AWWordLibraryManager();
         legacyLibraries.Submit("阿拉伯男名", new[] { "阿里" });

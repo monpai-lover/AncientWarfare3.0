@@ -56,14 +56,34 @@ namespace AncientWarfare3.core.lineage
         internal static bool TryBegin(IslandEscapeGroupSpec pSpec,
             out IslandEscapeGroupState pState)
         {
+            return TryRegister(pSpec, IslandEscapeStage.Evaluating,
+                pRestoring: false, out pState);
+        }
+
+        internal static bool TryRestore(IslandEscapeGroupSpec pSpec,
+            IslandEscapeStage pStage, out IslandEscapeGroupState pState)
+        {
+            pState = null;
+            if (pStage < IslandEscapeStage.Evaluating ||
+                pStage > IslandEscapeStage.Founding) return false;
+            return TryRegister(pSpec, pStage, pRestoring: true, out pState);
+        }
+
+        private static bool TryRegister(IslandEscapeGroupSpec pSpec,
+            IslandEscapeStage pStage, bool pRestoring,
+            out IslandEscapeGroupState pState)
+        {
             pState = null;
             if (pSpec == null || string.IsNullOrWhiteSpace(pSpec.GroupKey) ||
                 pSpec.EntryTile?.data == null ||
-                pSpec.LandingTile?.data == null) return false;
+                pSpec.LandingTile?.data == null ||
+                pSpec.OriginCity != null && pSpec.OriginCity.data == null)
+                return false;
 
             List<Actor> members = (pSpec.Members ??
                     Enumerable.Empty<Actor>())
-                .Where(IsInitialMember)
+                .Where(pActor => pRestoring ? IsLiveMember(pActor) :
+                    IsInitialMember(pActor))
                 .GroupBy(pActor => pActor.getID())
                 .Select(pGroup => pGroup.First())
                 .OrderBy(pActor => pActor.getID())
@@ -74,8 +94,11 @@ namespace AncientWarfare3.core.lineage
                     pSpec.OriginCity == null || pActor.city == pSpec.OriginCity ||
                     pActor.current_tile?.zone?.city == pSpec.OriginCity,
                     pActor.is_inside_boat)).ToList();
-            IReadOnlyList<long> manifest =
-                IslandEscapeBehaviourRules.BuildManifest(facts);
+            // Saved members may already be on a boat or on the destination island.
+            // Only a new departure requires residence at the origin and no transport.
+            IReadOnlyList<long> manifest = pRestoring
+                ? members.Select(pActor => pActor.getID()).ToList()
+                : IslandEscapeBehaviourRules.BuildManifest(facts);
             if (manifest.Count == 0) return false;
 
             if (Groups.TryGetValue(pSpec.GroupKey, out Registration existing) &&
@@ -92,9 +115,12 @@ namespace AncientWarfare3.core.lineage
                 OriginCityId = pSpec.OriginCity?.getID() ?? -1L,
                 EntryTileId = pSpec.EntryTile.data.tile_id,
                 LandingTileId = pSpec.LandingTile.data.tile_id,
-                LeaderActorId = pSpec.Leader?.getID() ?? manifest[0],
+                LeaderActorId = pSpec.Leader?.data != null &&
+                                manifest.Contains(pSpec.Leader.data.id)
+                    ? pSpec.Leader.data.id
+                    : manifest[0],
                 MemberActorIds = manifest.ToList(),
-                Stage = IslandEscapeStage.Evaluating
+                Stage = pStage
             };
             var registration = new Registration
             {
@@ -136,6 +162,12 @@ namespace AncientWarfare3.core.lineage
             pMoveTarget = null;
             if (!TryGetRegistration(pActor, out Registration registration))
                 return false;
+            if (registration.EntryTile?.data == null ||
+                registration.LandingTile?.data == null)
+            {
+                Fail(registration, "route_tiles_invalid");
+                return false;
+            }
             IslandEscapeGroupState state = registration.State;
             PruneMembers(state);
             if (state.MemberActorIds.Count == 0)
@@ -156,7 +188,7 @@ namespace AncientWarfare3.core.lineage
                 return ExecuteBoarding(pActor, registration, out pMoveTarget);
             if (state.Stage == IslandEscapeStage.Voyaging ||
                 state.Stage == IslandEscapeStage.Landing)
-                return ExecuteVoyage(pActor, registration);
+                return ExecuteVoyage(pActor, registration, out pMoveTarget);
             if (state.Stage == IslandEscapeStage.Founding)
             {
                 Complete(registration);
@@ -171,7 +203,7 @@ namespace AncientWarfare3.core.lineage
                 return;
             IslandEscapeGroupState state = registration.State;
             if (state.Stage == IslandEscapeStage.Boarding &&
-                AllMembersHaveRequests(state))
+                AllMembersHaveRequests(state, registration.LandingTile))
             {
                 SetStage(registration, IslandEscapeStage.Voyaging);
                 state.TransportRequestId = ResolveCommonRequestId(state);
@@ -198,7 +230,14 @@ namespace AncientWarfare3.core.lineage
         {
             pMoveTarget = null;
             IslandEscapeGroupState state = pRegistration.State;
-            if (pActor == null || pActor.is_inside_boat) return true;
+            if (pActor == null) return false;
+            if (pActor.is_inside_boat ||
+                pActor.current_tile?.isSameIsland(pRegistration.LandingTile) == true)
+            {
+                if (AllMembersHaveRequests(state, pRegistration.LandingTile))
+                    SetStage(pRegistration, IslandEscapeStage.Voyaging);
+                return true;
+            }
             if (pActor.current_tile?.data?.tile_id !=
                 pRegistration.EntryTile.data.tile_id)
             {
@@ -213,7 +252,7 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             state.TransportRequestId = request?.GetHashCode() ?? -1L;
-            if (AllMembersHaveRequests(state))
+            if (AllMembersHaveRequests(state, pRegistration.LandingTile))
             {
                 SetStage(pRegistration, IslandEscapeStage.Voyaging);
                 state.TransportRequestId = ResolveCommonRequestId(state);
@@ -222,24 +261,36 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static bool ExecuteVoyage(Actor pActor,
-            Registration pRegistration)
+            Registration pRegistration, out WorldTile pMoveTarget)
         {
+            pMoveTarget = null;
             if (AllMembersLanded(pRegistration.State, pRegistration.LandingTile))
             {
                 SetStage(pRegistration, IslandEscapeStage.Landing);
                 SetStage(pRegistration, IslandEscapeStage.Founding);
                 Complete(pRegistration);
             }
+            else if (!pActor.is_inside_boat &&
+                     pActor.current_tile?.isSameIsland(pRegistration.LandingTile) != true &&
+                     TaxiManager.getRequestForActor(pActor) == null)
+            {
+                // Taxi requests are runtime-only. A saved voyage can still have
+                // members waiting at the dock, so recreate their missing request.
+                return ExecuteBoarding(pActor, pRegistration, out pMoveTarget);
+            }
             return true;
         }
 
-        private static bool AllMembersHaveRequests(IslandEscapeGroupState pState)
+        private static bool AllMembersHaveRequests(IslandEscapeGroupState pState,
+            WorldTile pLandingTile)
         {
             return pState.MemberActorIds.All(pActorId =>
             {
                 Actor actor = ResolveActor(pActorId);
-                return actor?.data != null && actor.is_inside_boat ||
-                    actor != null && TaxiManager.getRequestForActor(actor) != null;
+                return actor?.data != null &&
+                    (actor.is_inside_boat ||
+                     actor.current_tile?.isSameIsland(pLandingTile) == true ||
+                     TaxiManager.getRequestForActor(actor) != null);
             });
         }
 

@@ -180,7 +180,8 @@ internal static class ContinuityAcceptanceSuite
             "stale route anchor blocked replanning");
         completed++;
 
-        // Large drains the entry snapshot while route workers stay unchanged.
+        // Large drains the entry population across bounded controller slices
+        // while route workers stay unchanged.
         const int armyCount = 80;
         var pending = new ArmyRtsPendingWork(
             controllerArmies: armyCount, firstOrders: armyCount,
@@ -202,8 +203,17 @@ internal static class ContinuityAcceptanceSuite
                 Assignments = 1
             }).ToArray();
         foreach (RecoveryArmy army in largeArmies) controllers.Enqueue(army);
-        int largeAdvanced = controllers.DrainSnapshot(
-            budget.ControllerArmies, army =>
+        int largeAdvanced = 0;
+        while (largeAdvanced < armyCount)
+        {
+            // Work added by a slice belongs to a later population. Limit the
+            // final slice to the unprocessed original entries, not the queue
+            // length after its callbacks append new armies.
+            int sliceBudget = Math.Min(budget.ControllerArmies,
+                armyCount - largeAdvanced);
+            Require(sliceBudget > 0 && sliceBudget <= 32,
+                "Large controller progress must retain its bounded slice");
+            largeAdvanced += controllers.DrainSnapshot(sliceBudget, army =>
             {
                 army.ControllerPasses++;
                 controllers.Enqueue(new RecoveryArmy
@@ -214,6 +224,7 @@ internal static class ContinuityAcceptanceSuite
                 });
                 return true;
             });
+        }
         Require(largeAdvanced == armyCount &&
                 largeArmies.All(army => army.ControllerPasses == 1) &&
                 controllers.Count == armyCount,

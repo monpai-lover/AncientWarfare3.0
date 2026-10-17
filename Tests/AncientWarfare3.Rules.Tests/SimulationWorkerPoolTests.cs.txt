@@ -6,7 +6,7 @@ internal static class SimulationWorkerPoolTests
     {
         DispatchGenerationCanOnlyBeConsumedOnce();
         ExecutesEveryIndexExactlyOnce();
-        TimedWaitDoesNotExecuteWorkerItems();
+        TimedWaitAssistsWithinItsBudget();
         RejectsConcurrentOperations();
         PropagatesWorkerExceptionsAndRemainsReusable();
         AlternatingOperationsDoNotReuseWorkerWakeups();
@@ -47,15 +47,17 @@ internal static class SimulationWorkerPoolTests
                 "worker pool executes each index exactly once");
     }
 
-    private static void TimedWaitDoesNotExecuteWorkerItems()
+    private static void TimedWaitAssistsWithinItsBudget()
     {
         using var backgroundEntered = new ManualResetEventSlim(false);
         using var releaseBackground = new ManualResetEventSlim(false);
         int callerThreadItems = 0;
+        int[] visits = new int[256];
         int callerThreadId = Environment.CurrentManagedThreadId;
         AWSimulationWorkerPool.WorkTicket ticket =
             AWSimulationWorkerPool.Instance.BeginIndexed(0, 256, index =>
             {
+                Interlocked.Increment(ref visits[index]);
                 if ((Thread.CurrentThread.Name ?? string.Empty)
                     .StartsWith("AW3 Simulation Worker ",
                         StringComparison.Ordinal))
@@ -69,18 +71,32 @@ internal static class SimulationWorkerPoolTests
                     Interlocked.Increment(ref callerThreadItems);
             });
 
-        True(backgroundEntered.Wait(TimeSpan.FromSeconds(2)),
-            "background simulation workers begin asynchronous work");
-        AWSimulationWorkerPool.Instance.TryWait(ticket, 5d);
-        releaseBackground.Set();
-        AWSimulationWorkerPool.Instance.Wait(ticket);
-        AWSimulationWorkerPool.WorkResult result =
-            AWSimulationWorkerPool.Instance.Complete(ticket);
+        AWSimulationWorkerPool.WorkResult result;
+        try
+        {
+            True(backgroundEntered.Wait(TimeSpan.FromSeconds(2)),
+                "background simulation workers begin asynchronous work");
+            True(!AWSimulationWorkerPool.Instance.TryWait(ticket, 0d),
+                "zero-budget polling cannot complete blocked work");
+            Equal(0, callerThreadItems,
+                "zero-budget polling must not run worker items");
+            True(!AWSimulationWorkerPool.Instance.TryWait(ticket, 5d),
+                "timed assistance yields while background workers remain blocked");
+        }
+        finally
+        {
+            releaseBackground.Set();
+            AWSimulationWorkerPool.Instance.Wait(ticket);
+            result = AWSimulationWorkerPool.Instance.Complete(ticket);
+        }
 
-        Equal(0, callerThreadItems,
-            "timed wait never runs worker items on the render thread");
+        True(callerThreadItems > 0 && result.Assisted,
+            "timed wait may help with remaining items within its budget");
         Equal(result.ScheduledItems, result.ExecutedItems,
             "asynchronous operation remains complete after timed wait");
+        foreach (int visitsForIndex in visits)
+            Equal(1, visitsForIndex,
+                "assistance and background workers execute each index exactly once");
     }
 
     private static void RejectsConcurrentOperations()

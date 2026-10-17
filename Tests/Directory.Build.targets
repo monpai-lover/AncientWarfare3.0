@@ -1,0 +1,16 @@
+<Project>
+  <!-- The game ships a Windows mixed-mode SQLite assembly. Use the official
+       managed/native package for standalone rule tests on other platforms. -->
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+    <_Aw3SqliteReference Include="@(Reference->WithMetadataValue('Identity', 'System.Data.SQLite'))" />
+    <_Aw3JsonReference Include="@(Reference->WithMetadataValue('Identity', 'Newtonsoft.Json'))" />
+  </ItemGroup>
+  <ItemGroup Condition="'@(_Aw3SqliteReference)' != ''">
+    <Reference Remove="System.Data.SQLite" />
+    <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
+  </ItemGroup>
+  <ItemGroup Condition="'@(_Aw3JsonReference)' != ''">
+    <Reference Remove="Newtonsoft.Json" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>

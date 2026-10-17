@@ -9,12 +9,14 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnArmyRegistered(Army pArmy)
         {
+            if (pArmy?.data == null) return;
             RefreshArmy(pArmy);
             KingdomWarDirectorService.QueueArmyChanged(SafeKingdom(pArmy));
         }
 
         public static void OnArmyKingdomChanged(Army pArmy)
         {
+            if (pArmy?.data == null) return;
             Kingdom previousKingdom = IndexedKingdom(pArmy);
             ArmyReplenishmentOperationService.OnArmyKingdomChanged(pArmy);
             RefreshArmy(pArmy);
@@ -26,13 +28,16 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnArmyRosterChanged(Army pArmy)
         {
+            if (pArmy?.data == null) return;
             RefreshArmy(pArmy);
             KingdomWarDirectorService.QueueArmyChanged(SafeKingdom(pArmy));
         }
 
         public static void OnArmyDisposed(Army pArmy)
         {
-            if (pArmy == null) return;
+            // The Dispose prefix owns cleanup while id is still backed by data.
+            // A retained Army reference can also receive a late roster/owner event.
+            if (pArmy?.data == null) return;
             Kingdom kingdom = SafeKingdom(pArmy);
             ArmyReplenishmentOperationService.OnArmyDisposed(pArmy);
             CoalitionWarTaskService.OnArmyInvalidated(pArmy.id);
@@ -92,9 +97,10 @@ namespace AncientWarfare3.core.lineage
 
         private static void RefreshArmy(Army pArmy)
         {
-            if (pArmy?.data == null || !SafeAlive(pArmy))
+            if (pArmy?.data == null) return;
+            if (!SafeAlive(pArmy))
             {
-                if (pArmy != null) Index.Remove(pArmy.id);
+                Index.Remove(pArmy.id);
                 ArmyFieldIndexService.OnArmyChanged(pArmy);
                 return;
             }
@@ -125,7 +131,7 @@ namespace AncientWarfare3.core.lineage
 
         private static Kingdom IndexedKingdom(Army pArmy)
         {
-            if (pArmy == null ||
+            if (pArmy?.data == null ||
                 !Index.TryGetKingdomId(pArmy.id, out long kingdomId))
                 return null;
             try { return World.world?.kingdoms?.get(kingdomId); }

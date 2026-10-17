@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Code/patch/AW_ActorMainSpritePatch.cs" Link="Production/AW_ActorMainSpritePatch.cs" />
+    <Compile Include="../../Code/patch/AW_AgePatch.cs" Link="Production/AW_AgePatch.cs" />
+    <Compile Include="../../Code/core/lineage/XiaOldHeadRefreshRules.cs" Link="Production/XiaOldHeadRefreshRules.cs" />
+    <Compile Include="../../Code/core/presentation/ActorVisualRoleRules.cs" Link="Production/ActorVisualRoleRules.cs" />
+    <Compile Include="../../Code/core/presentation/XiaActorTextureRules.cs" Link="Production/XiaActorTextureRules.cs" />
+    <Compile Include="../../Code/core/court/OfficialCareerRankRules.cs" Link="Production/OfficialCareerRankRules.cs" />
+  </ItemGroup>
+</Project>

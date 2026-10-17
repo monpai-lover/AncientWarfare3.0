@@ -169,7 +169,7 @@ foreach ($forbidden in @('CompleteRanking(', 'ProcessFinalRanking(',
 }
 
 $finalizer = Method-Source $deathPatch `
-    'public static Exception Die_Finalizer(' `
+    'public static void Die_Finalizer(' `
     'private static void EnsureDeathCause(' `
     'actor death finalizer'
 Require-Text $finalizer '__state?.Diagnostic ?? 0L' `

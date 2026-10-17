@@ -22,8 +22,11 @@ foreach ($token in @('AnnualPressure = 6', 'MaximumPressure = 300',
         'ActiveTargetLoyaltyPenalty = -25')) {
     if (-not $rules.Contains($token)) { throw "Pressure rules missing $token" }
 }
-foreach ($token in @('CurrentSchemaVersion = 5',
-        'PressureTargetCityId', 'Pressure = 0', 'LastPressureYear')) {
+if ($state -notmatch 'CurrentSchemaVersion\s*=\s*(\d+)' -or
+    [int]$Matches[1] -lt 5) {
+    throw 'Pressure persistence requires schema version 5 or newer'
+}
+foreach ($token in @('PressureTargetCityId', 'Pressure = 0', 'LastPressureYear')) {
     if (-not $state.Contains($token)) { throw "Pressure state missing $token" }
 }
 foreach ($token in @('MaximumPressure', 'PressureTargetCityId',

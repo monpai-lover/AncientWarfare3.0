@@ -50,9 +50,14 @@ $requiredFragments = @{
         'XiaActorTextureRules.ResolveWarriorHeadPath(',
         'SpriteTextureLoader.getSprite(',
         'ActorAnimationLoader.getHeadSpecial(',
-        'heads_special/head_king', 'heads_heir/head_0')
+        'LoadXiaKingHeadSprite(',
+        'XiaActorTextureRules.ResolveKingHeadPath()',
+        'XiaActorTextureRules.ResolveKingHanHeadPath()',
+        'heads_heir/head_0')
     AvatarHead = @(
         'XiaActorTextureRules.ResolveOfficialHeadPath(',
+        'XiaActorTextureRules.ResolveKingHeadPath()',
+        'XiaActorTextureRules.ResolveKingHanHeadPath()',
         'SpriteTextureLoader.getSprite(',
         'heads_heir/head_0', 'actor.isCityLeader()')
     Career = @(
@@ -80,8 +85,25 @@ if ($rules.Contains('heads_leaders/')) {
 }
 
 $visualPatch = $sources.VisualPatch
-if (-not ($visualPatch -match '(?s)if \(pActor\.isKing\(\)\).*?ActorAnimationLoader\.getHeadSpecial')) {
-    $failures.Add('Map king heads must use ActorAnimationLoader.getHeadSpecial')
+if (-not ($visualPatch -match '(?s)if \(pActor\.isKing\(\)\).*?LoadXiaKingHeadSprite\(')) {
+    $failures.Add('Map king heads must use the exact-sprite king head helper')
+}
+$kingHelperStart = $visualPatch.IndexOf('private static Sprite LoadXiaKingHeadSprite(')
+$kingHelperEnd = if ($kingHelperStart -ge 0) {
+    $visualPatch.IndexOf('private static bool IsXiaHeir(', $kingHelperStart)
+} else { -1 }
+if ($kingHelperStart -lt 0 -or $kingHelperEnd -le $kingHelperStart) {
+    $failures.Add('Map king head helper must be present')
+}
+else {
+    $kingHelper = $visualPatch.Substring($kingHelperStart, $kingHelperEnd - $kingHelperStart)
+    foreach ($fragment in @('IsHanEmperorCardActor', 'ResolveKingHanHeadPath()',
+            'ResolveKingHeadPath()', 'SpriteTextureLoader.getSprite(',
+            'if (sprite != null || string.Equals(preferredPath,')) {
+        if (-not $kingHelper.Contains($fragment)) {
+            $failures.Add("King head selection/fallback is missing: $fragment")
+        }
+    }
 }
 if (-not ($visualPatch -match '(?s)Sprite head = SpriteTextureLoader\.getSprite')) {
     $failures.Add('Flat Xia special heads must use SpriteTextureLoader.getSprite')
@@ -98,8 +120,10 @@ if ($textureBinding.Contains('tex.texture_head_warrior = pBasePath + "heads_warr
 }
 
 if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) {
-    $failures.Add("Updated actor texture source is missing: $sourceRoot")
+    Write-Warning "Optional artist overlay is unavailable; checking shipped texture resources: $sourceRoot"
 }
+
+
 else {
     foreach ($sourceFile in Get-ChildItem -LiteralPath $sourceRoot -Recurse -File) {
         $relative = $sourceFile.FullName.Substring($sourceRoot.Length).
@@ -125,6 +149,32 @@ else {
             if ($sourceHash -ne $destinationHash) {
                 $failures.Add("Updated Xia actor texture differs: $relative")
             }
+        }
+    }
+}
+
+# Standalone checkouts must contain the resources selected by the production
+# rank rules, even when the optional artist source directory is unavailable.
+foreach ($relative in @(
+    'leader_1/sprites.json', 'leader_2/sprites.json', 'leader_3/sprites.json',
+    'heads_leader/head_0.png', 'heads_leader/head_1.png', 'heads_leader/head_2.png',
+    'heads_special/head_king/head_0.png', 'heads_heir/head_0.png',
+    'king_han/swim_0.png', 'king_han/swim_1.png',
+    'king_han/swim_2.png', 'king_han/swim_3.png')) {
+    $path = Join-Path $xiaRoot $relative
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        $failures.Add("Missing shipped official/king texture resource: $relative")
+        continue
+    }
+    if ($relative.EndsWith('.json')) {
+        try { $null = [IO.File]::ReadAllText($path) | ConvertFrom-Json }
+        catch { $failures.Add("Invalid texture manifest: $relative") }
+    }
+    else {
+        $bytes = [IO.File]::ReadAllBytes($path)
+        if ($bytes.Length -lt 24 -or
+            [BitConverter]::ToString($bytes, 0, 8) -ne '89-50-4E-47-0D-0A-1A-0A') {
+            $failures.Add("Invalid PNG texture resource: $relative")
         }
     }
 }

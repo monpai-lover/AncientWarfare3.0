@@ -35,8 +35,11 @@ foreach ($token in @('TryCreate(', 'World.world.cities.newCity',
     }
 }
 
-foreach ($token in @('CurrentSchemaVersion = 4',
-        'OriginalTopTypeId')) {
+if ($state -notmatch 'CurrentSchemaVersion\s*=\s*(\d+)' -or
+    [int]$Matches[1] -lt 4) {
+    throw 'Wall restoration requires schema version 4 or newer'
+}
+foreach ($token in @('OriginalTopTypeId')) {
     if (-not $state.Contains($token)) {
         throw "Stronghold wall state is missing $token"
     }
@@ -59,7 +62,7 @@ $fall = $service.Substring($fallStart, $fallEnd - $fallStart)
 $restoreIndex = $fall.IndexOf('RestoreWalls(')
 $completeIndex = $fall.IndexOf(
     'pState.Phase = BanditStrongholdPhase.Completed')
-$removeIndex = $fall.IndexOf('World.world.cities.removeObject')
+$removeIndex = $fall.IndexOf('BanditStrongholdCityDisposalService.Schedule(')
 if ($restoreIndex -lt 0 -or $completeIndex -le $restoreIndex -or
     $removeIndex -le $restoreIndex) {
     throw 'Stronghold walls must restore before completion and city removal'
@@ -68,7 +71,7 @@ if ($restoreIndex -lt 0 -or $completeIndex -le $restoreIndex -or
 foreach ($token in @('PrepareBanditKingdomRemoval(',
         'pBandit.units.ToList()',
         'if (pPrimaryActor != null) candidates.Add(pPrimaryActor);',
-        'actor.kingdom = null;')) {
+        'ActorKingdomSafetyService.DetachForTransfer(actor);')) {
     if ($service -notmatch [regex]::Escape($token)) {
         throw "Bandit rollback cleanup is missing $token"
     }
@@ -77,14 +80,14 @@ foreach ($token in @('PrepareBanditKingdomRemoval(',
 $directBanditCleanup =
     'PrepareBanditKingdomRemoval\s*\(\s*bandit,\s*origin,\s*' +
     'pMother,\s*null,\s*ruler\s*\);\s*' +
-    'World\.world\.kingdoms\.removeObject\(bandit\);'
+    'RemoveBanditKingdomAndDrain\(bandit\);'
 if ($service -notmatch $directBanditCleanup) {
     throw 'Direct failed bandit removal is not preceded by actor cleanup'
 }
 $directCatchCleanup =
     'PrepareBanditKingdomRemoval\s*\(\s*pBandit,\s*origin,\s*' +
     'pMother,\s*null,\s*ruler\s*\);\s*' +
-    'World\.world\.kingdoms\.removeObject\(pBandit\);'
+    'RemoveBanditKingdomAndDrain\(pBandit\);'
 if ($service -notmatch $directCatchCleanup) {
     throw 'Direct bandit exception removal is not preceded by actor cleanup'
 }
@@ -92,9 +95,20 @@ $rollbackCleanup =
     'PrepareBanditKingdomRemoval\s*\(\s*plan\.Context\.Bandit,\s*' +
     'plan\.Context\.Origin,\s*plan\.Context\.Mother,\s*' +
     'pTransaction\.Actors,\s*plan\.Context\.Ruler\s*\);\s*' +
-    'World\.world\.kingdoms\.removeObject\(plan\.Context\.Bandit\);'
+    'RemoveBanditKingdomAndDrain\(plan\.Context\.Bandit\);'
 if ($service -notmatch $rollbackCleanup) {
     throw 'Transactional bandit removal is not preceded by actor cleanup'
+}
+$removalStart = $service.IndexOf('private static void RemoveBanditKingdomAndDrain(')
+$removalEnd = $service.IndexOf('private static bool IsValidRemovalCity(', $removalStart)
+if ($removalStart -lt 0 -or $removalEnd -le $removalStart) {
+    throw 'Bandit removal helper is missing'
+}
+$removal = $service.Substring($removalStart, $removalEnd - $removalStart)
+$nativeRemoval = $removal.IndexOf('World.world.kingdoms.removeObject(pBandit)')
+$repairDrain = $removal.IndexOf('ActorKingdomSafetyService.DrainPendingRepairs(')
+if ($nativeRemoval -lt 0 -or $repairDrain -le $nativeRemoval) {
+    throw 'Bandit removal must drain actor affiliation repairs after native removal'
 }
 
 $directStart = $service.IndexOf('internal static bool TryCreateDirect(')

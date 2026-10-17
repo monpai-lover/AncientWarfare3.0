@@ -6,6 +6,8 @@ using life.taxi;
 
 namespace AncientWarfare3.core.performance
 {
+    // Recheck snapshot entries after native actor/building disposal during
+    // parallel and incremental metadata maintenance.
     internal sealed class AWCooperativeWorldMaintenanceRunner
     {
         private const string DirtyManagerPhasePrefix =
@@ -574,7 +576,8 @@ namespace AncientWarfare3.core.performance
         {
             _actorMetaIndices.Clear();
             for (int i = 0; i < _actors.Count; i++)
-                _actorMetaIndices.Add(_actors[i], i);
+                if (_actors[i] != null)
+                    _actorMetaIndices.Add(_actors[i], i);
         }
 
         private void ApplyActorMetaPartitionChanges()
@@ -587,15 +590,19 @@ namespace AncientWarfare3.core.performance
             for (int i = 0; i < _dirtyActorPartitions.Count; i++)
             {
                 Actor actor = _dirtyActorPartitions[i];
-                int actorIndex = _actorMetaIndices[actor];
+                if (actor == null ||
+                    !_actorMetaIndices.TryGetValue(actor, out int actorIndex))
+                    continue;
                 ActorMetaPartitionKind previous =
                     _actorMetaPartitions[actorIndex];
                 ActorMetaPartitionKind next = GetActorMetaPartition(actor);
                 if (previous == next) continue;
 
                 bool previousAlive =
-                    previous != ActorMetaPartitionKind.Dying;
-                bool nextAlive = next != ActorMetaPartitionKind.Dying;
+                    previous == ActorMetaPartitionKind.AliveWild ||
+                    previous == ActorMetaPartitionKind.AliveCivilized;
+                bool nextAlive = next == ActorMetaPartitionKind.AliveWild ||
+                                 next == ActorMetaPartitionKind.AliveCivilized;
                 if (previousAlive != nextAlive)
                 {
                     if (previousAlive)
@@ -606,6 +613,8 @@ namespace AncientWarfare3.core.performance
 
                 switch (previous)
                 {
+                    case ActorMetaPartitionKind.Invalid:
+                        break;
                     case ActorMetaPartitionKind.AliveWild:
                         RemoveActorAtRank(wild, actor, actorIndex);
                         break;
@@ -622,6 +631,8 @@ namespace AncientWarfare3.core.performance
                 _actorMetaPartitions[actorIndex] = next;
                 switch (next)
                 {
+                    case ActorMetaPartitionKind.Invalid:
+                        break;
                     case ActorMetaPartitionKind.AliveWild:
                         InsertActorAtRank(wild, actor, actorIndex);
                         break;
@@ -715,6 +726,8 @@ namespace AncientWarfare3.core.performance
                     GetActorMetaPartition(actor);
                 switch (partition)
                 {
+                    case ActorMetaPartitionKind.Invalid:
+                        break;
                     case ActorMetaPartitionKind.AliveWild:
                         aliveCount++;
                         wildCount++;
@@ -747,13 +760,16 @@ namespace AncientWarfare3.core.performance
         private static ActorMetaPartitionKind GetActorMetaPartition(
             Actor pActor)
         {
-            Kingdom kingdom = pActor?.kingdom;
-            if (kingdom == null || kingdom.data == null || kingdom.isRekt())
+            if (pActor?.data == null || pActor.asset == null)
+                return ActorMetaPartitionKind.Invalid;
+            if (!pActor.isAlive()) return ActorMetaPartitionKind.Dying;
+            Kingdom kingdom = pActor.kingdom;
+            if (kingdom == null || kingdom.data == null ||
+                kingdom.asset == null || kingdom.isRekt())
             {
                 ActorKingdomSafetyService.QueueRepair(pActor);
                 return ActorMetaPartitionKind.Dying;
             }
-            if (!pActor.isAlive()) return ActorMetaPartitionKind.Dying;
             return kingdom.wild
                 ? ActorMetaPartitionKind.AliveWild
                 : ActorMetaPartitionKind.AliveCivilized;
@@ -779,6 +795,8 @@ namespace AncientWarfare3.core.performance
                 Actor actor = _actors[i];
                 switch (_actorMetaPartitions[i])
                 {
+                    case ActorMetaPartitionKind.Invalid:
+                        break;
                     case ActorMetaPartitionKind.AliveWild:
                         _aliveActors[aliveIndex++] = actor;
                         _wildActors[wildIndex++] = actor;
@@ -842,6 +860,7 @@ namespace AncientWarfare3.core.performance
             for (; _index < end; _index++)
             {
                 Actor actor = _actors[_index];
+                if (actor?.data == null || actor.asset == null) continue;
                 if (actor.beh_actor_target != null &&
                     !actor.beh_actor_target.isAlive())
                     actor.beh_actor_target = null;
@@ -862,6 +881,7 @@ namespace AncientWarfare3.core.performance
             for (; _index < end; _index++)
             {
                 Actor actor = _actors[_index];
+                if (actor?.data == null || actor.asset == null) continue;
                 if (actor.beh_building_target != null &&
                     !actor.beh_building_target.isAlive())
                     actor.beh_building_target = null;
@@ -877,9 +897,10 @@ namespace AncientWarfare3.core.performance
             for (; _index < end; _index++)
             {
                 Building building = _occupiedBuildings[_index];
+                if (building?.data == null || building.asset == null) continue;
                 building.residents.Clear();
                 if (building.asset.docks)
-                    building.component_docks.clearBoatCounter();
+                    building.component_docks?.clearBoatCounter();
             }
         }
 
@@ -890,19 +911,34 @@ namespace AncientWarfare3.core.performance
             for (; _index < end; _index++)
             {
                 Actor actor = _actors[_index];
-                actor.checkHomeBuilding();
+                if (actor?.data == null || actor.asset == null) continue;
+                // Native checkHomeBuilding reads the building's data and asset.
+                // A snapshot can outlive Dispose(), so detach that stale home
+                // before calling the native validation path.
+                Building previousHome = actor.home_building;
+                if (previousHome != null &&
+                    (previousHome.data == null || previousHome.asset == null))
+                {
+                    actor.clearHomeBuilding();
+                    actor.changeHappiness("just_lost_house");
+                }
+                else
+                {
+                    actor.checkHomeBuilding();
+                }
                 Building home = actor.home_building;
                 if (home != null)
                 {
                     if (home.asset.docks)
-                        home.component_docks.increaseBoatCounter(actor);
+                        home.component_docks?.increaseBoatCounter(actor);
                     else
                         home.residents.Add(actor.data.id);
                 }
 
                 Building inside = actor.inside_building;
                 if (inside != null &&
-                    (!inside.isUsable() || inside.isAbandoned()))
+                    (inside.data == null || inside.asset == null ||
+                     !inside.isUsable() || inside.isAbandoned()))
                 {
                     actor.exitBuilding();
                     actor.cancelAllBeh();
@@ -934,7 +970,8 @@ namespace AncientWarfare3.core.performance
         {
             AliveWild,
             AliveCivilized,
-            Dying
+            Dying,
+            Invalid
         }
     }
 }

@@ -31,7 +31,7 @@ $reader = Read-Source 'Code/core/lineage/LineageArchiveReader.cs'
 $enrollment = Read-Source 'Code/core/schools/HistoricalSchoolEliteEnrollmentService.cs'
 $keys = Read-Source 'Code/core/lineage/LineageKeys.cs'
 $court = Read-Source 'Code/core/court/CourtService.cs'
-$cityLeader = Read-Source 'Code/patch/AW_CityLeaderPatch.cs'
+$cityLeader = Read-Source 'Code/patch/AW_PromotionPatch.cs'
 
 Reject-Text $candidate 'if (localSelected.Count < CivilServiceExamRules.CandidateLimit)' `
     'local-full gate that starves foreign examinees'
@@ -45,13 +45,14 @@ Require-Text $enrollment 'HistoricalSchoolElitePriority.DeclinedNoble' `
     'declined-noble education priority'
 Require-Text $keys 'SCHOOL_DECLINED_NOBLE_EDUCATION_CURSOR' `
     'independent declined-noble enrollment cursor'
+# The event-driven coordinator fills each seat through formal, guest, then acting passes.
 Require-Regex $court `
-    '(?s)SchoolGuestOfficeService\.FillVacanciesAfterCivilServiceExam\(\s*pKingdom, pAllowActing: false\);\s*SchoolGuestOfficeService\.FillVacanciesAfterCivilServiceExam\(\s*pKingdom, pAllowActing: true\);[\s\S]*?EnsureMinimumCourt\([^;]+pAllowActing: true\);' `
-    'foreign graduates before domestic acting fallback'
-Require-Text $court 'AW_CityLeaderPatch.FillVacanciesAfterCivilServiceExam(' `
-    'immediate post-ranking city vacancy fill'
-Require-Text $cityLeader 'CivilServiceExamRules.CityVacancyFillBudget' `
-    'bounded post-ranking city vacancy scan'
+    '(?s)TryFillRegisteredCentralVacancy\(.*?pAllowActing: false.*?SchoolGuestOfficeService\.\s*TryFillRegisteredVacancy\(.*?pAllowActing: true' `
+    'formal domestic and foreign graduates before domestic acting fallback'
+Require-Text $examService 'CourtVacancyReconciliationService.CandidatePoolChanged(' `
+    'post-ranking candidate changes wake registered vacancies'
+Require-Text $cityLeader 'CourtVacancyReconciliationService.RegisterCityVacancies(' `
+    'leader removal registers local vacancies'
 Require-Text $examService 'internal static int CandidateTargetForRealm(' `
     'single runtime candidate-target adapter'
 Require-Text $examService 'CivilServiceExamRules.CandidateTarget(' `

@@ -17,21 +17,25 @@ internal static class CourtRegionalFolderSourceGuardTests
         Contains(window, "_expandedRegionIds", "court window must preserve folder expansion by region");
         Contains(window, "RenderRegionalGovernmentFolder", "court window must render one folder per region");
         Contains(window, "folderRect", "regional link target must be the folder container");
-        Contains(window, "aw_court_regional_folder", "court window must use the localized folder label");
+        Contains(folder, "aw_court_regional_folder", "court window must use the localized folder label");
         string readModel = Read("Code/core/court/CourtReadModelService.cs");
         string pyramidModel = Read("Code/core/court/CourtPyramidRules.cs");
         string actorNode = Read("Code/ui/items/CourtActorNodeView.cs");
         string historyWindow = Read("Code/ui/windows/CourtOfficeHistoryWindow.cs");
         string restore = Read("Code/core/multiplayer/AW3RuntimeRestorePipeline.cs");
-        Contains(readModel, "City officials are rendered under their regional folder",
+        Contains(readModel, "string.Equals(officer.layer, CourtOfficeLayer.County",
             "central court must not add city officials beside the regional folder");
         Contains(readModel, "string.Equals(officer.layer, CourtOfficeLayer.City",
             "city-layer officers must be filtered from the central node pool");
         Contains(pyramidModel, "public string HistoryOfficeLayer");
         Contains(pyramidModel, "public string HistoryOfficeId");
         Contains(pyramidModel, "public long HistoryCityId");
-        Contains(actorNode, "pNode.HistoryOfficeId",
+        Contains(actorNode, "pNode?.HistoryOfficeId",
             "history action uses the card's exact appointment scope");
+        Contains(actorNode, "pNode?.HistoryOfficeLayer",
+            "history action preserves the card's office layer");
+        Contains(actorNode, "pNode?.HistoryCityId",
+            "history action preserves the card's city context");
         False(actorNode.Contains("GetActiveOfficers(",
                 StringComparison.Ordinal),
             "history action cannot choose another office by actor identity");

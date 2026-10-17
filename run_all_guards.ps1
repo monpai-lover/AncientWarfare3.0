@@ -1,20 +1,58 @@
-$ErrorActionPreference = 'Continue'
-$testsDir = Join-Path $PSScriptRoot 'Tests'
-$guards = Get-ChildItem $testsDir -Filter '*.ps1' | Where-Object { $_.Name -ne 'run_all_guards.ps1' } | Sort-Object Name
-$pass = @(); $fail = @()
-foreach ($g in $guards) {
-  $name = [IO.Path]::GetFileNameWithoutExtension($g.Name)
-  if ($name -in @('run_relevant_guards','run_all_guards')) { continue }
-  $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $g.FullName 2>&1
-  $code = $LASTEXITCODE
-  $threw = ($out | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }).Count -gt 0
-  if (($code -eq 0 -or $null -eq $code) -and -not $threw) { $pass += $name }
-  else {
-    $firstErr = ($out | Select-Object -First 1) -join ' '
-    if ($firstErr.Length -gt 130) { $firstErr = $firstErr.Substring(0,130) }
-    $fail += ,@($name, $firstErr)
-  }
+[CmdletBinding()]
+param(
+    [string]$TestsDirectory = (Join-Path $PSScriptRoot 'Tests'),
+    [string[]]$CheckNames = @()
+)
+
+$ErrorActionPreference = 'Stop'
+$TestsDirectory = (Resolve-Path -LiteralPath $TestsDirectory).Path
+$shellName = if ($PSVersionTable.PSEdition -eq 'Core') {
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) { 'pwsh.exe' } else { 'pwsh' }
+} else { 'powershell.exe' }
+$shell = Join-Path $PSHOME $shellName
+$guards = @(Get-ChildItem -LiteralPath $TestsDirectory -Recurse -File -Filter '*.ps1' |
+    Where-Object { $_.Name -ne 'VerifySourceDeployment.ps1' } |
+    Sort-Object FullName)
+$missingNames = @()
+if ($CheckNames.Count -gt 0) {
+    # Historical subset runners select names without changing their lists.
+    # Only discovered files can run; missing selections remain visible failures.
+    $selectedNames = @($CheckNames | ForEach-Object { $_ -replace '\.ps1$', '' } |
+        Sort-Object -Unique)
+    $guards = @($guards | Where-Object { $_.BaseName -in $selectedNames })
+    $missingNames = @($selectedNames | Where-Object { $_ -notin $guards.BaseName })
+    foreach ($missing in $missingNames) { Write-Output "MISSING $missing" }
+} elseif ($guards.Count -eq 0) {
+    throw "No checks found in $TestsDirectory"
 }
-Write-Host "TOTAL=$($guards.Count) PASS=$($pass.Count) FAIL=$($fail.Count)"
-Write-Host "=== FAILING ==="
-foreach ($f in $fail) { Write-Host "FAIL`t$($f[0])`t$($f[1])" }
+$failures = @()
+foreach ($guard in $guards) {
+    # Isolate script globals, exit statements and Add-Type definitions.
+    $name = $guard.FullName.Substring($TestsDirectory.TrimEnd('/', '\').Length + 1)
+    # Some guards use repository-relative paths and do not set an error policy.
+    # Encode the wrapper to preserve literal paths, including spaces/quotes.
+    $quotedRoot = $PSScriptRoot.Replace("'", "''")
+    $quotedGuard = $guard.FullName.Replace("'", "''")
+    $command = @"
+`$ErrorActionPreference = 'Stop'
+Set-Location -LiteralPath '$quotedRoot'
+`$global:LASTEXITCODE = 0
+& '$quotedGuard'
+if (-not `$?) { exit 1 }
+exit 0
+"@
+    $encodedCommand = [Convert]::ToBase64String(
+        [Text.Encoding]::Unicode.GetBytes($command))
+    $output = & $shell -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedCommand 2>&1
+    $code = $LASTEXITCODE
+    if ($code -eq 0) {
+        Write-Output "PASS $name"
+    } else {
+        $failures += $name
+        Write-Output "FAIL $name (exit $code)"
+        $output | ForEach-Object { Write-Output "  $_" }
+    }
+}
+Write-Output "TOTAL=$($guards.Count + $missingNames.Count) PASS=$($guards.Count - $failures.Count) FAIL=$($failures.Count) MISSING=$($missingNames.Count)"
+if ($failures.Count -gt 0 -or $missingNames.Count -gt 0) { exit 1 }
+exit 0

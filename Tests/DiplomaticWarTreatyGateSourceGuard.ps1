@@ -94,14 +94,38 @@ foreach ($externalNeedle in @(
 if (-not $zhulu.Contains('TryStartSystemWar(attacker, defender,')) {
     throw 'external zhulu war must retain the treaty-gated system route'
 }
-if ($declaration -notmatch
-        'ResolveWarMainDefender\s*\(\s*pDefender\s*\)[\s\S]{0,300}HasActiveWarBlocker\s*\(\s*pAttacker,\s*mainDefender\s*\)' -or
-    $warDecision -notmatch
-        'ResolveWarMainDefender\s*\(\s*declaredDefender\s*\)[\s\S]{0,300}HasActiveWarBlocker\s*\(\s*pAttacker,\s*mainDefender\s*\)') {
-    throw 'governorate declarations must validate the actual main defender treaty'
+function Get-SourceSection([string] $source, [string] $startToken,
+    [string] $endToken) {
+    $start = $source.IndexOf($startToken)
+    if ($start -lt 0) { throw "Missing method: $startToken" }
+    $end = $source.IndexOf($endToken, $start + $startToken.Length)
+    if ($end -le $start) { throw "Missing method boundary: $endToken" }
+    return $source.Substring($start, $end - $start)
 }
-if ($declaration -notmatch
-        'ClearPendingForPair\s*\([\s\S]{0,800}ResolveWarMainDefender\s*\([\s\S]{0,250}record\?\.DefenderId') {
+$issue = Get-SourceSection $declaration 'internal static bool CanIssue(' `
+    'internal static List<DiplomaticWarTargetAvailability>'
+$startWar = Get-SourceSection $warDecision 'private static War StartWar(' `
+    'internal static Kingdom ResolveWarMainDefender('
+foreach ($body in @($issue, $startWar)) {
+    $resolve = $body.IndexOf('ResolveWarMainDefender(')
+    $treaty = [regex]::Match($body,
+        'HasActiveWarBlocker\s*\(\s*pAttacker,\s*mainDefender\s*\)')
+    $gate = $body.IndexOf('ShouldBlockWarWithActiveTreaty(activeTreaty,')
+    if ($resolve -lt 0 -or -not $treaty.Success -or
+        $treaty.Index -le $resolve -or $gate -le $treaty.Index -or
+        $body -notmatch 'HasActiveWarBlocker\s*\(\s*pAttacker,\s*pDefender\s*\)') {
+        throw 'declaration issue and execution must gate both declared and actual defenders on live treaties'
+    }
+}
+if ($startWar.IndexOf('ShouldBlockWarWithActiveTreaty(activeTreaty,') -gt
+    $startWar.IndexOf('World.world.diplomacy.startWar(')) {
+    throw 'the live treaty gate must run before native war creation'
+}
+$clearPending = Get-SourceSection $declaration 'public static void ClearPendingForPair(' `
+    'public static Kingdom TargetKingdom('
+if ($clearPending -notmatch ('ResolveWarMainDefender\s*\(\s*declaredDefender\s*,\s*pAttacker\s*\)' +
+        '[\s\S]*record\?\.DefenderId != pDefender\.id\s*&&\s*' +
+        'mainDefender != pDefender\) continue;')) {
     throw 'truce cleanup must match pending governorate declarations by actual defender'
 }
 

@@ -29,8 +29,13 @@ Require -Condition $priorityRules.Contains('return !p0SlicePending;') -Message '
 Require -Condition $postRunner.Contains('ArmyMilitaryMovementPriorityIndex.WasProcessed(') -Message 'P0 members must not receive a second path or smooth movement pass.'
 Require -Condition (-not $watchdog.Contains('TryTeleportFormationMember(')) -Message 'RTS member stalls must recover by same-target routing, not teleport to the captain.'
 Require -Condition (-not $watchdog.Contains('ShouldRecoverStaleInstalledRoute(')) -Message 'RTS watchdog must not gate independent member recovery on shared routes.'
-Require -Condition $routeProvider.Contains('TickOwnedFinder()') -Message 'dedicated AW3 army finder must expose an owned lifecycle tick.'
-Require -Condition $routeProvider.Contains('if (_ownsFinder) _finder.Tick();') -Message 'army route provider must tick only a dedicated finder, never the shared actor finder.'
-Require -Condition $routeProvider.Contains('currentAw3?.TickOwnedFinder();') -Message 'army route provider service must tick its dedicated finder from the cooperative frame.'
+# The b finder advances work on worker threads and schedules continuations when
+# steps are consumed; it no longer exposes the old main-thread Tick API.
+$finder = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/core/pathfinding/AWPathFinder.cs')
+Require -Condition $routeProvider.Contains('_finder.Start(pWorkerCount);') -Message 'dedicated army routing must start its worker lifecycle.'
+Require -Condition $routeProvider.Contains('_finder.Consume(finderRequestId);') -Message 'consuming army steps must advance the streamed finder session.'
+Require -Condition $finder.Contains('AWPathWorkPriority.Continuation') -Message 'stream consumption must schedule bounded continuation work.'
+Require -Condition ($routeProvider -match 'if \(_ownsFinder\)\s*\{\s*_finder.StopAndDrain\(\);\s*_finder.Dispose\(\);') -Message 'only the owned finder may be stopped and disposed.'
+Require -Condition $routeProvider.Contains('CancelSharedRequests(') -Message 'shared finder cleanup must cancel only the provider requests.'
 
 Write-Output 'Army RTS independent path source guard passed.'

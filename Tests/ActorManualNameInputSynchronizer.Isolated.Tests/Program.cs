@@ -15,12 +15,15 @@ namespace UnityEngine
         {
             return Math.Min(Math.Max(value, minimum), maximum);
         }
+
+        public static float Max(float left, float right) => Math.Max(left, right);
+        public static int Max(int left, int right) => Math.Max(left, right);
     }
 }
 
 namespace UnityEngine.UI
 {
-    internal sealed class InputField
+    internal sealed class InputField : UnityEngine.Component
     {
         private int _caretPosition;
         private int _selectionAnchorPosition;
@@ -28,6 +31,10 @@ namespace UnityEngine.UI
 
         public bool isFocused { get; set; }
         public string text { get; set; } = string.Empty;
+        public object placeholder;
+        public InputEvent onEndEdit = new InputEvent();
+        public void Select() => isFocused = true;
+        public void ActivateInputField() => isFocused = true;
         public int caretPosition
         {
             get => _caretPosition;
@@ -61,6 +68,7 @@ internal static class Program
             ActiveRewritePreservesInRangeSelection();
             ActiveCompositionDefersRewrite();
             CompositionReadFailureDefersRewrite();
+            EditorTests.Run();
             Console.WriteLine(
                 "Actor manual-name InputField synchronizer tests passed.");
             return 0;

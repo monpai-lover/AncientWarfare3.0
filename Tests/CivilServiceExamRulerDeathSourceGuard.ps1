@@ -78,7 +78,7 @@ foreach ($forbidden in @('CompleteRanking(', 'LoadFinalRankingPage(',
 }
 
 $finalizer = Method-Source $deathPatch `
-    'public static Exception Die_Finalizer(' `
+    'public static void Die_Finalizer(' `
     'private static void EnsureDeathCause(' 'actor death finalizer'
 Require-Text $finalizer '__state?.Diagnostic ?? 0L' `
     'finalizer closes the captured diagnostic'

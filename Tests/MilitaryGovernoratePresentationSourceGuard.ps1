@@ -40,8 +40,10 @@ $locales = Read-Source 'Locales\others.csv'
 
 Require $vassal 'data\.get\(LineageKeys\.MILITARY_GOVERNORATE_SUBJECT_KIND' `
     'subject kind must come from the cached kingdom-data projection'
-Require $ruler 'VassalService\.GetSubjectKind\(pKingdom\)' `
-    'ruler presentation must consume cached subject kind'
+Require $ruler 'VassalService\.IsMilitaryGovernorate\(pKingdom\)' `
+    'ruler presentation must recognize cached subjects and independent military governments'
+Require $vassal 'GetSubjectKind\(pKingdom\)[\s\S]*POLICY_GOVERNMENT_STATE' `
+    'military government identity must include cached subject kind and persisted government state'
 Require $heir 'VassalService\.GetSubjectKind\(pKingdom\)' `
     'heir presentation must consume cached subject kind'
 Require $map 'VassalService\.GetSubjectKind\(pKingdom\)' `

@@ -36,6 +36,17 @@ internal static class FramePrioritySchedulerConfirmationRulesTests
                 replicaSession: false,
                 modCycleActive: true),
             "pausing a fixed-step cycle must leave the cycle resumable instead of draining it on the UI frame");
+        Equal(AWPausedFrameAction.Continue,
+            AWFrameSchedulerRules.ResolvePausedFrameAction(
+                AWSimulationMode.Large, false, false, true),
+            "unpausing resumes the active cycle");
+        Equal(AWSaveBoundaryAction.DrainActiveCycle,
+            AWFrameSchedulerRules.ResolveSaveBoundary(true, true, false),
+            "saving a paused active cycle still requires a consistent boundary");
+        Equal(AWPausedFrameAction.AbortReplicaCycle,
+            AWFrameSchedulerRules.ResolvePausedFrameAction(
+                AWSimulationMode.Large, true, true, true),
+            "replicas still abort local active cycles");
 
         Equal("not_loaded", AWFrameSchedulerRules.ResolveAuthorityBlockReason(
                 gameLoaded: false, loading: false, paused: false,

@@ -30,8 +30,8 @@ $persistence = Read-Source 'Code/core/schools/GuestOfficePersistence.cs'
 $models = Read-Source 'Code/core/schools/GuestOfficePersistenceDbModels.cs'
 $db = Read-Source 'Code/core/schools/GuestOfficePersistenceDb.cs'
 
-Require-Text $court 'SchoolGuestOfficeService.FillVacanciesAfterCivilServiceExam(' `
-    'exam completion immediately invites qualified foreign graduates'
+Require-Text $court 'TryFillRegisteredVacancy(' `
+    'registered central vacancies preserve qualified foreign graduate appointments'
 Require-Text $court 'bool pActing = false)' `
     'guest appointment gate receives the actual appointment mode'
 Require-Text $court 'HasHostIssuedQualification(' `
@@ -44,7 +44,7 @@ foreach ($required in @(
         'pActing: pActing',
         'pActing: _pending.IsActing',
         'pActing: recoveryResult.IsActing',
-        'PendingOfficeIds(pHost.id)')) {
+        'IsOfficeReserved(pHost.id, pOfficeId)')) {
     Require-Text $guest $required "guest acting appointment chain $required"
 }
 Reject-Text $guest '_pending.OfficeId, residence, pActing: false);' `

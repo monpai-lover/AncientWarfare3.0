@@ -39,12 +39,12 @@ if (-not $window.Contains('private const float ContentInsetX = 30f;')) {
     $failures.Add('History content must retain the requested 30-pixel inset.')
 }
 if (-not $window.Contains(
-        '_root.anchoredPosition = new Vector2(ContentInsetX, 0f);')) {
-    $failures.Add('History content root must move right by its inset.')
+        '_root.anchoredPosition = Vector2.zero;')) {
+    $failures.Add('History content root must align with the shared scroll viewport.')
 }
 if (-not $window.Contains(
-        'float usableWidth = Mathf.Max(1f, contentWidth - ContentInsetX);')) {
-    $failures.Add('History content width must shrink by the rightward inset.')
+        'Mathf.Max(1f, contentWidth - 22f)')) {
+    $failures.Add('History content width must reserve space for its scrollbar.')
 }
 if (-not $window.Contains('OfficialCareerHistoryRules.YearRange(')) {
     $failures.Add('History rows must use the shared year-range rule.')

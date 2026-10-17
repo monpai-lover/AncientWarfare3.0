@@ -30,8 +30,8 @@ Forbid $cache 'pKingdom.updateColor(' `
 Forbid $cache 'dirtyAndClear()' `
     'generated-color cache refresh still clears the full native map'
 
-Forbid $patch 'nameof(Kingdom.updateColor)' `
-    'generic color changes still synchronously invoke the archive patch'
+Require $patch 'MilitaryGovernorateColorService.OnSuzerainColorChanged(' `
+    'suzerain color changes must still invalidate dependent governorate colors'
 Forbid $patch 'KingdomArchiveWriter.Upsert' `
     'generic color changes still synchronously write the kingdom archive'
 

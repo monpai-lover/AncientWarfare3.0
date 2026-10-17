@@ -22,29 +22,34 @@ internal static class PeacetimeWarriorMovementRulesTests
         string root = Directory.GetCurrentDirectory();
         string enlist = Read(root, "Code", "patch", "AW_EnlistPatch.cs");
         string safety = Read(root, "Code", "patch", "AW_ArmySafetyPatch.cs");
-        string path = Read(root, "Code", "patch", "AW_GlobalPathfindingPatch.cs");
-        string bridge = Read(root, "Code", "core", "pathfinding",
-            "AWPathMovementBridge.cs");
+        string peacetime = Read(root, "Code", "core", "lineage",
+            "StandingArmyPeacetimeService.cs");
         string diagnostic = Read(root, "Code", "core", "lineage",
-            "PeacetimeWarriorMovementDiagnostic.cs");
+            "ArmyRtsMovementDiagnostic.cs");
 
-        Assert(enlist.Contains("PeacetimeWarriorMovementDiagnostic.Trace",
+        Assert(enlist.Contains("StandingArmyPeacetimeService.GetJob(__instance)",
                 StringComparison.Ordinal),
-            "job selection must trace a stuck peaceful warrior");
-        Assert(safety.Contains("PeacetimeWarriorMovementDiagnostic.Trace",
+            "peaceful standing soldiers are evaluated for their civilian job");
+        Assert(safety.Contains("ShouldAllowVanillaDecisionEvaluation(",
+                StringComparison.Ordinal) &&
+               safety.Contains("ArmyRtsRuntimeMode.Current, rtsOwnsActor,",
                 StringComparison.Ordinal),
-            "decision evaluation must trace a stuck peaceful warrior");
-        Assert(path.Contains("PeacetimeWarriorMovementDiagnostic.Trace",
+            "vanilla decisions use live RTS ownership instead of warrior profession alone");
+        Assert(peacetime.Contains("ArmyRtsControllerService.HasActiveMission(army.id)",
+                StringComparison.Ordinal) &&
+               peacetime.Contains("WarArmyReturnRules.ShouldAllowPeacetimeJob(",
                 StringComparison.Ordinal),
-            "goTo and path consumption must trace a stuck peaceful warrior");
-        Assert(bridge.Contains("PeacetimeWarriorMovementDiagnostic.Trace",
+            "peacetime job selection yields to active missions and army returns");
+        Assert(peacetime.Contains("ArmyRtsMovementDiagnostic.Log(\"peacetime\",",
+                StringComparison.Ordinal) &&
+               diagnostic.Contains("if (!AWPerformanceSettings.ArmyRtsDiagnosticsEnabled) return;",
                 StringComparison.Ordinal),
-            "custom path polling must trace a stuck peaceful warrior");
+            "peacetime diagnostics use the shared opt-in movement diagnostic");
         Assert(!diagnostic.Contains("cancelAllBeh(", StringComparison.Ordinal) &&
                !diagnostic.Contains("stopMovement(", StringComparison.Ordinal) &&
                !diagnostic.Contains(".setTask(", StringComparison.Ordinal) &&
                !diagnostic.Contains(".goTo(", StringComparison.Ordinal),
-            "the peacetime diagnostic must be read-only");
+            "the shared movement diagnostic must be read-only");
     }
 
     private static string Read(string root, params string[] parts)

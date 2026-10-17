@@ -8,7 +8,7 @@ $ids = Get-Content -Raw (Join-Path $root 'Code/core/court/CourtIds.cs')
 $migration = Get-Content -Raw (Join-Path $root 'Code/core/court/WesternCourtMigrationRules.cs')
 
 foreach ($needle in @('GetActiveOfficers(pKingdom, 96)',
-                      'WesternCourtElectionService.QueueKingdomVacancies',
+                      'QueueKingdomVacancies(pKingdom)',
                       'WesternCourtElectionRules.CanQueueVacancy',
                       'KingdomPolicyEffectService.Read(pKingdom)',
                       'MilitaryOfficeIdsForCurrentProfile')) {

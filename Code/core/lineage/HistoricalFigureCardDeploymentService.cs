@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content;
 using AncientWarfare3.content.figures;
 using AncientWarfare3.core.court;
@@ -90,6 +91,9 @@ namespace AncientWarfare3.core.lineage
         {
             if (pRequest == null)
                 return HistoricalFigureCardDeploymentResult.Failure("request_missing");
+            // Card ownership is local, but deployment mutates the authoritative world.
+            if (AW3MultiplayerReplicaScope.IsReplicaSession)
+                return HistoricalFigureCardDeploymentResult.Failure("replica_session");
             if (!HistoricalFigureCardDeploymentRules.TryBegin(pRequest.DeploymentId))
                 return HistoricalFigureCardDeploymentResult.Failure(
                     "deployment_already_active");

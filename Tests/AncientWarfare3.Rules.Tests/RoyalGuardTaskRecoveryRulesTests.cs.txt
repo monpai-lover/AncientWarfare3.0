@@ -57,31 +57,31 @@ internal static class RoyalGuardTaskRecoveryRulesTests
         Assert(priorityIndex.Contains("ResolveP0PriorityRank", StringComparison.Ordinal),
             "military P0 snapshot puts royal guards ahead of RTS followers");
         int refreshCall = postRunner.IndexOf(
-            "RefreshMilitaryPriorityInputsForFrame();",
+            "RefreshRoyalGuardMilitaryPriorities(activeBatches);",
             StringComparison.Ordinal);
         int frozenSnapshot = postRunner.IndexOf(
             "ArmyMilitaryMovementPriorityIndex.CopySnapshot(militaryP0ActorIds);",
             StringComparison.Ordinal);
         int refreshHelper = postRunner.IndexOf(
-            "private static void RefreshMilitaryPriorityInputsForFrame()",
+            "private static void RefreshRoyalGuardMilitaryPriorities(",
             StringComparison.Ordinal);
         int transportRefresh = postRunner.IndexOf(
             "ArmyRtsTransportService.RefreshMilitaryP0Priority();",
-            refreshHelper,
+            refreshCall,
             StringComparison.Ordinal);
         int guardRefreshOrder = postRunner.IndexOf(
-            "RefreshRoyalGuardMilitaryPriorities();",
+            "RoyalGuardService.TryRefreshMilitaryPriority(actors[actorIndex]);",
             refreshHelper,
             StringComparison.Ordinal);
         Assert(refreshCall >= 0 &&
                frozenSnapshot > refreshCall &&
                refreshHelper > frozenSnapshot &&
-               transportRefresh > refreshHelper &&
-               guardRefreshOrder > transportRefresh &&
+               transportRefresh > refreshCall && transportRefresh < frozenSnapshot &&
+               guardRefreshOrder > refreshHelper &&
                guardRefreshOrder >= 0,
-            "each render frame refreshes transport members and guards before freezing the actor-post P0 snapshot");
+            "each actor-post cycle refreshes guards from active batches and transport members before freezing the P0 snapshot");
         Assert(postRunner.Contains(
-                "RoyalGuardService.TryRefreshMilitaryPriority(actor);",
+                "RoyalGuardService.TryRefreshMilitaryPriority(actors[actorIndex]);",
                 StringComparison.Ordinal),
             "the priority refresh observes each active guard and its king movement target");
         Assert(service.Contains(
@@ -101,7 +101,7 @@ internal static class RoyalGuardTaskRecoveryRulesTests
                 StringComparison.Ordinal),
             "guard priority refresh never unregisters a non-guard RTS actor");
         Assert(postRunner.Contains(
-                "ArmyRtsControllerService.TryRefreshMilitaryPriority(actor);",
+                "ArmyRtsControllerService.TryRefreshMilitaryPriority(actors[actorIndex]);",
                 StringComparison.Ordinal),
             "every actor-post cycle re-admits RTS captains and followers before the P0 snapshot");
         Assert(rtsService.Contains(

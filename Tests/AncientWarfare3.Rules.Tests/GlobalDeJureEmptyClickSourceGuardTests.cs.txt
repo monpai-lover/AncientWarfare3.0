@@ -21,7 +21,8 @@ internal static class GlobalDeJureEmptyClickSourceGuardTests
 
     private static void Contains(string pText, string pNeedle)
     {
-        if (!pText.Contains(pNeedle, StringComparison.Ordinal))
+        if (!System.Text.RegularExpressions.Regex.Replace(pText, @"\.\s+", ".")
+            .Contains(pNeedle, StringComparison.Ordinal))
             throw new InvalidOperationException(
                 "missing global de-jure empty click guard: " + pNeedle);
     }

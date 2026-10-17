@@ -12,7 +12,7 @@ namespace AncientWarfare3.core.naming
         {
             Id = (pId ?? string.Empty).Trim();
             _words = (pWords ?? Array.Empty<string>())
-                .Select(pWord => (pWord ?? string.Empty).Trim())
+                .Select(NormalizeWord)
                 .Where(pWord => pWord.Length > 0)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
@@ -21,6 +21,13 @@ namespace AncientWarfare3.core.naming
         public string Id { get; }
 
         public IReadOnlyList<string> Words => _words;
+
+        private static string NormalizeWord(string pWord)
+        {
+            // Chinese Name's separator library is a single hair-space token.
+            // Trimming that token removes the separator from every template.
+            return pWord == "\u200a" ? pWord : (pWord ?? string.Empty).Trim();
+        }
 
         internal bool TryPick(ref AWDeterministicNameRandom pRandom,
             out string pWord)

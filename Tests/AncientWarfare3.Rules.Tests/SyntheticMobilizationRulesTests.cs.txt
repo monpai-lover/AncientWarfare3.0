@@ -122,32 +122,27 @@ internal static class SyntheticMobilizationRulesTests
         Contains(source,
             "SyntheticLevyService.RemoveWithoutPersonalHistory(",
             "demobilization destroys generated actors without biographies");
-        Contains(source,
-            "SyntheticMobilizationRules.ShouldDeferDemobilization(",
-            "demobilization yields while a synthetic actor's army is returning home");
-        Contains(source,
-            "HasReturnArrivalConfirmed(",
-            "the synthetic cleanup boundary reads the per-actor arrival fact");
-        string levySource = File.ReadAllText(Path.Combine(
-            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
-            "SyntheticLevyService.cs"));
-        Contains(levySource, "ConfirmReturnArrival(Actor actor)",
-            "successful army return can persist each synthetic actor's arrival");
-        Contains(levySource, "ConfirmReturnArrivalIfSafe(Actor actor)",
-            "discard only releases synthetic actors already inside a safe city");
-        Contains(levySource, "ResetReturnArrival(Actor actor)",
-            "a new bounded return claim clears a stale prior arrival fact");
-        Contains(source, "WarArmyReturnService.IsActive(actor.army)",
-            "active return ownership blocks demobilization despite stale arrival state");
-        Contains(source,
-            "HasWartimeMilitaryLock(actor)",
-            "replacement wartime ownership blocks stale-arrival demobilization");
-        Contains(source,
-            "IsInsideFriendlySafeCity(actor)",
-            "bounded ledger work observes each actor's current safe-city arrival");
-        Contains(source,
-            "SyntheticLevyService.ConfirmReturnArrivalIfSafe(actor)",
-            "discarded actors become eligible when they later reach safety");
+        int cleanupStart = source.IndexOf("private static void ProcessDemobilization(",
+            StringComparison.Ordinal);
+        int cleanupEnd = source.IndexOf("private static Army ResolveOrBindArmy(",
+            cleanupStart, StringComparison.Ordinal);
+        string cleanup = source.Substring(cleanupStart, cleanupEnd - cleanupStart);
+        Contains(cleanup, "SyntheticMobilizationRules.DemobilizationBatch(",
+            "each cleanup work item limits actor visits");
+        Contains(cleanup, "if (ActorBatch.Count >= limit) break;",
+            "bounded cleanup snapshots actor ids before actor removal mutates the record");
+        Contains(cleanup, "if (!MatchesRecord(actor, pRecord))",
+            "cleanup releases stale records without deleting unrelated actors");
+        Contains(cleanup, "if (!SyntheticLevyService.IsSynthetic(actor)) continue;",
+            "ordinary actors and promoted permanent commanders survive synthetic cleanup");
+        Contains(cleanup, "EnqueueRecord(pKey)",
+            "unfinished cleanup retains bounded follow-up work");
+        Contains(cleanup, "pRecord.Phase = SyntheticMobilizationPhase.Complete",
+            "cleanup completes once the owned actor set is empty");
+        DoesNotContain(cleanup, "HasReturnArrivalConfirmed(",
+            "war-ended synthetic cleanup cannot deadlock on a disbanded army's return");
+        DoesNotContain(cleanup, "WarArmyReturnService.IsActive(",
+            "synthetic removal is independent of ordinary soldiers' return missions");
         Contains(source, "OnSyntheticMaterialized(Actor pActor)",
             "materialization registers actor identity atomically");
     }

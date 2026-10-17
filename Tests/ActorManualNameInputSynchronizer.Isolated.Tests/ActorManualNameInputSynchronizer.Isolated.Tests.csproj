@@ -8,7 +8,13 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="EditorTests.cs" />
+    <Compile Include="RuntimeStubs.cs" />
     <Compile Include="..\..\Code\patch\naming\ActorManualNameInputSynchronizer.cs"
              Link="Production\ActorManualNameInputSynchronizer.cs" />
+    <Compile Include="..\..\Code\patch\naming\AW_ActorManualNamePatch.cs"
+             Link="Production\AW_ActorManualNamePatch.cs" />
+    <Compile Include="..\..\Code\core\naming\ActorManualNameRules.cs"
+             Link="Production\ActorManualNameRules.cs" />
   </ItemGroup>
 </Project>

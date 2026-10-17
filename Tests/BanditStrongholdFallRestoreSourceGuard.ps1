@@ -11,19 +11,39 @@ $occupation = Get-Content -Raw -Encoding UTF8 $occupationPath
 $restore = Get-Content -Raw -Encoding UTF8 $restorePath
 $models = Get-Content -Raw -Encoding UTF8 $modelsPath
 $strategic = Get-Content -Raw -Encoding UTF8 $strategicPath
+$disposal = Get-Content -Raw -Encoding UTF8 (Join-Path $root `
+    'Code/core/lineage/BanditStrongholdCityDisposalService.cs')
 
 foreach ($token in @('TryHandleCapture(', 'BanditStrongholdPhase.Falling',
         'BanditStrongholdPhase.Completed', 'joinCity(', 'addZone(',
-        'recalculateNeighbourZones', 'World.world.cities.removeObject')) {
+        'recalculateNeighbourZones', 'BanditStrongholdCityDisposalService.Schedule(')) {
     if ($service -notmatch [regex]::Escape($token)) {
         throw "Stronghold fall is missing $token"
     }
 }
-$fallingIndex = $service.IndexOf('BanditStrongholdPhase.Falling')
-$removeIndex = $service.IndexOf('World.world.cities.removeObject')
-if ($fallingIndex -lt 0 -or $removeIndex -lt 0 -or
-    $fallingIndex -gt $removeIndex) {
-    throw 'Falling phase must be persisted before native city removal'
+$fallStart = $service.IndexOf('private static bool CompleteFall(')
+$fallingIndex = $service.IndexOf('pState.Phase = BanditStrongholdPhase.Falling', $fallStart)
+$fallWriteIndex = $service.IndexOf('PeasantRebelBanditStateStore.Write(', $fallingIndex)
+$transferIndex = $service.IndexOf('actor.joinCity(', $fallStart)
+$completedIndex = $service.IndexOf('pState.Phase = BanditStrongholdPhase.Completed', $fallStart)
+$completedWriteIndex = $service.IndexOf('PeasantRebelBanditStateStore.Write(', $completedIndex)
+$removeIndex = $service.IndexOf('BanditStrongholdCityDisposalService.Schedule(', $fallStart)
+if ($fallStart -lt 0 -or $fallingIndex -lt 0 -or
+    $fallWriteIndex -le $fallingIndex -or $transferIndex -le $fallWriteIndex -or
+    $completedIndex -le $transferIndex -or $completedWriteIndex -le $completedIndex -or
+    $removeIndex -le $completedWriteIndex) {
+    throw 'Fall must persist Falling before transfers and Completed before scheduling disposal'
+}
+if ($service.Contains('World.world.cities.removeObject')) {
+    throw 'Stronghold lifecycle must not remove cities during native collection mutation'
+}
+foreach ($token in @('CityManagerMutationScope.IsCityUpdateActive',
+        'CanDisposeStrongholdCity(', 'World.world.cities.removeObject(city)',
+        'AW3MultiplayerReplicaScope.IsReplicaSession',
+        'AW3MultiplayerReplicaScope.IsApplying')) {
+    if (-not $disposal.Contains($token)) {
+        throw "Deferred native city disposal is missing $token"
+    }
 }
 
 $finishIndex = $occupation.IndexOf('public static bool FinishCapture_Prefix')

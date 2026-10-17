@@ -147,8 +147,8 @@ namespace AncientWarfare3.core.lineage
         {
             bool safe = pCity?.data != null && pKingdom?.data != null &&
                         !pCity.isRekt() && pCity.kingdom == pKingdom;
-            SafeCityIndex.SetCity(pCity?.id ?? -1L,
-                pKingdom?.id ?? -1L, safe);
+            SafeCityIndex.SetCity(pCity?.data?.id ?? -1L,
+                pKingdom?.data?.id ?? -1L, safe);
         }
 
         public static void OnCityControlChanged(City pCity,
@@ -157,7 +157,7 @@ namespace AncientWarfare3.core.lineage
             if (pCity?.data == null) return;
             Kingdom current = pCity.kingdom;
             bool safe = current?.data != null && !pCity.isRekt();
-            SafeCityIndex.SetCity(pCity.id, current?.id ?? -1L, safe);
+            SafeCityIndex.SetCity(pCity.id, current?.data?.id ?? -1L, safe);
             RefreshObservedCount(pPreviousOwner);
             if (current != pPreviousOwner) RefreshObservedCount(current);
         }
@@ -166,7 +166,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pCity?.data == null) return;
             Kingdom previous = pCity.kingdom;
-            SafeCityIndex.SetCity(pCity.id, previous?.id ?? -1L,
+            SafeCityIndex.SetCity(pCity.id, previous?.data?.id ?? -1L,
                 safe: false);
             RefreshObservedCount(previous);
         }

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.RegularExpressions;
 
 internal static class DeJureAuthorityStageSourceGuardTests
 {
@@ -8,15 +9,27 @@ internal static class DeJureAuthorityStageSourceGuardTests
         string source = Read("Code/core/performance/AWAuthorityCycleService.cs");
         True(source.Contains("DeJureMaintenance", StringComparison.Ordinal),
             "authority cycle contains a de jure maintenance stage");
-        True(source.Contains("de_jure_maintenance", StringComparison.Ordinal),
-            "de jure maintenance has a diagnostic phase");
-        True(source.Contains("ProcessAuthorityCycle(2)", StringComparison.Ordinal),
+        True(source.Contains("Step(AuthorityStep.DeJureMaintenance,", StringComparison.Ordinal),
+            "de jure maintenance has a named measured authority step");
+        True(Regex.IsMatch(source,
+                @"DeJureRegionMaintenanceService\s*\.\s*ProcessAuthorityCycle\s*\(2\)"),
             "de jure maintenance uses a finite item budget");
         True(source.Contains("DeJureRegionMaintenanceService.Reset()",
             StringComparison.Ordinal),
             "authority reset clears de jure runtime state");
-        True(!source.Contains("RepairAfterWorldLoaded", StringComparison.Ordinal),
+        // The authority source explains world-load repair in a comment;
+        // forbid an invocation, rather than the documented method name.
+        True(!Regex.IsMatch(source, @"\bRepairAfterWorldLoaded\s*\("),
             "authority stage does not invoke full world repair");
+        True(source.Contains("CountyAdministrationStore.RepairDirtyCities()",
+                StringComparison.Ordinal),
+            "county maintenance consumes the dirty city queue");
+        string county = Read("Code/core/county/CountyAdministrationStore.cs");
+        True(county.Contains("RepairDirtyCities(int pBudget = 4)",
+                StringComparison.Ordinal) &&
+             county.Contains("DirtyCities.Take(pBudget).ToArray()",
+                StringComparison.Ordinal),
+            "the default county maintenance call retains a four-city budget");
     }
 
     private static string Read(string pPath) => File.ReadAllText(

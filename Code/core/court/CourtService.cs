@@ -287,12 +287,26 @@ namespace AncientWarfare3.core.court
                 string.IsNullOrEmpty(pVacancy.OfficeId))
                 return CourtVacancyOutcome.Invalid;
             if (IsWesternElective(pKingdom))
+            {
+                WesternCourtElectionService.EnqueueVacancy(pKingdom,
+                    pVacancy.OfficeId, pLayer: pVacancy.Layer);
                 return CourtVacancyOutcome.NoCandidate;
+            }
 
             List<Actor> roster = pSession.Roster;
             HashSet<string> occupied = pSession.ActiveOfficeIds(pKingdom);
             if (occupied.Contains(pVacancy.OfficeId))
                 return CourtVacancyOutcome.Invalid;
+            string preferredSchool = CourtProfileRegistry.PreferredSchoolFor(
+                pKingdom, pVacancy.OfficeId);
+            if (FillCentralOffice(pKingdom, roster, occupied,
+                    pVacancy.OfficeId, preferredSchool, null,
+                    pSession.ReservedActorIds, pAllowActing: false,
+                    pSession.SelectionCache, pVacancy.Layer))
+            {
+                pSession.MarkOfficeOccupied(pVacancy.OfficeId);
+                return CourtVacancyOutcome.Filled;
+            }
             if (pVacancy.Layer == CourtOfficeLayer.Central)
             {
                 CourtVacancyOutcome guestOutcome = SchoolGuestOfficeService.
@@ -302,8 +316,7 @@ namespace AncientWarfare3.core.court
                     return guestOutcome;
             }
             bool committed = FillCentralOffice(pKingdom, roster, occupied,
-                pVacancy.OfficeId, CourtProfileRegistry.PreferredSchoolFor(
-                    pKingdom, pVacancy.OfficeId), null,
+                pVacancy.OfficeId, preferredSchool, null,
                 pSession.ReservedActorIds, pAllowActing: true,
                 pSession.SelectionCache, pVacancy.Layer);
             // occupied 是会话开始时的快照,同一轮 Reconcile 会连续补多个席位。
@@ -3142,7 +3155,8 @@ namespace AncientWarfare3.core.court
 
         private static IEnumerable<Actor> RosterOrSafeUnits(Kingdom pKingdom, List<Actor> pRoster)
         {
-            return pRoster ?? SafeUnits(pKingdom);
+            return OfficerCandidateCatalog.EnumerateWithData(
+                pRoster ?? SafeUnits(pKingdom));
         }
 
         private static bool HasActiveOffice(Kingdom pKingdom, string pOfficeId,

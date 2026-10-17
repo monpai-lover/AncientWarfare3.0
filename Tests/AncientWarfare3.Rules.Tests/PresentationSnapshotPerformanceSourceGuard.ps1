@@ -73,7 +73,7 @@ Require-Present $patch `
     'AWPerformanceSettings.EnableActorPresentationSnapshots &&' `
     'Actor snapshot capture must remain disabled in vanilla animation mode.'
 if ($runner -notmatch
-    'if \(!AWPerformanceSettings\.EnableActorPresentationSnapshots\)\s+return false;') {
+    'if \(!CanDispatchPresentationWork\(\) \|\|\s*!AWPerformanceSettings\.EnableActorPresentationSnapshots\)\s+return false;') {
     throw 'Vanilla Actor rendering must never dispatch deferred Actor presentation work.'
 }
 if ($runner -match
@@ -85,7 +85,7 @@ if ($runner -notmatch
     throw 'Actor simulation must retain a background ticket when presentation snapshots are disabled.'
 }
 if ($runner -notmatch
-    'if \(!AWPerformanceSettings\.EnableWorldObjectPresentationSnapshots\)\s+return false;') {
+    'if \(!CanDispatchPresentationWork\(\) \|\|\s*!AWPerformanceSettings\.EnableWorldObjectPresentationSnapshots\)\s+return false;') {
     throw 'Vanilla building rendering must never dispatch deferred building presentation work.'
 }
 if ($runner -notmatch

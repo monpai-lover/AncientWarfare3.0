@@ -105,23 +105,18 @@ namespace AncientWarfare3.core.naming
                     out string metaType)) return false;
             try
             {
+                // The bundled SQLite 3.9 engine predates modern UPSERT syntax.
+                // Updating in place also preserves rowid and dependent rows.
+                using SQLiteTransaction transaction = db.BeginTransaction();
                 using var command = new SQLiteCommand(db);
-                command.CommandText = "INSERT INTO " + Table +
-                    " (IDENTITY_KEY,META_TYPE,OBJECT_ID,NATIVE_NAME," +
-                    "CHINESE_NAME,GIVEN_NAME,FAMILY_COMPONENT,GENERATOR_ID," +
-                    "CULTURE_ID,SCHEMA_VERSION,UPDATED_TIME) VALUES " +
-                    "(@key,@type,@object,@native,@chinese,@given,@family," +
-                    "@generator,@culture,@schema,@time) " +
-                    "ON CONFLICT(META_TYPE,OBJECT_ID) DO UPDATE SET " +
-                    "IDENTITY_KEY=excluded.IDENTITY_KEY," +
-                    "NATIVE_NAME=excluded.NATIVE_NAME," +
-                    "CHINESE_NAME=excluded.CHINESE_NAME," +
-                    "GIVEN_NAME=excluded.GIVEN_NAME," +
-                    "FAMILY_COMPONENT=excluded.FAMILY_COMPONENT," +
-                    "GENERATOR_ID=excluded.GENERATOR_ID," +
-                    "CULTURE_ID=excluded.CULTURE_ID," +
-                    "SCHEMA_VERSION=excluded.SCHEMA_VERSION," +
-                    "UPDATED_TIME=excluded.UPDATED_TIME";
+                command.Transaction = transaction;
+                command.CommandText = "UPDATE " + Table + " SET " +
+                    "IDENTITY_KEY=@key,NATIVE_NAME=@native," +
+                    "CHINESE_NAME=@chinese,GIVEN_NAME=@given," +
+                    "FAMILY_COMPONENT=@family,GENERATOR_ID=@generator," +
+                    "CULTURE_ID=@culture,SCHEMA_VERSION=@schema," +
+                    "UPDATED_TIME=@time WHERE META_TYPE=@type " +
+                    "AND OBJECT_ID=@object";
                 command.Parameters.AddWithValue("@key", IdentityKey(metaType,
                     pObjectId));
                 command.Parameters.AddWithValue("@type", metaType);
@@ -140,7 +135,20 @@ namespace AncientWarfare3.core.naming
                 command.Parameters.AddWithValue("@schema", pIdentity.SchemaVersion);
                 command.Parameters.AddWithValue("@time",
                     World.world?.getCurWorldTime() ?? 0d);
-                return command.ExecuteNonQuery() == 1;
+                int changed = command.ExecuteNonQuery();
+                if (changed == 0)
+                {
+                    command.CommandText = "INSERT INTO " + Table +
+                        " (IDENTITY_KEY,META_TYPE,OBJECT_ID,NATIVE_NAME," +
+                        "CHINESE_NAME,GIVEN_NAME,FAMILY_COMPONENT,GENERATOR_ID," +
+                        "CULTURE_ID,SCHEMA_VERSION,UPDATED_TIME) VALUES " +
+                        "(@key,@type,@object,@native,@chinese,@given,@family," +
+                        "@generator,@culture,@schema,@time)";
+                    changed = command.ExecuteNonQuery();
+                }
+                if (changed != 1) return false;
+                transaction.Commit();
+                return true;
             }
             catch { return false; }
         }

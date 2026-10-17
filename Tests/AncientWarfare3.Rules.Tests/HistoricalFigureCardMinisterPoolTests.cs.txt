@@ -28,20 +28,32 @@ internal static class HistoricalFigureCardMinisterPoolTests
         var expectedCounts = new Dictionary<string, int>
         {
             ["pre_qin_qin"] = 58,
-            ["han"] = 52,
-            ["three_six_dynasties"] = 59,
+            // 52 authored Han seeds plus the five retained legacy minister cards.
+            ["han"] = 57,
+            // Includes the added Yuan Shao, Guan Yu, and Zhang Fei cards.
+            ["three_six_dynasties"] = 62,
             ["sui_tang"] = 58,
             ["five_song"] = 58,
             ["yuan_ming_qing"] = 58
         };
-        True(HistoricalFigureCardCrates.All.All(crate =>
+        // The supporter crate is a contributor roster, outside the six historical periods.
+        var historicalCrates = HistoricalFigureCardCrates.All.Where(crate =>
+            crate.Id != HistoricalFigureCardSupporterSeeds.CollectionId).ToArray();
+        Equal(expectedCounts.Count, historicalCrates.Length,
+            "all six historical period crates remain available");
+        foreach (string legacyId in new[] { "han_han_xin", "han_zhang_liang",
+                     "han_sima_qian", "han_xiao_he", "han_ban_chao" })
+            True(HistoricalFigureCardCatalog.GetCards("han",
+                    HistoricalFigureCardRole.Minister).Any(card => card.CardId == legacyId),
+                "legacy Han minister remains in the draw pool: " + legacyId);
+        True(historicalCrates.All(crate =>
         {
             int actual = HistoricalFigureCardCatalog.GetCards(crate.Id,
                 HistoricalFigureCardRole.Minister).Count;
             return expectedCounts.TryGetValue(crate.Id, out int expected) &&
                 actual == expected;
         }), "each period has the planned minister card count");
-        True(HistoricalFigureCardCrates.All.All(crate =>
+        True(historicalCrates.All(crate =>
         {
             var cards = HistoricalFigureCardCatalog.GetCards(crate.Id,
                 HistoricalFigureCardRole.Minister);
@@ -50,12 +62,19 @@ internal static class HistoricalFigureCardMinisterPoolTests
                    cards.Any(card => card.MinisterType ==
                    HistoricalFigureCardMinisterType.MilitaryGeneral);
         }), "each period contains both minister types");
-        True(HistoricalFigureCardCrates.All.All(crate =>
+        True(historicalCrates.All(crate =>
         {
             var cards = HistoricalFigureCardCatalog.GetCards(crate.Id,
                 HistoricalFigureCardRole.Minister);
             return cards.Count(card => card.Rarity == HistoricalFigureCardRarity.Blue) >= 8;
         }), "each period minister crate contains at least eight blue rarity cards");
+
+        var supporters = HistoricalFigureCardCatalog.GetCards(
+            HistoricalFigureCardSupporterSeeds.CollectionId);
+        True(supporters.Count > 0 && supporters.All(card =>
+                card.Role == HistoricalFigureCardRole.Minister &&
+                card.MinisterType == HistoricalFigureCardMinisterType.CivilOfficial),
+            "the supporter crate contains civil contributor cards");
 
         foreach (HistoricalFigureCardDefinition card in
                  HistoricalFigureCardCatalog.All.Where(card =>

@@ -82,19 +82,9 @@ namespace AncientWarfare3.core.naming
 
         public static string ResolveNameTemplate(Actor pActor, MetaType pType)
         {
-            if (pActor == null) return null;
-            string template = null;
-            if (pActor.hasCulture())
-                template = pActor.culture.getNameTemplate(pType);
-            else
-            {
-                foreach (Actor parent in pActor.getParents())
-                {
-                    if (parent == null || !parent.hasCulture()) continue;
-                    template = parent.culture.getNameTemplate(pType);
-                    break;
-                }
-            }
+            if (pActor?.data == null) return null;
+            Culture culture = AWActorNamingContext.ResolveCulture(pActor);
+            string template = culture?.getNameTemplate(pType);
             return string.IsNullOrEmpty(template)
                 ? pActor.asset?.getNameTemplate(pType)
                 : template;

@@ -141,7 +141,7 @@ $stableReturnIndex = $usesAwBody.IndexOf(
     'if (!hasStableLineageId) return false;',
     [System.StringComparison]::Ordinal)
 $nativeProfileIndex = $usesAwBody.IndexOf(
-    'if (IsNativeXiaCultureActor(pActor))',
+    'if (UsesCommonGenealogy(pActor))',
     [System.StringComparison]::Ordinal)
 $readOnlyProfileIndex = $usesAwBody.IndexOf(
     '.ResolveForActorReadOnly(pActor)',
@@ -184,13 +184,23 @@ $readOnlyStart = $naming.IndexOf(
     'internal static AWCultureNamingTradition ResolveForActorReadOnly',
     [System.StringComparison]::Ordinal)
 $persistStart = $naming.IndexOf(
-    'private static AWCultureNamingTradition Persist',
+    'internal static void InitializeActorProfile',
     $readOnlyStart, [System.StringComparison]::Ordinal)
 if ($readOnlyStart -lt 0 -or $persistStart -lt $readOnlyStart) {
     throw 'The read-only actor naming resolver could not be located.'
 }
 $readOnlyBody = $naming.Substring($readOnlyStart,
     $persistStart - $readOnlyStart)
+$helperStart = $naming.IndexOf(
+    'private static WesternNamingTradition ResolveActorTraditionReadOnly',
+    [System.StringComparison]::Ordinal)
+$helperEnd = $naming.IndexOf(
+    'private static AWCultureNamingTradition Persist',
+    $helperStart, [System.StringComparison]::Ordinal)
+if ($helperStart -lt 0 -or $helperEnd -le $helperStart) {
+    throw 'Read-only naming helper boundaries could not be located.'
+}
+$readOnlyBody += $naming.Substring($helperStart, $helperEnd - $helperStart)
 foreach ($mutation in @('.set(', 'removeString(', 'Persist(', 'Ensure(')) {
     if ($readOnlyBody -match [regex]::Escape($mutation)) {
         throw "Read-only naming resolution must not call $mutation"

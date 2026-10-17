@@ -936,9 +936,9 @@ public static class CivilServiceExamRulesTests
         Equal("declined_noble", CivilServiceExamRules.ResolveSocialOrigin(
                 "common_lineage", everNoble: false, lineageId: 7L),
             "lineage membership alone defines declined nobility");
-        Equal("declined_noble", CivilServiceExamRules.ResolveSocialOrigin(
+        Equal("gentry", CivilServiceExamRules.ResolveSocialOrigin(
                 "none", everNoble: true, lineageId: -1L),
-            "historical noble blood defines declined nobility");
+            "historical noble blood defines the gentry stratum");
         Equal("commoner", CivilServiceExamRules.ResolveSocialOrigin(
                 "none", everNoble: false, lineageId: -1L),
             "an actor without current or historical nobility is commoner");
@@ -996,15 +996,15 @@ public static class CivilServiceExamRulesTests
                 currentRank: 0, officeGrade: 10, hasNineRankSystem: true,
                 hasFormalQualification: true, entryBonus: 2),
             "a high-office appointment grants its rank floor in the same operation");
-        Equal(10, OfficialCareerRankRules.ResolveInitialAppointmentRank(
+        Equal(12, OfficialCareerRankRules.ResolveInitialAppointmentRank(
                 currentRank: 0, officeGrade: 20, hasNineRankSystem: true,
                 hasFormalQualification: true, entryBonus: 0),
             "a middle-office appointment grants its rank floor in the same operation");
-        Equal(10, OfficialCareerRankRules.ResolveInitialAppointmentRank(
+        Equal(12, OfficialCareerRankRules.ResolveInitialAppointmentRank(
                 currentRank: 6, officeGrade: 20, hasNineRankSystem: true,
                 hasFormalQualification: true, entryBonus: 0),
             "an existing lower rank rises with a middle-office appointment");
-        Equal(8, OfficialCareerRankRules.ResolveInitialAppointmentRank(
+        Equal(14, OfficialCareerRankRules.ResolveInitialAppointmentRank(
                 currentRank: 0, officeGrade: 30, hasNineRankSystem: true,
                 hasFormalQualification: true, entryBonus: 2),
             "top graduate receives bounded lower-office entry rank");
@@ -1028,12 +1028,12 @@ public static class CivilServiceExamRulesTests
                 officeVacant: true, strictEligible: false,
                 hasFormalQualification: false),
             "an unqualified educated actor remains acting rather than becoming formal");
-        Equal(10, OfficialCareerRankRules.ResolveVacancyPromotionRank(
+        Equal(12, OfficialCareerRankRules.ResolveVacancyPromotionRank(
                 currentRank: 0, officeGrade: 20,
                 hasNineRankSystem: true, hasFormalQualification: true,
                 vacancyPromotion: true),
             "a promoted graduate lands on the vacant middle office rank floor");
-        Equal(10, OfficialCareerRankRules.ResolveVacancyPromotionRank(
+        Equal(12, OfficialCareerRankRules.ResolveVacancyPromotionRank(
                 currentRank: 0, officeGrade: 20,
                 hasNineRankSystem: true, hasFormalQualification: true,
                 vacancyPromotion: false),

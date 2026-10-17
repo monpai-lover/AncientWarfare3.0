@@ -34,6 +34,9 @@ try
         case "land":
             RunLandProbe(options.Seed);
             break;
+        case "contact":
+            RunContactProbe(options.Seed);
+            break;
         case "oracle":
             RunOracleProbe();
             break;
@@ -57,6 +60,8 @@ catch (Exception error)
 
 static void RunAllScenarios(RunnerOptions options)
 {
+    RunContactProbe(options.FirstSeed);
+    RunContinuityProbe(options.FirstSeed);
     string[] scenarioFamilies =
         { "land", "ownership", "route", "transport", "war",
           "rally-recruitment" };
@@ -94,10 +99,9 @@ static void ValidateAllScenarioResult(string scenario,
                 "land reservations distribute armies across fronts");
             Check.Equal(0, result.RepeatedOccupiedTargets,
                 "land armies never reassault a cleared occupied city");
-            // Replenish 不在此列：ShouldEnterReplenishment 要求
-            // wartimeRecovery，而 land 是「开战即出发」路径
-            // (ShouldSkipInitialRally)，本就不该进补员态。补员覆盖由
-            // rally-recruitment 的 PartialBattleRecruits 断言承担。
+            // Land casualties occur during local combat, which takes
+            // precedence over replenishment. The rally-recruitment family
+            // separately asserts that its recorded losses are replenished.
             RequireVisitedStates(result, ArmyRtsState.Rally,
                 ArmyRtsState.March, ArmyRtsState.Deploy,
                 ArmyRtsState.Assault, ArmyRtsState.Pursue,
@@ -544,6 +548,7 @@ static void RunFoundationProbe()
     Check.Equal(64, smoke.Trace.Count, "trace is capped at 64 entries");
     Check.Equal("change:16", smoke.Trace.Entries[0],
         "trace discards the oldest entry first");
+    RunContactProbe(seed: 17);
     RunContinuityProbe(seed: 17);
     Console.WriteLine("PASS foundation seed=17 trace=64");
 }
@@ -564,6 +569,33 @@ static void RunContinuityProbe(int seed)
         $"PASS continuity seed={seed} scenarios={result.CompletedScenarios} " +
         $"large_armies={result.LargeArmiesAdvanced} " +
         $"route_workers={result.RouteWorkersUsed}");
+}
+
+static void RunContactProbe(int seed)
+{
+    ScenarioState remote = ScenarioFactory.CreateLandContinuation(seed);
+    new SimulationEngine(remote).Step();
+    Check.True(remote.Cities.Values.All(city => city.Occupation == 0),
+        "a defended remote objective cannot accrue capture progress before arrival");
+    Check.True(remote.Armies.Values.All(army =>
+            army.State != ArmyRtsState.Assault),
+        "remote defenders do not preempt rally or strategic movement");
+
+    ScenarioState contact = ScenarioFactory.CreateLandContinuation(seed);
+    SimArmy army = contact.Armies[11L];
+    SimCity target = contact.Cities[101L];
+    army.TargetCityId = target.Id;
+    army.Position = target.Position;
+    army.Rallied = 1;
+    target.ReservedArmyIds.Add(army.Id);
+    foreach (long actorId in army.Members)
+        contact.Actors[actorId].Position = army.Position;
+    new SimulationEngine(contact).Step();
+    Check.Equal(ArmyRtsState.Assault, army.State,
+        "real contact still preempts incomplete rally and deployment");
+    Check.True(target.Occupation > 0,
+        "an army at the defenders' position can fight and capture");
+    Console.WriteLine($"PASS contact seed={seed} remote=0 local={target.Occupation}");
 }
 
 static void RunOracleProbe()

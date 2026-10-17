@@ -126,10 +126,16 @@ internal static class OfficialCareerCrossLayerPersistenceSqlTests
         InsertOfficer(db, 11, "city", "governor", pActing: false);
         InsertOfficer(db, 12, "feudatory", "chief_clerk", pActing: false);
 
+        bool projectionReached = false;
         OfficialCareerAppointmentResult result = OfficialCareerPersistence.
             Appoint(db, CentralAppointment(), (connection, transaction) =>
-                throw new InvalidOperationException("injected projection failure"));
+            {
+                projectionReached = true;
+                throw new InvalidOperationException("injected projection failure");
+            });
 
+        True(projectionReached,
+            "the rollback test reaches the injected projection failure");
         False(result.IsCommitted, "failed promotion does not commit");
         Equal(2L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
             "ACTOR_ID=101 AND ACTIVE=1 AND IFNULL(IS_ACTING,0)=0"),
@@ -201,7 +207,7 @@ internal static class OfficialCareerCrossLayerPersistenceSqlTests
         db.Open();
         Execute(db, "CREATE TABLE CourtOfficer (" +
             "OFFICER_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
-            "ACTOR_ID INTEGER,ACTOR_NAME TEXT,CITY_ID INTEGER," +
+            "ACTOR_ID INTEGER,ACTOR_NAME TEXT,CITY_ID INTEGER,COUNTY_ID INTEGER DEFAULT -1," +
             "LAYER TEXT,OFFICE_ID TEXT,SCHOOL_ID TEXT,INFLUENCE REAL," +
             "APPOINTED_YEAR INTEGER,APPOINTED_TIME REAL," +
             "ENDED_YEAR INTEGER,ENDED_TIME REAL,ACTIVE INTEGER," +
@@ -218,7 +224,7 @@ internal static class OfficialCareerCrossLayerPersistenceSqlTests
     {
         using var command = new SQLiteCommand(pDb);
         command.CommandText = "INSERT INTO CourtOfficer VALUES " +
-            "(@id,7,101,'Official',3,@layer,@office,'ru',12.5," +
+            "(@id,7,101,'Official',3,-1,@layer,@office,'ru',12.5," +
             "@year,@time,-1,-1,1,'',@time,6,5,'zhou',@acting)";
         command.Parameters.AddWithValue("@id", pOfficerId);
         command.Parameters.AddWithValue("@layer", pLayer);

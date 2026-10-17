@@ -197,11 +197,17 @@ internal static class AW3MultiplayerSuccessionRulesTests
         int prepare = mandate.IndexOf(
             "AuthoritativeSuccessionService.EnsureRegisteredCandidate(",
             StringComparison.Ordinal);
-        int defer = mandate.IndexOf(
+        int fastCandidate = mandate.IndexOf(
+            "HeirService.PeekRegisteredHeir(pKingdom)", StringComparison.Ordinal);
+        int fastDefer = mandate.IndexOf(
             "AW3MultiplayerSuccessionFacade.TryDefer(pKingdom, king)",
             StringComparison.Ordinal);
-        True(prepare >= 0 && defer > prepare,
-            "AW3 validates its registered heir before offering a hold");
+        int defer = mandate.IndexOf(
+            "AW3MultiplayerSuccessionFacade.TryDefer(pKingdom, king)",
+            prepare, StringComparison.Ordinal);
+        True(fastCandidate >= 0 && fastDefer > fastCandidate &&
+             prepare > fastDefer && defer > prepare,
+            "cached and fallback succession candidates precede their respective multiplayer holds");
         Equal(false, facade.Contains(
                 "PrepareSuccessionBeforeKingDeath"),
             "multiplayer installation never repeats synchronous preparation");

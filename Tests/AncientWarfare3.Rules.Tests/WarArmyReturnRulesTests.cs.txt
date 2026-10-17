@@ -1247,11 +1247,19 @@ internal static class WarArmyReturnRulesTests
 
         string syntheticSource = File.ReadAllText(Path.Combine(root, "Code",
             "core", "lineage", "SyntheticMobilizationLedgerService.cs"));
+        string syntheticCleanup = Section(syntheticSource,
+            "private static void ProcessDemobilization(",
+            "private static Army ResolveOrBindArmy(");
         Collect(failures,
-            syntheticSource.Contains(
-                "HasReturnArrivalConfirmed(",
+            syntheticCleanup.Contains("if (!MatchesRecord(actor, pRecord))",
+                StringComparison.Ordinal) &&
+            syntheticCleanup.Contains("if (!SyntheticLevyService.IsSynthetic(actor)) continue;",
+                StringComparison.Ordinal) &&
+            syntheticCleanup.Contains("SyntheticLevyService.RemoveWithoutPersonalHistory(actor)",
+                StringComparison.Ordinal) &&
+            !syntheticCleanup.Contains("HasReturnArrivalConfirmed(",
                 StringComparison.Ordinal) && nativeRelease > clearReturn,
-            "synthetic demobilization requires a per-actor successful return fact");
+            "war-ended synthetic records clean only their generated actors independently of ordinary return completion");
 
         if (failures.Count > 0)
             throw new InvalidOperationException(string.Join(

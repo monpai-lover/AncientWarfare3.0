@@ -584,7 +584,8 @@ internal static class ScenarioFactory
             position: state.Random.Next(1, 4));
         SimArmy army = state.Armies[31L];
         army.TargetCityId = 301L;
-        army.RouteDestinationPosition = 50;
+        army.RouteDestinationPosition = ResolveStagingPosition(army,
+            state.Cities[301L]);
         army.RouteState = SimRouteState.Waiting;
         army.State = ArmyRtsState.March;
         army.Organization = 40;
@@ -651,7 +652,7 @@ internal static class ScenarioFactory
             FormationObservationComplete = true,
             RouteArrived = army.RouteState == SimRouteState.Arrived,
             DeploymentReady = deployed,
-            EnemyContact = target.EnemyMilitaryPresent,
+            EnemyContact = HasTargetContact(army, target),
             ForceReady = ArmyLogisticsRules.HasMinimumOperationalForce(
                 army.Living),
             TargetComplete = target.ControllerKingdomId ==
@@ -697,8 +698,8 @@ internal static class ScenarioFactory
                     break;
 
                 // Local endpoint recovery must not release the mission city.
-                army.RouteDestinationPosition =
-                    state.Cities[army.TargetCityId].Position;
+                army.RouteDestinationPosition = ResolveStagingPosition(army,
+                    state.Cities[army.TargetCityId]);
                 army.RouteState = SimRouteState.Ready;
                 state.Runtime.RoutePhase = 3;
                 break;
@@ -740,6 +741,9 @@ internal static class ScenarioFactory
                 break;
             case ArmyRtsState.March:
                 AdvanceMarch(state, army);
+                break;
+            case ArmyRtsState.Deploy:
+                AdvanceDeployment(state, army);
                 break;
             case ArmyRtsState.Assault:
                 AdvanceAssault(state, army);
@@ -1061,6 +1065,7 @@ internal static class ScenarioFactory
                                   army.KingdomId &&
                                   !target.EnemyMilitaryPresent;
             bool deploymentReady = army.State == ArmyRtsState.Deploy &&
+                                   army.Position == target.Position &&
                                    army.StateTicks >= 1 &&
                                    ArmyRtsRules.
                                    HasIncrementalEscortQuorum(
@@ -1079,7 +1084,7 @@ internal static class ScenarioFactory
                 RallyReady = formationRallyReady,
                 RouteArrived = army.RouteState == SimRouteState.Arrived,
                 DeploymentReady = deploymentReady,
-                EnemyContact = target.EnemyMilitaryPresent,
+                EnemyContact = HasTargetContact(army, target),
                 MinimumForceReady = ArmyLogisticsRules.
                     HasMinimumOperationalForce(army.Living),
                 ForceReady = ArmyLogisticsRules.
@@ -1152,7 +1157,7 @@ internal static class ScenarioFactory
         if (target == null) return;
         target.ReservedArmyIds.Add(army.Id);
         army.TargetCityId = target.Id;
-        army.RouteDestinationPosition = target.Position;
+        army.RouteDestinationPosition = ResolveStagingPosition(army, target);
         army.RouteState = SimRouteState.None;
         army.PursuitCompleted = false;
         army.StateTicks = 0;
@@ -1178,6 +1183,9 @@ internal static class ScenarioFactory
                     break;
                 case ArmyRtsState.March:
                     AdvanceRallyRecruitmentMarch(state, army);
+                    break;
+                case ArmyRtsState.Deploy:
+                    AdvanceDeployment(state, army);
                     break;
                 case ArmyRtsState.Assault:
                     AdvanceRallyRecruitmentAssault(state, army);
@@ -1270,6 +1278,9 @@ internal static class ScenarioFactory
     {
         if (!state.Cities.TryGetValue(army.TargetCityId,
                 out SimCity target) || !target.EnemyMilitaryPresent) return;
+        if (!HasTargetContact(army, target))
+            throw new InvalidOperationException(
+                "rally army cannot fight defenders before reaching their city");
         if (!state.Runtime.RallyRecruitmentFirstAssaultObserved)
         {
             state.Runtime.RallyRecruitmentFirstAssaultObserved = true;
@@ -1388,7 +1399,7 @@ internal static class ScenarioFactory
                     army.Rallied, army.Living),
                 RouteArrived = army.RouteState == SimRouteState.Arrived,
                 DeploymentReady = deployed,
-                EnemyContact = target.EnemyMilitaryPresent,
+                EnemyContact = HasTargetContact(army, target),
                 ForceReady = ArmyLogisticsRules.HasMinimumOperationalForce(
                     army.Living),
                 NeedsReplenishment = ArmyRtsRules.NeedsReplenishment(
@@ -1447,7 +1458,7 @@ internal static class ScenarioFactory
         state.Result.DistinctArmyAssignments =
             state.Runtime.AssignedArmyIds.Count;
         army.TargetCityId = target.Id;
-        army.RouteDestinationPosition = target.Position;
+        army.RouteDestinationPosition = ResolveStagingPosition(army, target);
         army.RouteState = SimRouteState.None;
         army.StateTicks = 0;
         army.PursuitCompleted = false;
@@ -1472,6 +1483,9 @@ internal static class ScenarioFactory
                     break;
                 case ArmyRtsState.March:
                     AdvanceMarch(state, army);
+                    break;
+                case ArmyRtsState.Deploy:
+                    AdvanceDeployment(state, army);
                     break;
                 case ArmyRtsState.Assault:
                     AdvanceAssault(state, army);
@@ -1535,6 +1549,38 @@ internal static class ScenarioFactory
             army.RouteState = SimRouteState.Arrived;
     }
 
+    private static int ResolveStagingPosition(SimArmy army, SimCity target)
+    {
+        // A route ends just outside the defenders' position. Deployment then
+        // crosses this last bounded step; a hostile city is not local contact
+        // while the army is still rallying or marching toward it.
+        int direction = Math.Sign(target.Position - army.Position);
+        return target.Position - direction * Math.Min(2,
+            Math.Abs(target.Position - army.Position));
+    }
+
+    private static bool HasTargetContact(SimArmy army, SimCity target)
+    {
+        return target.EnemyMilitaryPresent &&
+               army.Position == target.Position;
+    }
+
+    private static void AdvanceDeployment(ScenarioState state, SimArmy army)
+    {
+        if (army.StateTicks < 2 ||
+            !state.Cities.TryGetValue(army.TargetCityId,
+                out SimCity target)) return;
+        army.Position += Math.Sign(target.Position - army.Position) *
+                         Math.Min(2, Math.Abs(target.Position - army.Position));
+        foreach (long actorId in army.Members)
+        {
+            if (!state.Actors.TryGetValue(actorId, out SimActor actor) ||
+                !actor.Alive) continue;
+            actor.Position += Math.Sign(army.Position - actor.Position) *
+                              Math.Min(2, Math.Abs(army.Position - actor.Position));
+        }
+    }
+
     private static void AdvanceAssault(ScenarioState state, SimArmy army)
     {
         if (!state.Cities.TryGetValue(army.TargetCityId,
@@ -1547,6 +1593,9 @@ internal static class ScenarioFactory
                 "assault attempted against completed occupied city");
         }
         if (!target.EnemyMilitaryPresent) return;
+        if (!HasTargetContact(army, target))
+            throw new InvalidOperationException(
+                "army cannot capture a distant city before reaching its defenders");
 
         if (!OccupiedCityCivilianProtectionRules.
                 ShouldSuppressActorCombat(

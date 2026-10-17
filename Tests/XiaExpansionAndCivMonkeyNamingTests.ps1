@@ -131,9 +131,9 @@ Require-Present 'monkey lineage initialization preserves the ChineseName surname
 Require-Present 'monkey lineage surname selection receives both ChineseName family fields' `
     $lineageService 'existingShiId >= 0, existingClan, chineseFamily, existingFamily);'
 Require-Present 'civilized monkey births enter native Xia-culture lineage initialization' `
-    'Code/patch/AW_BirthPatch.cs' 'LineageService.IsNativeXiaCultureActor(__instance)'
+    'Code/patch/AW_BirthPatch.cs' 'LineageService.UsesCommonGenealogy(__instance)'
 Require-Present 'civilized monkey clan changes refresh lineage archives' `
-    'Code/patch/AW_ClanEventPatch.cs' 'LineageService.IsNativeXiaCultureActor(__instance)'
+    'Code/patch/AW_ClanEventPatch.cs' 'LineageService.UsesCommonGenealogy(__instance)'
 Require-Present 'native Xia-culture clan members can be archived before ennoblement' `
     'Code/core/lineage/LineageArchiveWriter.cs' 'LineageService.HasOriginalClan(pActor)'
 Require-Present 'trace-only archive updates include civilized monkeys' `

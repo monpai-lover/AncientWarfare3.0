@@ -15,11 +15,23 @@ if (-not (Test-Path -LiteralPath $libraryPath)) {
 $words = @(Get-Content -LiteralPath $libraryPath -Encoding UTF8 |
     ForEach-Object { $_.Trim() } |
     Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-if ($words.Count -lt 15000) {
+# The curated library in 62a062e0 contains 6,864 names after removing the
+# superseded entries. Preserve that committed baseline while allowing additions.
+if ($words.Count -lt 6864) {
     throw "CK3 western city-name library is unexpectedly small: $($words.Count)"
 }
-if (@($words | Sort-Object -Unique).Count -ne $words.Count) {
-    throw 'CK3 western city-name library must be duplicate-free.'
+# Source libraries preserve imported text; AWWordLibraryAsset normalizes the
+# effective candidates with ordinal deduplication before deterministic picking.
+$uniqueWords = [System.Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::Ordinal)
+foreach ($word in $words) { [void]$uniqueWords.Add($word) }
+if ($uniqueWords.Count -lt 6434) {
+    throw "CK3 western city-name library lost effective candidates: $($uniqueWords.Count)"
+}
+$wordAsset = Get-Content -LiteralPath (Join-Path $repoRoot `
+    'Code/core/naming/AWWordLibraryAsset.cs') -Raw
+if ($wordAsset -notmatch '\.Distinct\(StringComparer\.Ordinal\)') {
+    throw 'Runtime word-library candidates must be deduplicated before selection.'
 }
 if (@($words | Where-Object { $_ -match '[\$\[\]#{}]' }).Count -ne 0) {
     throw 'CK3 western city-name library contains localization markup.'

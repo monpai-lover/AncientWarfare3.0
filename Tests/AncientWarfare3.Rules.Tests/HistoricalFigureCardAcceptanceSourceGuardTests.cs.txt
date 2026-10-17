@@ -161,10 +161,17 @@ internal static class HistoricalFigureCardAcceptanceSourceGuardTests
             "card deployment resolves the spawn_xia power");
         Contains(deployment, "spawnPower?.actor_asset_id ?? XiaRace.ID",
             "card deployment uses the spawn_xia actor asset");
-        Contains(deployment, "ResolveDeploymentAsset(city)",
-            "card deployment resolves the species from the selected target");
-        Contains(deployment, "pCity?.getActorAsset() ?? ResolveSpawnXiaAsset()",
-            "city deployments use the city species and empty land uses Xia");
+        Contains(deployment, "ResolveDeploymentAsset(city, definition)",
+            "card deployment resolves species using the target and card role");
+        string assetResolution = Between(deployment,
+            "private static ActorAsset ResolveDeploymentAsset(",
+            "private static ActorAsset ResolveSpawnXiaAsset()");
+        Contains(assetResolution, "HistoricalFigureCardRoleRules.IsMonarch(pDefinition)",
+            "monarch deployment takes the Xia founding path");
+        Contains(assetResolution, "return ResolveSpawnXiaAsset() ?? pCity?.getActorAsset();",
+            "monarchs prefer Xia so lineage and reign records can initialize");
+        Contains(assetResolution, "return pCity?.getActorAsset() ?? ResolveSpawnXiaAsset();",
+            "ministers integrate with the city species and empty land uses Xia");
         Contains(deployment, "pAdultAge: true", "deployment creates adults");
         Contains(deployment, "GetOwnedCount", "deployment requires an owned card");
         Contains(deployment, "card_deployed", "deployment writes person history");

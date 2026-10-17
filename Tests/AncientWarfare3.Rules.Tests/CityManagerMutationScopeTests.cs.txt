@@ -49,8 +49,10 @@ internal static class CityManagerMutationScopeTests
         True(patch.Contains("HarmonyFinalizer", StringComparison.Ordinal) &&
              patch.Contains("CityManagerMutationScope.ExitCityUpdate()",
                  StringComparison.Ordinal) &&
-             patch.Contains("return __exception", StringComparison.Ordinal),
-            "city manager update always exits without swallowing errors");
+             patch.Contains("private static void CityUpdateFinalizer()",
+                 StringComparison.Ordinal) &&
+             !patch.Contains("return null", StringComparison.Ordinal),
+            "city manager finalizer releases its scope and leaves the original exception unchanged");
 
         string disposalPath = Path.Combine(root, "Code", "core", "lineage",
             "BanditStrongholdCityDisposalService.cs");
@@ -118,11 +120,18 @@ internal static class CityManagerMutationScopeTests
             deferredAuthority);
         True(CountOccurrences(compactDeferredAuthority,
                  "PeasantRebelBanditStrongholdPopulationService." +
-                 "ProcessAuthorityCycle()") == 1,
-            "the bounded authority stage settles empty strongholds exactly once");
+                 "ProcessAuthorityCycle(1)") == 1,
+            "the authority stage checks at most one stronghold population per pass");
         True(CountOccurrences(compactDeferredAuthority,
-                 "BanditStrongholdCityDisposalService.ProcessAuthorityCycle()") == 1,
-            "the bounded authority stage drains stronghold city disposal exactly once");
+                 "BanditStrongholdCityDisposalService.ProcessAuthorityCycle(1)") == 1,
+            "the authority stage disposes at most one stronghold city per pass");
+        False(compactDeferredAuthority.Contains(
+                "PeasantRebelBanditStrongholdPopulationService.ProcessAuthorityCycle()",
+                StringComparison.Ordinal) ||
+              compactDeferredAuthority.Contains(
+                "BanditStrongholdCityDisposalService.ProcessAuthorityCycle()",
+                StringComparison.Ordinal),
+            "the bounded authority stage must not also drain either full event queue");
         True(compactDeferredAuthority.Contains(
                  "DeferredRuntimeWorkRules.ResolveItemsPerAuthorityFrame(",
                  StringComparison.Ordinal) &&

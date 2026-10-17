@@ -13,7 +13,7 @@ if ($chronicle -notmatch 'pPrevious == pNext') {
 if ($policy -notmatch 'RecordWesternInstitutionTransition\(pKingdom\)') {
     throw 'completed western policy does not refresh institution history'
 }
-if ($court -notmatch 'CourtInstitutionService\.Refresh\(pKingdom, pRecordHistory: true\)') {
+if ($court -notmatch 'CourtInstitutionService\.Refresh\(\s*pKingdom, pRecordHistory: true\)') {
     throw 'legacy western institution migration is not recovered annually'
 }
 

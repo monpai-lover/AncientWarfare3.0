@@ -1198,19 +1198,11 @@ namespace AncientWarfare3.core.lineage
                 {
                     if (stronghold?.data != null && mother?.data != null)
                     {
-                        int population;
-                        try
-                        {
-                            population = stronghold.getPopulationPeople();
-                        }
-                        catch { continue; }
-                        BanditStrongholdFallAction action =
-                            PeasantRebelBanditStrongholdRules.
-                                ResolveFallAction(population,
-                                    state.LastHostileKillerKingdomId,
-                                    captureFinished: false);
-                        if (action == BanditStrongholdFallAction.QueueFall)
-                            QueueFall(stronghold.getID(), -1L);
+                        // Restored collections can still contain dead actors.
+                        // Use the same deferred living-resident check as death
+                        // callbacks, including strongholds emptied by combat.
+                        PeasantRebelBanditStrongholdPopulationService.
+                            EnqueueStronghold(stronghold.getID());
                         continue;
                     }
                     if (stronghold?.data == null)
@@ -1380,9 +1372,16 @@ namespace AncientWarfare3.core.lineage
                 DeferredWorkClass.CriticalRuntime,
                 () =>
                 {
-                    RemoveStrongholdTowers(state);
-                    RestoreWalls(state);
+                    if (!CanMutate()) return;
                     Kingdom resolved = ResolveKingdom(banditId);
+                    // City transfers may have revived the realm since this was queued.
+                    // Revalidate before touching its towers or terrain.
+                    if (resolved?.data != null &&
+                        PeasantRebelRouteService.SafeCityCount(resolved) > 0)
+                        return;
+                    if (!RemoveStrongholdTowers(state) || !RestoreWalls(state))
+                        throw new InvalidOperationException(
+                            "Bandit orphan cleanup remains incomplete");
                     if (resolved?.data != null &&
                         PeasantRebelRouteService.SafeCityCount(resolved) == 0)
                         PeasantRebelBanditStateStore.Clear(resolved);

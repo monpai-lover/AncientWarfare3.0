@@ -40,6 +40,12 @@ internal static class XiaHistoricalDeJureRulesTests
         Equal("司州", migration.RegionName,
             "missing legacy name receives historical state name");
         True(migration.SeatLocked, "resolved seat is locked");
+        True(DeJureHistoricalProfileRules.ShouldApplyTrackedSeatRename(
+            migration.SeatCityId == 12L, true, migration.SeatLocked),
+            "a newly initialized historical seat accepts a player rename immediately");
+        False(DeJureHistoricalProfileRules.ShouldApplyTrackedSeatRename(
+            migration.SeatCityId == 12L, false, migration.SeatLocked),
+            "an automatic city-name projection cannot rename an initialized historical state");
         var preserved = DeJureHistoricalProfileRules.Migrate("旧州", "旧州",
             9L, "河南郡", "司州", 12L);
         Equal("旧州", preserved.RegionName,
@@ -53,6 +59,8 @@ internal static class XiaHistoricalDeJureRulesTests
             false, true), "generated rename is rejected");
         False(DeJureHistoricalProfileRules.ShouldApplyTrackedSeatRename(false,
             true, true), "non-seat rename is rejected");
+        False(DeJureHistoricalProfileRules.ShouldApplyTrackedSeatRename(true,
+            true, false), "an unresolved seat cannot rename a historical state");
     }
 
     private static void Equal<T>(T pExpected, T pActual, string pMessage)

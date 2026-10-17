@@ -1,5 +1,5 @@
 using AncientWarfare3.core.court;
-using AncientWarfare3.core.county;
+using CountyNameRules = AncientWarfare3.core.county.CountyNameRules;
 
 internal static class CountyCourtRulesTests
 {

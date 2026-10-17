@@ -43,13 +43,17 @@ if ($guardIndex -lt 0 -or $closeIndex -lt 0 -or $guardIndex -gt $closeIndex) {
     throw 'The affiliation-only recovery path must bypass official career closure.'
 }
 
-$reformStart = $court.IndexOf('if (layer == CourtOfficeLayer.Central && tierOffices.Count > 0', [StringComparison]::Ordinal)
+$reformStart = $court.IndexOf('bool centralObsolete = layer == CourtOfficeLayer.Central &&', [StringComparison]::Ordinal)
+if ($reformStart -lt 0) { throw 'Missing central office reform validation.' }
 $reformEnd = $court.IndexOf('SyncSchoolTrait(actor, active: true);', $reformStart, [StringComparison]::Ordinal)
 if ($reformStart -lt 0 -or $reformEnd -le $reformStart) {
     throw 'Unable to inspect court reform validation branch.'
 }
 
 $reform = $court.Substring($reformStart, $reformEnd - $reformStart)
+if (-not $reform.Contains('if (centralObsolete || militaryObsolete)')) {
+    throw 'Both obsolete central and military offices must enter reform cleanup.'
+}
 $guestEnd = 'SchoolGuestOfficeService.EndGuestOfficer(actor, pKingdom,'
 if (-not $reform.Contains($guestEnd)) {
     throw 'Court reform must route serving guests through the guest-office end state machine.'

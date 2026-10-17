@@ -101,7 +101,7 @@ namespace AncientWarfare3.patch
 
             if (__instance.isSapient())
             {
-                if (__instance.is_profession_warrior && !__instance.equipment.helmet.isEmpty())
+                if (__instance.is_profession_warrior && __instance.equipment?.helmet?.isEmpty() == false)
                 {
                     path = textureAsset.texture_head_warrior;
                     specialHead = true;
@@ -156,7 +156,7 @@ namespace AncientWarfare3.patch
         {
             if (pActor == null || pHeads == null || pHeads.Length == 0) return;
             if (pActor.data.head > pHeads.Length - 1) pActor.data.head = 0;
-            if (pActor.data.head == -1)
+            if (pActor.data.head < 0)
                 pActor.data.head = AnimationHelper.getSpriteIndex(pActor.data.id, pHeads.Length);
         }
 

@@ -27,9 +27,10 @@ internal static class CourtHistoryLocalizationRegressionTests
         if (!modClass.Contains("CourtLocalizationRepair.Ensure()"))
             throw new InvalidOperationException(
                 "court localization repair must run during mod load");
-        if (!history.Contains("EnsureLocalOfficerHistory"))
+        if (history.Contains("EnsureLocalOfficerHistory") ||
+            !Read("Code/core/multiplayer/AW3RuntimeRestorePipeline.cs").Contains("legacy_projected_office_repair"))
             throw new InvalidOperationException(
-                "history window must repair legacy local officer history");
+                "legacy history repair belongs to world restore, never to opening the history window");
         if (!node.Contains("ResolveActionableOffice"))
             throw new InvalidOperationException(
                 "court node history must resolve the actual office for dual roles");

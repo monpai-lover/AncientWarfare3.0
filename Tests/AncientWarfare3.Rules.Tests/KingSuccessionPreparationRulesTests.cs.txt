@@ -72,8 +72,8 @@ internal static class KingSuccessionPreparationRulesTests
 
         string reconcile = heirSource.Substring(reconcileStart,
             peekStart - reconcileStart);
-        True(reconcile.Contains(
-                "IsSuccessionSexEligible(cached, pKingdom)"),
+        True(System.Text.RegularExpressions.Regex.IsMatch(reconcile,
+                @"IsSuccessionSexEligible\(cached,\s*pKingdom\)"),
             "a cached female heir is not eligible after the law is disabled");
 
         string peek = heirSource.Substring(peekStart, peekEnd - peekStart);
@@ -308,14 +308,32 @@ internal static class KingSuccessionPreparationRulesTests
             "ResolveRegistrationHome(",
             "RoyalGuardService.ReleaseForRegisteredHeir(",
             "SlaveService.FreeSlave(",
+            "RemoveCityLeaderOffice(pKingdom, pHeir)",
+            "NaturalizeForRegistration(pKingdom, pHeir, home)",
+            "HistoricalAffiliationService.SynchronizeHomeForSuccession(");
+        string naturalize = SourceSlice(source,
+            "private static bool NaturalizeForRegistration(",
+            "private static bool TryJoinForRegistration(");
+        AssertOrdered(naturalize,
+            "TryJoinForRegistration(pKingdom, pHeir, pHome)",
+            "foreach (City city in pKingdom.getCities())",
+            "TryJoinForRegistration(pKingdom, pHeir, city)",
+            "pHeir.setCity(null)",
+            "TryJoinForRegistration(pKingdom, pHeir, null)");
+        True(naturalize.Contains("city.kingdom != pKingdom"),
+            "fallback homes must still belong to the inheriting realm");
+        string join = SourceSlice(source,
+            "private static bool TryJoinForRegistration(",
+            "private static void LogHeirDivergence(");
+        AssertOrdered(join,
             "FormalAffiliationTransferScope.Open(",
             "pHeir.joinKingdom(pKingdom)",
-            "pHeir.joinCity(home)");
-        True(normalize.Contains(
-                "pHeir.kingdom == pKingdom &&") &&
-             normalize.Contains(
-                 "(home?.data == null || pHeir.city == home)"),
-            "registration verifies the committed affiliation");
+            "pHeir.joinCity(pHome)",
+            "if (pHeir.kingdom != pKingdom) return false;",
+            "return current?.data == null || current.kingdom == pKingdom;");
+        True(normalize.Contains("return pHeir.kingdom == pKingdom;") &&
+             normalize.Contains("pHeir, pKingdom, pHeir.city ?? home"),
+            "registration validates nationality and records the actual home after fallback");
         True(normalize.Contains("pKingdom.capital") &&
              normalize.Contains("pHeir.city") &&
              normalize.Contains("pKingdom.getCities()"),
@@ -347,8 +365,9 @@ internal static class KingSuccessionPreparationRulesTests
         string body = source.Substring(start, end - start);
         Equal(false, body.Contains("if (home?.data == null) return false;"),
             "a temporarily cityless realm cannot veto its registered heir");
-        True(body.Contains("home?.data?.id ?? -1L") &&
-             body.Contains("if (home?.data != null && pHeir.city != home)"),
+        True(body.Contains("pHome?.data?.id ?? -1L") &&
+             body.Contains("if (pHome?.data != null && pHeir.city != pHome)") &&
+             body.Contains("TryJoinForRegistration(pKingdom, pHeir, null)"),
             "home relocation is optional while kingdom affiliation remains mandatory");
     }
 
@@ -374,9 +393,10 @@ internal static class KingSuccessionPreparationRulesTests
             StringComparison.Ordinal);
         string store = source.Substring(storeStart, storeEnd - storeStart);
         True(store.Contains(
-                 "if (heir?.data == null && previousHeir?.data != null &&") &&
-             store.Contains("previousHeir.isAlive()"),
-            "an empty recomputation cannot erase a live authoritative registered heir");
+                 "if (heir?.data == null && previousHeirSexEligible &&") &&
+             store.Contains("previousHeir.isAlive()") &&
+             store.Contains("IsSuccessionSexEligible(previousHeir, pKingdom)"),
+            "an empty recomputation preserves a live heir only while the succession law still permits them");
         True(store.IndexOf("heir?.data == null", StringComparison.Ordinal) <
              store.IndexOf("NormalizeHeirForRegistration(pKingdom, heir)",
                  StringComparison.Ordinal),
@@ -555,10 +575,21 @@ internal static class KingSuccessionPreparationRulesTests
             "unready relationship indexes consume the AW archive result");
         True(source.Contains("TryResolvePredecessorGeneration("),
             "archive fallback anchors its generation window to the live or archived predecessor");
-        True(source.Contains("SuccessionRelationshipIndex.IsReady") &&
-             source.Contains("SuccessionEvidenceStatus.PendingEvidence") &&
-             source.Contains("SuccessionRelationshipIndex.HasLivingLineageMembers("),
-            "terminal archive evidence waits for the live relationship index and reconciles wider living kin");
+        Equal(false, source.Contains("SuccessionRelationshipIndex."),
+            "terminal archive evidence is independent of incomplete vanilla relationship indexes");
+        int extinct = source.IndexOf("SuccessionEvidenceStatus.ExtinctConfirmed",
+            archiveResolve, StringComparison.Ordinal);
+        int living = source.IndexOf("LineageQuery.GetLivingLineageMemberIds(",
+            extinct, StringComparison.Ordinal);
+        int exhausted = source.IndexOf("EligibleLineExhausted", living,
+            StringComparison.Ordinal);
+        int court = source.IndexOf("SuccessionCourtFallbackService.ResolveCandidate(",
+            exhausted, StringComparison.Ordinal);
+        True(extinct > archiveResolve && living > extinct &&
+             exhausted > living && court > exhausted &&
+             source.Contains("context.LineageId, 1).Count > 0") &&
+             source.Contains("SuccessionEvidenceStatus.PendingEvidence"),
+            "terminal archive evidence reconciles wider living AW kin with a one-row query before court fallback");
         int scanProgress = source.IndexOf("archive.ScanInProgress",
             archiveResolve, StringComparison.Ordinal);
         True(scanProgress > archiveResolve,
@@ -1141,4 +1172,15 @@ internal static class KingSuccessionPreparationRulesTests
             throw new InvalidOperationException(
                 name + ": expected " + expected + ", got " + actual);
     }
+    private static string SourceSlice(string source, string startMarker,
+        string endMarker)
+    {
+        int start = source.IndexOf(startMarker, StringComparison.Ordinal);
+        True(start >= 0, "source boundary exists: " + startMarker);
+        int end = source.IndexOf(endMarker, start + startMarker.Length,
+            StringComparison.Ordinal);
+        True(end > start, "source boundary exists: " + endMarker);
+        return source.Substring(start, end - start);
+    }
+
 }

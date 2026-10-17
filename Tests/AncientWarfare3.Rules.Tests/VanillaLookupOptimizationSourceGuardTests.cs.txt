@@ -27,10 +27,7 @@ internal static class VanillaLookupOptimizationSourceGuardTests
             foreach (string symbol in new[]
                      {
                          "AWFreeTileSearchIndex",
-                         "AWEnemyPresenceCache",
-                         "AWDeferredPathRequestBatch",
-                         "AWStatusSimulationScheduler",
-                         "AWSimulationCoordinatorThread"
+                         "AWStatusSimulationScheduler"
                      })
             {
                 if (source.Contains(symbol, StringComparison.Ordinal))
@@ -41,6 +38,28 @@ internal static class VanillaLookupOptimizationSourceGuardTests
 
         string actorPost = File.ReadAllText(Path.Combine(root, "Code",
             "core", "performance", "AWCooperativeActorPostRunner.cs"));
+        // This branch intentionally uses a preparation-scoped enemy cache,
+        // deferred path capture, and one coordinator for actor/building work.
+        // Guard their cleanup boundaries instead of forbidding their existence.
+        foreach (string boundary in new[]
+                 {
+                     "AWEnemyPresenceCache.BeginPreparation();",
+                     "AWEnemyPresenceCache.EndPreparation();",
+                     "AWDeferredPathRequestBatch.BeginCapture();",
+                     "AWDeferredPathRequestBatch.CompleteCycle();",
+                     "AWDeferredPathRequestBatch.AbortCycle();"
+                 })
+            if (!actorPost.Contains(boundary, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "actor-post lifecycle boundary missing: " + boundary);
+        string batchRunner = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "performance", "AWCooperativeBatchRunner.cs"));
+        if (!batchRunner.Contains("AWSimulationCoordinatorThread.Instance.Begin(",
+                StringComparison.Ordinal) ||
+            !batchRunner.Contains("AWSimulationCoordinatorThread.Instance.WaitAndDiscard(",
+                StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "parallel batch dispatch must retain its coordinator teardown boundary");
         if (!actorPost.Contains("case PostStage.MilitaryP0:",
                 StringComparison.Ordinal) ||
             !actorPost.Contains("ArmyRtsTransportService.ProcessMilitaryP0",

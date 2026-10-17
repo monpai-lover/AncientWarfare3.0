@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
+    <Compile Include="../../Code/core/uiquery/AWHistoricalReadWorker.cs" Link="Production/AWHistoricalReadWorker.cs" />
+    <Compile Include="../../Code/core/asyncwork/AWAsyncWorkRules.cs" Link="Production/AWAsyncWorkRules.cs" />
+    <Compile Include="../../Code/core/asyncwork/AWAsyncWorkQueue.cs" Link="Production/AWAsyncWorkQueue.cs" />
+    <Compile Include="../../Code/core/asyncwork/AWAsyncDiagnostics.cs" Link="Production/AWAsyncDiagnostics.cs" />
+  </ItemGroup>
+</Project>

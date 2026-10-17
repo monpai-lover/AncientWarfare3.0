@@ -375,11 +375,11 @@ namespace AncientWarfare3.core.lineage
                 pForceEstablishment: false, pTargetArmy: null);
         }
 
-        public static void RequestOffensiveRecovery(Kingdom pKingdom,
+        public static bool RequestOffensiveRecovery(Kingdom pKingdom,
             City pPreferredCity, int pDemand,
             bool pForceEstablishment)
         {
-            RequestOffensiveRecovery(pKingdom, pPreferredCity, pDemand,
+            return RequestOffensiveRecovery(pKingdom, pPreferredCity, pDemand,
                 pForceEstablishment, pTargetArmy: null);
         }
 
@@ -390,25 +390,33 @@ namespace AncientWarfare3.core.lineage
                 pForceEstablishment: false, pTargetArmy);
         }
 
-        private static void RequestOffensiveRecovery(Kingdom pKingdom,
+        private static bool RequestOffensiveRecovery(Kingdom pKingdom,
             City pPreferredCity, int pDemand,
             bool pForceEstablishment, Army pTargetArmy)
         {
+            // Native id getters dereference data even after an entity has
+            // been disposed. Keep diagnostics and request keys data-safe.
+            long kingdomId = pKingdom?.data?.id ?? -1L;
+            long targetArmyId = pTargetArmy?.data?.id ?? -1L;
+            long preferredCityId = pPreferredCity?.data?.id ?? -1L;
             bool kingdomLive = pKingdom?.data != null &&
                                !pKingdom.isRekt();
+            bool targetArmyLive = pTargetArmy == null ||
+                                  pTargetArmy.data != null &&
+                                  !pTargetArmy.isRekt();
             bool emergencyActive = kingdomLive &&
                 MilitaryEmergencyService.HasAny(pKingdom);
             bool restorationCampaign = kingdomLive &&
                 AutonomousRestorationService.IsActiveCampaignKingdom(
                     pKingdom);
-            bool accepted = kingdomLive && emergencyActive &&
+            bool accepted = kingdomLive && targetArmyLive && emergencyActive &&
                             !restorationCampaign && pDemand > 0;
             bool diagnosticsEnabled = AWPerformanceSettings.
                 ArmyRtsDiagnosticsEnabled;
-            string requestKey = "request|" + (pKingdom?.id ?? -1L) +
-                                "|" + (pTargetArmy?.id ?? -1L);
+            string requestKey = "request|" + kingdomId +
+                                "|" + targetArmyId;
             string requestSignature = Math.Max(0, pDemand) + "|" +
-                (pPreferredCity?.id ?? -1L) + "|" + emergencyActive + "|" +
+                preferredCityId + "|" + emergencyActive + "|" +
                 restorationCampaign + "|" + accepted;
             if (TemporaryLevyDiagnosticRules.
                     ShouldWriteRecoveryRequestDiagnostic(diagnosticsEnabled,
@@ -418,28 +426,28 @@ namespace AncientWarfare3.core.lineage
             {
                 AncientWarfare3.ModClass.LogInfo(
                     "[AW3 RTS levy request sample] kingdom=" +
-                    (pKingdom?.id ?? -1L) + " demand=" +
+                    kingdomId + " demand=" +
                     Math.Max(0, pDemand) + " target_army=" +
-                    (pTargetArmy?.id ?? -1L) + " preferred_city=" +
-                    (pPreferredCity?.id ?? -1L) + " emergency=" +
+                    targetArmyId + " preferred_city=" +
+                    preferredCityId + " emergency=" +
                     emergencyActive + " restoration=" +
                     restorationCampaign + " accepted=" + accepted);
             }
-            if (!accepted) return;
+            if (!accepted) return false;
 
             bool planCreated = !CasualtyReinforcementPlans.TryGetValue(
-                pKingdom.id, out CasualtyReinforcementPlan plan);
+                kingdomId, out CasualtyReinforcementPlan plan);
             if (planCreated)
             {
-                plan = new CasualtyReinforcementPlan(pKingdom.id);
-                CasualtyReinforcementPlans[pKingdom.id] = plan;
+                plan = new CasualtyReinforcementPlan(kingdomId);
+                CasualtyReinforcementPlans[kingdomId] = plan;
             }
             bool directedReplenishment = pTargetArmy?.data != null;
             if (directedReplenishment)
             {
                 int current = plan.TargetDemandsByArmy.TryGetValue(
-                    pTargetArmy.id, out int existing) ? existing : 0;
-                plan.TargetDemandsByArmy[pTargetArmy.id] =
+                    targetArmyId, out int existing) ? existing : 0;
+                plan.TargetDemandsByArmy[targetArmyId] =
                     TemporaryLevyRules.MergeDirectedReplenishmentDemand(
                         current, pDemand);
             }
@@ -455,8 +463,9 @@ namespace AncientWarfare3.core.lineage
             if (pPreferredCity?.data != null &&
                 pPreferredCity.kingdom == pKingdom &&
                 !pPreferredCity.isRekt())
-                plan.PreferredCityId = pPreferredCity.id;
+                plan.PreferredCityId = preferredCityId;
             ScheduleCasualtyReinforcement(plan);
+            return true;
         }
 
         public static bool HasPendingOffensiveRecovery(Kingdom pKingdom)

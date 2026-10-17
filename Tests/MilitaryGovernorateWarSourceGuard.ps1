@@ -16,6 +16,20 @@ foreach ($token in @(
 )) {
     if (-not $war.Contains($token)) { throw "Missing war redirect: $token" }
 }
+$resolverStart = $war.IndexOf('internal static Kingdom ResolveWarMainDefender(')
+$resolverEnd = $war.IndexOf('private static bool CanPassVassalWarRules(', $resolverStart)
+if ($resolverStart -lt 0 -or $resolverEnd -le $resolverStart) {
+    throw 'Missing main defender resolution boundary.'
+}
+$resolver = $war.Substring($resolverStart, $resolverEnd - $resolverStart)
+foreach ($token in @('VassalSubjectKind.MilitaryGovernorate',
+        'VassalService.GetRootSuzerain(pDeclaredDefender)',
+        'ResolveMainDefender(pAttacker?.id ?? -1L,',
+        '!root.isRekt()', ': pDeclaredDefender')) {
+    if (-not $resolver.Contains($token)) {
+        throw "Main defender resolution lost governorate or fallback behavior: $token"
+    }
+}
 if (-not $war.Contains(
         'CanPassAllianceWarRules(pAttacker, queueDefender')) {
     throw 'Queued war does not validate the resolved main defender.'

@@ -384,6 +384,9 @@ namespace AncientWarfare3.core.uiquery
                 bool accepted;
                 lock (_gate)
                 {
+                    // Save cancellation notifications may update a window or start a
+                    // replacement read. Deliver them only after the save is released.
+                    if (_saveBarrier) break;
                     if (_completions.Count == 0) break;
                     completion = _completions.Dequeue();
                     if (completion.Status == CompletionStatus.Cancelled)
@@ -466,10 +469,7 @@ namespace AncientWarfare3.core.uiquery
                 }
                 _saveBarrier = true;
                 _accepting = false;
-                ClearQueueLocked();
-                ClearCompletionsLocked();
-                _callbacks.Clear();
-                _latestIds.Clear();
+                CancelReadsForSaveLocked();
                 _signal.Set();
                 Monitor.PulseAll(_gate);
 
@@ -802,6 +802,40 @@ namespace AncientWarfare3.core.uiquery
         {
             try { pConnection.Close(); }
             finally { pConnection.Dispose(); }
+        }
+
+        private void CancelReadsForSaveLocked()
+        {
+            var cancelled = new List<(string Key, long Id,
+                MainThreadCallbacks Callbacks)>(_latestIds.Count);
+            foreach (KeyValuePair<string, long> latest in _latestIds)
+            {
+                MainThreadCallbacks callbacks = _callbacks.Take(latest.Value);
+                if (callbacks != null)
+                    cancelled.Add((latest.Key, latest.Value, callbacks));
+            }
+            ClearQueueLocked();
+            ClearCompletionsLocked();
+            _callbacks.Clear();
+            _latestIds.Clear();
+            foreach (var request in cancelled)
+            {
+                // Retain the original identity so a closed window, a replacement
+                // request, or ClearWorld can invalidate this deferred notification.
+                _callbacks.Register(request.Id, request.Callbacks.Commit,
+                    request.Callbacks.Fault);
+                _latestIds.Add(request.Key, request.Id);
+                _completions.Enqueue(new Completion
+                {
+                    Id = request.Id,
+                    Key = request.Key,
+                    Stamp = new AWAsyncStamp(_worldGeneration, 0L, 0L),
+                    DatabaseEpoch = _databaseEpoch,
+                    Status = CompletionStatus.Faulted,
+                    Error = new OperationCanceledException(
+                        "Historical read cancelled for save.")
+                });
+            }
         }
 
         private void ClearQueueLocked()

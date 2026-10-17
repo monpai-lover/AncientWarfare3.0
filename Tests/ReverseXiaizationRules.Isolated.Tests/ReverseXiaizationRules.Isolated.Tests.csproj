@@ -8,5 +8,6 @@
   <ItemGroup>
     <Compile Include="..\AncientWarfare3.Rules.Tests\ReverseXiaizationRulesTests.cs.txt" Link="ReverseXiaizationRulesTests.cs" />
     <Compile Include="..\..\Code\core\lineage\ReverseXiaizationRules.cs" Link="Production\ReverseXiaizationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\XiaizationAnnualRules.cs" Link="Production\XiaizationAnnualRules.cs" />
   </ItemGroup>
 </Project>

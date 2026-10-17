@@ -44,6 +44,34 @@ internal static class ArmyRtsWarLifecycleRulesTests
                 insideTargetTerritory: true, hostileCombatUnitNearby: false),
             "arrival without defenders keeps strategic movement active");
 
+        foreach (ArmyRtsWarResolutionMode mode in new[]
+                 { ArmyRtsWarResolutionMode.Standard,
+                   ArmyRtsWarResolutionMode.LastStand })
+        {
+            Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(mode,
+                    ArmyRtsWarPhase.StrategicMovement,
+                    pWithdrawalRequired: false,
+                    pInsideTargetTerritory: true, pTargetIsEnemy: true,
+                    pObjectiveOpen: true) ==
+                   ArmyRtsCombatControlDecision.ReleaseToVanilla,
+                "arrival at an open enemy city publishes capture metadata without requiring a defender scan");
+            Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(mode,
+                    ArmyRtsWarPhase.StrategicMovement,
+                    pWithdrawalRequired: false,
+                    pInsideTargetTerritory: false, pTargetIsEnemy: true,
+                    pObjectiveOpen: true) ==
+                   ArmyRtsCombatControlDecision.KeepStrategicControl,
+                "an enemy objective does not end strategic movement before arrival");
+        }
+        Assert(ArmyRtsWarLifecycleRules.ResolveCombatControl(
+                ArmyRtsWarResolutionMode.AbstractDecisive,
+                ArmyRtsWarPhase.StrategicMovement,
+                pWithdrawalRequired: false,
+                pInsideTargetTerritory: true, pTargetIsEnemy: true,
+                pObjectiveOpen: true) ==
+               ArmyRtsCombatControlDecision.KeepStrategicControl,
+            "abstract duels never hand tactical ownership to native city combat");
+
         Assert(ArmyRetreatRules.ShouldStandAndFightWhenNoSafeCity(
                 ArmyRtsRole.Assault, ArmyRtsPosture.Attack,
                 hasSafeRetreatCity: false, explicitPlayerRetreat: false),

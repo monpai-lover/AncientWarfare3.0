@@ -13,7 +13,11 @@ if ($source -match 'MembershipCompensationWriteOperation|TryQueueCompensation') 
 if ($source -match '(?s)MembershipWriteOperation\s*:\s*IHistoricalSchoolWriteOperation\s*,\s*IHistoricalSchoolAsyncWriteOperation') {
     throw 'School membership joins must stay on the v1.0 buffered main-thread commit path.'
 }
-if ($source -match 'MembershipJoinBackgroundWrite|MembershipConversionBackgroundWrite|DetachBackgroundWrite\(\)') {
+# Standing promotions can detach; membership joins and conversions must remain on the main thread.
+$membershipStart = $source.IndexOf('private abstract class MembershipWriteOperation')
+if ($membershipStart -lt 0) { throw 'Membership write operation is missing.' }
+$membershipSource = $source.Substring($membershipStart)
+if ($membershipSource -match 'MembershipJoinBackgroundWrite|MembershipConversionBackgroundWrite|DetachBackgroundWrite\(\)') {
     throw 'School membership joins must not detach actor membership projection from its buffered operation.'
 }
 if ($source -notmatch '(?s)public void AfterCommit.*HistoricalSchoolStore\.InvalidateTeachingCommit\(Event\.CityId\).*if \(!Adopt\(\)\).*PendingMembershipActors\.Remove\(ActorId\).*Completion\?\.Invoke\(true\)') {

@@ -9,48 +9,60 @@ namespace AncientWarfare3.Tests
         internal static void Run()
         {
             ActorReadPathOnlyProjectsStoredIdentity();
-            FullScanWritesRouteThroughRetryQueue();
-            PersistenceUsesSingleStatementUpsertWithoutPerActorTransaction();
+            TargetedWritesRouteThroughRetryQueue();
+            PersistenceUsesLegacyCompatibleAtomicUpdate();
             MigrationDoesNotFabricateHumanGenerators();
             ManualActorNameIsProtectedAcrossProjectionAndRestore();
             ManualRenameServiceOwnsStructuredPersistence();
             SplitActorNameEditorReplacesVanillaInput();
         }
 
-        private static void PersistenceUsesSingleStatementUpsertWithoutPerActorTransaction()
+        private static void PersistenceUsesLegacyCompatibleAtomicUpdate()
         {
             string source = Read("Code", "core", "naming",
                 "AWLocalizedNamePersistence.cs");
-            AssertEx.True(source.Contains("ON CONFLICT(META_TYPE,OBJECT_ID)"),
-                "Localized identity writes must use one upsert statement.");
-            AssertEx.True(!source.Contains("BeginTransaction"),
-                "Per-actor localized identity writes must not open SQLite transactions.");
+            AssertEx.True(!source.Contains("ON CONFLICT") &&
+                          !source.Contains("OR REPLACE"),
+                "Localized identity writes must support bundled SQLite without replacing rows.");
+            AssertEx.True(source.Contains("BeginTransaction") &&
+                          source.Contains("command.Transaction = transaction") &&
+                          source.Contains("transaction.Commit()"),
+                "The synchronous update/insert fallback must commit atomically.");
         }
 
         private static void ActorReadPathOnlyProjectsStoredIdentity()
         {
             string source = Read("Code", "patch", "naming",
                 "AW_ActorLocalizedNamePatch.cs");
-            string compact = Compact(source);
+            string compact = Compact(Between(source,
+                "private static void GetName_Postfix(",
+                "private static bool IsHistoricalFigure("));
             AssertEx.True(compact.Contains(
                     "AWLocalizedNameService.ProjectStored(__instance?.data)"),
-                "Actor.getName must only project an already-stored identity.");
-            AssertEx.True(!compact.Contains(
-                    "stringprojected=AWLocalizedNameService.ProjectActor(" +
-                    "__instance)"),
-                "Actor.getName must not initialize, generate, or persist identity.");
+                "Actor.getName postfix must project an already-stored identity.");
+            AssertEx.True(!compact.Contains("ProjectActor(") &&
+                          !compact.Contains(".Enqueue(") &&
+                          !compact.Contains(".Upsert("),
+                "Actor.getName postfix must not initialize or persist identity.");
         }
 
-        private static void FullScanWritesRouteThroughRetryQueue()
+        private static void TargetedWritesRouteThroughRetryQueue()
         {
-            string source = Read("Code", "core", "naming",
-                "AWLocalizedNameMigrationService.cs");
-            AssertEx.True(!source.Contains(
-                    "AWLocalizedNamePersistence.Upsert(metaType, objectId, data)"),
-                "Full-scan writes must not bypass the retry queue.");
-            AssertEx.True(source.Contains(
-                    "Enqueue(metaType, objectId, data)"),
-                "Full-scan writes must capture and enqueue an immutable snapshot.");
+            string compact = Compact(Read("Code", "core", "naming",
+                "AWLocalizedNameMigrationService.cs"));
+            AssertEx.True(!compact.Contains("AWLocalizedNamePersistence.Upsert("),
+                "Targeted writes must not bypass the asynchronous retry queue.");
+            int capture = compact.IndexOf("AWLocalizedNamePersistence.Capture(pData)",
+                StringComparison.Ordinal);
+            int enqueue = compact.IndexOf(
+                "PendingWrites.Enqueue(pMetaType,pObjectId,snapshot)",
+                StringComparison.Ordinal);
+            AssertEx.True(capture >= 0 && enqueue > capture,
+                "Writes must capture an immutable snapshot before enqueueing it.");
+            AssertEx.True(compact.Contains("PendingWrites.Flush(pBudget,TrySubmitAsync)") &&
+                          compact.Contains("HistoricalWriteService.Ready") &&
+                          compact.Contains("HistoricalWriteService.TryUpsertState("),
+                "The retry queue must use a bounded flush into the ready async writer.");
         }
 
         private static void MigrationDoesNotFabricateHumanGenerators()
@@ -68,15 +80,31 @@ namespace AncientWarfare3.Tests
                 "AWLocalizedNameService.cs");
             string migration = Read("Code", "core", "naming",
                 "AWLocalizedNameMigrationService.cs");
+            string persistence = Read("Code", "core", "naming",
+                "AWLocalizedNamePersistence.cs");
+            string refresh = Read("Code", "core", "naming",
+                "AWLocalizedNameRefreshService.cs");
+            string restore = Read("Code", "core", "multiplayer",
+                "AW3RuntimeRestorePipeline.cs");
             string patch = Read("Code", "patch", "naming",
                 "AW_ActorLocalizedNamePatch.cs");
             string lineage = Read("Code", "core", "lineage",
                 "LineageService.cs");
 
-            AssertEx.True(Compact(service).Contains("pData.custom_name"),
-                "localized projection must inspect custom actor names");
-            AssertEx.True(Compact(migration).Contains("custom_name"),
-                "restore migration must reconcile custom actor names");
+            string projectStored = Compact(Between(service,
+                "internal static string ProjectStored(",
+                "internal static string CurrentLanguage("));
+            AssertEx.True(projectStored.Contains(
+                    "if(pData.custom_name&&!string.IsNullOrWhiteSpace(pData.name))returnpData.name;"),
+                "localized projection must preserve a nonempty custom name before selecting a stored slot");
+            AssertEx.True(Compact(persistence).Contains(
+                    "AWLocalizedNameService.ProjectStored(pData)"),
+                "restored identity data must project through the custom-name protection");
+            AssertEx.True(Compact(restore).Contains(
+                    "AWLocalizedNameMigrationService.RebuildVisibleProjections") &&
+                          Compact(migration).Contains("AWLocalizedNameRefreshService.Request()") &&
+                          Compact(refresh).Contains("AWLocalizedNameService.ProjectStored(data)"),
+                "runtime restore must request visible refresh through protected projection");
             AssertEx.True(Compact(patch).Contains("custom_name"),
                 "Actor.getName must preserve custom actor names");
             AssertEx.True(Compact(lineage).Contains(
@@ -110,10 +138,11 @@ namespace AncientWarfare3.Tests
             AssertEx.True(compact.Contains(
                     "AW_ActorManualNameSecondInput") &&
                 compact.Contains("ActorManualRenameService") &&
-                compact.Contains("ActorManualNameMode.Xia") &&
+                compact.Contains("ActorManualRenameService.ResolveMode(pActor)") &&
+                compact.Contains("ActorManualRenameRules.UsesFamilyFirst(pState.Mode)") &&
                 compact.Contains("onEndEdit.RemoveAllListeners") &&
-                compact.Contains("pFirst.can_be_empty=xiaMode") &&
-                compact.Contains("pState.Second.can_be_empty=!xiaMode") &&
+                compact.Contains("pFirst.can_be_empty=familyFirst") &&
+                compact.Contains("pState.Second.can_be_empty=!familyFirst") &&
                 compact.Contains("ActorManualNameEditorState.Display") &&
                 compact.Contains("EnterEditing") &&
                 compact.Contains("CommitAndCollapse"),
@@ -136,6 +165,16 @@ namespace AncientWarfare3.Tests
         {
             return new string((pSource ?? string.Empty)
                 .Where(value => !char.IsWhiteSpace(value)).ToArray());
+        }
+
+        private static string Between(string pSource, string pStart, string pEnd)
+        {
+            int start = pSource.IndexOf(pStart, StringComparison.Ordinal);
+            int end = start < 0 ? -1 : pSource.IndexOf(pEnd, start + pStart.Length,
+                StringComparison.Ordinal);
+            AssertEx.True(start >= 0 && end > start,
+                "Expected source boundaries must exist: " + pStart + " / " + pEnd);
+            return pSource.Substring(start, end - start);
         }
     }
 }

@@ -32,8 +32,9 @@ namespace AncientWarfare3.patch
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.saveWorldToDirectory))]
-        public static void SaveWorldToDirectory_Prefix()
+        public static void SaveWorldToDirectory_Prefix(out bool __state)
         {
+            __state = false;
             if (_multiplayerSnapshotSaveDepth > 0) return;
             // 存档前先恢复可推断的城市箭塔归属，再清理无法恢复的 null 建筑，
             // 防止脏数据写入存档文件。
@@ -45,6 +46,7 @@ namespace AncientWarfare3.patch
             try
             {
                 EnterOwnedSaveBoundary();
+                __state = true;
                 if (!TryPrepareForSave(out string error,
                         out Exception cause))
                     throw AWSaveBoundaryException.CreateBlocked(
@@ -52,16 +54,17 @@ namespace AncientWarfare3.patch
             }
             catch
             {
-                ExitOwnedSaveBarrier();
+                if (__state) ExitOwnedSaveBarrier();
                 throw;
             }
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.saveWorldToDirectory))]
-        public static void SaveWorldToDirectory_Postfix(string pFolder)
+        public static void SaveWorldToDirectory_Postfix(string pFolder,
+            bool __state)
         {
-            if (_multiplayerSnapshotSaveDepth > 0) return;
+            if (!__state) return;
             try
             {
                 if (string.IsNullOrEmpty(pFolder)) return;
@@ -94,9 +97,9 @@ namespace AncientWarfare3.patch
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.saveWorldToDirectory))]
         private static Exception SaveWorldToDirectory_Finalizer(
-            Exception __exception)
+            Exception __exception, bool __state)
         {
-            ExitOwnedSaveBarrier();
+            if (__state) ExitOwnedSaveBarrier();
             return __exception;
         }
 

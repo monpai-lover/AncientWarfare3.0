@@ -18,22 +18,29 @@ function Require-Regex([string]$text, [string]$pattern, [string]$message) {
     }
 }
 
-Require-Text $service 'private enum CooperativeAuthorityStage' `
-    'persistent cooperative authority stage model'
+Require-Text $service 'internal enum AuthorityStep' `
+    'named authority measurement steps'
 Require-Text $service 'public static string GetCooperativePhaseName()' `
     'service-specific phase accessor'
 Require-Text $service 'public static bool ProcessCooperativeStep(' `
     'single-step cooperative authority API'
 Require-Text $service 'public static void AbortCooperativeCycle()' `
     'scheduler abort clearing cooperative authority state'
-Require-Text $service 'ResetCooperativeState();' `
-    'world reset clearing cooperative cursor state'
-Require-Text $service 'aw3.authority.succession_relationships' `
-    'succession relationship phase name'
-Require-Text $service 'aw3.authority.army_rts' `
-    'RTS phase name'
-Require-Text $service 'aw3.authority.actor_death_archive' `
-    'actor death archive phase name'
+Require-Text $service 'CooperativeGate.Reset();' `
+    'world reset clearing cooperative admission state'
+Require-Text $service 'SuccessionRelationshipIndex.Reset();' `
+    'world reset clears retained succession event state'
+Require-Text $service 'EndStep(AuthorityStep.ArmyRtsScheduling, argStep)' `
+    'RTS authority measurement'
+Require-Text $service 'ActorDeathArchiveService.ProcessAuthorityCycle();' `
+    'actor death archive drain'
+Require-Text $service 'AccountStepBytes(pStep, allocated);' `
+    'per-step allocation measurements retained on b'
+Require-Regex $service `
+    '(?s)public static bool ProcessCooperativeStep\(.*?ProcessCooperativeCycle\(pCycleToken, pCyclePaused\);\s*return true;' `
+    'b cooperative compatibility dispatch completes the measured authority pass'
+Require-Text $service 'if (!pGate.TryEnter(pCycleToken, allowed)) return;' `
+    'both native and cooperative cycles share admission gating'
 Require-Text $service 'public static void ProcessNativeCycle()' `
     'unchanged native scheduler entry point'
 

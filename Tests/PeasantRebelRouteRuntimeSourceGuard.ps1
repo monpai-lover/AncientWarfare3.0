@@ -44,9 +44,9 @@ $ceremonialProjection = Get-Content -Raw `
     'Code/core/lineage/CeremonialTitleResolver.cs'
 $historyRules = Get-Content -Raw `
     'Code/core/lineage/HistoryLocalizationRules.cs'
-$othersLocale = Get-Content -Raw -Encoding UTF8 'locales/others.csv'
+$othersLocale = Get-Content -Raw -Encoding UTF8 'Locales/others.csv'
 $mandateLocale = Get-Content -Raw -Encoding UTF8 `
-    'locales/aw3_mandate_extra.csv'
+    'Locales/aw3_mandate_extra.csv'
 $restorePipeline = Get-Content -Raw `
     'Code/core/multiplayer/AW3RuntimeRestorePipeline.cs'
 $chroniclePatch = Get-Content -Raw 'Code/patch/AW_ChroniclePatch.cs'
@@ -109,15 +109,13 @@ $outlawName = if (Test-Path `
 } else {
     ''
 }
-$mandateBuildStart = $mandateBorder.IndexOf(
-    'private static int BuildBorderWalls(')
-$mandateBuildEnd = $mandateBorder.IndexOf(
-    'private static TopTileType ResolveBorderWallType',
-    $mandateBuildStart)
+$mandateRefresh = Get-Content -Raw 'Code/core/lineage/MandateBorderWallRefreshService.cs'
+$mandateBuildStart = $mandateRefresh.IndexOf('private static int RefreshCity(')
+$mandateBuildEnd = $mandateRefresh.IndexOf('internal static int OnKingdomYear(')
 if ($mandateBuildStart -lt 0 -or $mandateBuildEnd -le $mandateBuildStart) {
-    throw 'Could not isolate Mandate BuildBorderWalls.'
+    throw 'Could not isolate Mandate RefreshCity.'
 }
-$mandateBuildWalls = $mandateBorder.Substring($mandateBuildStart,
+$mandateBuildWalls = $mandateRefresh.Substring($mandateBuildStart,
     $mandateBuildEnd - $mandateBuildStart)
 $hasOutsideStart = $mandateBorder.IndexOf(
     'private static bool HasOutsideNeighbour(')
@@ -163,8 +161,12 @@ Require $notice 'Cultiway-Reborn city-wall geometry' `
     'The adapted wall source needs an MIT notice.'
 Require $packagedNotice 'Copyright (c) 2025 Inmny' `
     'The packaged wall notice must retain the Cultiway copyright.'
-Require $mandateBorder 'CultiwayStyleCityWallService.BuildFrontier(' `
+Require $mandateBuildWalls 'TryPlanFrontier(city, WallWidth,' `
     'Mandate walls must follow real qualifying frontiers.'
+Require $mandateBuildWalls 'foreach (CultiwayWallPoint point in planned)' `
+    'Mandate refresh must process every planned wall point.'
+Require $mandateBuildWalls 'MandateBorderWallStateStore.Write(pMandate, state);' `
+    'Mandate refresh must retain its restoration manifest.'
 Require $mandateBorder 'IsFortificationTarget(' `
     'Mandate border systems must share one diplomatic target predicate.'
 Require $mandateBorder 'Alliance.isSame(' `
@@ -348,10 +350,14 @@ Require $kingdomUi 'PeasantRebelRouteService.IsBandit(kingdom)' `
     'The kingdom ruler portrait must request the bandit living title.'
 Require $heirProjection 'ComposeCeremonialTitle(pKingdom, true)' `
     'The shared heir read model must project the stronghold heir title.'
-Require $ceremonialProjection 'PeasantRebelRouteService.IsBandit(pActor.kingdom)' `
-    'Bandit heirs must enter the route-specific ceremonial title path.'
-Require $ceremonialProjection 'HeirTitleRules.BuildSocialTitle("", pActor.kingdom)' `
-    'Bandit heir ceremonial titles must reuse the shared heir title rule.'
+Require $ceremonialProjection 'HeirService.ResolveHeirKingdom(pActor)' `
+    'Heir ceremonial titles must resolve the registered realm even before nationality normalization.'
+Require $ceremonialProjection 'if (heirKingdom?.data != null)' `
+    'Heir ceremonial titles must validate the resolved realm.'
+Require $ceremonialProjection 'HeirTitleRules.BuildSocialTitle("", heirKingdom)' `
+    'Bandit heir ceremonial titles must reuse the shared heir title rule for the registered realm.'
+Forbid $ceremonialProjection 'HeirTitleRules.BuildSocialTitle("", pActor.kingdom)' `
+    'A displaced heir must not inherit the current host realm ceremonial title.'
 Require $warPatch 'PeasantRebelRouteService.OnWarStarted(__result)' `
     'Native war lifecycle must record origin suppression starts.'
 foreach ($key in @(
@@ -443,15 +449,19 @@ if ($banditYearStart -lt 0 -or $banditYearEnd -le $banditYearStart) {
 }
 $banditYearBody = $bandit.Substring($banditYearStart,
     $banditYearEnd - $banditYearStart)
-Require $banditYearBody 'ResolveTransitionCity(pKingdom)' `
-    'Annual bandit work must survive loss of the original founding city.'
+foreach ($stage in @('RunBanditRouteYear(pKingdom)',
+        'PeasantRebelBanditPressureService.OnKingdomYear(pKingdom)',
+        'PeasantRebelBanditRaidService.ScheduleYear(pKingdom)',
+        'PeasantRebelBanditWallService.RepairYear(pKingdom,')) {
+    Require $banditYearBody $stage 'Annual bandit work must route through the current kingdom services.'
+}
 Forbid $banditYearBody 'SafeCityCount(pKingdom) > 1' `
     'Multi-city formal bandits must continue annual route work.'
 
 $removeStart = $chroniclePatch.IndexOf(
-    'internal static void RemoveKingdom_Prefix(')
+    'RemoveKingdom_Prefix(')
 $removeEnd = $chroniclePatch.IndexOf(
-    'internal static void RemoveKingdom_Postfix(', $removeStart)
+    'RemoveKingdom_Postfix(', $removeStart)
 if ($removeStart -lt 0 -or $removeEnd -le $removeStart) {
     throw 'Could not isolate the kingdom removal prefix.'
 }

@@ -16,11 +16,17 @@ internal static class OfficialCareerActingAtomicPersistenceSqlTests
         db.Open();
         CreateSchema(db);
 
+        bool projectionReached = false;
         OfficialCareerAppointmentResult result = OfficialCareerPersistence
             .Appoint(db, Appointment(pActing: true), (connection, transaction) =>
+            {
+                projectionReached = true;
                 throw new InvalidOperationException(
-                    "injected acting-state projection failure"));
+                    "injected acting-state projection failure");
+            });
 
+        True(projectionReached,
+            "the rollback test reaches the injected projection failure");
         False(result.IsCommitted,
             "state projection failure cannot commit an acting appointment");
         Equal(0L, Scalar(db,
@@ -49,7 +55,7 @@ internal static class OfficialCareerActingAtomicPersistenceSqlTests
     {
         Execute(pDb, "CREATE TABLE CourtOfficer (" +
             "OFFICER_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
-            "ACTOR_ID INTEGER,ACTOR_NAME TEXT,CITY_ID INTEGER," +
+            "ACTOR_ID INTEGER,ACTOR_NAME TEXT,CITY_ID INTEGER,COUNTY_ID INTEGER DEFAULT -1," +
             "LAYER TEXT,OFFICE_ID TEXT,SCHOOL_ID TEXT,INFLUENCE REAL," +
             "APPOINTED_YEAR INTEGER,APPOINTED_TIME REAL," +
             "ENDED_YEAR INTEGER,ENDED_TIME REAL,ACTIVE INTEGER," +

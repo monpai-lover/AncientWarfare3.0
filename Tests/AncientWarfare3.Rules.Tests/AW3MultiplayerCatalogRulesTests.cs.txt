@@ -170,7 +170,10 @@ internal static class AW3MultiplayerCatalogRulesTests
             AW3CommandRequest.CommitDomesticHousehold(7, 31, 32,
                 "consort"),
             AW3CommandRequest.FillCentralCourtVacancies(7),
-            AW3CommandRequest.MergeDeJureRegions(7, 101, 102)
+            AW3CommandRequest.MergeDeJureRegions(7, 101, 102),
+            AW3CommandRequest.RenameCounty(7, 19, "New County"),
+            AW3CommandRequest.RenameCityState(7, 19, "New City", "New State"),
+            AW3CommandRequest.ReclaimMilitaryGovernorateCity(7, 8, 19)
         };
 
         Equal(Enum.GetValues<AW3CommandKind>().Length, requests.Length,
@@ -180,6 +183,19 @@ internal static class AW3MultiplayerCatalogRulesTests
             "request factories cover unique command kinds");
         True(requests.All(value => value.IsValid),
             "factory requests are valid");
+        AW3CommandRequest county = requests.Single(value => value.Kind ==
+            AW3CommandKind.RenameCounty);
+        Equal(19L, county.SecondaryId, "county rename retains its county identity");
+        Equal("New County", county.Text, "county rename retains its new name");
+        AW3CommandRequest state = requests.Single(value => value.Kind ==
+            AW3CommandKind.RenameCityState);
+        Equal(19L, state.CityId, "state rename retains its city identity");
+        Equal("New City", state.Text, "city rename retains its new name");
+        Equal("New State", state.Payload, "state rename retains its new name");
+        AW3CommandRequest reclaim = requests.Single(value => value.Kind ==
+            AW3CommandKind.ReclaimMilitaryGovernorateCity);
+        Equal(8L, reclaim.TargetCountryId, "governorate reclamation retains the subject country");
+        Equal(19L, reclaim.CityId, "governorate reclamation retains the city identity");
         Equal(7L, requests[0].CountryId,
             "source country retained");
         Equal(true, requests[0].BoolValue,
@@ -309,6 +325,14 @@ internal static class AW3MultiplayerCatalogRulesTests
             .ToArray();
         SequenceEqual(sourceIds, catalogIds,
             "the live AW3 window constants equal the public catalog");
+        Contains(idsSource, "internal const string COUNTY_RENAME",
+            "the county editor keeps its county-specific local context");
+        Equal(false, catalogIds.Contains("aw_county_rename"),
+            "the county editor is not advertised through a context-free public request");
+        Contains(idsSource, "internal const string HISTORICAL_FIGURE_CARDS",
+            "local card collection remains outside world multiplayer routing");
+        Contains(idsSource, "internal const string HISTORICAL_FIGURE_CARD_RECYCLE",
+            "local card recycling remains outside world multiplayer routing");
 
         string facade = File.ReadAllText(Path.Combine(root, "Code", "api",
             "multiplayer", "AW3MultiplayerUiFacade.cs"));
@@ -771,6 +795,32 @@ internal static class AW3MultiplayerCatalogRulesTests
             "SchoolMapModeService.SetFocus",
             "ShiLineageMapModeService.SetFocus"
         };
+        // Card collection preferences belong to the local player. Deployment
+        // changes the world and has a separate authority check at its entry.
+        var localUiWrites = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "windows/HistoricalFigureDrawWindow.cs:HistoricalFigureCardAudioService.SetEnabled"
+        };
+        var authorityGuardedUiWrites = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "windows/HistoricalFigureDrawWindow.cs:HistoricalFigureCardDeploymentService.TryDeploy"
+        };
+        string deployment = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "HistoricalFigureCardDeploymentService.cs"));
+        int deployStart = deployment.IndexOf(
+            "public static HistoricalFigureCardDeploymentResult TryDeploy(",
+            StringComparison.Ordinal);
+        True(deployStart >= 0, "card deployment exposes its guarded entry");
+        string deployEntry = deployment.Substring(deployStart);
+        Match replicaGuard = Regex.Match(deployEntry,
+            @"if\s*\(AW3MultiplayerReplicaScope\.IsReplicaSession\)\s*" +
+            @"return\s+HistoricalFigureCardDeploymentResult\.Failure\(""replica_session""\);");
+        int beginDeployment = deployEntry.IndexOf(
+            "HistoricalFigureCardDeploymentRules.TryBegin(",
+            StringComparison.Ordinal);
+        True(replicaGuard.Success && beginDeployment > replicaGuard.Index,
+            "local card deployment rejects every replica before reserving the deployment or mutating the world");
         var violations = new List<string>();
         foreach (string file in Directory.EnumerateFiles(root, "*.cs",
                      SearchOption.AllDirectories).OrderBy(value => value,
@@ -785,7 +835,10 @@ internal static class AW3MultiplayerCatalogRulesTests
                 {
                     string call = match.Groups["owner"].Value + "." +
                                   match.Groups["method"].Value;
-                    if (!readOnlyExceptions.Contains(call))
+                    string location = relative + ":" + call;
+                    if (!readOnlyExceptions.Contains(call) &&
+                        !localUiWrites.Contains(location) &&
+                        !authorityGuardedUiWrites.Contains(location))
                         violations.Add(relative + ":" + (lineIndex + 1) +
                                        ":" + call);
                 }

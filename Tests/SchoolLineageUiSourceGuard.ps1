@@ -12,10 +12,12 @@ $masterCard = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/items/Scho
 $composition = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/ui/items/SchoolCompositionElement.cs')
 $mapBottomBar = Get-Content -Raw -LiteralPath (Join-Path $root 'Code/core/policy/SchoolMapBottomBarController.cs')
 
-if ($schoolWindow -notmatch '\.Take\(_lineageRows\.Count\)') {
-    throw 'ShowLineage must keep the v1.1.2 fixed-row rendering contract.'
+if ($schoolWindow -notmatch 'EnsureLineageRows\(rows\.Count\)' -or
+    $schoolWindow -notmatch 'LoadMembershipHistory\(pSchoolId\)' -or
+    $schoolWindow -match '\.Take\(_lineageRows\.Count\)') {
+    throw 'ShowLineage must retain persisted history and grow its row pool without truncating members.'
 }
-if ($schoolWindow -match 'EnsureLineageRows|LogLineageDiagnostic|_lastLineageDiagnosticSignature') {
+if ($schoolWindow -match 'LogLineageDiagnostic|_lastLineageDiagnosticSignature') {
     throw 'ShowLineage must not dynamically mutate its row pool or diagnostic state.'
 }
 if ($schoolWindow -match 'SchoolMembershipService\.AllActive\(\)') {

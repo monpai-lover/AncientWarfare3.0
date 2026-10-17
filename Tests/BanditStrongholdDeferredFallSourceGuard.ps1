@@ -7,6 +7,8 @@ $runnerPath = Join-Path $repoRoot `
     'Code/core/performance/AWCooperativeActorPostRunner.cs'
 $service = Get-Content -Raw -Encoding UTF8 $servicePath
 $runner = Get-Content -Raw -Encoding UTF8 $runnerPath
+$population = Get-Content -Raw -Encoding UTF8 (Join-Path $repoRoot `
+    'Code/core/lineage/PeasantRebelBanditStrongholdPopulationService.cs')
 
 function Get-MethodBody([string] $source, [string] $startToken,
     [string] $nextToken) {
@@ -20,7 +22,7 @@ function Get-MethodBody([string] $source, [string] $startToken,
 $capture = Get-MethodBody $service 'internal static bool TryHandleCapture(' `
     'internal static bool IsHostileKingdom('
 $death = Get-MethodBody $service 'internal static void OnBanditResidentDied(' `
-    'internal static void RestoreRuntime('
+    'internal static void QueuePopulationFall('
 $restore = Get-MethodBody $service 'internal static void RestoreRuntime(' `
     'private static void QueueFall('
 
@@ -30,13 +32,34 @@ if ($capture -notmatch 'QueueFall\(' -or $capture -match 'CompleteFall\(') {
 if ($death -match 'CompleteFall\(') {
     throw 'Actor-death callback still completes bandit fall inline'
 }
-foreach ($token in @('ResolveFallAction(', 'QueueFall(')) {
+foreach ($token in @('LastHostileKillerKingdomId',
+        'PeasantRebelBanditStateStore.Write(', 'EnqueueStronghold(')) {
     if ($death -notmatch [regex]::Escape($token)) {
         throw "Actor-death callback is missing $token"
     }
 }
+if ($death -match 'getPopulationPeople\(|CountLivingResidents\(|QueueFall\(') {
+    throw 'Actor death must only enqueue population work until resident mutation finishes'
+}
 if ($restore -match 'CompleteFall\(' -or $restore -notmatch 'QueueFall\(') {
     throw 'Runtime restore must defer stronghold fall'
+}
+if ($restore -notmatch 'EnqueueStronghold\(' -or
+    $restore -match 'getPopulationPeople\(|ResolveFallAction\(') {
+    throw 'Runtime restore must queue living-resident validation, including combat-empty strongholds'
+}
+foreach ($token in @('CountLivingResidents(city)', 'ShouldQueueFall(true, living)',
+        'QueuePopulationFall(cityId)', 'IsLivingResident(',
+        'actor.isAlive()', 'actor.isRekt()', 'actor.city == pCity')) {
+    if (-not $population.Contains($token)) {
+        throw "Deferred stronghold population validation is missing $token"
+    }
+}
+$populationFall = Get-MethodBody $service 'internal static void QueuePopulationFall(' `
+    'internal static void RestoreRuntime('
+if ($populationFall -notmatch 'QueueFall\(' -or
+    $populationFall -match 'CompleteFall\(') {
+    throw 'Population settlement must pass through the deferred fall boundary'
 }
 
 $queueStart = $service.IndexOf('private static void QueueFall(')

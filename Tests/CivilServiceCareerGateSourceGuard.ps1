@@ -52,6 +52,8 @@ $historyWindow = Read-Source $historyWindowPath 'history list window'
 $court = Read-Source $courtPath 'court service'
 $cityPatch = Read-Source $cityPatchPath 'city leader patch'
 $keys = Read-Source $keysPath 'lineage keys'
+$governorProjection = Read-Source (Join-Path $root 'Code/core/court/CityGovernorProjectionRepairService.cs') 'governor projection'
+$local = Read-Source (Join-Path $root 'Code/core/court/LocalCourtAppointmentService.cs') 'local appointment'
 
 Require-Text $keys 'CIVIL_SERVICE_QUALIFICATION' 'qualification projection key'
 Require-Text $keys 'CIVIL_SERVICE_ISSUING_KINGDOM_ID' 'issuing kingdom projection key'
@@ -65,11 +67,16 @@ Require-Text $qualification 'HistoricalSchoolEducationService.CanAppoint(' 'educ
 Require-Text $qualification 'IsAppointmentExempt(' 'explicit appointment exemptions'
 Require-Text $qualification 'HasRequiredServiceHistory(' 'career service ladder'
 Require-Text $qualification 'OfficialCareerRankRules.CanEnterOffice(' 'rank and service gate'
-Require-Text $qualification 'ShouldUseVacancyPromotion(' `
+Require-Text $qualification 'ShouldUseVacancyFallback(' `
     'formal qualification gate has a vacancy-only promotion exception'
+foreach ($grade in @(30, 20)) {
+    Require-Match $qualification `
+        "OfficialCareerRankRules\.\s*IsRequiredServiceGrade\(\s*grade,\s*$grade\)" `
+        "batched service history delegates exact grade $grade matching"
+}
 Require-Match $qualification `
-    'OfficialCareerRankRules\.IsRequiredServiceGrade\(\s*grade,\s*requiredOfficeGrade\)' `
-    'service history delegates exact office-tier matching'
+    'requiredOfficeGrade == 20\s*\? history.HasMiddleService\s*: history.HasLowerService' `
+    'service-history callers select the matching result from the shared query'
 Require-Text $qualification 'IFNULL(IS_ACTING,0)=0' `
     'acting appointments cannot satisfy formal service history'
 Reject-Match $qualification `
@@ -84,7 +91,7 @@ Require-Text $court 'CanReceiveFormalCivilAppointment(' 'candidate-discovery app
 Require-Text $court 'pAllowVacancyPromotion: true' `
     'automatic and manual vacant-office paths request formal promotion'
 Require-Text $court 'TryAssignActingCityGovernor(' 'one-year acting governor path'
-Require-Text $cityPatch 'TryAssignActingCityGovernor(' 'vacancy uses acting path'
+Require-Text $governorProjection 'TryAssignActingCityGovernor(' 'vacancy uses acting path'
 Require-Text $court 'ShouldUseActingCentralFallback(' `
     'central vacancies use an educated acting fallback'
 Require-Text $court 'ShouldExpireActingCentralOfficial(' `
@@ -116,7 +123,7 @@ Require-Text $state 'TryExpireActingCentralOfficial(' `
 Require-Text $court 'TryExpireActingCityGovernor(' 'acting vacancy retry entry'
 Require-Text $court 'TryRestoreActiveOfficerProjection(' `
     'acting expiry restores any remaining authoritative formal office'
-Require-Text $cityPatch 'CanEnterActingGovernorCandidatePool(' `
+Require-Text $local '!string.IsNullOrEmpty(officeId)' `
     'acting governor discovery rejects actors with an existing court office'
 
 Reject-Text $career 'ApplyOfficeRankFloor(' 'appointment-time rank flooring'

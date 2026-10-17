@@ -47,11 +47,26 @@ internal static class ArmyRtsCombatHandoffRulesTests
                 contactActorIsCaptain: true,
                 captainHasValidCombatTarget: true),
             "captain contact requests field-combat ownership immediately instead of waiting for a controller tick");
-        Assert(!ArmyRtsFieldCombatRules.ShouldRequestFieldCombatFromP0(
+        Assert(ArmyRtsFieldCombatRules.ShouldRequestFieldCombatFromP0(
                 missionActive: true, alreadyReleased: false,
                 contactActorIsCaptain: false,
                 captainHasValidCombatTarget: true),
-            "ordinary member contacts do not repeatedly scan the whole army");
+            "a member can release field combat when its captain is already engaged");
+        Assert(!ArmyRtsFieldCombatRules.ShouldRequestFieldCombatFromP0(
+                missionActive: true, alreadyReleased: false,
+                contactActorIsCaptain: false,
+                captainHasValidCombatTarget: false),
+            "a member contact alone does not release combat without an engaged captain");
+        Assert(!ArmyRtsFieldCombatRules.ShouldRequestFieldCombatFromP0(
+                missionActive: true, alreadyReleased: true,
+                contactActorIsCaptain: false,
+                captainHasValidCombatTarget: true),
+            "member contacts do not repeat an existing field-combat release");
+        Assert(!ArmyRtsFieldCombatRules.ShouldRequestFieldCombatFromP0(
+                missionActive: false, alreadyReleased: false,
+                contactActorIsCaptain: false,
+                captainHasValidCombatTarget: true),
+            "an inactive mission cannot acquire field-combat ownership");
         Assert(ArmyMilitaryMovementPriorityRules.
                 ShouldAdvanceNewFightTaskInSameP0(
                     hasAttackTarget: true, isFightingTask: true,

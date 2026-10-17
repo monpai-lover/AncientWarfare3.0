@@ -65,7 +65,7 @@ foreach ($token in @(
     'public static bool CommitSuccession(',
     'BeginTransaction(IsolationLevel.Serializable)',
     'GOVERNOR_ACTOR_ID=@governor,SUCCESSOR_ACTOR_ID=-1,',
-    'SUCCESSION_STATE=0,REPLACEMENT_ALLOWED=0'
+    'SUCCESSION_STATE=0,REPLACEMENT_ALLOWED=1'
 )) {
     if (-not $store.Contains($token)) { throw "Missing store token: $token" }
 }

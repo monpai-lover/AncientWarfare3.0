@@ -33,6 +33,7 @@ namespace AncientWarfare3.patch.naming
             EnsureSecondInput(first, state);
             EnsureTrigger(__instance, first, state);
             if (state.Second == null || state.Trigger == null) return;
+            state.Trigger.CancelRetry();
             state.ActorId = actor.data.id;
             ShowDisplay(__instance, first, state);
         }
@@ -86,18 +87,33 @@ namespace AncientWarfare3.patch.naming
             if (!pState.LayoutCaptured || pState.Second == null) return;
             Actor actor = pWindow?.actor;
             RectTransform first = pFirst.GetComponent<RectTransform>();
-            if (actor?.data == null || first == null) return;
+            if (actor?.data == null || actor.data.id != pState.ActorId ||
+                first == null) return;
+            if (!CanRewriteFields(pFirst, pState))
+            {
+                pState.Trigger?.ScheduleRetry(() =>
+                    ShowDisplay(pWindow, pFirst, pState));
+                return;
+            }
 
             pState.Suppress = true;
             try
             {
+                if (!ActorManualNameInputSynchronizer.TryRewrite(
+                        pFirst.inputField, actor.getName().Trim()))
+                {
+                    pState.Trigger?.ScheduleRetry(() =>
+                        ShowDisplay(pWindow, pFirst, pState));
+                    return;
+                }
+                pFirst.LastValue = pFirst.inputField.text;
+                pState.Trigger?.CancelRetry();
                 pState.State = ActorManualNameEditorState.Display;
                 pFirst.inputField.onEndEdit.RemoveAllListeners();
                 pState.Second.inputField.onEndEdit.RemoveAllListeners();
                 first.sizeDelta = pState.OriginalSize;
                 first.anchoredPosition = pState.OriginalPosition;
                 pFirst.can_be_empty = false;
-                pFirst.setText(actor.getName().Trim());
                 SetLabelVisible(pFirst, false);
                 SetLabelVisible(pState.Second, false);
                 pState.Second.gameObject.SetActive(false);
@@ -115,14 +131,25 @@ namespace AncientWarfare3.patch.naming
             Actor actor = pWindow?.actor;
             if (pState.Suppress || actor?.data == null || actor.isRekt() ||
                 actor.data.id != pState.ActorId) return;
+            pState.Trigger?.CancelRetry();
             ActorManualNameEditorState next = ActorManualNameEditorRules
                 .Resolve(pState.State,
                     ActorManualNameEditorEvent.NameSelected,
                     anyEditorFieldFocused: true);
             if (pState.State == next) return;
+            if (!CanRewriteFields(pFirst, pState) ||
+                !PopulateEditing(pWindow, actor, pFirst, pState))
+            {
+                pState.Trigger?.ScheduleRetry(() =>
+                {
+                    if (pState.Trigger.IsAnyEditorFieldFocused?.Invoke() ==
+                        true)
+                        EnterEditing(pWindow, pFirst, pState);
+                });
+                return;
+            }
             pState.State = next;
             Layout(pFirst, pState);
-            PopulateEditing(pWindow, actor, pFirst, pState);
             try
             {
                 pFirst.inputField.Select();
@@ -153,14 +180,21 @@ namespace AncientWarfare3.patch.naming
             pState.Second.gameObject.SetActive(true);
         }
 
-        private static void PopulateEditing(UnitWindow pWindow,
+        private static bool CanRewriteFields(NameInput pFirst,
+            EditorState pState)
+        {
+            return ActorManualNameInputSynchronizer.CanRewrite(
+                       pFirst.inputField) &&
+                   ActorManualNameInputSynchronizer.CanRewrite(
+                       pState.Second?.inputField);
+        }
+
+        private static bool PopulateEditing(UnitWindow pWindow,
             Actor pActor, NameInput pFirst, EditorState pState)
         {
             pState.Suppress = true;
             try
             {
-                pFirst.inputField.onEndEdit.RemoveAllListeners();
-                pState.Second.inputField.onEndEdit.RemoveAllListeners();
                 pState.Mode = ActorManualRenameService.ResolveMode(pActor);
                 bool familyFirst = ActorManualRenameRules.UsesFamilyFirst(
                     pState.Mode);
@@ -168,14 +202,23 @@ namespace AncientWarfare3.patch.naming
                     pState.Mode);
                 ActorManualNameDraft draft = ActorManualRenameService
                     .Capture(pActor);
+                if (!ActorManualNameInputSynchronizer.TryRewrite(
+                        pFirst.inputField, familyFirst
+                            ? draft.FamilyOrClanName
+                            : draft.GivenName) ||
+                    !ActorManualNameInputSynchronizer.TryRewrite(
+                        pState.Second.inputField, familyFirst
+                            ? draft.GivenName
+                            : draft.FamilyOrClanName)) return false;
+                // NameInput.OnEnable reattaches checkInput when the second
+                // field expands. Its required-field fallback must match the
+                // split value rather than the full name copied by Instantiate.
+                pFirst.LastValue = pFirst.inputField.text;
+                pState.Second.LastValue = pState.Second.inputField.text;
+                pFirst.inputField.onEndEdit.RemoveAllListeners();
+                pState.Second.inputField.onEndEdit.RemoveAllListeners();
                 pFirst.can_be_empty = familyFirst;
                 pState.Second.can_be_empty = !familyFirst;
-                pFirst.setText(familyFirst
-                    ? draft.FamilyOrClanName
-                    : draft.GivenName);
-                pState.Second.setText(familyFirst
-                    ? draft.GivenName
-                    : draft.FamilyOrClanName);
                 SetFieldLabel(pFirst, familyFirst
                     ? mergedShi ? "aw_actor_name_shi" :
                         "aw_actor_name_family_or_shi"
@@ -198,6 +241,7 @@ namespace AncientWarfare3.patch.naming
                 ScheduleFocusCheck(pState));
             pState.Second.inputField.onEndEdit.AddListener(_ =>
                 ScheduleFocusCheck(pState));
+            return true;
         }
 
         private static void ScheduleFocusCheck(EditorState pState)
@@ -224,6 +268,12 @@ namespace AncientWarfare3.patch.naming
                     ActorManualNameEditorEvent.FocusChanged,
                     anyEditorFieldFocused: false);
             if (next != ActorManualNameEditorState.Display) return;
+            if (!CanRewriteFields(pFirst, pState))
+            {
+                pState.Trigger?.ScheduleRetry(() =>
+                    CommitAndCollapse(pWindow, pFirst, pState));
+                return;
+            }
             if (!ActorManualRenameService.TryCommit(actor,
                     pFirst.inputField.text,
                     pState.Second.inputField.text, out string error))
@@ -323,6 +373,7 @@ namespace AncientWarfare3.patch.naming
         internal Action FocusLost;
         internal Action Disabled;
         private bool _focusCheckPending;
+        private Action _retry;
 
         public void OnPointerClick(PointerEventData pEventData)
         {
@@ -334,8 +385,21 @@ namespace AncientWarfare3.patch.naming
             _focusCheckPending = true;
         }
 
+        internal void ScheduleRetry(Action pRetry)
+        {
+            _retry = pRetry;
+        }
+
+        internal void CancelRetry()
+        {
+            _retry = null;
+        }
+
         private void LateUpdate()
         {
+            Action retry = _retry;
+            _retry = null;
+            retry?.Invoke();
             if (!_focusCheckPending) return;
             _focusCheckPending = false;
             bool isFocused = IsAnyEditorFieldFocused?.Invoke() ?? false;
@@ -346,6 +410,7 @@ namespace AncientWarfare3.patch.naming
         {
             _focusCheckPending = false;
             Disabled?.Invoke();
+            CancelRetry();
         }
     }
 }

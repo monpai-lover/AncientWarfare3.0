@@ -12,7 +12,7 @@ internal static class CityStateRenameIntegrationSourceGuardTests
         string router  = Read("Code/core/multiplayer/commands/AW3AuthoritativeCommandRouter.cs");
         string handler = Read("Code/core/multiplayer/commands/AW3CourtCommandHandler.cs");
         string patch   = Read("Code/patch/AW_KingdomRenamePatch.cs");
-        string window  = Read("Code/ui/windows/CityStateRenameWindow.cs");
+        string editor  = Read("Code/patch/naming/AW_CityStateNamePatch.cs");
 
         // 创建路径：RegionName 在创建/迁移时初始化一次
         Contains(store, "RegionName =");
@@ -42,12 +42,20 @@ internal static class CityStateRenameIntegrationSourceGuardTests
         Contains(service, "TryRenameRegion");
 
         // patch 传 pTrack
-        Contains(patch, "DeJureRegionStore.SyncSeatName(city, committedCityName,");
+        Contains(patch, "if (!CityStateRenameService.IsNativeSeatSyncSuppressed)");
+        Contains(patch, "DeJureRegionStore.SyncSeatName(city,");
+        Contains(patch, "committedCityName, pTrack)");
 
-        // UI：两个输入框
-        Contains(window, "_cityInput");
-        Contains(window, "_stateInput");
-        Contains(window, "AW3CommandRequest.RenameCityState");
+        // 原生城市横幅内嵌双输入框，失焦后通过权威命令提交。
+        Contains(editor, "HarmonyPatch(typeof(WindowMetaGeneric<City, CityData>)");
+        Contains(editor, "SecondInputName = \"AW_CityStateNameSecondInput\"");
+        Contains(editor, "pFirst.inputField.text,");
+        Contains(editor, "pState.Second.inputField.text");
+        Contains(editor, "pState.Second.gameObject.SetActive(pState.HasRegion)");
+        Contains(editor, "CityStateNameFieldRules.CreateDraft(");
+        Contains(editor, "CommitAndCollapse(pWindow, pFirst, pState)");
+        Contains(editor, "DispatchFromUi(AW3CommandRequest.RenameCityState(kingdomId,");
+        Contains(editor, "pCity.data.id, pDraft.CityName, pDraft.StateName)");
     }
 
     private static string Read(string pPath) => File.ReadAllText(

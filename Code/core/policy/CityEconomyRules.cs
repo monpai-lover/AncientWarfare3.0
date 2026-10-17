@@ -1,5 +1,5 @@
+using System;
 using AncientWarfare3.core.lineage;
-using UnityEngine;
 
 namespace AncientWarfare3.core.policy
 {
@@ -75,7 +75,7 @@ namespace AncientWarfare3.core.policy
             if (isBorder && militaryBuildings >= 1) return CityEconomyRole.FrontierMilitary;
             if (marketBuildings >= farmBuildings && marketBuildings >= workshopBuildings && marketBuildings >= 2)
                 return CityEconomyRole.MarketTrade;
-            if (workshopBuildings >= 2 || adoptedTechCount >= Mathf.Max(3, totalTechCount / 2))
+            if (workshopBuildings >= 2 || adoptedTechCount >= Math.Max(3, totalTechCount / 2))
                 return CityEconomyRole.WorkshopCraft;
             return CityEconomyRole.AgrarianGranary;
         }
@@ -88,10 +88,10 @@ namespace AncientWarfare3.core.policy
             float policyMultiplier = 1f, float techMultiplier = 1f,
             float farmOutputMultiplier = 1f)
         {
-            float pop = Mathf.Max(0, population);
-            float techFactor = totalTechCount <= 0 ? 0f : Mathf.Clamp01((float)adoptedTechCount / totalTechCount);
-            float distanceFactor = Mathf.Clamp(1f - distanceFromCapital / 220f, 0.45f, 1f);
-            float slaveFactor = Mathf.Clamp01(slavePopulation / Mathf.Max(1f, pop));
+            float pop = Math.Max(0, population);
+            float techFactor = totalTechCount <= 0 ? 0f : Clamp((float)adoptedTechCount / totalTechCount, 0f, 1f);
+            float distanceFactor = Clamp(1f - distanceFromCapital / 220f, 0.45f, 1f);
+            float slaveFactor = Clamp(slavePopulation / Math.Max(1f, pop), 0f, 1f);
             float nonCoreFactor = nonCore ? 0.72f : 1f;
 
             float policy = 0.15f + pop * 0.006f + techFactor * 0.35f;
@@ -148,11 +148,18 @@ namespace AncientWarfare3.core.policy
             tax *= taxMultiplier;
             manpower *= manpowerMultiplier;
             food *= farmOutputMultiplier;
-            float remittance = Mathf.Clamp01(feudatoryRemittanceMultiplier);
+            float remittance = Clamp(feudatoryRemittanceMultiplier, 0f, 1f);
             policy *= remittance;
             tax *= remittance;
             unrest -= unrestReduction;
-            return new CityEconomyContribution(policy, tech, tax, manpower, food, Mathf.Clamp(unrest, 0f, 100f));
+            return new CityEconomyContribution(policy, tech, tax, manpower, food, Clamp(unrest, 0f, 100f));
+        }
+
+        private static float Clamp(float value, float minimum, float maximum)
+        {
+            if (value < minimum) return minimum;
+            if (value > maximum) return maximum;
+            return value;
         }
     }
 
@@ -197,7 +204,7 @@ namespace AncientWarfare3.core.policy
 
         private static bool Close(float pA, float pB)
         {
-            return Mathf.Abs(pA - pB) <= EPSILON;
+            return Math.Abs(pA - pB) <= EPSILON;
         }
     }
 

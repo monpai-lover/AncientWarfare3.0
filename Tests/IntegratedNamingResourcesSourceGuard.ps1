@@ -1,16 +1,30 @@
+param(
+    [string] $UpstreamSourceRoot,
+    [switch] $RequireUpstreamComparison
+)
+
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$sourceRoot = Join-Path (Split-Path -Parent $repoRoot) 'ChineseName_1.5.0new'
+$sourceRoot = $UpstreamSourceRoot
+if ([string]::IsNullOrWhiteSpace($sourceRoot)) {
+    $sourceRoot = Join-Path (Split-Path -Parent $repoRoot) 'ChineseName_1.5.0new'
+}
 $sourceGenerators = Join-Path $sourceRoot 'name_generators\default'
 $sourceWords = Join-Path $sourceRoot 'word_libraries\default'
 $targetGenerators = Join-Path $repoRoot 'name_generators\default'
 $targetWords = Join-Path $repoRoot 'word_libraries\default'
 
-foreach ($directory in @($sourceGenerators, $sourceWords)) {
-    if (-not (Test-Path -LiteralPath $directory)) {
-        throw "Missing upstream Chinese Name resource directory: $directory"
+$hasUpstream = (Test-Path -LiteralPath $sourceGenerators) -and
+    (Test-Path -LiteralPath $sourceWords)
+if (-not $hasUpstream) {
+    if ($RequireUpstreamComparison -or
+        -not [string]::IsNullOrWhiteSpace($UpstreamSourceRoot)) {
+        throw "Missing upstream Chinese Name resources under: $sourceRoot"
     }
+    Write-Warning ('Upstream compatibility comparison skipped: ' +
+        "$sourceRoot is unavailable. Local resource integrity is still checked. " +
+        'Use -UpstreamSourceRoot and -RequireUpstreamComparison to require that comparison.')
 }
 
 function Get-RelativeFileSet([string] $root, [string] $filter) {
@@ -20,9 +34,15 @@ function Get-RelativeFileSet([string] $root, [string] $filter) {
         Sort-Object -Unique)
 }
 
-$sourceGeneratorFiles = Get-RelativeFileSet $sourceGenerators '*.json'
+$sourceGeneratorFiles = @()
+if ($hasUpstream) {
+    $sourceGeneratorFiles = Get-RelativeFileSet $sourceGenerators '*.json'
+}
 $targetGeneratorFiles = Get-RelativeFileSet $targetGenerators '*.json'
-$sourceWordFiles = Get-RelativeFileSet $sourceWords '*.txt'
+$sourceWordFiles = @()
+if ($hasUpstream) {
+    $sourceWordFiles = Get-RelativeFileSet $sourceWords '*.txt'
+}
 $targetWordFiles = Get-RelativeFileSet $targetWords '*.txt'
 
 foreach ($relative in $sourceGeneratorFiles) {
@@ -63,6 +83,9 @@ foreach ($relative in $targetGeneratorFiles) {
     foreach ($asset in $assets) {
         if ([string]::IsNullOrWhiteSpace([string]$asset.id)) {
             throw "Generator without id in $relative"
+        }
+        if ($targetAssetsById.ContainsKey([string]$asset.id)) {
+            throw "Duplicate integrated generator id '$($asset.id)' in $relative"
         }
         $targetAssetsById[[string]$asset.id] = $asset
         $generatorCount++
@@ -109,7 +132,8 @@ $nonEmptyWordIds = New-Object 'System.Collections.Generic.HashSet[string]' ([Str
 foreach ($relative in $targetWordFiles) {
     $path = Join-Path $targetWords $relative
     $lines = @(Get-Content -LiteralPath $path -Encoding UTF8 |
-        Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) -or
+            $_ -ceq ([string][char]0x200A) })
     $wordId = [IO.Path]::GetFileNameWithoutExtension($relative)
     [void]$wordIds.Add($wordId)
     if ($lines.Count -gt 0) { [void]$nonEmptyWordIds.Add($wordId) }
@@ -127,6 +151,8 @@ $legacyAliases[(ConvertFrom-Utf8Base64 '572X5pav5ZCN5a2X')] = @(
 $legacyAliases[(ConvertFrom-Utf8Base64 '54q55aSq5Lq65ZCN')] = @(
     (ConvertFrom-Utf8Base64 '54q55aSq55S35ZCN'),
     (ConvertFrom-Utf8Base64 '54q55aSq5aWz5ZCN'))
+$legacyAliases['日本名字'] = @('日本名字下')
+$legacyAliases['天干地支'] = @('天干', '地支')
 foreach ($library in $referencedLibraries) {
     if ($legacyAliases.ContainsKey($library)) {
         foreach ($sourceId in $legacyAliases[$library]) {

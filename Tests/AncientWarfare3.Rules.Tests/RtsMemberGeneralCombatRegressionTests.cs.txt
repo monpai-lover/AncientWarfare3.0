@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.RegularExpressions;
 
 internal static class RtsMemberGeneralCombatRegressionTests
 {
@@ -14,9 +15,15 @@ internal static class RtsMemberGeneralCombatRegressionTests
         Assert(content.Contains("warrior_army_leader_move_to_attack_target",
                 StringComparison.Ordinal),
             "captains must retain the native city attack movement decision");
-        Assert(!behaviour.Contains("BehArmyRtsMemberCombat",
-                StringComparison.Ordinal),
-            "member combat must not retain a duplicate custom target finder");
+        int memberStart = behaviour.IndexOf("public sealed class BehArmyRtsMemberCombat",
+            StringComparison.Ordinal);
+        int memberEnd = behaviour.IndexOf("public sealed class BehArmyRtsSiegeCombat",
+            memberStart, StringComparison.Ordinal);
+        string member = behaviour.Substring(memberStart, memberEnd - memberStart);
+        Assert(member.Contains("target = pActor.attack_target?.a;", StringComparison.Ordinal) &&
+               member.Contains("ArmyRtsControllerService.FindCaptainCombatTarget(", StringComparison.Ordinal) &&
+               !member.Contains("doUnits(", StringComparison.Ordinal),
+            "member combat reuses an existing target before the shared bounded finder instead of duplicating a world scan");
         Assert(!behaviour.Contains("b2_updateAI", StringComparison.Ordinal) &&
                !behaviour.Contains("b5_checkPathMovement", StringComparison.Ordinal) &&
                !behaviour.Contains("b6_updateMovement", StringComparison.Ordinal),
@@ -47,12 +54,20 @@ internal static class RtsMemberGeneralCombatRegressionTests
         string enemySearchTransition = scheduler.Substring(
             beforeEnemySearchStage,
             prepareEnemySearchStage - beforeEnemySearchStage);
-        Assert(enemySearchTransition.Contains(
-                   "stage = PostStage.MilitaryP0;",
+        string compactTransition = Regex.Replace(enemySearchTransition, @"\s+", "");
+        int p0Start = scheduler.IndexOf("case PostStage.MilitaryP0:", StringComparison.Ordinal);
+        int p0End = scheduler.IndexOf("case PostStage.BeforeDeadCheck:", p0Start, StringComparison.Ordinal);
+        string p0 = scheduler.Substring(p0Start, p0End - p0Start);
+        Assert(compactTransition.Contains(
+                   "TryRunNextPostRange(currentEnemyTargetJobIndex,enemySearchJobIndex)",
                    StringComparison.Ordinal) &&
-               enemySearchTransition.Contains(
-                   "BeginEnemySearchPreparation();",
-                   StringComparison.Ordinal),
+               compactTransition.Contains("if(ShouldRunMilitaryP0Stage()){stage=PostStage.MilitaryP0;continue;}",
+                   StringComparison.Ordinal) &&
+               enemySearchTransition.Contains("BeginEnemySearchPreparation();", StringComparison.Ordinal) &&
+               p0.IndexOf("CanAdmitOrdinaryActorWork(militaryP0Pending)", StringComparison.Ordinal) >
+                   p0.IndexOf("RunMilitaryP0Chunk(elapsed)", StringComparison.Ordinal) &&
+               p0.IndexOf("BeginEnemySearchPreparation();", StringComparison.Ordinal) >
+                   p0.IndexOf("CanAdmitOrdinaryActorWork(militaryP0Pending)", StringComparison.Ordinal),
             "military P0 must run after native timers/current-target checks " +
             "and before the ordinary enemy-search stage");
 

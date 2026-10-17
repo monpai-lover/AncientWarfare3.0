@@ -5,92 +5,77 @@ $qr = Join-Path $repo 'sponsor_qr.jpg'
 $window = Join-Path $repo 'Code/ui/windows/SupporterLeaderboardWindow.cs'
 $item = Join-Path $repo 'Code/ui/items/SupporterLeaderboardListItem.cs'
 $service = Join-Path $repo 'Code/ui/SupporterLeaderboardData.cs'
+$roster = Join-Path $repo 'Code/content/supporters/SupporterRosterData.cs'
 $tab = Join-Path $repo 'Code/ui/AW_LineageTab.cs'
 $ids = Join-Path $repo 'Code/ui/AW_LineageWindowIds.cs'
 $locale = Join-Path $repo 'Locales/aw3_supporters.csv'
-foreach ($path in @($data, $qr, $window, $item, $service, $tab, $ids, $locale)) {
+foreach ($path in @($data, $qr, $window, $item, $service, $roster, $tab, $ids, $locale)) {
     if (-not (Test-Path -LiteralPath $path)) { throw "missing supporter leaderboard source: $path" }
 }
 $csv = Get-Content -Raw -Encoding UTF8 -LiteralPath $data
-if ($csv -notmatch '(?m)^rank,name,amount,date\r?$') { throw 'supporters.csv header is invalid' }
-$technicalName = -join ([char]0x4e00, [char]0x7c73)
-$technicalDescription = -join (
-    [char]0x63d0, [char]0x4f9b, [char]0x4e86, [char]0x6280,
-    [char]0x672f, [char]0x652f, [char]0x6301, [char]0x548c,
-    [char]0x5e2e, [char]0x52a9, ':', [char]0x5bfb, [char]0x8def,
-    '/', [char]0x5927, [char]0x6b65, [char]0x957f, [char]0x8c03,
-    [char]0x5ea6, [char]0x5668)
-if ($csv -notmatch ('(?m)^1,' + [regex]::Escape($technicalName) + ',,,' +
-        [regex]::Escape($technicalDescription) + '\r?$')) {
-    throw 'technical support entry is missing or outdated'
+if ($csv -notmatch '(?m)^rank,name,amount,date(?:,description(?:,contribution_weight)?)?\r?$') {
+    throw 'supporters.csv header is invalid'
 }
-if ($csv -notmatch '(?m)^2,Justin,80,2026-08-19\r?$') {
-    throw 'Justin supporter entry is missing or outdated'
+# Compile both shipped readers: leaderboard rows share the card roster parser.
+$harness = @'
+namespace AncientWarfare3 {
+    public class ModClass {
+        public static ModClass Instance { get; } = new ModClass();
+        public Declaration Declaration { get; } = new Declaration();
+        public Declaration GetDeclaration() => Declaration;
+    }
+    public class Declaration { public string FolderPath; }
 }
-if ([regex]::Matches($csv, '(?m)^\d+,Justin,[^,\r\n]+,[^\r\n]+\r?$').Count -ne 1) {
-    throw 'supporters.csv must contain exactly one Justin entry'
-}
-if ($csv -notmatch '(?m)^18,\u963f\u5df4,10,2026-08-19\r?$') {
-    throw 'Aba supporter entry is missing or outdated'
-}
-if ($csv -notmatch '(?m)^10,\u672a\u660e\u5929\u900d\u9065\u884c,20\.00,2026-08-02\r?$') {
-    throw 'supporter entry 9 is missing'
-}
-if ($csv -notmatch '(?m)^11,\u963f\u826f,50,2026-08-04\r?$') {
-    throw 'supporter entry 10 is missing'
-}
-if ($csv -notmatch '(?m)^12,MO,10,2026-08-04\r?$') {
-    throw 'supporter entry 11 is missing'
-}
-foreach ($requiredRow in @(
-        '(?m)^3,Jake,20,',
-        '(?m)^4,Au,10,',
-        '(?m)^5,[^,]+,5,',
-        '(?m)^6,[^,]+,10,',
-        '(?m)^7,Beluga,15,',
-        '(?m)^8,Coherence,22\.90,',
-        '(?m)^9,[^,]+,25,')) {
-    if ($csv -notmatch $requiredRow) {
-        throw "supporter entry is missing: $requiredRow"
+namespace AncientWarfare3.ui {
+    public static class SupporterDataCheck {
+        public static void Run(string csvPath) {
+            ModClass.Instance.Declaration.FolderPath = System.IO.Path.GetDirectoryName(csvPath);
+            var expected = content.supporters.SupporterRosterData.Parse(System.IO.File.ReadAllLines(csvPath));
+            var actual = SupporterLeaderboardData.Read();
+            if (expected.Count == 0 || expected.Count != actual.Count)
+                throw new System.Exception("Leaderboard must include every shared-roster supporter.");
+            for (int i = 0; i < expected.Count; i++) {
+                var a = expected[i]; var b = actual[i];
+                var amount = a.Amount == "" && a.Description == "" ? "-" : a.Amount;
+                var date = a.Date == "" && a.Description == "" ? "-" : a.Date;
+                if (a.Rank != b.Rank || a.Name != b.Name || amount != b.Amount ||
+                    date != b.Date || a.Description != b.Description)
+                    throw new System.Exception("Leaderboard differs from shared roster at rank " + a.Rank);
+            }
+            string folder = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                "aw3-supporter-check-" + System.Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(folder);
+            try {
+                ModClass.Instance.Declaration.FolderPath = folder;
+                if (SupporterLeaderboardData.Read().Count != 0)
+                    throw new System.Exception("Missing shared roster must not resurrect an obsolete embedded roster.");
+                System.IO.File.WriteAllLines(System.IO.Path.Combine(folder, SupporterLeaderboardData.FileName), new[] {
+                    "rank,name,amount,date,description,contribution_weight", "# comment",
+                    "2,Technical,,,Artwork,80", "1,\"Name, with comma\",12.50,2026-08-19",
+                    "3,Unspecified,,," });
+                var parsed = SupporterLeaderboardData.Read();
+                var roster = content.supporters.SupporterRosterData.Read();
+                if (parsed.Count != 3 || parsed[0].Name != "Name, with comma" ||
+                    parsed[0].Amount != "12.50" || parsed[1].Description != "Artwork" ||
+                    parsed[1].Amount != "" || parsed[1].Date != "" ||
+                    parsed[2].Amount != "-" || parsed[2].Date != "-" ||
+                    roster[1].ContributionWeight != "80")
+                    throw new System.Exception("Shared parsing must preserve quotes, contribution weights and display placeholders.");
+            } finally {
+                ModClass.Instance.Declaration.FolderPath = null;
+                System.IO.Directory.Delete(folder, true);
+            }
+        }
     }
 }
-$source = Get-Content -Raw -Encoding UTF8 -LiteralPath $service
-if ($source -notmatch ('(?s)Rank = 1,\s*Name = "' +
-        [regex]::Escape($technicalName) + '",\s*Amount = "",\s*Date = "",\s*Description = "' +
-        [regex]::Escape($technicalDescription) + '"')) {
-    throw 'technical support fallback is missing or outdated'
-}
-if ($source -notmatch '(?s)Rank = 2,\s*Name = "Justin",\s*Amount = "80",\s*Date = "2026-08-19"') {
-    throw 'Justin supporter fallback is missing or outdated'
-}
-if ($source -notmatch '(?s)Rank = 18,\s*Name = "\u963f\u5df4",\s*Amount = "10",\s*Date = "2026-08-19"') {
-    throw 'Aba supporter fallback is missing or outdated'
-}
-$builtIn = [regex]::Match(
-    $source,
-    '(?s)private static readonly IReadOnlyList<SupporterLeaderboardEntry> BuiltIn\s*=\s*new List<SupporterLeaderboardEntry>\s*\{(?<entries>.*?)\n\s*\};')
-if (-not $builtIn.Success -or
-    [regex]::Matches($builtIn.Groups['entries'].Value, 'Name = "Justin"').Count -ne 1) {
-    throw 'built-in supporter data must contain exactly one Justin entry'
-}
-foreach ($required in @(
-        'supporters.csv',
-        'Name = "Jake"',
-        'Name = "Beluga"',
-        'Amount = "15"',
-        'Amount = "20.00"',
-        'Parse(')) {
-    if ($source -notmatch [regex]::Escape($required)) { throw "supporter data fallback missing: $required" }
-}
-if ($source -notmatch 'Name = "\u963f\u826f"') {
-    throw 'supporter data fallback entry 10 is missing'
-}
-if ($source -notmatch 'Name = "MO"') {
-    throw 'supporter data fallback entry 11 is missing'
-}
-if ($source -notmatch [regex]::Escape('Name = "' + $technicalName + '"') -or
-    $source -notmatch [regex]::Escape('Description = "' + $technicalDescription + '"')) {
-    throw 'supporter data technical support fallback is missing'
+'@
+$harnessPath = Join-Path ([IO.Path]::GetTempPath()) ("aw3-supporter-" + [guid]::NewGuid().ToString('N') + '.cs')
+try {
+    [IO.File]::WriteAllText($harnessPath, $harness)
+    Add-Type -Path @($roster, $service, $harnessPath)
+    [AncientWarfare3.ui.SupporterDataCheck]::Run($data)
+} finally {
+    Remove-Item -LiteralPath $harnessPath -ErrorAction SilentlyContinue
 }
 $itemSource = Get-Content -Raw -Encoding UTF8 -LiteralPath $item
 foreach ($required in @('decimal.TryParse', 'amountPrefix + amount', 'Description', 'description')) {

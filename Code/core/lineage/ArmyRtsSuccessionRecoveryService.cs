@@ -34,7 +34,7 @@ namespace AncientWarfare3.core.lineage
             bool pFromLoad = false)
         {
             long completedKingId = CompletedKingByKingdom.TryGetValue(
-                pKingdom?.id ?? -1L, out long completed) ? completed : -1L;
+                pKingdom?.data?.id ?? -1L, out long completed) ? completed : -1L;
             bool validKingdom = pKingdom?.data != null &&
                                 !pKingdom.isRekt();
             bool validKing = pKing?.data != null && pKing.isAlive() &&
@@ -48,7 +48,6 @@ namespace AncientWarfare3.core.lineage
 
         internal static void ProcessAuthorityCycle()
         {
-            if (_authorityCycle < long.MaxValue) _authorityCycle++;
             ProcessPendingRecoveries(
                 ArmyRtsSuccessionRecoveryRules.MaximumArmiesPerCycle,
                 pRequireRuntimeCommit: true);
@@ -77,13 +76,15 @@ namespace AncientWarfare3.core.lineage
         {
             if (pRequireRuntimeCommit &&
                 !ArmyRtsRuntimeMode.ShouldCommit) return 0;
+            // Both native and Large scheduling enter here. The retry clock
+            // must advance even when the caller supplies its own work budget.
+            if (_authorityCycle < long.MaxValue) _authorityCycle++;
             DiscoverMissionContinuity();
             int limit = System.Math.Max(0, pMaximum);
             int processed = ProcessPendingCaptains(limit);
             processed += ProcessPendingLowForceArmies(
                 System.Math.Max(0, limit - processed));
             int kingdomVisits = Pending.Count;
-            var toRemove = new List<long>();
             while (processed < limit && Pending.Count > 0 &&
                    kingdomVisits-- > 0)
             {
@@ -99,7 +100,7 @@ namespace AncientWarfare3.core.lineage
                 Kingdom kingdom = FindKingdom(kingdomId);
                 if (!IsCurrent(kingdom, work))
                 {
-                    toRemove.Add(kingdomId);
+                    Pending.Remove(kingdomId);
                     continue;
                 }
 
@@ -127,11 +128,14 @@ namespace AncientWarfare3.core.lineage
                 }
                 if (!complete) break;
                 CompletedKingByKingdom[kingdomId] = work.KingId;
-                toRemove.Add(kingdomId);
+                // Remove completed work before selecting the next kingdom.
+                // A callback may install a newer successor while this work
+                // runs; leave that replacement entry queued.
+                if (Pending.TryGetValue(kingdomId, out Work current) &&
+                    ReferenceEquals(current, work))
+                    Pending.Remove(kingdomId);
                 KingdomWarDirectorService.QueueArmyChanged(kingdom);
             }
-            for (int i = 0; i < toRemove.Count; i++)
-                Pending.Remove(toRemove[i]);
             return processed;
         }
 
@@ -221,26 +225,42 @@ namespace AncientWarfare3.core.lineage
         {
             if (pMission == null || pKingdom?.data == null ||
                 pMission.WarId < 0L ||
-                !MissingArmyRecoveryQueued.Add(pMission.ArmyId)) return;
+                MissingArmyRecoveryQueued.Contains(pMission.ArmyId)) return;
             City source = pKingdom.capital;
             if (source?.data == null && pKingdom.cities?.Count > 0)
                 source = pKingdom.cities[0];
             if (source?.data == null) return;
             if (ArmyFieldIndexService.TryGetCityArmy(source, out _)) return;
-            TemporaryLevyService.RequestOffensiveRecovery(
+            bool accepted = TemporaryLevyService.RequestOffensiveRecovery(
                 pKingdom, source,
                 ArmyLogisticsRules.MinimumOperationalForce,
                 pForceEstablishment: true);
+            // A missing capital or a failed request is temporary. Only a
+            // successfully dispatched establishment request may be coalesced.
+            if (accepted) MissingArmyRecoveryQueued.Add(pMission.ArmyId);
         }
 
         internal static int ProcessPendingCaptains(int pMaximum)
         {
-            int limit = System.Math.Min(System.Math.Max(0, pMaximum),
-                PendingCaptainArmies.Count);
-            int processed = 0;
-            while (processed < limit && PendingCaptainArmies.Count > 0)
+            int limit = System.Math.Max(0, pMaximum);
+            if (limit == 0 || PendingCaptainArmies.Count == 0) return 0;
+            // Failed attempts are requeued. Visit the entry snapshot once so
+            // its lowest ID cannot consume the entire pass and starve peers.
+            var armyIds = new List<long>(System.Math.Min(limit,
+                PendingCaptainArmies.Count));
+            foreach (long armyId in PendingCaptainArmies)
             {
-                long armyId = PendingCaptainArmies.Min;
+                if (CaptainRetryAfterCycle.TryGetValue(armyId,
+                        out long retryAfter) &&
+                    !ArmyRtsSuccessionRecoveryRules.ShouldAttemptCaptainRecovery(
+                        _authorityCycle, retryAfter)) continue;
+                armyIds.Add(armyId);
+                if (armyIds.Count >= limit) break;
+            }
+            int processed = 0;
+            for (int i = 0; i < armyIds.Count; i++)
+            {
+                long armyId = armyIds[i];
                 PendingCaptainArmies.Remove(armyId);
                 Army army = FindArmy(armyId);
                 Kingdom kingdom = AWArmyService.GetIntendedKingdom(army);
@@ -276,9 +296,11 @@ namespace AncientWarfare3.core.lineage
                         wartimeEmergency: wartimeEmergency))
                 {
                     PendingCaptainArmies.Add(armyId);
-                    CaptainRetryAfterCycle[armyId] = _authorityCycle +
-                        ArmyRtsSuccessionRecoveryRules.
-                            CaptainRecoveryRetryCooldownCycles;
+                    int cooldown = ArmyRtsSuccessionRecoveryRules.
+                        CaptainRecoveryRetryCooldownCycles;
+                    CaptainRetryAfterCycle[armyId] =
+                        _authorityCycle > long.MaxValue - cooldown
+                            ? long.MaxValue : _authorityCycle + cooldown;
                     LogCaptainRecovery("captain_recovery_retry", army,
                         "mission=" + missionActive + " emergency=" +
                         wartimeEmergency);

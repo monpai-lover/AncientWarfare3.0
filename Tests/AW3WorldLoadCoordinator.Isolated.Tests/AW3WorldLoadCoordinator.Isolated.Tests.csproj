@@ -8,6 +8,11 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="SavePatchStubs.cs" />
+    <Compile Include="SavePatchTests.cs" />
+    <Compile Include="../../Code/patch/AW_SavePatch.cs" Link="Production/AW_SavePatch.cs" />
+    <Compile Include="../../Code/core/asyncwork/AWSaveBoundaryException.cs" Link="Production/AWSaveBoundaryException.cs" />
+    <Compile Include="../../Code/core/schools/HistoricalSchoolSavePreparation.cs" Link="Production/HistoricalSchoolSavePreparation.cs" />
     <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerWorldLoadModels.cs"
              Link="Production\AW3MultiplayerWorldLoadModels.cs" />
     <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerWorldLoadOperation.cs"

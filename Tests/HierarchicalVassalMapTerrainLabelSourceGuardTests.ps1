@@ -27,7 +27,13 @@ Require $labels 'LocalizedTextManager.current_font' `
     'labels do not use the localized game font'
 Require $labels 'ApplyRuntimeLabel' `
     'native results have no TextMesh publication entry point'
-Forbid $labels 'HierarchicalVassalMapLabelRuntime.ProcessFrame();' `
-    'visible labels still depend on the multi-frame worker runtime'
+Require $service 'PublishNativeCountryLabels();' `
+    'native country draws must publish labels synchronously'
+Require $service 'PublishNativeCityLabels();' `
+    'native city draws must publish labels synchronously'
+Require $labels 'HierarchicalVassalMapLabelRuntime.ProcessFrame();' `
+    'regional and county refresh jobs must retain their bounded worker'
+Require $labels 'RecoverFromProcessFailure();' `
+    'failed background label work must clean up before retry'
 
 Write-Output 'HierarchicalVassalMapTerrainLabelSourceGuard: PASS'

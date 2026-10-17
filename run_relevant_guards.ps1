@@ -1,4 +1,5 @@
-$ErrorActionPreference = 'Continue'
+$ErrorActionPreference = 'Stop'
+# Historical selected checks. For the current full inventory use run_all_checks.ps1.
 $guards = @(
   'ActorRuntimePerformanceSourceGuardTests','ArmyLifecycleRulesTests','ArmyMapInformationMinimapSourceGuardTests',
   'ArmyReplenishmentCompletionSourceGuardTests','ArmyReplenishmentOperationSourceGuardTests','ArmyRtsControllerPerformanceSourceGuard',
@@ -28,13 +29,5 @@ $guards = @(
   ,'CityLeaderVacancyScanBudgetSourceGuard'
   ,'CityBureauImmediateReconcileCaptureSourceGuard'
 )
-$fail = @()
-foreach ($g in $guards) {
-  $p = Join-Path $PSScriptRoot "Tests\$g.ps1"
-  if (-not (Test-Path $p)) { Write-Host "MISSING $g"; continue }
-  try { $global:LASTEXITCODE = 0; & $p *> $null; if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }; }
-  catch { $fail += ,@($g, $_.Exception.Message) }
-}
-Write-Host "=== RAN $($guards.Count) guards ==="
-if ($fail.Count -eq 0) { Write-Host "ALL PASS" }
-else { foreach ($f in $fail) { Write-Host "FAIL $($f[0]): $($f[1])" } }
+& (Join-Path $PSScriptRoot 'run_all_guards.ps1') -CheckNames $guards
+exit $LASTEXITCODE

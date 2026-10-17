@@ -88,12 +88,18 @@ namespace AncientWarfare3.patch
                     {
                         Kingdom currentKingdom = unit.kingdom;
                         Kingdom cityKingdom = unit.city?.kingdom;
+                        // Favorites can outlive a kingdom's disposal. Its id
+                        // getter dereferences data, and getColor needs asset.
+                        if (currentKingdom?.data == null || currentKingdom.asset == null)
+                            currentKingdom = null;
+                        if (cityKingdom?.data == null || cityKingdom.asset == null)
+                            cityKingdom = null;
                         long visualKingdomId = HeirMinimapVisualRules.ResolveVisualKingdomId(
-                        cityKingdom?.id ?? -1L,
-                        currentKingdom?.id ?? -1L);
-                        Kingdom visualKingdom = currentKingdom?.id == visualKingdomId
+                            cityKingdom?.data?.id ?? -1L,
+                            currentKingdom?.data?.id ?? -1L);
+                        Kingdom visualKingdom = currentKingdom?.data?.id == visualKingdomId
                             ? currentKingdom
-                            : cityKingdom?.id == visualKingdomId
+                            : cityKingdom?.data?.id == visualKingdomId
                                 ? cityKingdom
                                 : null;
                         scaleCity = unit.city != null && unit.city.kingdom == visualKingdom

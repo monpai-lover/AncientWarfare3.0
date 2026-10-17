@@ -5,14 +5,27 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants>$(DefineConstants);AW3_RULES_TESTS</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
-    <Compile Include="HistoricalFigureCardDeploymentServiceSourceGuardTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureStoragePathStub.cs" Link="HistoricalFigureStoragePathStub.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardDeploymentServiceSourceGuardTests.cs.txt" Link="HistoricalFigureCardDeploymentServiceSourceGuardTests.cs" />
     <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardAcceptanceSourceGuardTests.cs.txt" Link="HistoricalFigureCardAcceptanceSourceGuardTests.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureDef.cs" Link="Production\HistoricalFigureDef.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureCardModels.cs" Link="Production\HistoricalFigureCardModels.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureCardCatalog.cs" Link="Production\HistoricalFigureCardCatalog.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureCardNarratives.cs" Link="Production\HistoricalFigureCardNarratives.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographyCatalog.cs" Link="Production\HistoricalFigureCardBiographyCatalog.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureCardCuratedBiographies.cs" Link="Production\HistoricalFigureCardCuratedBiographies.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographiesPreQin.cs" Link="Production\HistoricalFigureCardBiographiesPreQin.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographiesHan.cs" Link="Production\HistoricalFigureCardBiographiesHan.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographiesThreeSix.cs" Link="Production\HistoricalFigureCardBiographiesThreeSix.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographiesSuiTang.cs" Link="Production\HistoricalFigureCardBiographiesSuiTang.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographiesFiveSong.cs" Link="Production\HistoricalFigureCardBiographiesFiveSong.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureCardBiographiesYuanMingQing.cs" Link="Production\HistoricalFigureCardBiographiesYuanMingQing.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureCardSupporterSeeds.cs" Link="Production\HistoricalFigureCardSupporterSeeds.cs" />
+    <Compile Include="..\..\Code\content\supporters\SupporterRosterData.cs" Link="Production\SupporterRosterData.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureCardCrates.cs" Link="Production\HistoricalFigureCardCrates.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureCardMinisterSeeds.cs" Link="Production\HistoricalFigureCardMinisterSeeds.cs" />
     <Compile Include="..\..\Code\content\figures\HistoricalFigureCardRecycleRules.cs" Link="Production\HistoricalFigureCardRecycleRules.cs" />
@@ -22,6 +35,10 @@
     <Compile Include="..\..\Code\core\lineage\HistoricalFigureCardRoleRules.cs" Link="Production\HistoricalFigureCardRoleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoricalFigureCardParentageService.cs" Link="Production\HistoricalFigureCardParentageService.cs" />
     <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardCatalogRulesTests.cs.txt" Link="HistoricalFigureCardCatalogRulesTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardRoleRulesTests.cs.txt" Link="HistoricalFigureCardRoleRulesTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardMinisterPoolTests.cs.txt" Link="HistoricalFigureCardMinisterPoolTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardSupporterSeedTests.cs.txt" Link="HistoricalFigureCardSupporterSeedTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\SupporterRosterRulesTests.cs.txt" Link="SupporterRosterRulesTests.cs" />
     <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardCollectionRulesTests.cs.txt" Link="HistoricalFigureCardCollectionRulesTests.cs" />
     <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardDrawRulesTests.cs.txt" Link="HistoricalFigureCardDrawRulesTests.cs" />
     <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalFigureCardDeploymentRulesTests.cs.txt" Link="HistoricalFigureCardDeploymentRulesTests.cs" />
@@ -31,9 +48,6 @@
   <ItemGroup>
     <Reference Include="Newtonsoft.Json">
       <HintPath>D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed\Newtonsoft.Json.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.CoreModule">
-      <HintPath>D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
   </ItemGroup>
 </Project>

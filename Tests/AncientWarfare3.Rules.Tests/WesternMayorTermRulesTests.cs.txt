@@ -127,8 +127,8 @@ internal static class WesternMayorTermRulesTests
         Contains(appointmentWindow,
             "ReadManualAppointmentIncumbentActorId(",
             "appointment window reads the current incumbent before scanning");
-        Contains(appointmentWindow,
-            "ShouldRebaseVacancyTarget(_expectedIncumbentActorId",
+        Equal(true, System.Text.RegularExpressions.Regex.IsMatch(appointmentWindow,
+                @"ShouldRebaseVacancyTarget\(\s*_expectedIncumbentActorId,\s*actualIncumbentActorId\)"),
             "appointment window rebases a stale vacancy into replacement mode");
 
         int processStart = service.IndexOf(
@@ -143,10 +143,11 @@ internal static class WesternMayorTermRulesTests
         int publish = service.IndexOf(
             "PublishCommittedGovernorRotation(pPlan);", processStart,
             StringComparison.Ordinal);
-        Equal(true, commit >= 0 && publish >= 0 && transfer > publish,
+        Equal(true, commit > processStart && publish > commit && transfer > publish,
             "successful rotation commits before biography records are written");
-        Contains(service, "item.FormerCity, item.DestinationCity",
-            "transfer biography receives both former and destination cities");
+        Equal(true, System.Text.RegularExpressions.Regex.IsMatch(service,
+                @"ChronicleEvents\.OnOfficialTransferred\(\s*item\.Actor,\s*pKingdom,\s*item\.Mutation\.State\.OfficeId,\s*item\.FormerCity,\s*item\.DestinationCity,\s*pYear\s*\)"),
+            "transfer biography receives the actor, office, former and destination cities, and year from the committed assignment");
     }
 
     private static void Contains(string source, string expected,

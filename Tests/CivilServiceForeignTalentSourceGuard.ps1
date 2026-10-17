@@ -105,7 +105,7 @@ Reject-Text ($query + $service + $travel) 'setKingdom(' `
     'foreign scholars retain nationality'
 
 Require-Text $qualification `
-    'if (!HasExaminationSystem(pKingdom)) return true;' `
+    'if (!examinationSystem && !nineRankSystem) return true;' `
     'legacy appointments remain open before examination research'
 Require-Text $guest 'GuestOfficePersistence.PrepareStart(' `
     'foreign appointments reuse guest-office atomic persistence'
@@ -118,7 +118,7 @@ Require-Text $guest 'CivilServiceExamRules.CanEnterGuestCandidateIndex(' `
     'guest candidate eligibility preserves teacher or host qualification gate'
 Require-Text $guest 'GuestOfficeSubmissionOutcome submission = TryAppointAndRecord(' `
     'qualified foreign graduates reuse the atomic guest appointment chain'
-Require-Text $guest 'candidate.Actor, pHost, office, residence' `
+Require-Text $guest 'candidate.Actor, pHost, pOfficeId, residence' `
     'qualified foreign graduate identity reaches the atomic guest appointment chain'
 Require-Text $guest '.ResidentTeacherIds(city.data.id, school.Id)' `
     'ordinary teacher guest discovery remains intact'

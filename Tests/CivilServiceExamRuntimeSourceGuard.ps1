@@ -47,6 +47,7 @@ $service = Read-Source 'Code/core/court/CivilServiceExamService.cs'
 $schoolRuntime = Read-Source 'Code/core/schools/HistoricalSchoolRuntime.cs'
 $restorePipeline = Read-Source 'Code/core/multiplayer/AW3RuntimeRestorePipeline.cs'
 $annual = Read-Source 'Code/core/policy/KingdomAnnualWorkService.cs'
+$examCycle = Read-Source 'Code/core/court/ExamCycleService.cs'
 $authority = Read-Source 'Code/core/performance/AWAuthorityCycleService.cs'
 $restore = Read-Source 'Code/core/multiplayer/AW3RuntimeRestorePipeline.cs'
 $recent = Read-Source 'Code/core/policy/RecentFeatureBenchmarkRules.cs'
@@ -72,8 +73,7 @@ foreach ($required in @(
         'EducationScore(membership, pYear)',
         'SafeStat(actor, "intelligence")',
         'CivilServiceExamRules.AgeFitness(',
-        'pActor.data.get(LineageKeys.LINEAGE_STATUS,',
-        'CivilServiceExamRules.ResolveSocialOrigin(',
+        'SocialStandingService.Resolve(pActor)',
         'CivilServiceExamRules.SelectCandidatesWithLocalPriority(')) {
     Require-Text $query $required "bounded candidate query $required"
 }
@@ -88,12 +88,19 @@ foreach ($required in @(
         'command.Parameters.AddWithValue("@limit",')) {
     Require-Text $pool $required "bounded candidate pool SQL $required"
 }
-foreach ($origin in @('NobleOrigin', 'DeclinedNobleOrigin',
-        'CommonerOrigin')) {
-    Require-Pattern $query `
-        "LoadIndexedActorIds\(pKingdomId,\s*CivilServiceExamRules\.${origin},\s*pYear,\s*pMode\)" `
-        "bounded candidate query stratified $origin load"
+Require-Pattern $query `
+    'LoadIndexedActorIds\(pKingdomId,\s*null,\s*pYear,\s*pMode\)' `
+    'bounded candidate query obtains one pool before shared social classification'
+Require-Text $query 'ResolveSocialOrigin(FindActor(actorId))' `
+    'source buckets use live shared social-standing facts'
+foreach ($origin in @('NobleOrigin', 'GentryOrigin', 'DeclinedNobleOrigin')) {
+    Require-Text $query "CivilServiceExamRules.${origin}" `
+        "candidate query includes the $origin bucket"
 }
+Require-Pattern $query '\{ noble, gentry, declined, commoner \}' `
+    'candidate query interleaves all four social-standing buckets'
+Require-Text $pool 'bool filterByOrigin = !string.IsNullOrEmpty(pSocialOrigin);' `
+    'the shared pool can bypass obsolete archive-only social classification'
 Require-Text $query 'CivilServiceExamRules.InterleaveCandidateSources(sources,' `
     'bounded candidate query interleaves all social sources'
 Require-Text $rules `
@@ -151,7 +158,7 @@ foreach ($required in @(
         'LineageKeys.COURT_DOMINANT_SCHOOL',
         'RulerExamAbility(pKingdom.king)',
         'CivilServiceExamPersistence.LoadFinalRankingCandidates(',
-        'CourtService.FillVacanciesAfterCivilServiceExam(',
+        'CourtVacancyReconciliationService.CandidatePoolChanged(',
         'CivilServiceExamPersistence.LoadDueSession(',
         'CivilServiceExamCandidateQuery.Build(',
         'public static void ClearRuntime()',
@@ -180,8 +187,12 @@ Reject-Text $rankingSource 'MandateService.IsMandateKingdom(kingdom)' `
 Reject-Text $rankingSource 'KingdomTitleService.IsEmperor(kingdom)' `
     'player ranking must not reclassify a frozen sitting from current title'
 
-Require-Text $annual 'CivilServiceExamService.OnKingdomYear(pKingdom);' `
-    'annual examination scheduling'
+Require-Text $annual 'ExamCycleService.OnKingdomYear(pKingdom);' `
+    'annual work delegates examination scheduling to the shared cycle'
+Require-Text $examCycle 'if (!ExamCycleRules.IsCycleYear(year, anchorYear)) return;' `
+    'exam cycle gates annual scheduling on the persisted anchor'
+Require-Text $examCycle 'CivilServiceExamService.OnKingdomYear(pKingdom);' `
+    'the shared cycle dispatches civil-service examinations'
 Require-Text $authority 'CivilServiceExamService.ProcessAuthorityCycle' `
     'authority examination progression'
 Require-Text $authority 'CivilServiceExamService.ClearRuntime();' `

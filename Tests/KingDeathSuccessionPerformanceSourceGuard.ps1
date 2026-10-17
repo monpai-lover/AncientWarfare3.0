@@ -54,9 +54,21 @@ foreach ($forbidden in @('BuildSnapshot(',
     }
 }
 
-if (-not [regex]::IsMatch($mandate,
-        'Actor\s+successor\s*=\s*AuthoritativeSuccessionService\s*\.\s*EnsureRegisteredCandidate\s*\(')) {
-    throw 'dead-king handling must resolve the authoritative successor'
+$registered = $mandate.IndexOf('Actor successor = HeirService.PeekRegisteredHeir(pKingdom);',
+    [StringComparison]::Ordinal)
+$fallback = $mandate.IndexOf('successor = AuthoritativeSuccessionService.EnsureRegisteredCandidate(',
+    [StringComparison]::Ordinal)
+if ($registered -lt 0 -or $fallback -le $registered) {
+    throw 'dead-king handling must try the registered heir before authoritative fallback'
+}
+$registeredPath = $mandate.Substring($registered, $fallback - $registered)
+foreach ($required in @('AW3MultiplayerSuccessionFacade.TryDefer(',
+        'HeirService.PrepareRegisteredHeirForAccession(',
+        '__instance.makeKingAndMoveToCapital(pKingdom, successor);',
+        'return false;')) {
+    if (-not $registeredPath.Contains($required)) {
+        throw "registered-heir fast path must retain its accession contract: $required"
+    }
 }
 if (-not $mandate.Contains('pKingdom.data.timer_new_king > 0f')) {
     throw 'managed succession must preserve the native accession delay'

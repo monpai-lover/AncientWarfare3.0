@@ -61,10 +61,14 @@ namespace AncientWarfare3.core.lineage
         private sealed class PendingDeathSuccession
         {
             public Actor Holder;
+            public long HolderActorId;
+            public string HolderName;
             public NobleTitleSnapshot Held;
             public string HeldDisplayTitle;
             public Actor Successor;
+            public long SuccessorActorId;
             public Kingdom Context;
+            public long ContextKingdomId;
             public NobleTitleSnapshot SuccessorCurrent;
             public int SuccessorRank;
             public bool KeepsHigherTitle;
@@ -882,19 +886,23 @@ namespace AncientWarfare3.core.lineage
             var pending = new PendingDeathSuccession
             {
                 Holder = pHolder,
+                HolderActorId = pHolder.data.id,
+                HolderName = pHolder.getName() ?? "",
                 Held = held,
                 HeldDisplayTitle = GetDisplayTitle(pHolder),
                 Successor = successor,
+                SuccessorActorId = successor?.data?.id ?? -1L,
                 Context = context,
+                ContextKingdomId = context?.data != null ? context.id : -1L,
                 SuccessorCurrent = successorCurrent,
                 SuccessorRank = successorRank,
                 KeepsHigherTitle = keepsHigherTitle
             };
-            PendingDeathSuccessions.TryUpsert(pHolder.data.id, pending);
-            if (!PendingDeathSuccessions.TryProcess(pHolder.data.id,
+            PendingDeathSuccessions.TryUpsert(pending.HolderActorId, pending);
+            if (!PendingDeathSuccessions.TryProcess(pending.HolderActorId,
                     TryProcessPendingDeathSuccession))
                 ModClass.LogWarning("Noble rank succession queued for retry: actor=" +
-                                    pHolder.data.id);
+                                    pending.HolderActorId);
         }
 
         public static bool RetryPendingDeathSuccessionOne()
@@ -917,11 +925,21 @@ namespace AncientWarfare3.core.lineage
         private static bool TryProcessPendingDeathSuccession(
             PendingDeathSuccession pPending)
         {
-            if (!Ready || pPending?.Holder?.data == null) return false;
-            Actor holder = pPending.Holder;
-            Actor successor = pPending.Successor;
-            Kingdom context = pPending.Context;
-            bool canInherit = successor?.data != null && context?.data != null;
+            if (!Ready || pPending == null) return false;
+            // Native corpse cleanup can release or reuse the actor before a DB retry.
+            // Persistence must use the death snapshot, never the pooled actor's new identity.
+            Actor holder = pPending.Holder?.data?.id == pPending.HolderActorId
+                ? pPending.Holder
+                : null;
+            Actor successor = pPending.Successor?.data?.id == pPending.SuccessorActorId
+                ? pPending.Successor
+                : null;
+            Kingdom context = pPending.Context?.data != null &&
+                              pPending.Context.id == pPending.ContextKingdomId
+                ? pPending.Context
+                : null;
+            bool hasSuccessorIdentity = successor?.data != null && context?.data != null;
+            bool canInherit = hasSuccessorIdentity && successor.isAlive() && !successor.isRekt();
             bool shouldInherit = canInherit && !pPending.KeepsHigherTitle;
             long successorGrantId = -1L;
             long successorKingdomId = context?.id ?? pPending.Held.KingdomId;
@@ -937,12 +955,12 @@ namespace AncientWarfare3.core.lineage
                 double now = LineageService.CurTime();
                 using SQLiteTransaction transaction = DB.BeginTransaction();
                 NobleDeathSuccessionCommittedGrant existing = null;
-                if (shouldInherit)
+                if (hasSuccessorIdentity && !pPending.KeepsHigherTitle)
                     NobleDeathSuccessionPersistence
                         .TryReadCommittedInheritance(DB,
                             EnfeoffmentTableItem.GetTableName(),
                             pPending.Held.GrantId, successor.data.id,
-                            holder.data.id, context.id, successorRank,
+                            pPending.HolderActorId, context.id, successorRank,
                             NobleTitleStyle.Male, out existing, transaction);
                 if (existing != null)
                 {
@@ -957,6 +975,20 @@ namespace AncientWarfare3.core.lineage
                 }
                 else
                 {
+                    // No transaction committed for the prior attempt. Other grants may
+                    // have changed this heir's title while the death was waiting to retry.
+                    if (canInherit)
+                    {
+                        pPending.SuccessorCurrent = ReadHot(successor);
+                        pPending.SuccessorRank = NobleRankRules.ResultingInheritedRank(
+                            pPending.SuccessorCurrent.Rank, pPending.Held.Rank);
+                        pPending.KeepsHigherTitle = pPending.SuccessorCurrent.IsActive &&
+                            pPending.SuccessorCurrent.Style == NobleTitleStyle.Male &&
+                            NobleTitleNameRules.ShouldKeepSuccessorTitle(
+                                pPending.SuccessorCurrent.Rank, pPending.Held.Rank);
+                        successorRank = pPending.SuccessorRank;
+                        shouldInherit = !pPending.KeepsHigherTitle;
+                    }
                     HashSet<string> usedTitleNames =
                         ReadActiveTitleNames(transaction);
                     string closeReason = !canInherit
@@ -965,7 +997,7 @@ namespace AncientWarfare3.core.lineage
                             ? "merged_into_higher_title"
                             : "inherited";
                     long inheritedGrantId = CloseActiveGrant(transaction,
-                        holder.data.id, year, now, closeReason);
+                        pPending.HolderActorId, year, now, closeReason);
                     if (inheritedGrantId < 0)
                     {
                         if (shouldInherit)
@@ -1001,9 +1033,10 @@ namespace AncientWarfare3.core.lineage
                                 throw new InvalidOperationException(
                                     "no unused inherited noble title name");
                             InsertActiveGrant(transaction, successorGrantId,
-                                context, holder, successor, successorRank,
+                                context, pPending.HolderActorId,
+                                pPending.HolderName, successor, successorRank,
                                 NobleTitleStyle.Male, successorTitleName,
-                                "eldest_son_inheritance", holder.data.id,
+                                "eldest_son_inheritance", pPending.HolderActorId,
                                 inheritedGrantId, year, now);
                             inherited = true;
                             inheritedActive = true;
@@ -1021,12 +1054,12 @@ namespace AncientWarfare3.core.lineage
 
             ClearProjection(holder);
             if (inherited && inheritedActive && successorGrantId >= 0 &&
-                successor?.data != null)
+                canInherit)
                 Project(successor, successorGrantId, successorKingdomId,
                     successorRank, successorStyle, successorTitleName);
             try
             {
-                if (successor?.data != null)
+                if (canInherit)
                     LineageService.ArchiveActor(successor, pAlive: true);
             }
             catch { }
@@ -1114,6 +1147,20 @@ namespace AncientWarfare3.core.lineage
             string pTitleName, string pReason, long pInheritedFromActorId,
             long pPredecessorGrantId, int pYear, double pNow)
         {
+            InsertActiveGrant(pTransaction, pGrantId, pKingdom,
+                pGrantor?.data?.id ?? -1L,
+                pGrantor?.data != null ? pGrantor.getName() : "",
+                pRecipient, pRank, pStyle, pTitleName, pReason,
+                pInheritedFromActorId, pPredecessorGrantId, pYear, pNow);
+        }
+
+        private static void InsertActiveGrant(SQLiteTransaction pTransaction,
+            long pGrantId, Kingdom pKingdom, long pGrantorActorId,
+            string pGrantorName, Actor pRecipient, int pRank,
+            NobleTitleStyle pStyle, string pTitleName, string pReason,
+            long pInheritedFromActorId, long pPredecessorGrantId,
+            int pYear, double pNow)
+        {
             using var insert = new SQLiteCommand(DB)
                 { Transaction = pTransaction };
             insert.CommandText = "INSERT INTO " +
@@ -1131,9 +1178,9 @@ namespace AncientWarfare3.core.lineage
             insert.Parameters.AddWithValue("@kingdomName",
                 pKingdom.name ?? "");
             insert.Parameters.AddWithValue("@grantor",
-                pGrantor?.data?.id ?? -1L);
+                pGrantorActorId);
             insert.Parameters.AddWithValue("@grantorName",
-                pGrantor?.getName() ?? "");
+                pGrantorName ?? "");
             insert.Parameters.AddWithValue("@actor", pRecipient.data.id);
             insert.Parameters.AddWithValue("@actorName",
                 pRecipient.getName() ?? "");

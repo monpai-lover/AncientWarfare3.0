@@ -20,9 +20,9 @@ internal static class CourtLocalLayoutAndLeaderRepairSourceGuardTests
             "local court summary must have an explicit presentation path");
         Contains(window, "_cityId >= 0L",
             "button layout must distinguish local court context");
-        Contains(leader, "CourtOfficeLayer.City",
+        Contains(governorProjection, "CourtOfficeLayer.City",
             "city leader repair must inspect local-layer officers");
-        Contains(leader, "CourtVacancyReconciliationService.RegisterCityVacancies",
+        Contains(promotion, "CourtVacancyReconciliationService.RegisterCityVacancies",
             "city leader repair must register local vacancies");
         Contains(promotion, "RemoveLeader_Postfix",
             "leader removal must trigger immediate vacancy repair");
@@ -35,8 +35,8 @@ internal static class CourtLocalLayoutAndLeaderRepairSourceGuardTests
         False(localAppointments.Contains("CandidateScanState",
                 StringComparison.Ordinal),
             "local appointment service cannot retain rotating scan state");
-        Contains(courtService,
-            "LocalChiefOfficeResolver.ResolveChiefOffice(pKingdom, pCity)",
+        False(!System.Text.RegularExpressions.Regex.IsMatch(courtService,
+            @"LocalChiefOfficeResolver\.ResolveChiefOffice\(pKingdom,\s*pCity\)"),
             "CourtService exposes the shared local-chief result");
         Contains(localAppointments,
             "LocalChiefOfficeResolver.ResolveOrderedSeats",

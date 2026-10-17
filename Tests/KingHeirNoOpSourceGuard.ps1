@@ -22,7 +22,7 @@ $prepare = Get-Slice `
 $manual = Get-Slice 'public static void StoreSelectedHeir' `
     'public static string ResolveSuccessionModeForCandidate'
 $store = Get-Slice 'private static Actor StoreHeirSelection' `
-    'private static HeirSelection SelectByEffectiveLaw'
+    'internal static bool PrepareRegisteredHeirForAccession'
 
 foreach ($caller in @($refresh, $prepare, $manual)) {
     if ($caller.Contains('ClearOldHeirFlag')) {
@@ -32,11 +32,11 @@ foreach ($caller in @($refresh, $prepare, $manual)) {
 
 $gate = $store.IndexOf('HeirSelectionSignatureRules.IsUnchanged',
     [StringComparison]::Ordinal)
-$clear = $store.IndexOf('ClearOldHeirFlag(pKingdom)',
+$clear = $store.IndexOf('ClearOldHeirFlag(pKingdom, heir?.data?.id ?? -1L)',
     [StringComparison]::Ordinal)
-$firstSideEffect = $store.IndexOf('FormerHeirService.ClearSnapshot',
+$firstSideEffect = $store.IndexOf('NormalizeHeirForRegistration(pKingdom, heir)',
     [StringComparison]::Ordinal)
-if ($gate -lt 0 -or $clear -le $gate -or $firstSideEffect -le $clear) {
+if ($gate -lt 0 -or $firstSideEffect -le $gate -or $clear -le $firstSideEffect) {
     throw 'The unchanged-heir gate must precede registration and heir maintenance.'
 }
 

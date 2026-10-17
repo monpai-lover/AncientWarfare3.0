@@ -40,8 +40,12 @@ Require-Contains $controller 'source.target_attack_city = pTarget;' `
     'The released RTS army anchor city must receive the exact target city.'
 Require-Contains $controller 'source.target_attack_zone = pTarget.hasZones()' `
     'The released RTS army anchor city must receive a target-city attack zone.'
-Require-Contains $controller 'currentCity == target' `
-    'Entering the selected enemy city must hand off even before a hostile-unit scan observes a defender.'
+Require-Contains $controller 'bool exact = currentZone?.city == pTarget;' `
+    'Target-territory detection must recognize the selected city directly.'
+Require-Match $controller 'bool insideTarget = IsInsideTargetTerritory\(captain, target\);' `
+    'The combat lifecycle must use the shared target-territory detection.'
+Require-Match $controller 'ResolveCombatControl\(\s*ArmyRtsWarDoctrine\.Current, lifecycle\.Phase,\s*withdrawalRequired, insideTarget, targetIsEnemy,\s*objectiveOpen,' `
+    'Entering the selected enemy city must publish capture metadata independently of hostile-unit scan results.'
 Require-Contains $retreat 'PrepareForRetreatSelection(pArmy)' `
     'Retreat selection must cancel the old route before asynchronous candidate selection.'
 Require-Contains $controller 'runtime.NoSafeRetreat)' `
@@ -56,7 +60,9 @@ Require-Contains $controller 'StandingArmyPeacetimeService.RefreshJob(actor);' `
     'Released standing soldiers must be evaluated for the peacetime patrol job.'
 Require-Match $controller 'ShouldHandoffObjective\([\s\S]{0,420}Invalidate\(pArmyId\)' `
     'A completed objective must end its RTS mission before patrol can own the actor.'
-Require-Match $controller 'target_control_event[\s\S]{0,480}Invalidate\(armyId\)' `
+$targetCompletion = [regex]::Match($controller,
+    '(?s)public static void OnTargetCompleted\(City pTargetCity\)(?<body>.*?)\r?\n        (?:public|private|internal) static').Groups['body'].Value
+Require-Match $targetCompletion 'target_control_event[\s\S]*Invalidate\(armyId\)' `
     'City-control completion must end every matching RTS mission before patrol can own the actor.'
 Require-Contains $controller 'RoyalGuardService.EnsureProtectKingTask(pActor);' `
     'RTS release must restore royal guards to protect-the-king behavior.'
@@ -69,8 +75,12 @@ Require-Contains (Get-Content -Raw (Join-Path $repo 'Code\core\lineage\AWArmyRol
     'Royal Guard captains must never become RTS-owned, including kings and leaders.'
 Require-Contains $rules 'ShouldAllowVanillaCityAttack(' `
     'Only a persisted VanillaCombat lifecycle phase may release a target city.'
-Require-Contains $runner 'ConfigurePriorityOnly(batch, job,' `
-    'Skipped large-scheduler movement batches must retain a restricted RTS path pulse.'
+Require-Contains $runner 'ArmyMilitaryMovementPriorityIndex.CopySnapshot(militaryP0ActorIds);' `
+    'The dedicated military P0 stage must take its own actor snapshot independently of ordinary movement batches.'
+Require-Contains $runner 'RunMilitaryP0Chunk(elapsed);' `
+    'Large scheduling must execute the dedicated military movement stage.'
+Require-Match $runner 'ProcessMilitaryP0Actor\([\s\S]*actor\.b5_checkPathMovement\(cycleElapsed\);' `
+    'The military P0 stage must advance native path movement when ordinary movement batches are skipped.'
 Require-Contains $controller 'TrySubmitMemberObjectiveRoute(' `
     'RTS members must retain their independent objective routes.'
 Require-Contains $runner 'ArmyMilitaryMovementPriorityIndex.WasProcessed(' `

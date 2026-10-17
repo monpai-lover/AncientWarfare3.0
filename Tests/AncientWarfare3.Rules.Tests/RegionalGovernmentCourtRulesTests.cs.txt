@@ -14,8 +14,10 @@ internal static class RegionalGovernmentCourtRulesTests
             "court pyramid protects regional projections from actor merge");
         string readModel = File.ReadAllText(Path.Combine(root, "Code", "core",
             "court", "CourtReadModelService.cs"));
-        False(readModel.Contains("AddRegionalGovernmentNodes(seeds, pKingdom)"),
-            "central court must not project regional government nodes");
+        True(readModel.Contains("AddRegionalGovernmentNodes(seeds, pKingdom)") &&
+             readModel.Contains("\"regional-folder:\"") &&
+             !readModel.Contains("\"regional-chief:\""),
+            "central court uses presentation-only regional folders, not persisted chief offices");
         False(readModel.Contains("CommanderyChiefNode"),
             "local court must not project a duplicate commandery chief card");
         False(readModel.Contains("commandery-chief:"),

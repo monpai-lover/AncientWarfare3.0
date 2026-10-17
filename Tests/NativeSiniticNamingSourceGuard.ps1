@@ -25,8 +25,10 @@ Forbid $service 'NativeSiniticIdentityMigration' `
     'actor projection must not invoke the removed native Sinitic identity migration'
 
 $lineageService = 'Code/core/lineage/LineageService.cs'
-Forbid $lineageService 'UsesNativeSiniticGenealogy' `
-    'lineage service must not admit the five native Sinitic species as genealogy actors'
+Require $lineageService 'bool UsesCommonGenealogy(Actor pActor)' `
+    'native Sinitic actors must share the common genealogy lifecycle'
+Require $lineageService 'AWNativeSiniticSpeciesRules.IsNativeSiniticSpecies(' `
+    'common genealogy must recognize the exact native Sinitic species catalog'
 Forbid $lineageService 'NativeSiniticIdentityMigration' `
     'lineage service must not invoke the removed native Sinitic identity migration'
 
@@ -40,15 +42,18 @@ foreach ($migration in @(
 }
 
 $manual = 'Code/core/naming/ActorManualRenameService.cs'
-Require $manual 'profile == NamingProfileId.NativeSinitic' `
+Require $manual 'ActorManualRenameRules.ResolveMode(' `
+    'manual rename must use the shared profile-aware mode rules'
+Require 'Code/core/naming/ActorManualRenameRules.cs' `
+    'profile == NamingProfileId.NativeSinitic' `
     'manual rename does not use the surname-first editor for the new profile'
 
 $birth = 'Code/patch/AW_BirthPatch.cs'
-Require $birth 'IsNativeXiaCultureActor(__instance)' `
-    'actor creation boundary changed beyond Xia/civilized-monkey lifecycle'
+Require $birth 'UsesCommonGenealogy(__instance)' `
+    'actor creation must include native Sinitic genealogy'
 $clan = 'Code/patch/AW_ClanEventPatch.cs'
-Require $clan 'IsNativeXiaCultureActor(__instance)' `
-    'clan-change boundary changed beyond Xia/civilized-monkey lifecycle'
+Require $clan 'UsesCommonGenealogy(__instance)' `
+    'clan changes must include native Sinitic genealogy'
 $archive = 'Code/core/lineage/LineageArchiveWriter.cs'
 Require $archive 'IsNativeXiaCultureActor(pActor)' `
     'lineage archive boundary changed beyond Xia/civilized-monkey lifecycle'

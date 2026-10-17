@@ -83,13 +83,24 @@ namespace AncientWarfare3.core.lineage
                 List<Actor> members = ResolveMembers(ReadIds(kingdom));
                 Actor leader = ResolveActor(ReadLong(kingdom,
                     LineageKeys.MANDATE_ISLAND_EXILE_LEADER_ID));
-                if (origin?.data == null || landing?.data == null ||
-                    members.Count == 0 || leader?.data == null)
+                if (origin?.data == null || origin.isRekt() ||
+                    landing?.data == null || members.Count == 0)
                 {
                     Fail(kingdom, "restore_state_invalid");
                     continue;
                 }
-                IslandEscapeService.TryBegin(new IslandEscapeGroupSpec
+                if (leader?.data == null || !members.Contains(leader))
+                    leader = members[0];
+                IslandEscapeStage restoredStage = ReadStage(kingdom) switch
+                {
+                    MandateIslandExileStage.Evaluating => IslandEscapeStage.Evaluating,
+                    MandateIslandExileStage.Boarding => IslandEscapeStage.Boarding,
+                    MandateIslandExileStage.Voyaging => IslandEscapeStage.Voyaging,
+                    MandateIslandExileStage.Landing => IslandEscapeStage.Landing,
+                    MandateIslandExileStage.Founding => IslandEscapeStage.Founding,
+                    _ => IslandEscapeStage.None
+                };
+                if (!IslandEscapeService.TryRestore(new IslandEscapeGroupSpec
                 {
                     GroupKey = "mandate:island:" + kingdom.id,
                     OriginCity = origin,
@@ -101,7 +112,15 @@ namespace AncientWarfare3.core.lineage
                     OnFounded = (next, survivors) => Finish(kingdom, origin,
                         FindCandidate(landing), survivors),
                     OnFailed = (next, reason) => Fail(kingdom, reason)
-                }, out _);
+                }, restoredStage, out IslandEscapeGroupState restored))
+                    Fail(kingdom, "restore_registration_failed");
+                else
+                {
+                    kingdom.data.set(LineageKeys.MANDATE_ISLAND_EXILE_LEADER_ID,
+                        restored.LeaderActorId);
+                    kingdom.data.set(LineageKeys.MANDATE_ISLAND_EXILE_MEMBER_IDS,
+                        string.Join(",", restored.MemberActorIds));
+                }
             }
         }
 

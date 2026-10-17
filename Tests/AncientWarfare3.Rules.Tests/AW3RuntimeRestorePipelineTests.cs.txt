@@ -160,6 +160,7 @@ internal static class AW3RuntimeRestorePipelineTests
             "new AW3RestoreStage(\"ruler_cache\"",
             "new AW3RestoreStage(\"year_names\"",
             "new AW3RestoreStage(\"runtime_cache_reset\"",
+            "new AW3RestoreStage(\"historical_ancestors\"",
             "new AW3RestoreStage(\"feudatories\"",
             "new AW3RestoreStage(\"mandate_phase\"",
             "new AW3RestoreStage(\"royal_asylum\"",
@@ -210,7 +211,17 @@ internal static class AW3RuntimeRestorePipelineTests
         Equal(false, savePatch.Contains(
                 "LineageArchiveManager.Instance.LoadFromSaveDirectory(pPath)"),
             "loadWorld hook does not restore before SmoothLoader completes");
-        Equal(false, savePatch.Contains("catch { }"),
+        string generatedRestore = pipeline.Substring(pipeline.IndexOf(
+            "internal static AW3RestoreResult TryInitializeGeneratedWorld(",
+            StringComparison.Ordinal));
+        OrderedTokens(generatedRestore, new[]
+        {
+            "new AW3RestoreStage(\"archive_create\"",
+            "new AW3RestoreStage(\"runtime_cache_reset\"",
+            "new AW3RestoreStage(\"historical_ancestors\"",
+            "new AW3RestoreStage(\"war_refugees\""
+        }, "generated-world historical ancestor repair follows archive initialization and runtime reset");
+        Equal(false, savePatch.Substring(generatedPostfix).Contains("catch { }"),
             "save patch no longer hides individual reset failures");
     }
 
@@ -254,8 +265,12 @@ internal static class AW3RuntimeRestorePipelineTests
             "coordinator restores AW3 after world completion");
         Contains(coordinator, ".FailWorldLoadFallback(",
             "generated fallback fails a strict operation");
-        Contains(coordinator, ".TryTimeout(DateTime.UtcNow)",
-            "coordinator polls the strict deadline");
+        Contains(coordinator, "Tick(DateTime.UtcNow);",
+            "coordinator polls the strict deadline using the current UTC time");
+        Contains(coordinator, "_operation.TryTimeout(utcNow)",
+            "coordinator expires the strict operation at the polled deadline");
+        Contains(coordinator, "PreservePendingWorldLoad(before)",
+            "terminal operations preserve WorldBox's already dispatched load");
         Contains(coordinator,
             "AWAsyncRuntime.State == AWAsyncLifecycleState.Stopped",
             "an untracked native world still starts the async runtime");

@@ -21,13 +21,19 @@ Require $appointment `
     'local appointments are not read through a city-scoped active query'
 Require $appointment 'AND LAYER=@layer AND ACTIVE=1' `
     'local appointment query is not restricted to active city-layer rows'
-Require $appointment 'TryLoadLocalActorIds\(' `
-    'local vacancies do not use the bounded local candidate pool'
+Require $appointment 'SelectCandidate\(pSession\.StrictCandidates\(' `
+    'local vacancies must use the qualified candidate pool first'
+Require $appointment 'SelectCandidate\(pSession\.FactsCandidates\(' `
+    'local vacancies must retain the validated fallback pool'
+Require $appointment 'CityCandidatePool\.GetOrBuild\(pKingdom' `
+    'local vacancies must reuse the event-maintained city candidate table'
+Require $appointment 'ReservedActorIds.Contains\(pTable.Ids\[index\]\)' `
+    'cached local candidates must recheck session reservations at selection'
 Require $career 'pAllowLocalLowerQualification' `
     'local lower qualification is not an explicit appointment boundary'
 Require $state 'LocalOfficialTermRules\.TermLength\(' `
     'local appointments do not receive finite local terms'
-Require $bureau 'LocalCourtAppointmentService\.ReconcileCity\(' `
+Require $bureau 'LocalCourtAppointmentService\.DiscoverVacancies\(' `
     'annual city slices do not reconcile real local appointments'
 Require $bureau 'OFFICER_ACTOR_IDS' `
     'city bureau state does not persist real officer ids'

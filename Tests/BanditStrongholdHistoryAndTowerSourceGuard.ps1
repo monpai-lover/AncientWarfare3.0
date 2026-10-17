@@ -27,13 +27,17 @@ foreach ($token in @('ResolveTowerAsset(', 'getBuilding("order_watch_tower")',
         'reservedFootprint.Overlaps(',
         'wallPoints.Contains(',
         'CanPlaceGateTower(',
-        'aw_bandit_stronghold_tower_failed',
+        'Bandit gate tower creation skipped at ',
         'World.world.buildings.addBuilding(', 'building.setKingdom(',
         'Towers.Add(', 'RemoveStrongholdTowers(',
-        'World.world.buildings.removeObject(')) {
+        'building.removeBuildingFinal(')) {
     if (-not $service.Contains($token)) {
         throw "Stronghold tower lifecycle is missing $token"
     }
+}
+
+if ($service.Contains('World.world.buildings.removeObject(')) {
+    throw 'Tower disposal must use native final cleanup to release tiles and zone membership'
 }
 
 $nativePlacement =
@@ -65,6 +69,12 @@ $acceptIndex = $candidateSelection.IndexOf('interior = candidate;')
 if ($towerCheckIndex -lt 0 -or $acceptIndex -le $towerCheckIndex) {
     throw 'Each four-zone candidate must validate gate towers before acceptance'
 }
+foreach ($token in @('wallFallbackInterior', 'wallFallbackPlan',
+        'towerTiles = new List<WorldTile>()')) {
+    if (-not $candidateSelection.Contains($token)) {
+        throw "Wall-only fallback for unavailable towers is missing $token"
+    }
+}
 
 $createStart = $service.IndexOf('internal static bool TryCreate(')
 $newCityIndex = $service.IndexOf('newCityEvent(', $createStart)
@@ -80,12 +90,12 @@ if ($createStart -lt 0 -or $newCityIndex -lt 0 -or
 $fallStart = $service.IndexOf('private static bool CompleteFall(')
 $towerRemoveIndex = $service.IndexOf('RemoveStrongholdTowers(', $fallStart)
 $wallRestoreIndex = $service.IndexOf('RestoreWalls(', $fallStart)
-$cityRemoveIndex = $service.IndexOf('World.world.cities.removeObject(',
+$cityRemoveIndex = $service.IndexOf('BanditStrongholdCityDisposalService.Schedule(',
     $fallStart)
 if ($fallStart -lt 0 -or $towerRemoveIndex -lt 0 -or
     $wallRestoreIndex -le $towerRemoveIndex -or
     $cityRemoveIndex -le $wallRestoreIndex) {
-    throw 'Suppression must remove towers before walls and city removal'
+    throw 'Suppression must remove towers before walls and scheduled city disposal'
 }
 
 $events = @('bandit_stronghold_established',

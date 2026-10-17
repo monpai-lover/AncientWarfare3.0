@@ -30,7 +30,7 @@ namespace AncientWarfare3.content
         public const string DE_JURE_REGION_RETIRE =
             "aw_de_jure_region_retire";
         public const string BanditAmnestyIconPath =
-            "ui/icons/aw_bandit_amnesty";
+            "ui/Icons/aw_bandit_amnesty";
 
         private static Kingdom _pendingVassal;
         private static readonly List<City> SchoolNameplateCandidates = new List<City>();

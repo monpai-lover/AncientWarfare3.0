@@ -1,5 +1,10 @@
 HistoricalFigureCardCatalogRulesTests.Run();
 Console.WriteLine("Historical figure card catalogue rules passed.");
+HistoricalFigureCardRoleRulesTests.Run();
+HistoricalFigureCardMinisterPoolTests.Run();
+HistoricalFigureCardSupporterSeedTests.Run();
+SupporterRosterRulesTests.Run();
+Console.WriteLine("Historical figure role, minister pool, and supporter rules passed.");
 HistoricalFigureCardCollectionRulesTests.Run();
 Console.WriteLine("Historical figure card collection rules passed.");
 HistoricalFigureCardDrawRulesTests.Run();

@@ -145,10 +145,13 @@ internal static class ShiLineageMapModeSourceGuardTests
             "invalid top Shi slots must remain visible as disabled rows");
         Contains(element, "_rows[i].gameObject.SetActive(true);",
             "top Shi slots must keep a stable visible layout");
-        Contains(element, "new Vector2(360f, 150f)",
-            "Shi composition panel must fit its title, dominant row, and top three");
-        Contains(element, "-52f - i * 30f",
-            "Shi rows must start below the dominant label");
+        // The bottom bar uses three side-by-side slots below the two labels.
+        Contains(element, "new Vector2(1080f, 90f)",
+            "Shi composition panel must fit its title, dominant label, and three horizontal slots");
+        Contains(element, "new Vector2(8f + i * 356f, -52f)",
+            "Shi slots must stay below the dominant label without overlapping each other");
+        Contains(element, "new Vector2(344f, 26f)",
+            "Shi slots must leave horizontal gutters and fit inside the bottom bar");
         Contains(element,
             "_labels[i].rectTransform.offsetMax = new Vector2(-52f, 0f);",
             "Shi row labels must reserve the focus-button inset");

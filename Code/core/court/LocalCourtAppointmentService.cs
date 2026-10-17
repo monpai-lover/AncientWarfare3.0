@@ -69,8 +69,10 @@ namespace AncientWarfare3.core.court
                             pStrict: true, pLimit: CountyShortlistLimit));
                 Actor countyCandidate = FirstAvailable(pSession,
                     countyCandidates, pVacancy);
+                bool countyPromotion = false;
                 if (countyCandidate == null)
                 {
+                    countyPromotion = true;
                     CountyFillDiagnostics.Count("fallback_used", 1);
                     countyCandidates = pSession.CountyCandidatesForCity(pCity,
                         CountyCandidateMode.Fallback,
@@ -102,7 +104,7 @@ namespace AncientWarfare3.core.court
                     return CountyFillDiagnostics.Report("all_reserved",
                         CourtVacancyOutcome.NoCandidate);
                 if (!CourtService.TryAssignCountyMagistrate(countyCandidate,
-                        pKingdom, pCity, pVacancy.CountyId, true))
+                        pKingdom, pCity, pVacancy.CountyId, countyPromotion))
                     return CountyFillDiagnostics.Report("assign_failed",
                         CourtVacancyOutcome.TechnicalFailure);
                 // 缓存下来的候选表在本轮内不会重建,所以刚上任的人必须显式登记
@@ -144,8 +146,10 @@ namespace AncientWarfare3.core.court
                 pKingdom, pCity, leaderNativeCityId, pVacancy.OfficeId,
                 pAllowVacancyPromotion: false, pSession, context,
                 pStrict: true);
+            bool vacancyPromotion = false;
             if (candidate == null)
             {
+                vacancyPromotion = true;
                 CountyFillDiagnostics.Count("city_fallback_used");
                 candidate = SelectCandidate(pSession.FactsCandidates(
                         pKingdom,
@@ -162,7 +166,7 @@ namespace AncientWarfare3.core.court
                 bool committed = ManualLocalChiefAppointmentService.TryAppoint(
                     pKingdom, pCity, candidate, () =>
                         CourtService.TryAssignLocalOfficerRecord(candidate,
-                            pKingdom, pCity, pVacancy.OfficeId, true));
+                            pKingdom, pCity, pVacancy.OfficeId, vacancyPromotion));
                 if (committed)
                 {
                     pSession.Reserve(candidate, pVacancy);
@@ -172,7 +176,7 @@ namespace AncientWarfare3.core.court
                     CourtVacancyOutcome.TechnicalFailure;
             }
             if (!CourtService.TryAssignLocalOfficer(candidate, pKingdom,
-                    pCity, pVacancy.OfficeId, true))
+                    pCity, pVacancy.OfficeId, vacancyPromotion))
                 return CountyFillDiagnostics.Report("city_assign_failed",
                     CourtVacancyOutcome.TechnicalFailure);
             // 候选表跨轮持久,刚上任的人必须显式摘出池 —— 他已经有官职了,

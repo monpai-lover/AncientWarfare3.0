@@ -111,9 +111,9 @@ internal static class FramePrioritySchedulerStabilitySourceGuardTests
         string authority = File.ReadAllText(Path.Combine(root,
             "Code/core/performance/AWAuthorityCycleService.cs"));
         Contains(authority,
-            "CourtVacancyReconciliationService.DrainDueRetryTickets(1);");
+            "CourtVacancyReconciliationService.DrainDueRetryTickets(1)");
         Contains(authority,
-            "ProcessAuthorityCycle(1);");
+            "ProcessAuthorityCycle(1)");
         DoesNotContain(authority,
             "ResolveCatchUpItemsPerAuthorityFrame(pending)");
 

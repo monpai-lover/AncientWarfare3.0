@@ -16,6 +16,6 @@ if (-not $workflow.Contains('SyncRegionalTitlesFromInputs')) {
 if ($workflow -match 'text\.Chinese = value;\s*text\.English = value;') {
     throw 'One regional input still overwrites both localized values'
 }
-if (-not $workflow.Contains('_root.anchoredPosition = new Vector2(-530f, 0f)')) { throw 'Local editor offset missing' }
+if (-not $workflow.Contains('CustomCourtWorkflowLayoutRules.Resolve(contentWidth,')) { throw 'Shared responsive editor layout missing' }
 if (-not $workflow.Contains('_root.anchoredPosition = new Vector2(-510f, 0f)')) { throw 'Central-only +20 px offset missing' }
 Write-Output 'PASS: custom court regional editor'

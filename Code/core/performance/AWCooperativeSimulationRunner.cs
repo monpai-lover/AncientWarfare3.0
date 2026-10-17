@@ -456,7 +456,8 @@ namespace AncientWarfare3.core.performance
 
         public bool TryBeginActorPresentationOverlap()
         {
-            if (!AWPerformanceSettings.EnableActorPresentationSnapshots)
+            if (!CanDispatchPresentationWork() ||
+                !AWPerformanceSettings.EnableActorPresentationSnapshots)
                 return false;
 
             if (!AWPerformanceSettings.EnableActorPresentationSnapshots ||
@@ -473,7 +474,8 @@ namespace AncientWarfare3.core.performance
 
         public bool TryBeginBuildingPresentationOverlap()
         {
-            if (!AWPerformanceSettings.EnableWorldObjectPresentationSnapshots)
+            if (!CanDispatchPresentationWork() ||
+                !AWPerformanceSettings.EnableWorldObjectPresentationSnapshots)
                 return false;
 
             if (!AWPerformanceSettings.EnableWorldObjectPresentationSnapshots ||
@@ -651,6 +653,8 @@ namespace AncientWarfare3.core.performance
 
         public void FinishPresentationFrame()
         {
+            if (!CanDispatchPresentationWork()) return;
+
             if (_stage == SimulationStage.Actors &&
                 _actorRunner.WaitingForPresentationDispatch &&
                 _actorRunner.BeginParallelPresentationWork())
@@ -670,6 +674,17 @@ namespace AncientWarfare3.core.performance
                 Interlocked.Increment(
                     ref _buildingPresentationOverlapFallbacks);
             }
+        }
+
+        private bool CanDispatchPresentationWork()
+        {
+            // Rendering may continue after the simulation was paused or its
+            // world changed. Only block new work: read boundaries still join
+            // already running tasks, and saves explicitly drain the cycle.
+            return Config.game_loaded && !SmoothLoader.isLoading() &&
+                   _world != null && ReferenceEquals(_world, World.world) &&
+                   !_world.isPaused() &&
+                   !AW3MultiplayerReplicaScope.IsReplicaSession;
         }
 
         public string GetPresentationOverlapDiagnostics()

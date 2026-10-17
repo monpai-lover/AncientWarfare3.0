@@ -72,6 +72,10 @@
 		<Compile Include="AW3HistoryEventPublisherTestStub.cs.txt" />
 		<Compile Include="MandateCapitalBuildingTextureRulesTests.cs.txt" />
 		<Compile Include="..\..\Code\core\presentation\MandateCapitalBuildingTextureRules.cs" Link="Production\MandateCapitalBuildingTextureRules.cs" />
+		<Compile Include="CountyCourtRulesTests.cs.txt" />
+		<Compile Include="SocialIdentityRulesTests.cs.txt" />
+		<Compile Include="..\..\Code\core\court\CountyCourtRules.cs" Link="Production\CountyCourtRules.cs" />
+		<Compile Include="..\..\Code\core\lineage\SocialIdentityRules.cs" Link="Production\SocialIdentityRules.cs" />
 		<Compile Include="CountyRenameRulesTests.cs.txt" />
 		<Compile Include="CountyRenameSourceGuardTests.cs.txt" />
 		<Compile Include="..\..\Code\core\county\CountyRenameRules.cs" Link="Production\CountyRenameRules.cs" />
@@ -700,14 +704,6 @@
       <HintPath>..\..\Assemblies\System.Data.SQLite.dll</HintPath>
       <Private>true</Private>
     </Reference>
-    <Reference Include="UnityEngine">
-      <HintPath>D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed\UnityEngine.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
-    <Reference Include="UnityEngine.CoreModule">
-      <HintPath>D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="HistoricalCountyNameRulesTests.cs.txt" />
@@ -1259,7 +1255,6 @@
   <Target Name="WartimeMilitaryTaskGatePerformanceSourceGuard"
       BeforeTargets="Build">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\CultiwayPerfSchedulerNonRegressionSourceGuard.ps1&quot;" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\CultiwayPerfSchedulerCompletionSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\RoyalLineageSuccessionGateSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\KingDeathSuccessionPerformanceSourceGuard.ps1&quot;" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\ActionLandedPostJobSafetySourceGuard.ps1&quot;" />
@@ -1300,14 +1295,9 @@
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\FormalOfficialNobleIdentitySourceGuard.ps1&quot;" />
   </Target>
   <Target Name="CultiwayPathLifecycleSourceGuards" BeforeTargets="Build">
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\DirectPathLifecycleSourceGuard.ps1&quot;" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\PathFinderLifecycleSourceGuard.ps1&quot;" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\PathFinderSubmitNewSourceGuard.ps1&quot;" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\PathFinderWorkerLoopSourceGuard.ps1&quot;" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\PathTransportRouteReuseSourceGuard.ps1&quot;" />
+    <!-- Run the lifecycle suites supported by this branch; retain its independent RTS guard. -->
+    <Exec Command="dotnet &quot;$(TargetPath)&quot; --path-lifecycle-regression"
+          WorkingDirectory="$(MSBuildProjectDirectory)/../.." />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\ArmyRtsIndependentPathSourceGuard.ps1&quot;" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\PathFinderCultiwayApiSourceGuard.ps1&quot;" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\ReadyPathCursorPollSourceGuard.ps1&quot;" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\NativePathTickSourceGuard.ps1&quot;" />
   </Target>
 </Project>

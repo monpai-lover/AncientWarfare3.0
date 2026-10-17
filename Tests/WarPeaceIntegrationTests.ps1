@@ -276,9 +276,15 @@ $maintenanceBlock = if ($maintenanceStart -ge 0 -and
         $maintenanceEnd - $maintenanceStart)
 } else { '' }
 if (-not $maintenanceBlock.Contains(
-        'WarRecoveryCursor(pKingdom).Take(1)') -or
-    $maintenanceBlock.Contains('WarSettlementCursor(pKingdom).Take(1)')) {
+        'WarRecoveryCursor(pKingdom).Take(4)') -or
+    $maintenanceBlock.Contains('WarSettlementCursor(') -or
+    -not $maintenanceBlock.Contains('const int recoveryPasses = 4;') -or
+    -not $maintenanceBlock.Contains('i < recoveryPasses')) {
     throw 'settlement recovery must not advance the annual four-war peace cursor'
+}
+if ($proposal -notmatch ('WarRecoveryCursor\s*\(\s*Kingdom pKingdom\s*\)' +
+        '\s*\{\s*return ProposalRuntime\.GetOrAddRecoveryCursor\(')) {
+    throw 'settlement recovery must own a separate bounded runtime cursor'
 }
 $asyncPrepareStart = $proposal.IndexOf(
     'internal static bool TryPrepareAsyncProposalYear(')
@@ -386,13 +392,14 @@ if (-not $proposal.Contains(
         '.AcceptAndExecuteOrResume(')) {
     throw 'outer diplomacy must use the unified peace accept/resume entry'
 }
-if (-not $proposal.Contains(
-        'WarPeaceSettlementService.Instance.RecoverOneForKingdom(')) {
+if ($maintenanceBlock -notmatch
+        'WarPeaceSettlementService\.Instance\s*\.RecoverOneForKingdom\(pKingdom\.id, recoveryWarIds\)') {
     throw 'annual kingdom work must trigger bounded indexed peace recovery'
 }
 if (-not $maintenanceBlock.Contains('WarRecoveryCursor(pKingdom)') -or
-    -not $maintenanceBlock.Contains('.Take(1)')) {
-    throw 'annual peace recovery must rotate exactly one reserved active war'
+    -not $maintenanceBlock.Contains('.Take(4)') -or
+    -not $maintenanceBlock.Contains('recoveryWarIds.Add(war.data.id)')) {
+    throw 'annual peace recovery must rotate a bounded four-war recovery batch'
 }
 if (-not $proposal.Contains(
         'WarPeaceSettlementService.Instance.EvaluateAi(')) {
@@ -621,7 +628,8 @@ if (-not $settlementStore.Contains('REQUESTER_KINGDOM_ID=@kingdom') -or
     -not $settlementStore.Contains('LIMIT @limit') -or
     -not $settlementStore.Contains('AND STATUS IN ') -or
     -not $settlementStore.Contains(
-        "('executing','terms_applied')") -or
+        "('accepted','executing','terms_applied')") -or
+    -not $settlementStore.Contains('Math.Max(1, Math.Min(8, limit))') -or
     -not $settlementStore.Contains(
         "WHERE WAR_ID=@war AND SCOPE_KIND='coalition' AND ") -or
     -not $settlementStore.Contains("STATUS='executed' ")) {
@@ -761,11 +769,15 @@ foreach ($source in @($coalitionTasks, $militaryFacts)) {
 }
 foreach ($needle in @(
         'CoalitionWarTaskService.OnWarStarted(__result);',
-        'CoalitionWarTaskService.OnWarEnded(pWar);',
+        'CoalitionWarTaskService.OnWarEnded(pWar)',
         'CoalitionWarTaskService.OnWarParticipantChanged(')) {
     if (-not $warPatch.Contains($needle)) {
         throw "coalition task lifecycle is missing war hook: $needle"
     }
+}
+if ($warPatch -notmatch ('MeasureWarEndStage\("coalition_war_task",\s*' +
+        '\(\) =>\s*CoalitionWarTaskService\.OnWarEnded\(pWar\)\);')) {
+    throw 'coalition task cleanup must run in the measured war-end lifecycle'
 }
 if (-not $armyController.Contains(
         'CoalitionWarTaskService.OnArmyInvalidated(pArmyId);')) {

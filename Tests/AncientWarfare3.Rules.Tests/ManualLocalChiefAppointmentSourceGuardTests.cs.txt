@@ -37,7 +37,7 @@ internal static class ManualLocalChiefAppointmentSourceGuardTests
         Contains(service,
             "CourtVacancyReconciliationService.RegisterCityVacancies");
         DoesNotContain(window, ".setLeader(");
-        Contains(leader,
+        Contains(Read("Code/patch/AW_PromotionPatch.cs"),
             "CourtVacancyReconciliationService.RegisterCityVacancies");
         DoesNotContain(leader, "pCity.getUnits()");
         DoesNotContain(local, "CandidateScanState");

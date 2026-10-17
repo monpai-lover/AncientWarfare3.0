@@ -7,6 +7,9 @@ internal static class NobleDeathSuccessionRetrySqlTests
     {
         FailedTransactionRemainsPendingAndRetriesExactlyOnce();
         FailedSaveFlushBlocksAndClearDropsPendingState();
+        FailedDeathDoesNotStarveLaterSuccessions();
+        SuccessfulCallbackPreservesReplacement();
+        WorldClearDuringCallbackPreservesNewWorldWork();
     }
 
     private static void FailedTransactionRemainsPendingAndRetriesExactlyOnce()
@@ -67,6 +70,70 @@ internal static class NobleDeathSuccessionRetrySqlTests
         queue.Clear();
         Assert(queue.Count == 0,
             "world clear empties pending noble death cleanup");
+    }
+
+    private static void FailedDeathDoesNotStarveLaterSuccessions()
+    {
+        var queue = new NobleDeathSuccessionRetryQueue<string>();
+        queue.TryUpsert(10L, "blocked");
+        queue.TryUpsert(20L, "second");
+        queue.TryUpsert(30L, "third");
+        var processed = new List<string>();
+        bool Process(string value)
+        {
+            processed.Add(value);
+            if (value == "blocked") throw new InvalidOperationException("transient failure");
+            return true;
+        }
+
+        Assert(!queue.TryProcessOne(Process) && queue.Count == 3,
+            "failed death remains queued without escaping into the simulation loop");
+        Assert(queue.TryProcessOne(Process) && queue.TryProcessOne(Process),
+            "later successful deaths must progress while the first death is unresolved");
+        Assert(queue.Count == 1 && string.Join(",", processed) == "blocked,second,third",
+            "each bounded drain processes one death in fair order");
+        Assert(!queue.TryProcessOne(Process) && processed.Count == 4 && queue.Count == 1,
+            "failed death is retried after other queued deaths");
+        Assert(queue.TryFlushAll(_ => true) && queue.Count == 0,
+            "resolved failure can eventually be flushed for save");
+    }
+
+    private static void SuccessfulCallbackPreservesReplacement()
+    {
+        var queue = new NobleDeathSuccessionRetryQueue<string>();
+        queue.TryUpsert(10L, "old");
+        Assert(queue.TryProcess(10L, value =>
+        {
+            Assert(value == "old", "callback receives the entry being processed");
+            queue.TryUpsert(10L, "new");
+            return true;
+        }) && queue.Count == 1,
+            "completion of old work must not remove a replacement enqueued by its callback");
+        string processed = null;
+        Assert(queue.TryProcessOne(value => { processed = value; return true; }) &&
+            processed == "new" && queue.Count == 0,
+            "replacement remains reachable by the bounded drain");
+    }
+
+    private static void WorldClearDuringCallbackPreservesNewWorldWork()
+    {
+        var queue = new NobleDeathSuccessionRetryQueue<string>();
+        queue.TryUpsert(10L, "old-world");
+        queue.TryUpsert(20L, "discarded-world");
+        Assert(queue.TryProcessOne(_ =>
+        {
+            queue.Clear();
+            queue.TryUpsert(10L, "new-world");
+            return true;
+        }) && queue.Count == 1,
+            "an old callback cannot erase a reused actor id from a new world");
+        string processed = null;
+        Assert(queue.TryFlushAll(value => { processed = value; return true; }) &&
+            processed == "new-world",
+            "world clear removes stale ordering and retains only new work");
+        int calls = 0;
+        Assert(queue.TryProcessOne(_ => { calls++; return true; }) && calls == 0,
+            "cleared world entries cannot reappear after flush");
     }
 
     private static SQLiteConnection OpenDatabase()

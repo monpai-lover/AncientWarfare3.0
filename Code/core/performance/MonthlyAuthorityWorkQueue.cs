@@ -23,6 +23,7 @@ namespace AncientWarfare3.core.performance
         private readonly Queue<MonthlyAuthorityWorkBatch<T>> _pending =
             new Queue<MonthlyAuthorityWorkBatch<T>>();
         private int _lastScheduledMonthKey = int.MinValue;
+        private bool _hasScheduledMonth;
         private int _pendingCount;
 
         internal int PendingCount => _pendingCount;
@@ -30,7 +31,7 @@ namespace AncientWarfare3.core.performance
 
         internal bool ShouldScheduleMonth(int pMonthKey)
         {
-            return _lastScheduledMonthKey == int.MinValue ||
+            return !_hasScheduledMonth ||
                    pMonthKey > _lastScheduledMonthKey;
         }
 
@@ -42,23 +43,26 @@ namespace AncientWarfare3.core.performance
             // before authority work runs. Snapshot the current population once
             // and replay it for each missed month so monthly services do not
             // silently lose pregnancy, policy, levy, or war observations.
-            IReadOnlyList<T> snapshot = pValues as IReadOnlyList<T> ??
-                (pValues == null
-                    ? Array.Empty<T>()
-                    : new List<T>(pValues));
-            long firstCandidate = _lastScheduledMonthKey == int.MinValue
+            // IReadOnlyList only restricts this reference; its owner can still
+            // mutate the underlying list while queued months are draining.
+            IReadOnlyList<T> snapshot = pValues == null
+                ? Array.Empty<T>()
+                : new List<T>(pValues);
+            long firstCandidate = !_hasScheduledMonth
                 ? pMonthKey
                 : (long)_lastScheduledMonthKey + 1L;
             long catchUpFloor = (long)pMonthKey - MaxCatchUpMonths + 1L;
-            int firstMonth = (int)Math.Max(firstCandidate, catchUpFloor);
-            for (int month = firstMonth; month <= pMonthKey; month++)
+            long firstMonth = Math.Max(firstCandidate, catchUpFloor);
+            // A 32-bit inclusive cursor wraps at int.MaxValue and never exits.
+            for (long month = firstMonth; month <= pMonthKey; month++)
             {
                 if (snapshot.Count == 0) continue;
                 _pending.Enqueue(new MonthlyAuthorityWorkBatch<T>(
-                    month, snapshot));
+                    (int)month, snapshot));
                 _pendingCount += snapshot.Count;
             }
             _lastScheduledMonthKey = pMonthKey;
+            _hasScheduledMonth = true;
             return true;
         }
 
@@ -88,6 +92,7 @@ namespace AncientWarfare3.core.performance
         internal void ResetScheduleGate()
         {
             _lastScheduledMonthKey = int.MinValue;
+            _hasScheduledMonth = false;
         }
 
         internal void Clear()

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <DefineConstants>$(DefineConstants);AW3_FACADE_ISOLATED</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../AW3MultiplayerSnapshotFacadeTests.cs"
+             Link="AW3MultiplayerSnapshotFacadeTests.cs" />
+    <Compile Include="../../Code/api/multiplayer/AW3MultiplayerSnapshotFacade.cs"
+             Link="Production/AW3MultiplayerSnapshotFacade.cs" />
+    <Compile Include="../../Code/api/multiplayer/AW3MultiplayerSnapshotError.cs"
+             Link="Production/AW3MultiplayerSnapshotError.cs" />
+    <Compile Include="../../Code/api/multiplayer/AW3MultiplayerSnapshotResult.cs"
+             Link="Production/AW3MultiplayerSnapshotResult.cs" />
+  </ItemGroup>
+</Project>

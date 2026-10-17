@@ -513,20 +513,21 @@ internal static class RuntimePerformanceDiagnosticRulesTests
         int finalizerAttribute = IndexAfter(source, "[HarmonyFinalizer]",
             postfix);
         int finalizer = IndexAfter(source,
-            "private static Exception " +
+            "private static void " +
             "CheckBenchmarkAutoLoadTimeout_Finalizer(Exception __exception)",
             finalizerAttribute);
         int finalizerCall = IndexAfter(source, helperCall, finalizer);
-        int returnException = IndexAfter(source, "return __exception;",
-            finalizerCall);
         int helper = source.IndexOf(
             "private static void CheckPendingBenchmarkAutoLoadTimeout()",
             StringComparison.Ordinal);
 
         True(postfix >= 0 && postfixCall > postfix &&
              finalizerAttribute > postfixCall && finalizer > finalizerAttribute &&
-             finalizerCall > finalizer && returnException > finalizerCall,
+             finalizerCall > finalizer && helper > finalizerCall,
             "normal and exceptional MapBox.Update paths share timeout cleanup");
+        True(finalizer >= 0 && helper > finalizer &&
+             !source.Substring(finalizer, helper - finalizer).Contains("return null"),
+            "the void timeout finalizer preserves the native exception without a HarmonyX rethrow wrapper");
         True(helper >= 0 && helper != postfix && helper != finalizer,
             "timeout state logic has one shared implementation");
     }
