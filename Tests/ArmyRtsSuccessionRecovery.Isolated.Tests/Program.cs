@@ -27,7 +27,10 @@ var tests = new (string Name, Action Test)[]
     ("retreat events preserve valid transfer and removal", () => ArmyServiceBoundaryRuntimeTests.Run("ValidRetreatEvents")),
     ("war-ended synthetic actors clean up without army or return arrival", () => SyntheticDemobilizationRuntimeTests.Run("NoArmyOrArrivalRequired")),
     ("synthetic cleanup preserves its bounded continuation", () => SyntheticDemobilizationRuntimeTests.Run("BoundedBatches")),
-    ("synthetic cleanup preserves permanent and unrelated actors", () => SyntheticDemobilizationRuntimeTests.Run("PermanentAndUnrelatedActorsSurvive"))
+    ("synthetic cleanup preserves permanent and unrelated actors", () => SyntheticDemobilizationRuntimeTests.Run("PermanentAndUnrelatedActorsSurvive")),
+    ("old transport release preserves transferred actors' new paths", () => TransportReleaseRuntimeTests.Run("TransferredMemberKeepsNewPath")),
+    ("transport release ignores detached and invalid roster entries", () => TransportReleaseRuntimeTests.Run("DetachedAndInvalidActorsAreNotCancelled")),
+    ("transport release remains idempotent for current members", () => TransportReleaseRuntimeTests.Run("RepeatedReleaseIsIdempotent"))
 };
 int failed = 0;
 foreach (var test in tests)

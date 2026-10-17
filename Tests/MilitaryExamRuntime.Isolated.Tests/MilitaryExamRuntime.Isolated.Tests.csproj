@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Code/core/court/MilitaryExamService.cs" Link="Production/MilitaryExamService.cs" />
+    <Compile Include="../../Code/core/court/MilitaryExamPersistence.cs" Link="Production/MilitaryExamPersistence.cs" />
+    <Compile Include="../../Code/core/court/MilitaryExamRules.cs" Link="Production/MilitaryExamRules.cs" />
+    <Compile Include="../../Code/core/court/MilitaryEstablishmentRules.cs" Link="Production/MilitaryEstablishmentRules.cs" />
+    <Compile Include="../../Code/core/court/ExamCycleRules.cs" Link="Production/ExamCycleRules.cs" />
+    <Compile Include="../../Code/core/db/MilitaryExamSessionTableItem.cs" Link="Production/MilitaryExamSessionTableItem.cs" />
+    <Compile Include="../../Code/core/db/MilitaryExamCandidateTableItem.cs" Link="Production/MilitaryExamCandidateTableItem.cs" />
+    <Compile Include="../../Code/core/db/MilitaryOfficerRecordTableItem.cs" Link="Production/MilitaryOfficerRecordTableItem.cs" />
+    <Compile Include="../../Code/core/db/AbstractTableItem.cs" Link="Production/AbstractTableItem.cs" />
+    <Compile Include="../../Code/attributes/TableDefAttribute.cs" Link="Production/TableDefAttribute.cs" />
+    <Compile Include="../../Code/attributes/TableItemDefAttribute.cs" Link="Production/TableItemDefAttribute.cs" />
+    <Reference Include="System.Data.SQLite">
+      <HintPath>../../Assemblies/System.Data.SQLite.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

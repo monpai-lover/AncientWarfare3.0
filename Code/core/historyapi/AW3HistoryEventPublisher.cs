@@ -24,8 +24,11 @@ namespace AncientWarfare3.core.historyapi
 
         public static void PublishCommitted(AW3HistoryEvent item)
         {
-            if (!TryAccept(item)) return;
-            Registry.PublishCommitted(item);
+            lock (Gate)
+            {
+                if (!TryAccept(item)) return;
+                Registry.PublishCommitted(item);
+            }
         }
 
         public static void PublishDiplomacy(long recordId, string eventType,
@@ -97,8 +100,8 @@ namespace AncientWarfare3.core.historyapi
             {
                 PublishedIds.Clear();
                 PublishedProjections.Clear();
+                Registry.Clear();
             }
-            Registry.Clear();
         }
 
         public static void PublishHistoryRow(string table, long eventId)

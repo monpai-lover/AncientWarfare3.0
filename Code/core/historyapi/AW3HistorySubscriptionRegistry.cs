@@ -13,6 +13,8 @@ namespace AncientWarfare3.core.historyapi
         private readonly Queue<AW3HistoryEvent> _pending =
             new Queue<AW3HistoryEvent>();
         private int _overflowCount;
+        private long _generation;
+        private bool _draining;
 
         public IDisposable Subscribe(AW3HistorySubscription filter,
             Action<AW3HistoryEvent> handler)
@@ -46,35 +48,56 @@ namespace AncientWarfare3.core.historyapi
         public int Drain(int maximumEvents = 64)
         {
             if (maximumEvents <= 0) return 0;
-            int delivered = 0;
-            while (delivered < maximumEvents)
+            long generation;
+            lock (_gate)
             {
-                AW3HistoryEvent item;
-                Subscription[] subscriptions;
-                lock (_gate)
-                {
-                    if (_pending.Count == 0) break;
-                    item = _pending.Dequeue();
-                    subscriptions = _subscriptions.ToArray();
-                }
-
-                for (int index = 0; index < subscriptions.Length; index++)
-                {
-                    Subscription subscription = subscriptions[index];
-                    if (!subscription.IsActive || !subscription.Filter.Matches(item))
-                        continue;
-                    try { subscription.Handler(item); }
-                    catch { }
-                }
-                delivered++;
+                // A handler may drain again. Finish the current event for all
+                // subscribers before taking the next event from the queue.
+                if (_draining) return 0;
+                _draining = true;
+                generation = _generation;
             }
-            return delivered;
+            int delivered = 0;
+            try
+            {
+                while (delivered < maximumEvents)
+                {
+                    AW3HistoryEvent item;
+                    Subscription[] subscriptions;
+                    lock (_gate)
+                    {
+                        if (generation != _generation || _pending.Count == 0) break;
+                        item = _pending.Dequeue();
+                        subscriptions = _subscriptions.ToArray();
+                    }
+
+                    for (int index = 0; index < subscriptions.Length; index++)
+                    {
+                        Subscription subscription = subscriptions[index];
+                        lock (_gate)
+                            if (generation != _generation) return delivered;
+                        if (!subscription.IsActive || !subscription.Filter.Matches(item))
+                            continue;
+                        try { subscription.Handler(item); }
+                        catch { }
+                    }
+                    delivered++;
+                }
+                return delivered;
+            }
+            finally
+            {
+                lock (_gate) _draining = false;
+            }
         }
 
         public void Clear()
         {
             lock (_gate)
             {
+                _generation++;
+                foreach (Subscription subscription in _subscriptions)
+                    subscription.Deactivate();
                 _pending.Clear();
                 _subscriptions.Clear();
                 _overflowCount = 0;
@@ -99,7 +122,7 @@ namespace AncientWarfare3.core.historyapi
         private sealed class Subscription : IDisposable
         {
             private readonly AW3HistorySubscriptionRegistry _owner;
-            private bool _disposed;
+            private volatile bool _disposed;
 
             public Subscription(AW3HistorySubscription filter,
                 Action<AW3HistoryEvent> handler,
@@ -113,6 +136,8 @@ namespace AncientWarfare3.core.historyapi
             public AW3HistorySubscription Filter { get; }
             public Action<AW3HistoryEvent> Handler { get; }
             public bool IsActive => !_disposed;
+
+            public void Deactivate() => _disposed = true;
 
             public void Dispose()
             {

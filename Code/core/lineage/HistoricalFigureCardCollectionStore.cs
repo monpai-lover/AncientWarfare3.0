@@ -51,7 +51,7 @@ namespace AncientWarfare3.core.lineage
         private const int MaximumDrawHistory = 100;
         private static readonly object Gate = new object();
         private readonly string _path;
-        private HistoricalFigureCardCollectionSnapshot _snapshot;
+        private HistoricalFigureCardCollectionSnapshot _snapshot = EmptySnapshot();
         private bool _loaded;
         private int _revision;
 
@@ -97,7 +97,9 @@ namespace AncientWarfare3.core.lineage
             lock (Gate)
             {
                 if (_loaded) return;
-                _snapshot = ReadSnapshot();
+                HistoricalFigureCardCollectionSnapshot loaded = ReadSnapshot();
+                if (loaded == null) return;
+                _snapshot = loaded;
                 _loaded = true;
                 _revision = 1;
             }
@@ -216,14 +218,16 @@ namespace AncientWarfare3.core.lineage
             EnsureLoaded();
             lock (Gate)
             {
+                if (!_loaded) return false;
                 if (_snapshot.draws.Any(p => p != null &&
                         string.Equals(p.DrawId, pDrawId, StringComparison.Ordinal)))
                     return false;
                 if (!_snapshot.ownedCounts.TryGetValue(pCardId, out int count))
                     count = 0;
-                _snapshot.ownedCounts[pCardId] = checked(count + 1);
-                AddSource(_snapshot, pCardId, pCrateId ?? "", 1);
-                _snapshot.draws.Add(new HistoricalFigureCardDrawRecord
+                HistoricalFigureCardCollectionSnapshot next = Clone(_snapshot);
+                next.ownedCounts[pCardId] = checked(count + 1);
+                AddSource(next, pCardId, pCrateId ?? "", 1);
+                next.draws.Add(new HistoricalFigureCardDrawRecord
                 {
                     drawId = pDrawId,
                     cardId = pCardId,
@@ -231,21 +235,10 @@ namespace AncientWarfare3.core.lineage
                     utc = pUtc ?? "",
                     crateId = pCrateId ?? ""
                 });
-                while (_snapshot.draws.Count > MaximumDrawHistory)
-                    _snapshot.draws.RemoveAt(0);
-                _snapshot.lastUpdatedUtc = pUtc ?? "";
-                if (!TryWriteSnapshot(_snapshot))
-                {
-                    _snapshot.ownedCounts[pCardId] = count;
-                    if (_snapshot.ownedCounts[pCardId] <= 0)
-                        _snapshot.ownedCounts.Remove(pCardId);
-                    RemoveSource(_snapshot, pCardId, pCrateId ?? "", 1);
-                    _snapshot.draws.RemoveAll(p => p != null &&
-                        string.Equals(p.DrawId, pDrawId, StringComparison.Ordinal));
-                    return false;
-                }
-                _revision++;
-                return true;
+                while (next.draws.Count > MaximumDrawHistory)
+                    next.draws.RemoveAt(0);
+                next.lastUpdatedUtc = pUtc ?? "";
+                return TryCommitSnapshot(next);
             }
         }
 
@@ -255,23 +248,16 @@ namespace AncientWarfare3.core.lineage
             EnsureLoaded();
             lock (Gate)
             {
+                if (!_loaded) return false;
                 if (!_snapshot.ownedCounts.TryGetValue(pCardId, out int count) ||
                     count <= 0) return false;
-                if (count == 1) _snapshot.ownedCounts.Remove(pCardId);
-                else _snapshot.ownedCounts[pCardId] = count - 1;
-                string source = SelectAnySource(_snapshot, pCardId);
-                RemoveSource(_snapshot, pCardId, source, 1);
-                string previousUpdatedUtc = _snapshot.lastUpdatedUtc;
-                _snapshot.lastUpdatedUtc = pUtc ?? DateTime.UtcNow.ToString("O");
-                if (TryWriteSnapshot(_snapshot))
-                {
-                    _revision++;
-                    return true;
-                }
-                _snapshot.ownedCounts[pCardId] = count;
-                AddSource(_snapshot, pCardId, source, 1);
-                _snapshot.lastUpdatedUtc = previousUpdatedUtc;
-                return false;
+                HistoricalFigureCardCollectionSnapshot next = Clone(_snapshot);
+                if (count == 1) next.ownedCounts.Remove(pCardId);
+                else next.ownedCounts[pCardId] = count - 1;
+                string source = SelectAnySource(next, pCardId);
+                RemoveSource(next, pCardId, source, 1);
+                next.lastUpdatedUtc = pUtc ?? DateTime.UtcNow.ToString("O");
+                return TryCommitSnapshot(next);
             }
         }
 
@@ -286,6 +272,7 @@ namespace AncientWarfare3.core.lineage
             EnsureLoaded();
             lock (Gate)
             {
+                if (!_loaded) return false;
                 if (_snapshot.draws.Any(p => p != null &&
                         string.Equals(p.DrawId, pRecycleId,
                             StringComparison.Ordinal))) return false;
@@ -325,20 +312,20 @@ namespace AncientWarfare3.core.lineage
                 if (HistoricalFigureCardCrates.Get(outputCrateId) == null)
                     return false;
 
-                HistoricalFigureCardCollectionSnapshot before = Clone(_snapshot);
+                HistoricalFigureCardCollectionSnapshot next = Clone(_snapshot);
                 foreach (HistoricalFigureCardRecycleInput input in inputs)
                 {
-                    int owned = _snapshot.ownedCounts[input.CardId];
-                    if (owned == 1) _snapshot.ownedCounts.Remove(input.CardId);
-                    else _snapshot.ownedCounts[input.CardId] = owned - 1;
-                    RemoveSource(_snapshot, input.CardId, input.CrateId, 1);
+                    int owned = next.ownedCounts[input.CardId];
+                    if (owned == 1) next.ownedCounts.Remove(input.CardId);
+                    else next.ownedCounts[input.CardId] = owned - 1;
+                    RemoveSource(next, input.CardId, input.CrateId, 1);
                 }
-                _snapshot.ownedCounts[pOutputCardId] =
-                    _snapshot.ownedCounts.TryGetValue(pOutputCardId,
+                next.ownedCounts[pOutputCardId] =
+                    next.ownedCounts.TryGetValue(pOutputCardId,
                         out int outputCount) ? outputCount + 1 : 1;
-                AddSource(_snapshot, pOutputCardId, outputCrateId, 1);
+                AddSource(next, pOutputCardId, outputCrateId, 1);
                 string utc = pUtc ?? DateTime.UtcNow.ToString("O");
-                _snapshot.draws.Add(new HistoricalFigureCardDrawRecord
+                next.draws.Add(new HistoricalFigureCardDrawRecord
                 {
                     drawId = pRecycleId,
                     cardId = pOutputCardId,
@@ -346,16 +333,10 @@ namespace AncientWarfare3.core.lineage
                     utc = utc,
                     crateId = outputCrateId
                 });
-                while (_snapshot.draws.Count > MaximumDrawHistory)
-                    _snapshot.draws.RemoveAt(0);
-                _snapshot.lastUpdatedUtc = utc;
-                if (TryWriteSnapshot(_snapshot))
-                {
-                    _revision++;
-                    return true;
-                }
-                _snapshot = before;
-                return false;
+                while (next.draws.Count > MaximumDrawHistory)
+                    next.draws.RemoveAt(0);
+                next.lastUpdatedUtc = utc;
+                return TryCommitSnapshot(next);
             }
         }
 
@@ -372,7 +353,6 @@ namespace AncientWarfare3.core.lineage
 
         private HistoricalFigureCardCollectionSnapshot ReadSnapshot()
         {
-            if (!File.Exists(_path)) return EmptySnapshot();
             try
             {
                 var loaded = JsonConvert.DeserializeObject<
@@ -383,13 +363,33 @@ namespace AncientWarfare3.core.lineage
                 Normalize(loaded);
                 return loaded;
             }
-            catch (Exception error)
+            catch (FileNotFoundException) { return EmptySnapshot(); }
+            catch (DirectoryNotFoundException) { return EmptySnapshot(); }
+            catch (Exception error) when (error is JsonException ||
+                                          error is InvalidDataException)
             {
-                PreserveCorruptFile();
+                if (!PreserveCorruptFile()) return null;
                 TryLogWarning("Historical card collection reset after read failure: " +
                               error.Message);
                 return EmptySnapshot();
             }
+            catch (Exception error) when (error is IOException ||
+                                          error is UnauthorizedAccessException)
+            {
+                // An unreadable file may still hold valid ownership. Leave the
+                // store unloaded so later reads retry and writes cannot replace it.
+                TryLogWarning("Historical card collection read deferred: " +
+                              error.Message);
+                return null;
+            }
+        }
+
+        private bool TryCommitSnapshot(HistoricalFigureCardCollectionSnapshot pNext)
+        {
+            if (!TryWriteSnapshot(pNext)) return false;
+            _snapshot = pNext;
+            _revision++;
+            return true;
         }
 
         private bool TryWriteSnapshot(HistoricalFigureCardCollectionSnapshot pSnapshot)
@@ -422,20 +422,22 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private void PreserveCorruptFile()
+        private bool PreserveCorruptFile()
         {
             try
             {
-                if (!File.Exists(_path)) return;
+                if (!File.Exists(_path)) return false;
                 string backup = _path + ".corrupt";
                 if (File.Exists(backup))
                     backup = _path + "." + DateTime.UtcNow.Ticks + ".corrupt";
                 File.Move(_path, backup);
+                return true;
             }
             catch (Exception error)
             {
                 TryLogWarning("Historical card corrupt-file backup failed: " +
                               error.Message);
+                return false;
             }
         }
 

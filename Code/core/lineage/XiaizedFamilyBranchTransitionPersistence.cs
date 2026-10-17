@@ -30,18 +30,22 @@ namespace AncientWarfare3.core.lineage
     {
         internal XiaizedFamilyBranchTransitionResult(bool pSuccess,
             long pNewShiId, IReadOnlyList<long> pMovedActorIds,
-            string pFailure)
+            string pFailure, string pFamilyName = "", string pClanName = "")
         {
             Success = pSuccess;
             NewShiId = pNewShiId;
             MovedActorIds = pMovedActorIds ?? Array.Empty<long>();
             Failure = pFailure ?? string.Empty;
+            FamilyName = pFamilyName ?? string.Empty;
+            ClanName = pClanName ?? string.Empty;
         }
 
         internal bool Success { get; }
         internal long NewShiId { get; }
         internal IReadOnlyList<long> MovedActorIds { get; }
         internal string Failure { get; }
+        internal string FamilyName { get; }
+        internal string ClanName { get; }
     }
 
     internal static class XiaizedFamilyBranchTransitionPersistence
@@ -61,7 +65,8 @@ namespace AncientWarfare3.core.lineage
             {
                 transaction = pDb.BeginTransaction(IsolationLevel.Serializable);
                 RequireOldBranch(pDb, transaction, pRequest);
-                long newShiId = FindExistingChild(pDb, transaction, pRequest);
+                long newShiId = FindExistingChild(pDb, transaction, pRequest,
+                    out string familyName, out string clanName);
                 if (newShiId < 0L)
                 {
                     newShiId = NextShiId(pDb, transaction);
@@ -70,14 +75,16 @@ namespace AncientWarfare3.core.lineage
                 Inject(pFail,
                     XiaizedFamilyBranchTransitionStage.AfterBranchWrite);
 
-                RebindFounder(pDb, transaction, pRequest, newShiId);
+                RebindFounder(pDb, transaction, pRequest, newShiId,
+                    familyName, clanName);
                 var movedActorIds = new List<long>
                     { pRequest.FounderActorId };
                 Inject(pFail,
                     XiaizedFamilyBranchTransitionStage.AfterActorWrite);
                 transaction.Commit();
                 return new XiaizedFamilyBranchTransitionResult(true,
-                    newShiId, movedActorIds, string.Empty);
+                    newShiId, movedActorIds, string.Empty, familyName,
+                    clanName);
             }
             catch (Exception error)
             {
@@ -127,21 +134,34 @@ namespace AncientWarfare3.core.lineage
 
         private static long FindExistingChild(SQLiteConnection pDb,
             SQLiteTransaction pTransaction,
-            XiaizedFamilyBranchTransitionRequest pRequest)
+            XiaizedFamilyBranchTransitionRequest pRequest,
+            out string pFamilyName, out string pClanName)
         {
+            pFamilyName = pRequest.FamilyName;
+            pClanName = pRequest.ClanName;
             using var command = new SQLiteCommand(pDb)
                 { Transaction = pTransaction };
-            command.CommandText = "SELECT SHI_ID FROM ShiBranch WHERE " +
-                "LINEAGE_ID=@lineage AND PARENT_SHI_ID=@parent AND " +
-                "NAMING_PROFILE='xia' AND SOURCE_TYPE=@source " +
-                "ORDER BY SHI_ID LIMIT 1";
+            // Reusing a branch also reuses its committed identity. A later
+            // relative may live in a different city, and retries can generate
+            // a different fallback name before the live actor is published.
+            command.CommandText = "SELECT b.SHI_ID,b.CLAN_NAME," +
+                "(SELECT a.FAMILY_NAME FROM ActorArchive a " +
+                "WHERE a.SHI_ID=b.SHI_ID AND " +
+                "LENGTH(TRIM(IFNULL(a.FAMILY_NAME,'')))>0 " +
+                "ORDER BY a.ID LIMIT 1) FROM ShiBranch b WHERE " +
+                "b.LINEAGE_ID=@lineage AND b.PARENT_SHI_ID=@parent AND " +
+                "b.NAMING_PROFILE='xia' AND b.SOURCE_TYPE=@source " +
+                "ORDER BY b.SHI_ID LIMIT 1";
             command.Parameters.AddWithValue("@lineage", pRequest.LineageId);
             command.Parameters.AddWithValue("@parent", pRequest.OldShiId);
             command.Parameters.AddWithValue("@source", TransitionSource);
-            object value = command.ExecuteScalar();
-            return value == null || value == DBNull.Value
-                ? -1L
-                : Convert.ToInt64(value);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            if (!reader.Read()) return -1L;
+            string clan = reader.IsDBNull(1) ? "" : reader.GetString(1);
+            string family = reader.IsDBNull(2) ? "" : reader.GetString(2);
+            if (!string.IsNullOrWhiteSpace(clan)) pClanName = clan;
+            if (!string.IsNullOrWhiteSpace(family)) pFamilyName = family;
+            return reader.GetInt64(0);
         }
 
         private static long NextShiId(SQLiteConnection pDb,
@@ -190,7 +210,8 @@ namespace AncientWarfare3.core.lineage
 
         private static void RebindFounder(SQLiteConnection pDb,
             SQLiteTransaction pTransaction,
-            XiaizedFamilyBranchTransitionRequest pRequest, long pNewShiId)
+            XiaizedFamilyBranchTransitionRequest pRequest, long pNewShiId,
+            string pFamilyName, string pClanName)
         {
             using var command = new SQLiteCommand(pDb)
                 { Transaction = pTransaction };
@@ -199,8 +220,8 @@ namespace AncientWarfare3.core.lineage
                 "WHERE ID=@actor AND IS_ALIVE=1 AND " +
                 "(SHI_ID=@old OR SHI_ID=@new)";
             command.Parameters.AddWithValue("@new", pNewShiId);
-            command.Parameters.AddWithValue("@family", pRequest.FamilyName);
-            command.Parameters.AddWithValue("@clan", pRequest.ClanName);
+            command.Parameters.AddWithValue("@family", pFamilyName);
+            command.Parameters.AddWithValue("@clan", pClanName);
             command.Parameters.AddWithValue("@old", pRequest.OldShiId);
             command.Parameters.AddWithValue("@actor",
                 pRequest.FounderActorId);

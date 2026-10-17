@@ -16,6 +16,22 @@
 # Local tests and internal development notes
 /Tests/*
 !/Tests/Directory.Build.targets
+!/Tests/HistoricalFigureCards.Isolated.Tests/
+/Tests/HistoricalFigureCards.Isolated.Tests/*
+!/Tests/HistoricalFigureCards.Isolated.Tests/*.cs
+!/Tests/HistoricalFigureCards.Isolated.Tests/*.csproj
+!/Tests/ArmyMissionPersistence.Isolated.Tests/
+/Tests/ArmyMissionPersistence.Isolated.Tests/*
+!/Tests/ArmyMissionPersistence.Isolated.Tests/*.cs
+!/Tests/ArmyMissionPersistence.Isolated.Tests/*.csproj
+!/Tests/MilitaryExamRuntime.Isolated.Tests/
+/Tests/MilitaryExamRuntime.Isolated.Tests/*
+!/Tests/MilitaryExamRuntime.Isolated.Tests/*.cs
+!/Tests/MilitaryExamRuntime.Isolated.Tests/*.csproj
+!/Tests/HistoryApiRuntime.Isolated.Tests/
+/Tests/HistoryApiRuntime.Isolated.Tests/*
+!/Tests/HistoryApiRuntime.Isolated.Tests/*.cs
+!/Tests/HistoryApiRuntime.Isolated.Tests/*.csproj
 !/Tests/AW3MultiplayerSnapshotFacade.Isolated.Tests/
 /Tests/AW3MultiplayerSnapshotFacade.Isolated.Tests/*
 !/Tests/AW3MultiplayerSnapshotFacade.Isolated.Tests/*.csproj

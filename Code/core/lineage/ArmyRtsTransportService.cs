@@ -907,7 +907,9 @@ namespace AncientWarfare3.core.lineage
             States.Remove(pArmy.id);
             foreach (Actor member in state.Members.Values)
             {
-                if (member?.data == null) continue;
+                // The captured roster can outlive an army reassignment.
+                // Its replacement owner may already have installed a path.
+                if (!IsValidMember(member, pArmy)) continue;
                 try
                 {
                     AWPathMovementBridge.Cancel(member,

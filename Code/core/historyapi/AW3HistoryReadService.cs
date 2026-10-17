@@ -33,7 +33,9 @@ namespace AncientWarfare3.core.historyapi
                     "SUBJECT_NAME,CONTENT," +
                     (source == "PersonBiography" ? "CATEGORY," : "'' AS CATEGORY,") +
                     "CONTEXT_KINGDOM_ID," +
-                    "TARGET_ID,PROJECTION_KEY FROM " + source +
+                    "TARGET_ID,PROJECTION_KEY," +
+                    (source == "PersonBiography" ? "ACTOR_ID" :
+                        source == "KingdomHistory" ? "KINGDOM_ID" : "CITY_ID") + " FROM " + source +
                     " WHERE " + idColumn + "=@id LIMIT 1", db);
                 command.Parameters.AddWithValue("@id", eventId);
                 using SQLiteDataReader reader = command.ExecuteReader();
@@ -49,7 +51,10 @@ namespace AncientWarfare3.core.historyapi
                     YearText = ReadString(reader, 2), EventType = ReadString(reader, 3),
                     SubjectName = ReadString(reader, 4), Content = ReadString(reader, 5),
                     Category = ReadString(reader, 6),
-                    ContextKingdomId = ReadLong(reader, 7), TargetId = ReadLong(reader, 8)
+                    ContextKingdomId = ReadLong(reader, 7), TargetId = ReadLong(reader, 8),
+                    SubjectId = ReadLong(reader, 10),
+                    KingdomId = source == "KingdomHistory"
+                        ? ReadLong(reader, 10) : ReadLong(reader, 7)
                 };
                 return AW3HistoryDtoMapper.ToEvent(row);
             }
@@ -202,9 +207,7 @@ namespace AncientWarfare3.core.historyapi
             if (!ValidCursor(query)) return EmptyPage<AW3OfficialCareerEntry>();
             return AW3HistoryReadConnection.TryRead(db =>
             {
-                var rows = actorId.HasValue
-                    ? ReadCareerByActor(db, actorId.Value, query.Limit)
-                    : OfficialCareerHistoryQuery.Read(db, scope, query.Limit);
+                var rows = ReadCareerRows(db, actorId, scope, query);
                 var items = rows.Select(ToCareer).ToList();
                 return Page(items.Select(item => new HistoryItem<AW3OfficialCareerEntry>(
                     item, new AW3HistoryCursorKey(item.AppointedTime,
@@ -226,21 +229,21 @@ namespace AncientWarfare3.core.historyapi
             var items = new List<HistoryItem<AW3HistoryEvent>>();
             if (query.ActorId >= 0)
             {
-                items.AddRange(ReadBiographyRows(db, query.ActorId)
+                items.AddRange(ReadBiographyRows(db, query.ActorId, query)
                     .Select(row => EventItem(row, AW3HistoryDomains.Biography,
                         "PersonBiography")));
                 AddCareerRows(db, query, items);
             }
             else if (query.CityId >= 0)
             {
-                items.AddRange(ReadChronicleRows(db, "CityHistory", query.CityId)
+                items.AddRange(ReadChronicleRows(db, "CityHistory", query.CityId, query)
                     .Select(row => EventItem(row, AW3HistoryDomains.Chronicle,
                         "CityHistory")));
                 AddCareerRows(db, query, items);
             }
             else if (query.KingdomId >= 0)
             {
-                items.AddRange(ReadChronicleRows(db, "KingdomHistory", query.KingdomId)
+                items.AddRange(ReadChronicleRows(db, "KingdomHistory", query.KingdomId, query)
                     .Select(row => EventItem(row, AW3HistoryDomains.Chronicle,
                         "KingdomHistory")));
                 AddCareerRows(db, query, items);
@@ -249,23 +252,24 @@ namespace AncientWarfare3.core.historyapi
             {
                 if (query.Domain == "" || query.Domain == AW3HistoryDomains.Biography)
                     items.AddRange(ReadAllHistoryRows(db, "PersonBiography",
-                        AW3HistoryDomains.Biography));
+                        AW3HistoryDomains.Biography, query));
                 if (query.Domain == "" || query.Domain == AW3HistoryDomains.Chronicle)
                 {
                     items.AddRange(ReadAllHistoryRows(db, "KingdomHistory",
-                        AW3HistoryDomains.Chronicle));
+                        AW3HistoryDomains.Chronicle, query));
                     items.AddRange(ReadAllHistoryRows(db, "CityHistory",
-                        AW3HistoryDomains.Chronicle));
+                        AW3HistoryDomains.Chronicle, query));
                 }
                 if (query.Domain == "" || query.Domain == AW3HistoryDomains.OfficialCareer)
                     AddCareerRows(db, query, items);
             }
-            if (query.Domain == AW3HistoryDomains.Diplomacy ||
-                query.Domain == "")
+            if ((query.Domain == AW3HistoryDomains.Diplomacy ||
+                 query.Domain == "") && query.ActorId < 0L &&
+                query.CityId < 0L && query.CountyId < 0L && query.OfficeId == "")
             {
                 items.AddRange(ReadDiplomacyItemsOnConnection(db,
                         query.KingdomId >= 0 ? query.KingdomId : (long?)null,
-                        null).Select(item => ToHistoryItem(item.Value)));
+                        null, query).Select(item => ToHistoryItem(item.Value)));
             }
             items = items.Where(item => Matches(item.Key, query) &&
                 (query.Domain == "" || item.Value.Domain == query.Domain) &&
@@ -274,21 +278,38 @@ namespace AncientWarfare3.core.historyapi
         }
 
         private static List<HistoryItem<AW3HistoryEvent>> ReadAllHistoryRows(
-            SQLiteConnection db, string source, string domain)
+            SQLiteConnection db, string source, string domain, AW3HistoryQuery query)
         {
-            var result = new List<HistoryItem<AW3HistoryEvent>>();
+            return ReadHistoryRows(db, source, domain, query).Select(row =>
+                EventItem(row, domain, source)).ToList();
+        }
+
+        private static List<AW3HistoryRow> ReadHistoryRows(
+            SQLiteConnection db, string source, string domain, AW3HistoryQuery query,
+            long? subjectId = null)
+        {
+            var result = new List<AW3HistoryRow>();
             try
             {
                 string sql = source == "PersonBiography"
                     ? "SELECT EVENT_ID,ACTOR_ID,WORLD_TIME,YEAR_PREFIX,EVENT_TYPE," +
                       "SUBJECT_NAME,CONTENT,CATEGORY,AGE_AT_EVENT,IS_KING_AT_EVENT," +
                       "ROLE_SNAPSHOT,CONTEXT_KINGDOM_ID,TARGET_ID,PROJECTION_KEY " +
-                      "FROM PersonBiography ORDER BY WORLD_TIME,EVENT_ID LIMIT 512"
+                      "FROM PersonBiography WHERE 1=1"
                     : "SELECT EVENT_ID," + (source == "CityHistory" ? "CITY_ID" : "KINGDOM_ID") +
                       ",WORLD_TIME,YEAR_PREFIX,EVENT_TYPE,SUBJECT_NAME,CONTENT," +
                       "CONTEXT_KINGDOM_ID,TARGET_ID,PROJECTION_KEY FROM " + source +
-                      " ORDER BY WORLD_TIME,EVENT_ID LIMIT 512";
+                      " WHERE 1=1";
                 using var command = new SQLiteCommand(sql, db);
+                string subjectColumn = source == "PersonBiography" ? "ACTOR_ID" :
+                    source == "KingdomHistory" ? "KINGDOM_ID" : "CITY_ID";
+                if (subjectId.HasValue)
+                {
+                    command.CommandText += " AND " + subjectColumn + "=@subject";
+                    command.Parameters.AddWithValue("@subject", subjectId.Value);
+                }
+                command.CommandText += PageSql(command, query, "WORLD_TIME",
+                    domain, source, "EVENT_ID", "EVENT_TYPE");
                 using SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
@@ -311,12 +332,14 @@ namespace AncientWarfare3.core.historyapi
                     }
                     else
                     {
-                        row.KingdomId = source == "KingdomHistory" ? row.SubjectId : -1L;
+                        row.KingdomId = source == "KingdomHistory" ? row.SubjectId : ReadLong(reader, 7);
                         row.ContextKingdomId = ReadLong(reader, 7);
                         row.TargetId = ReadLong(reader, 8);
                         row.ProjectionKeyText = ReadString(reader, 9);
                     }
-                    result.Add(EventItem(row, domain, source));
+                    if (source == "PersonBiography") row.KingdomId = row.ContextKingdomId;
+                    row.ProjectionKey = row.RecordId;
+                    result.Add(row);
                 }
             }
             catch (SQLiteException) { }
@@ -328,46 +351,55 @@ namespace AncientWarfare3.core.historyapi
         {
             if (query.Domain != "" && query.Domain != AW3HistoryDomains.OfficialCareer)
                 return;
-            string actorFilter = query.ActorId >= 0 ? " AND ACTOR_ID=@actor" : "";
-            string kingdomFilter = query.KingdomId >= 0 ? " AND KINGDOM_ID=@kingdom" : "";
-            string cityFilter = query.CityId >= 0 ? " AND IFNULL(CITY_ID,-1)=@city" : "";
-            string countyFilter = query.CountyId >= 0 ? " AND IFNULL(COUNTY_ID,-1)=@county" : "";
-            string officeFilter = query.OfficeId == "" ? "" : " AND IFNULL(OFFICE_ID,'')=@office";
+            AddCareerEventRows(db, query, target, false);
+            AddCareerEventRows(db, query, target, true);
+        }
+
+        private static void AddCareerEventRows(SQLiteConnection db,
+            AW3HistoryQuery query, List<HistoryItem<AW3HistoryEvent>> target, bool ended)
+        {
+            string source = ended ? "CourtOfficerEnd" : "CourtOfficerAppointment";
+            string type = ended ? "office_ended" : "appointed";
             try
             {
                 using var command = new SQLiteCommand(
                     "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID,ACTOR_NAME,LAYER,OFFICE_ID," +
                     "APPOINTED_YEAR,APPOINTED_TIME,ENDED_YEAR,ENDED_TIME,ACTIVE,END_REASON " +
-                    "FROM CourtOfficer WHERE 1=1" + actorFilter + kingdomFilter +
-                    cityFilter + countyFilter + officeFilter +
-                    " ORDER BY APPOINTED_TIME,OFFICER_ID LIMIT 512", db);
-                if (query.ActorId >= 0) command.Parameters.AddWithValue("@actor", query.ActorId);
-                if (query.KingdomId >= 0) command.Parameters.AddWithValue("@kingdom", query.KingdomId);
-                if (query.CityId >= 0) command.Parameters.AddWithValue("@city", query.CityId);
-                if (query.CountyId >= 0) command.Parameters.AddWithValue("@county", query.CountyId);
-                if (query.OfficeId != "") command.Parameters.AddWithValue("@office", query.OfficeId);
+                    "FROM CourtOfficer WHERE 1=1" + (ended ? " AND ENDED_TIME>=0" : ""), db);
+                AppendCareerFilters(command, query);
+                command.CommandText += PageSql(command, query,
+                    ended ? "ENDED_TIME" : "APPOINTED_TIME", AW3HistoryDomains.OfficialCareer,
+                    source, "OFFICER_ID", "'" + type + "'");
                 using SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
-                {
-                    long officerId = ReadLong(reader, 0);
-                    long kingdomId = ReadLong(reader, 1);
-                    long actorId = ReadLong(reader, 2);
-                    double appointed = ReadDouble(reader, 7, -1d);
-                    int startYear = ReadInt(reader, 6, -1);
-                    AddCareerEvent(target, officerId, actorId, kingdomId,
-                        ReadString(reader, 3), ReadString(reader, 4),
-                        ReadString(reader, 5), appointed, startYear,
-                        "appointed", "", "CourtOfficerAppointment");
-                    double ended = ReadDouble(reader, 9, -1d);
-                    if (ended >= 0d)
-                        AddCareerEvent(target, officerId, actorId, kingdomId,
-                            ReadString(reader, 3), ReadString(reader, 4),
-                            ReadString(reader, 5), ended,
-                            ReadInt(reader, 8, -1), "office_ended",
-                            ReadString(reader, 11), "CourtOfficerEnd");
-                }
+                    AddCareerEvent(target, ReadLong(reader, 0), ReadLong(reader, 2),
+                        ReadLong(reader, 1), ReadString(reader, 3), ReadString(reader, 4),
+                        ReadString(reader, 5), ReadDouble(reader, ended ? 9 : 7, -1d),
+                        ReadInt(reader, ended ? 8 : 6, -1), type,
+                        ended ? ReadString(reader, 11) : "", source);
             }
             catch (SQLiteException) { }
+        }
+
+        private static void AppendCareerFilters(SQLiteCommand command, AW3HistoryQuery query)
+        {
+            foreach (var filter in new[]
+            {
+                ("ACTOR_ID", "@actorFilter", query.ActorId),
+                ("KINGDOM_ID", "@kingdomFilter", query.KingdomId),
+                ("CITY_ID", "@cityFilter", query.CityId),
+                ("COUNTY_ID", "@countyFilter", query.CountyId)
+            })
+                if (filter.Item3 >= 0)
+                {
+                    command.CommandText += " AND " + filter.Item1 + "=" + filter.Item2;
+                    command.Parameters.AddWithValue(filter.Item2, filter.Item3);
+                }
+            if (query.OfficeId != "")
+            {
+                command.CommandText += " AND OFFICE_ID=@officeFilter";
+                command.Parameters.AddWithValue("@officeFilter", query.OfficeId);
+            }
         }
 
         private static void AddCareerEvent(List<HistoryItem<AW3HistoryEvent>> target,
@@ -387,7 +419,7 @@ namespace AncientWarfare3.core.historyapi
         private static AW3HistoryPage<AW3BiographyEntry> ReadBiographyOnConnection(
             SQLiteConnection db, long actorId, AW3HistoryQuery query)
         {
-            var items = ReadBiographyRows(db, actorId).Select(row =>
+            var items = ReadBiographyRows(db, actorId, query).Select(row =>
             {
                 AW3BiographyEntry entry = AW3HistoryDtoMapper.ToBiography(row,
                     row.Age, row.RoleSnapshot, row.WasKing);
@@ -403,7 +435,7 @@ namespace AncientWarfare3.core.historyapi
         private static AW3HistoryPage<AW3ChronicleEntry> ReadKingdomEventsOnConnection(
             SQLiteConnection db, long kingdomId, AW3HistoryQuery query)
         {
-            var items = ReadChronicleRows(db, "KingdomHistory", kingdomId).Select(row =>
+            var items = ReadChronicleRows(db, "KingdomHistory", kingdomId, query).Select(row =>
                 new HistoryItem<AW3ChronicleEntry>(
                     AW3HistoryDtoMapper.ToChronicle(row, "kingdom", -1L),
                     new AW3HistoryCursorKey(row.WorldTime,
@@ -416,7 +448,7 @@ namespace AncientWarfare3.core.historyapi
         private static AW3HistoryPage<AW3ChronicleEntry> ReadCityEventsOnConnection(
             SQLiteConnection db, long cityId, AW3HistoryQuery query)
         {
-            var items = ReadChronicleRows(db, "CityHistory", cityId).Select(row =>
+            var items = ReadChronicleRows(db, "CityHistory", cityId, query).Select(row =>
                 new HistoryItem<AW3ChronicleEntry>(
                     AW3HistoryDtoMapper.ToChronicle(row, "city", cityId),
                     new AW3HistoryCursorKey(row.WorldTime,
@@ -427,25 +459,16 @@ namespace AncientWarfare3.core.historyapi
         }
 
         private static List<AW3HistoryRow> ReadBiographyRows(
-            SQLiteConnection db, long actorId)
+            SQLiteConnection db, long actorId, AW3HistoryQuery query)
         {
-            using var scope = HistoryQuery.EnterBackgroundRead(db);
-            List<HistoryEntry> entries = HistoryQuery.ReadPerson(actorId);
-            return entries.Select(entry => FromHistory(entry,
-                AW3HistoryDomains.Biography, "PersonBiography", actorId,
-                entry.context_kingdom_id)).ToList();
+            return ReadHistoryRows(db, "PersonBiography", AW3HistoryDomains.Biography,
+                query, actorId);
         }
 
         private static List<AW3HistoryRow> ReadChronicleRows(
-            SQLiteConnection db, string source, long id)
+            SQLiteConnection db, string source, long id, AW3HistoryQuery query)
         {
-            using var scope = HistoryQuery.EnterBackgroundRead(db);
-            List<HistoryEntry> entries = source == "CityHistory"
-                ? HistoryQuery.ReadCity(id)
-                : HistoryQuery.ReadKingdom(id);
-            return entries.Select(entry => FromHistory(entry,
-                AW3HistoryDomains.Chronicle, source, id,
-                source == "KingdomHistory" ? id : entry.context_kingdom_id)).ToList();
+            return ReadHistoryRows(db, source, AW3HistoryDomains.Chronicle, query, id);
         }
 
         private static AW3GenealogyEntry ReadActor(SQLiteConnection db, long actorId)
@@ -484,12 +507,12 @@ namespace AncientWarfare3.core.historyapi
                 ? result : new List<AW3GenealogyEntry>();
         }
 
-        private static List<OfficialCareerHistoryRow> ReadCareerByActor(
-            SQLiteConnection db, long actorId, int limit)
+        private static List<OfficialCareerHistoryRow> ReadCareerRows(
+            SQLiteConnection db, long? actorId, OfficialCareerHistoryScope scope,
+            AW3HistoryQuery query)
         {
-            int bounded = Math.Min(AW3HistoryQuery.MaximumLimit,
-                Math.Max(1, limit));
             var result = new List<OfficialCareerHistoryRow>();
+            if (!actorId.HasValue && !scope.IsValid) return result;
             using var command = new SQLiteCommand(
                 "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID,CITY_ID,IFNULL(COUNTY_ID,-1)," +
                 "IFNULL(LAYER,''),IFNULL(OFFICE_ID,''),IFNULL(ACTOR_NAME,'')," +
@@ -497,10 +520,32 @@ namespace AncientWarfare3.core.historyapi
                 "APPOINTED_TIME,IFNULL(RANK_AT_APPOINTMENT,0)," +
                 "IFNULL(LOCAL_GRADE_AT_APPOINTMENT,0) FROM " +
                 CourtOfficerTableItem.GetTableName() +
-                " WHERE ACTOR_ID=@actor ORDER BY APPOINTED_YEAR DESC,APPOINTED_TIME DESC," +
-                "OFFICER_ID DESC LIMIT @limit", db);
-            command.Parameters.AddWithValue("@actor", actorId);
-            command.Parameters.AddWithValue("@limit", bounded);
+                " WHERE 1=1", db);
+            if (actorId.HasValue)
+            {
+                command.CommandText += " AND ACTOR_ID=@actor";
+                command.Parameters.AddWithValue("@actor", actorId.Value);
+            }
+            else
+            {
+                command.CommandText += " AND KINGDOM_ID=@kingdom AND LAYER=@layer AND OFFICE_ID=@office";
+                command.Parameters.AddWithValue("@kingdom", scope.KingdomId);
+                command.Parameters.AddWithValue("@layer", scope.Layer);
+                command.Parameters.AddWithValue("@office", scope.OfficeId);
+                if (scope.HasCity)
+                {
+                    command.CommandText += " AND (CITY_ID=@city OR CITY_ID<0)";
+                    command.Parameters.AddWithValue("@city", scope.CityId);
+                }
+                if (scope.HasCounty)
+                {
+                    command.CommandText += " AND COUNTY_ID=@county";
+                    command.Parameters.AddWithValue("@county", scope.CountyId);
+                }
+            }
+            AppendCareerFilters(command, query);
+            command.CommandText += PageSql(command, query, "APPOINTED_TIME",
+                AW3HistoryDomains.OfficialCareer, "CourtOfficer", "OFFICER_ID");
             using SQLiteDataReader reader = command.ExecuteReader();
             while (reader.Read())
             {
@@ -518,7 +563,7 @@ namespace AncientWarfare3.core.historyapi
         private static AW3HistoryPage<AW3DiplomacyEvent> ReadDiplomacyOnConnection(
             SQLiteConnection db, long? first, long? second, AW3HistoryQuery query)
         {
-            var rows = ReadDiplomacyItemsOnConnection(db, first, second);
+            var rows = ReadDiplomacyItemsOnConnection(db, first, second, query);
             return Page(rows.Where(item => Matches(item.Key, query) &&
                 (query.Domain == "" || query.Domain == AW3HistoryDomains.Diplomacy) &&
                 (query.EventType == "" || item.Value.EventType == query.EventType)), query);
@@ -526,143 +571,73 @@ namespace AncientWarfare3.core.historyapi
 
         private static List<HistoryItem<AW3DiplomacyEvent>>
             ReadDiplomacyItemsOnConnection(SQLiteConnection db, long? first,
-                long? second)
+                long? second, AW3HistoryQuery query)
         {
             var rows = new List<HistoryItem<AW3DiplomacyEvent>>();
-            AddDialogueRows(db, first, second, rows);
-            AddProposalRows(db, first, second, rows);
-            AddMarriageRows(db, first, second, rows);
-            AddOperationRows(db, first, second, rows);
-            AddCoalitionRows(db, first, second, rows);
-            AddSettlementRows(db, first, second, rows);
+            // Query lifecycle projections separately: an old row can have a much
+            // later response/end time, so limiting records first loses events.
+            AddDiplomacySource(db, first, second, query, rows, "DiplomacyDialogue",
+                "EVENT_ID", "KINGDOM_A_ID", "KINGDOM_B_ID", "EVENT_TIME", "EVENT_YEAR",
+                "YEAR_PREFIX", "''", "DETAIL", "'dialogue:' || IFNULL(EVENT_TYPE,'')", "DiplomacyDialogue");
+            AddDiplomacySource(db, first, second, query, rows, "DiplomacyProposal",
+                "PROPOSAL_ID", "REQUESTER_KINGDOM_ID", "RESPONDER_KINGDOM_ID", "CREATED_TIME", "CREATED_YEAR",
+                "REQUEST_YEAR_PREFIX", "STATUS", "''", "'proposal:' || IFNULL(PROPOSAL_TYPE,'')", "DiplomacyProposal");
+            AddDiplomacySource(db, first, second, query, rows, "DiplomacyProposal",
+                "PROPOSAL_ID", "RESPONDER_KINGDOM_ID", "REQUESTER_KINGDOM_ID", "RESPONSE_TIME", "RESPONSE_YEAR",
+                "RESPONSE_YEAR_PREFIX", "STATUS", "RESPONSE_REASON", "'proposal_response'", "DiplomacyProposalResponse",
+                "RESPONSE_TIME>=0");
+            AddDiplomacySource(db, first, second, query, rows, "DiplomaticMarriage",
+                "MARRIAGE_ID", "KINGDOM_A_ID", "KINGDOM_B_ID", "START_TIME", "START_YEAR",
+                "''", "'active'", "''", "'marriage_started'", "DiplomaticMarriageStart");
+            AddDiplomacySource(db, first, second, query, rows, "DiplomaticMarriage",
+                "MARRIAGE_ID", "KINGDOM_A_ID", "KINGDOM_B_ID", "END_TIME", "-1",
+                "''", "'ended'", "''", "'marriage_ended'", "DiplomaticMarriageEnd", "END_TIME>=0");
+            AddDiplomacySource(db, first, second, query, rows, "DiplomaticOperation",
+                "OPERATION_ID", "SOURCE_KINGDOM_ID", "TARGET_KINGDOM_ID", "START_TIME", "START_YEAR",
+                "''", "STATUS", "''", "'operation_started:' || IFNULL(OPERATION_TYPE,'')", "DiplomaticOperationStart");
+            AddDiplomacySource(db, first, second, query, rows, "DiplomaticOperation",
+                "OPERATION_ID", "SOURCE_KINGDOM_ID", "TARGET_KINGDOM_ID", "DUE_TIME", "-1",
+                "''", "STATUS", "RESULT", "'operation_result'", "DiplomaticOperationResult", "IFNULL(RESULT,'')<>''");
+            AddDiplomacySource(db, first, second, query, rows, "DiplomaticCoalition",
+                "COALITION_ID", "MEMBER_A_ID", "MEMBER_B_ID", "START_TIME", "START_YEAR",
+                "''", "'active'", "''", "'coalition_started'", "DiplomaticCoalitionStart");
+            AddDiplomacySource(db, first, second, query, rows, "DiplomaticCoalition",
+                "COALITION_ID", "MEMBER_A_ID", "MEMBER_B_ID", "END_TIME", "-1",
+                "''", "'ended'", "''", "'coalition_ended'", "DiplomaticCoalitionEnd", "END_TIME>=0");
+            AddDiplomacySource(db, first, second, query, rows, "PeaceSettlement",
+                "SETTLEMENT_ID", "WINNER_KINGDOM_ID", "LOSER_KINGDOM_ID", "WORLD_TIME", "-1",
+                "''", "'committed'", "TERMS_TEXT", "'peace_settlement'", "PeaceSettlement");
             return rows;
         }
 
-        private static void AddDialogueRows(SQLiteConnection db, long? first,
-            long? second, List<HistoryItem<AW3DiplomacyEvent>> target)
-        {
-            TryQuery(db, "SELECT EVENT_ID,KINGDOM_A_ID,KINGDOM_B_ID,EVENT_TYPE,DETAIL," +
-                "EVENT_YEAR,EVENT_TIME,YEAR_PREFIX FROM DiplomacyDialogue", first, second,
-                "KINGDOM_A_ID", "KINGDOM_B_ID",
-                (reader, a, b) => AddDiplomacy(target, reader.GetInt64(0),
-                    "dialogue:" + ReadString(reader, 3), a, b, ReadDouble(reader, 6, -1d),
-                    ReadInt(reader, 5, -1), ReadString(reader, 7), "", ReadString(reader, 4),
-                    "DiplomacyDialogue"));
-        }
-
-        private static void AddProposalRows(SQLiteConnection db, long? first,
-            long? second, List<HistoryItem<AW3DiplomacyEvent>> target)
-        {
-            TryQuery(db, "SELECT PROPOSAL_ID,REQUESTER_KINGDOM_ID,RESPONDER_KINGDOM_ID," +
-                "PROPOSAL_TYPE,STATUS,CREATED_YEAR,CREATED_TIME,REQUEST_YEAR_PREFIX," +
-                "RESPONSE_YEAR,RESPONSE_TIME,RESPONSE_YEAR_PREFIX,RESPONSE_REASON FROM DiplomacyProposal",
-                first, second, "REQUESTER_KINGDOM_ID", "RESPONDER_KINGDOM_ID", (reader, a, b) =>
-            {
-                AddDiplomacy(target, reader.GetInt64(0), "proposal:" + ReadString(reader, 3),
-                    a, b, ReadDouble(reader, 6, -1d), ReadInt(reader, 5, -1),
-                    ReadString(reader, 7), ReadString(reader, 4), "",
-                    "DiplomacyProposal");
-                double responseTime = ReadDouble(reader, 9, -1d);
-                if (responseTime >= 0d)
-                    AddDiplomacy(target, reader.GetInt64(0), "proposal_response", b, a,
-                        responseTime, ReadInt(reader, 8, -1), ReadString(reader, 10),
-                        ReadString(reader, 4), ReadString(reader, 11),
-                        "DiplomacyProposalResponse");
-            });
-        }
-
-        private static void AddMarriageRows(SQLiteConnection db, long? first,
-            long? second, List<HistoryItem<AW3DiplomacyEvent>> target)
-        {
-            TryQuery(db, "SELECT MARRIAGE_ID,KINGDOM_A_ID,KINGDOM_B_ID,START_YEAR,START_TIME," +
-                "END_TIME FROM DiplomaticMarriage", first, second,
-                "KINGDOM_A_ID", "KINGDOM_B_ID", (reader, a, b) =>
-            {
-                AddDiplomacy(target, reader.GetInt64(0), "marriage_started", a, b,
-                    ReadDouble(reader, 4, -1d), ReadInt(reader, 3, -1), "", "active", "",
-                    "DiplomaticMarriageStart");
-                double end = ReadDouble(reader, 5, -1d);
-                if (end >= 0d)
-                    AddDiplomacy(target, reader.GetInt64(0), "marriage_ended", a, b,
-                        end, -1, "", "ended", "", "DiplomaticMarriageEnd");
-            });
-        }
-
-        private static void AddOperationRows(SQLiteConnection db, long? first,
-            long? second, List<HistoryItem<AW3DiplomacyEvent>> target)
-        {
-            TryQuery(db, "SELECT OPERATION_ID,SOURCE_KINGDOM_ID,TARGET_KINGDOM_ID,OPERATION_TYPE," +
-                "START_YEAR,START_TIME,DUE_TIME,RESULT,STATUS FROM DiplomaticOperation",
-                first, second, "SOURCE_KINGDOM_ID", "TARGET_KINGDOM_ID", (reader, a, b) =>
-            {
-                AddDiplomacy(target, reader.GetInt64(0), "operation_started:" +
-                    ReadString(reader, 3), a, b, ReadDouble(reader, 5, -1d),
-                    ReadInt(reader, 4, -1), "", ReadString(reader, 8), "",
-                    "DiplomaticOperationStart");
-                if (!string.IsNullOrEmpty(ReadString(reader, 7)))
-                    AddDiplomacy(target, reader.GetInt64(0), "operation_result", a, b,
-                        ReadDouble(reader, 6, -1d), -1, "", ReadString(reader, 8),
-                        ReadString(reader, 7), "DiplomaticOperationResult");
-            });
-        }
-
-        private static void AddCoalitionRows(SQLiteConnection db, long? first,
-            long? second, List<HistoryItem<AW3DiplomacyEvent>> target)
-        {
-            TryQuery(db, "SELECT COALITION_ID,MEMBER_A_ID,MEMBER_B_ID,START_YEAR,START_TIME," +
-                "END_TIME,STATUS FROM DiplomaticCoalition", first, second,
-                "MEMBER_A_ID", "MEMBER_B_ID", (reader, a, b) =>
-            {
-                AddDiplomacy(target, reader.GetInt64(0), "coalition_started", a, b,
-                    ReadDouble(reader, 4, -1d), ReadInt(reader, 3, -1), "", "active", "",
-                    "DiplomaticCoalitionStart");
-                double end = ReadDouble(reader, 5, -1d);
-                if (end >= 0d)
-                    AddDiplomacy(target, reader.GetInt64(0), "coalition_ended", a, b,
-                        end, -1, "", "ended", "", "DiplomaticCoalitionEnd");
-            });
-        }
-
-        private static void AddSettlementRows(SQLiteConnection db, long? first,
-            long? second, List<HistoryItem<AW3DiplomacyEvent>> target)
-        {
-            TryQuery(db, "SELECT SETTLEMENT_ID,WINNER_KINGDOM_ID,LOSER_KINGDOM_ID," +
-                "WORLD_TIME,TERMS_TEXT FROM PeaceSettlement", first, second,
-                "WINNER_KINGDOM_ID", "LOSER_KINGDOM_ID",
-                (reader, a, b) => AddDiplomacy(target, reader.GetInt64(0),
-                    "peace_settlement", a, b, ReadDouble(reader, 3, -1d), -1,
-                    "", "committed", ReadString(reader, 4), "PeaceSettlement"));
-        }
-
-        private static void TryQuery(SQLiteConnection db, string sql, long? first,
-            long? second, string firstColumn, string secondColumn,
-            Action<SQLiteDataReader, long, long> add)
+        private static void AddDiplomacySource(SQLiteConnection db, long? first,
+            long? second, AW3HistoryQuery query, List<HistoryItem<AW3DiplomacyEvent>> target,
+            string table, string id, string firstColumn, string secondColumn,
+            string time, string year, string yearText, string status, string content,
+            string eventType, string source, string predicate = "1=1")
         {
             try
             {
-                string suffix = first.HasValue
-                    ? " WHERE (" + firstColumn + "=@first OR " +
-                      secondColumn + "=@first)"
-                    : "";
-                if (first.HasValue && second.HasValue)
-                    suffix = " WHERE ((" + firstColumn + "=@first AND " +
-                        secondColumn + "=@second) OR (" + firstColumn +
-                        "=@second AND " + secondColumn + "=@first))";
-                using var command = new SQLiteCommand(sql + suffix +
-                    " ORDER BY 1 LIMIT 512", db);
+                using var command = new SQLiteCommand("SELECT " + id + "," + firstColumn + "," +
+                    secondColumn + "," + time + "," + year + "," + yearText + "," + status + "," +
+                    content + "," + eventType + " FROM " + table + " WHERE " + predicate, db);
                 if (first.HasValue)
                 {
+                    command.CommandText += second.HasValue
+                        ? " AND ((" + firstColumn + "=@first AND " + secondColumn + "=@second) OR (" +
+                          firstColumn + "=@second AND " + secondColumn + "=@first))"
+                        : " AND (" + firstColumn + "=@first OR " + secondColumn + "=@first)";
                     command.Parameters.AddWithValue("@first", first.Value);
                     command.Parameters.AddWithValue("@second", second ?? -1L);
                 }
+                command.CommandText += PageSql(command, query, time,
+                    AW3HistoryDomains.Diplomacy, source, id, eventType);
                 using SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
-                {
-                    long a = ReadLong(reader, 1);
-                    long b = ReadLong(reader, 2);
-                    if (first.HasValue && !PairMatches(a, b, first.Value, second)) continue;
-                    add(reader, a, b);
-                }
+                    AddDiplomacy(target, ReadLong(reader, 0), ReadString(reader, 8),
+                        ReadLong(reader, 1), ReadLong(reader, 2), ReadDouble(reader, 3, -1d),
+                        ReadInt(reader, 4, -1), ReadString(reader, 5), ReadString(reader, 6),
+                        ReadString(reader, 7), source);
             }
             catch (SQLiteException) { }
         }
@@ -760,6 +735,47 @@ namespace AncientWarfare3.core.historyapi
         private static AW3OfficialCareerEntry ToCareer(OfficialCareerHistoryRow row)
         {
             return AW3HistoryDtoMapper.ToCareer(row);
+        }
+
+        private static string PageSql(SQLiteCommand command, AW3HistoryQuery query,
+            string timeColumn, string domain, string source, string idColumn,
+            string eventType = null)
+        {
+            // Match ReadDouble/DTO normalization, including SQLite infinities.
+            // Otherwise an infinite time can sort after the current page but
+            // map before its cursor, making that record permanently unreachable.
+            string time = "(CASE WHEN " + timeColumn +
+                " BETWEEN -1.7976931348623157E308 AND 1.7976931348623157E308 THEN " +
+                timeColumn + " ELSE -1 END)";
+            string sql = "";
+            if (query.WorldTimeFrom >= 0d)
+            {
+                sql += " AND " + time + ">=@timeFrom";
+                command.Parameters.AddWithValue("@timeFrom", query.WorldTimeFrom);
+            }
+            if (query.WorldTimeTo >= 0d)
+            {
+                sql += " AND " + time + "<=@timeTo";
+                command.Parameters.AddWithValue("@timeTo", query.WorldTimeTo);
+            }
+            if (eventType != null && query.EventType != "")
+            {
+                sql += " AND (" + eventType + ")=@eventType";
+                command.Parameters.AddWithValue("@eventType", query.EventType);
+            }
+            if (query.Domain != "" && query.Domain != domain) sql += " AND 0=1";
+            if (AW3HistoryCursorRules.TryDecode(query.Cursor, out AW3HistoryCursorKey cursor))
+            {
+                int order = string.CompareOrdinal(domain, cursor.Domain);
+                if (order == 0) order = string.CompareOrdinal(source, cursor.Source);
+                string tie = order > 0 ? "1=1" : order < 0 ? "0=1" : idColumn + ">@cursorId";
+                sql += " AND (" + time + ">@cursorTime OR (" + time +
+                    "=@cursorTime AND " + tie + "))";
+                command.Parameters.AddWithValue("@cursorTime", cursor.WorldTime);
+                command.Parameters.AddWithValue("@cursorId", cursor.RecordId);
+            }
+            command.Parameters.AddWithValue("@pageLimit", query.Limit + 1);
+            return sql + " ORDER BY " + time + "," + idColumn + " LIMIT @pageLimit";
         }
 
         private static bool Matches(AW3HistoryCursorKey key, AW3HistoryQuery query)

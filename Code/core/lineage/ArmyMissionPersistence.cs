@@ -232,7 +232,7 @@ namespace AncientWarfare3.core.lineage
             var facts = new ArmyMissionRestoreFacts
             {
                 ArmyId = pArmy.id,
-                KingdomId = kingdom?.id ?? -1L,
+                KingdomId = kingdom?.data?.id ?? -1L,
                 ArmyAlive = SafeArmyAlive(pArmy),
                 ArmyKingdomMatches = IsLiveKingdom(kingdom) &&
                                      SafeWarHasKingdom(war, kingdom),
@@ -316,8 +316,9 @@ namespace AncientWarfare3.core.lineage
                 out bool playerOrder, false);
             pArmy.data.get(LineageKeys.AW_ARMY_RTS_ISSUED_TIME,
                 out string issuedText, string.Empty);
-            double.TryParse(issuedText, NumberStyles.Float,
-                CultureInfo.InvariantCulture, out double issuedTime);
+            if (!double.TryParse(issuedText, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double issuedTime))
+                issuedTime = -1d;
             return new ArmyMissionStoredIntent
             {
                 WarId = warId,

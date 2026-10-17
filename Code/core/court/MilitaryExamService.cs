@@ -52,17 +52,18 @@ namespace AncientWarfare3.core.court
                 AdmissionQuota = generalVacancies + localVacancies + reserveTarget,
                 UpdatedTime = LineageService.CurTime()
             };
-            if (MilitaryExamPersistence.TryCreateSession(DB, session))
-                PopulateCandidates(pKingdom, session);
+            if (PopulateCandidates(pKingdom, session, out var candidates))
+                MilitaryExamPersistence.TryCreateSession(DB, session, candidates);
         }
 
-        private static void PopulateCandidates(Kingdom pKingdom,
-            MilitaryExamSessionRecord pSession)
+        private static bool PopulateCandidates(Kingdom pKingdom,
+            MilitaryExamSessionRecord pSession,
+            out List<MilitaryExamCandidateRecord> candidates)
         {
-            if (pKingdom?.data == null || pSession == null || pSession.Id < 0L) return;
+            candidates = new List<MilitaryExamCandidateRecord>();
+            if (pKingdom?.data == null || pSession == null) return false;
             int target = Math.Min(64, Math.Max(0, pSession.ReserveTarget));
-            if (target == 0) return;
-            var candidates = new List<MilitaryExamCandidateRecord>();
+            if (target == 0) return true;
             try
             {
                 foreach (Actor actor in pKingdom.getUnits())
@@ -72,7 +73,8 @@ namespace AncientWarfare3.core.court
                         !actor.isAdult() || actor.getAge() >= MilitaryExamRules.RetirementAge ||
                         actor.isKing() || HeirService.PeekRegisteredHeir(pKingdom) == actor ||
                         FeudatoryService.IsActivePrince(actor) ||
-                        SlaveService.IsSlave(actor) || GeneralService.IsGeneral(actor) ||
+                        SlaveService.IsSlave(actor) || SlaveService.IsRetiredSoldier(actor) ||
+                        GeneralService.IsGeneral(actor) ||
                         IsArmyCaptain(actor)) continue;
                     int warfare = Stat(actor, "warfare");
                     int damage = Stat(actor, "damage");
@@ -101,7 +103,7 @@ namespace AncientWarfare3.core.court
                     });
                 }
             }
-            catch { return; }
+            catch { return false; }
             candidates.Sort((left, right) =>
             {
                 int score = right.TotalScore.CompareTo(left.TotalScore);
@@ -109,7 +111,7 @@ namespace AncientWarfare3.core.court
             });
             if (candidates.Count > target) candidates.RemoveRange(target,
                 candidates.Count - target);
-            MilitaryExamPersistence.InsertCandidates(DB, candidates);
+            return true;
         }
 
         private static bool IsArmyCaptain(Actor pActor)

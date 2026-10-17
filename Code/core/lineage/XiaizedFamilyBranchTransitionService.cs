@@ -109,8 +109,8 @@ namespace AncientWarfare3.core.lineage
             pPrepared = new XiaizedFamilyBranchTransitionPrepared
             {
                 NewShiId = result.NewShiId,
-                FamilyName = family,
-                ClanName = clan,
+                FamilyName = result.FamilyName,
+                ClanName = result.ClanName,
                 ActorIds = actorIds
             };
             return true;
@@ -208,8 +208,8 @@ namespace AncientWarfare3.core.lineage
             pPrepared = new XiaizedFamilyBranchTransitionPrepared
             {
                 NewShiId = result.NewShiId,
-                FamilyName = family,
-                ClanName = clan,
+                FamilyName = result.FamilyName,
+                ClanName = result.ClanName,
                 ActorIds = result.MovedActorIds
             };
             return true;

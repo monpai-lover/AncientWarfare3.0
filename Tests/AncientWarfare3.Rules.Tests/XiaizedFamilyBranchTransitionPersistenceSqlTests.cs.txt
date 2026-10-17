@@ -7,6 +7,7 @@ internal static class XiaizedFamilyBranchTransitionPersistenceSqlTests
     {
         CreatesChildAndMovesOnlyTheNewFounder();
         ReplayReusesTheSameChild();
+        ReusedChildPreservesItsCommittedIdentity();
         FailureRollsBackEveryWrite();
     }
 
@@ -62,6 +63,42 @@ internal static class XiaizedFamilyBranchTransitionPersistenceSqlTests
         Equal(10L, ScalarLong(db,
             "SELECT SHI_ID FROM ActorArchive WHERE ID=101"),
             "failed transition leaves founder on old branch");
+    }
+
+    private static void ReusedChildPreservesItsCommittedIdentity()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        SeedWesternBranch(db);
+        XiaizedFamilyBranchTransitionPersistence.TryCommit(db, Request());
+        var request = Request();
+        request.FounderActorId = 103L;
+        // A relative can enter Xia culture in a different city, or a retry can
+        // generate a different fallback name after the first transaction.
+        request.FamilyName = "Ji";
+        request.ClanName = "Wei";
+        var result = XiaizedFamilyBranchTransitionPersistence.TryCommit(db,
+            request);
+        Equal(true, result.Success, "relative joins existing child");
+        Equal(11L, result.NewShiId, "source branch identity controls reuse");
+        Equal("Zhou", result.FamilyName, "publication uses committed family");
+        Equal("Lu", result.ClanName, "publication uses committed clan");
+        Equal("Zhou|Lu", ScalarText(db,
+            "SELECT FAMILY_NAME||'|'||CLAN_NAME FROM ActorArchive WHERE ID=103"),
+            "reused branch keeps its committed family and clan");
+        Equal("Lu", ScalarText(db,
+            "SELECT CLAN_NAME FROM ShiBranch WHERE SHI_ID=11"),
+            "existing branch name remains authoritative");
+        Equal("Paris|Paris", ScalarText(db,
+            "SELECT FAMILY_NAME||'|'||CLAN_NAME FROM ActorArchive WHERE ID=102"),
+            "dead relative is unchanged");
+
+        request.FounderActorId = 101L;
+        var replay = XiaizedFamilyBranchTransitionPersistence.TryCommit(db,
+            request);
+        Equal(true, replay.Success, "replay with regenerated names succeeds");
+        Equal("Zhou|Lu", ScalarText(db,
+            "SELECT FAMILY_NAME||'|'||CLAN_NAME FROM ActorArchive WHERE ID=101"),
+            "replay does not rename the founder");
     }
 
     private static XiaizedFamilyBranchTransitionRequest Request()
