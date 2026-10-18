@@ -1,6 +1,7 @@
 using System;
 using System.Data.SQLite;
 using System.IO;
+using System.Threading;
 
 namespace AncientWarfare3.core.db
 {
@@ -51,16 +52,23 @@ namespace AncientWarfare3.core.db
         {
             if (pConnection == null) return true;
 
+            // A background checkpoint can stall in native I/O while holding Gate.
+            // Reject this save without taking over or closing that connection.
+            // The save prefix unwinds its async barriers and a later save retries.
+            if (!Monitor.TryEnter(LineageArchiveCheckpointService.Gate,
+                    TimeSpan.FromSeconds(2)))
+            {
+                ModClass.LogWarning(
+                    "Lineage archive WAL checkpoint timed out waiting for the background checkpoint.");
+                return false;
+            }
             try
             {
                 // 与后台检查点串行:两者都在搬同一个 WAL,重叠没有意义,
                 // 而存档要的是「回来时 WAL 已经干净」这个确定结果。
-                lock (LineageArchiveCheckpointService.Gate)
-                {
-                    using var command = pConnection.CreateCommand();
-                    command.CommandText = "PRAGMA wal_checkpoint(PASSIVE);";
-                    command.ExecuteNonQuery();
-                }
+                using var command = pConnection.CreateCommand();
+                command.CommandText = "PRAGMA wal_checkpoint(PASSIVE);";
+                command.ExecuteNonQuery();
 
                 return true;
             }
@@ -70,6 +78,7 @@ namespace AncientWarfare3.core.db
                     "Lineage archive WAL checkpoint failed: " + error.Message);
                 return false;
             }
+            finally { Monitor.Exit(LineageArchiveCheckpointService.Gate); }
         }
 
         public static void ConfigureSnapshotTarget(SQLiteConnection pConnection)

@@ -1,0 +1,130 @@
+using System;
+using System.Collections.Generic;
+public sealed class Data { public long id = 1; }
+public sealed class Asset { public bool can_attack_buildings = true; }
+public sealed class Kingdom { public Data data = new(); public Asset asset = new(); }
+public sealed class WorldTile { public Data data = new(); }
+public sealed class BatchActors { }
+public sealed class Job<T> { }
+public class BaseSimObject { public bool Destroyed; public bool isRekt() => Destroyed; }
+public sealed class TaskData { public bool in_combat; }
+public sealed class Ai { public TaskData task; }
+public sealed class Actor : BaseSimObject
+{
+    public Data data = new(); public Asset asset = new(); public Kingdom kingdom = new();
+    public WorldTile current_tile = new(); public BatchActors batch = new(); public Ai ai = new();
+    public bool Alive = true, has_attack_target, _update_done, _beh_skip, _has_status_strange_urge;
+    public float _timeout_targets; public List<long> _aggression_targets = new();
+    public int Searches, Fights, Tasks; public bool ThrowOnSearch;
+    public bool isAlive() => Alive;
+    public bool isAllowedToLookForEnemies() => true;
+    public bool isInWaterAndCantAttack() => false;
+    public bool hasTask() => ai.task != null;
+    public void setTask(string id, bool pClean, bool pCleanJob) { Tasks++; ai.task = new(); }
+    public BaseSimObject checkObjectList(IEnumerable<BaseSimObject> candidates, bool buildings,
+        bool pFindClosest, bool pIgnoreStunned, int maximum)
+    {
+        Searches++;
+        if (ThrowOnSearch) throw new InvalidOperationException("real search failure");
+        // Native enemy search reads these live fields. Actor.Dispose clears data,
+        // asset, batch and kingdom; classification may belong to an earlier frame.
+        _ = data.id; _ = kingdom.data.id; _ = kingdom.asset.can_attack_buildings; _ = current_tile.data.id;
+        foreach (var candidate in candidates) if (!candidate.isRekt()) return candidate;
+        return null;
+    }
+    public bool canAttackTarget(BaseSimObject target, bool pCheckForFactions, bool pAttackBuildings) => !target.isRekt();
+    public void startFightingWith(BaseSimObject target) { Fights++; has_attack_target = true; }
+    public void stopMovement() { }
+    public void skipBehaviour() { _beh_skip = true; }
+    public void Dispose() { Destroyed = true; data = null; asset = null; kingdom = null; batch = null; }
+}
+public sealed class Units { public Dictionary<long, Actor> Items = new(); public Actor get(long id) => Items.TryGetValue(id, out var a) ? a : null; }
+public sealed class Map { public Units units = new(); }
+public static class World { public static Map world = new(); }
+public sealed class TimeScale { public float multiplier = 1; }
+public static class Config { public static TimeScale time_scale_asset = new(); }
+namespace AncientWarfare3.core.performance
+{
+    internal static class AWPerformanceSettings { public const int SimulationBatchSize = 32; }
+    internal sealed partial class AWCooperativeActorPostRunner
+    {
+        private readonly int[] activeBehaviorActorCounts = new int[1];
+        private int prepares;
+        private void PrepareEnemySearch(Actor actor) { prepares++; }
+        public static void RunCases()
+        {
+            int failed = 0, total = 0;
+            void Test(string name, Action action)
+            {
+                total++;
+                try { action(); Console.WriteLine("PASS " + name); }
+                catch (Exception error) { failed++; Console.WriteLine("FAIL " + name + ": " + error.Message); }
+            }
+            Test("live actor searches and commits", () => {
+                var actor = new Actor(); var work = Work(actor); work.Search(); work.Commit();
+                Require(actor.Searches == 1 && actor.Fights == 1, "valid search must advance combat");
+            });
+            foreach (var invalid in new (string Name, Action<Actor> Change)[] {
+                ("disposed actor", a => a.Dispose()), ("missing data", a => a.data = null),
+                ("missing asset", a => a.asset = null), ("dead actor", a => a.Alive = false),
+                ("disposed kingdom", a => { a.kingdom.data = null; a.kingdom.asset = null; }),
+                ("missing tile", a => a.current_tile = null)
+            })
+            {
+                Test(invalid.Name + " before scheduled search", () => {
+                    var actor = new Actor(); var work = Work(actor); invalid.Change(actor);
+                    work.Search(); work.Commit(); Require(actor.Searches == 0 && actor.Fights == 0, "stale work must be skipped");
+                });
+                Test(invalid.Name + " before result commit", () => {
+                    var actor = new Actor(); var work = Work(actor); work.Search(); invalid.Change(actor);
+                    work.Commit(); Require(actor.Fights == 0, "result cannot mutate invalid actor");
+                });
+            }
+            Test("new combat target is preserved", () => {
+                var actor = new Actor(); var work = Work(actor); work.Search(); actor.has_attack_target = true;
+                work.Commit(); Require(actor.Fights == 0, "new target must win");
+            });
+            Test("destroyed target is rejected", () => {
+                var actor = new Actor(); var target = new BaseSimObject(); var work = Work(actor, target);
+                work.Search(); target.Destroyed = true; work.Commit(); Require(actor.Fights == 0, "dead target must be rejected");
+            });
+            Test("live search failures still propagate", () => {
+                var actor = new Actor { ThrowOnSearch = true }; var work = Work(actor);
+                try { work.Search(); } catch (InvalidOperationException e) when (e.Message == "real search failure") { return; }
+                throw new Exception("must not swallow actual search faults");
+            });
+            Test("classification commit rejects actor disposed after capture", () => {
+                var runner = new AWCooperativeActorPostRunner(); var actor = new Actor { has_attack_target = true };
+                var work = new EnemyPrepareBatchWork(); work.Configure(actor.batch, new(), new[] { actor }, 1, false);
+                work.RunParallel(); actor.Dispose(); runner.CommitEnemySearchClassification(work, 0);
+                Require(actor.Tasks == 0, "stale classified action cannot install a task");
+            });
+            Test("live classification installs the combat task", () => {
+                var runner = new AWCooperativeActorPostRunner(); var actor = new Actor { has_attack_target = true };
+                var work = new EnemyPrepareBatchWork(); work.Configure(actor.batch, new(), new[] { actor }, 1, false);
+                work.RunParallel(); runner.CommitEnemySearchClassification(work, 0);
+                Require(actor.Tasks == 1, "valid classified combat must advance");
+            });
+            Test("classification commit rejects an actor moved to another batch", () => {
+                var runner = new AWCooperativeActorPostRunner(); var actor = new Actor { has_attack_target = true };
+                var work = new EnemyPrepareBatchWork(); work.Configure(actor.batch, new(), new[] { actor }, 1, false);
+                work.RunParallel(); actor.batch = new(); runner.CommitEnemySearchClassification(work, 0);
+                Require(actor.Tasks == 0, "old batch cannot commit transferred actor work");
+            });
+            Test("classification rejects kingdom asset loss", () => {
+                var actor = new Actor(); actor.kingdom.asset = null; var work = new EnemyPrepareBatchWork();
+                work.Configure(actor.batch, new(), new[] { actor }, 1, false); work.RunParallel();
+                Require(work.ActionCount == 0, "invalid native kingdom cannot reach preparation");
+            });
+            Console.WriteLine($"Enemy search lifecycle: {total - failed}/{total} passed.");
+            if (failed != 0) throw new Exception(failed + " enemy-search lifecycle regressions");
+        }
+        private static SearchWorkItem Work(Actor actor, BaseSimObject target = null)
+        {
+            var work = new SearchWorkItem(); work.Configure(actor,
+                new List<BaseSimObject> { target ?? new BaseSimObject() }, true, 0, 0, false);
+            return work;
+        }
+        private static void Require(bool value, string message) { if (!value) throw new Exception(message); }
+    }
+}

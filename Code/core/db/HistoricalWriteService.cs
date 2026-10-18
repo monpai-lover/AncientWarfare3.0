@@ -42,6 +42,11 @@ namespace AncientWarfare3.core.db
                 pError = "historical async writer is disabled";
                 return false;
             }
+            if (!LineageArchiveManager.Instance.IsOperational)
+            {
+                pError = "historical archive is unavailable";
+                return false;
+            }
 
             lock (LifecycleGate)
             {

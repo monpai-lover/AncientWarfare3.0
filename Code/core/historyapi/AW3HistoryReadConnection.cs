@@ -15,15 +15,21 @@ namespace AncientWarfare3.core.historyapi
             result = default;
             long epoch = LineageArchiveManager.RuntimeDatabaseEpoch;
             string path;
-            try { path = LineageArchiveManager.RuntimeDbPath; }
+            try
+            {
+                if (!LineageArchiveManager.Instance.IsOperational) return false;
+                path = LineageArchiveManager.RuntimeDbPath;
+            }
             catch { return false; }
             if (string.IsNullOrWhiteSpace(path)) return false;
 
             try
             {
-                result = Task.Run(() => ReadOnForeignThread(read, path, epoch))
+                T candidate = Task.Run(() => ReadOnForeignThread(read, path, epoch))
                     .GetAwaiter().GetResult();
-                return epoch == LineageArchiveManager.RuntimeDatabaseEpoch;
+                if (!IsCurrentArchive(epoch)) return false;
+                result = candidate;
+                return true;
             }
             catch (Exception)
             {
@@ -34,20 +40,25 @@ namespace AncientWarfare3.core.historyapi
         private static T ReadOnForeignThread<T>(Func<SQLiteConnection, T> read,
             string path, long epoch)
         {
-            if (epoch != LineageArchiveManager.RuntimeDatabaseEpoch)
+            if (!IsCurrentArchive(epoch))
                 return default;
             using var connection = new SQLiteConnection(
                 LineageArchivePragmaService.SnapshotReadOnlyConnectionString(path));
             connection.Open();
-            if (epoch != LineageArchiveManager.RuntimeDatabaseEpoch)
+            if (!IsCurrentArchive(epoch))
                 return default;
             using (HistoryQuery.EnterBackgroundRead(connection))
             using (LineageQuery.EnterBackgroundRead(connection))
             {
                 T result = read(connection);
-                return epoch == LineageArchiveManager.RuntimeDatabaseEpoch
-                    ? result : default;
+                return IsCurrentArchive(epoch) ? result : default;
             }
+        }
+
+        private static bool IsCurrentArchive(long epoch)
+        {
+            return epoch == LineageArchiveManager.RuntimeDatabaseEpoch &&
+                   LineageArchiveManager.Instance.IsOperational;
         }
     }
 }

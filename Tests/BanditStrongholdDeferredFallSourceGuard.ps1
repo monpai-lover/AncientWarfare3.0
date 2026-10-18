@@ -80,14 +80,17 @@ if ($enemyStart -lt 0 -or $enemyEnd -lt 0) {
     throw 'Cannot isolate EnemyPrepareBatchWork'
 }
 $enemy = $runner.Substring($enemyStart, $enemyEnd - $enemyStart)
+$liveActor = Get-MethodBody $runner 'private static bool IsLiveEnemySearchActor(' `
+    'private void PrepareEnemySearch('
 foreach ($token in @('actor?.data != null', '!actor.isRekt()',
         'actor.isAlive()', 'actor.asset != null',
-        'actor.kingdom?.data != null')) {
-    if ($enemy -notmatch [regex]::Escape($token)) {
+        'actor.kingdom?.data != null', 'actor.kingdom.asset != null',
+        'actor.current_tile != null')) {
+    if ($liveActor -notmatch [regex]::Escape($token)) {
         throw "Enemy preparation snapshot filter is missing $token"
     }
 }
-$validIndex = $enemy.IndexOf('actor?.data != null')
+$validIndex = $enemy.IndexOf('if (!IsLiveEnemySearchActor(actor))')
 $searchIndex = $enemy.IndexOf('actor.isAllowedToLookForEnemies()')
 if ($validIndex -lt 0 -or $searchIndex -lt 0 -or
     $validIndex -gt $searchIndex) {

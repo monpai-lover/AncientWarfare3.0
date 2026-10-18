@@ -121,7 +121,8 @@ namespace AncientWarfare3.core.db
     }
     internal static class LineageArchivePragmaService
     {
-        public static bool CheckpointForSave(object database) => true;
+        public static bool CheckpointReady = true;
+        public static bool CheckpointForSave(object database) => CheckpointReady;
     }
     internal static class HistoricalWriteService
     {

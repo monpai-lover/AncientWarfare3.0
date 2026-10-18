@@ -58,6 +58,7 @@ internal static class Program
                 .GetMethod("RunCases").Invoke(null, null); }
             catch (TargetInvocationException error) when (error.InnerException != null)
             { throw error.InnerException; }
+            SchedulerFaultRecoveryCases.Run(root, args.Length > 1 ? args[1] : null);
             return 0;
         }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }

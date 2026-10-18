@@ -607,6 +607,66 @@ namespace AncientWarfare3.patch
             }
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(PauseButton), nameof(PauseButton.press))]
+        private static void CaptureUserPauseState(out bool __state)
+        {
+            __state = Config.paused;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PauseButton), nameof(PauseButton.press))]
+        private static void ResumeSchedulerAfterUserUnpause(bool __state)
+        {
+            if (!__state || Config.paused || !AWFramePriorityGovernor.Faulted)
+                return;
+
+            // Only an explicit pause-control transition can retry a failed
+            // cycle. A benchmark or another mod clearing Config.paused must
+            // not bypass the fault latch or retry automatically every frame.
+            if (!Config.game_loaded || World.world == null ||
+                SmoothLoader.isLoading() ||
+                AW3MultiplayerReplicaScope.IsReplicaSession ||
+                AWWorldInitializationGate.IsPending(World.world) ||
+                AWFramePriorityGovernor.IsExecutingSimulationPhase)
+            {
+                Config.paused = true;
+                return;
+            }
+
+            string previousFault = AWFramePriorityGovernor.FaultMessage;
+            try
+            {
+                ResetSchedulerState(pUnbindSimulationTime: false, pForce: true);
+                ModClass.LogInfo("AW scheduler recovered after explicit resume: " +
+                    previousFault);
+            }
+            catch (Exception error)
+            {
+                // ResetSchedulerState attempts every cleanup step, including
+                // ResetFault, before reporting failures. Restore the latch if
+                // any owner could not release its work safely.
+                AWFramePriorityGovernor.MarkFault(error);
+                Config.paused = true;
+                ModClass.LogError("AW scheduler resume cleanup failed; game remains paused: " +
+                    error);
+            }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(HotkeyLibrary), nameof(HotkeyLibrary.checkHotKeyActions))]
+        private static void CaptureUserHotkeyPauseState(out bool __state)
+        {
+            CaptureUserPauseState(out __state);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(HotkeyLibrary), nameof(HotkeyLibrary.checkHotKeyActions))]
+        private static void ResumeSchedulerAfterUserHotkeyUnpause(bool __state)
+        {
+            ResumeSchedulerAfterUserUnpause(__state);
+        }
+
         private static void ResetSchedulerState(
             bool pUnbindSimulationTime,
             bool pForce = false)

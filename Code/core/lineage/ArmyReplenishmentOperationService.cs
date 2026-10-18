@@ -341,9 +341,12 @@ namespace AncientWarfare3.core.lineage
             Kingdom kingdom = SafeKingdom(army);
             City preferredCity = FindCity(state.SourceCityId);
             long missionWarId = ResolveMissionWarId(army, kingdom);
-            if (!ArmyRtsControllerService.CanGenerateWartimeReplacements(
-                    army, preferredCity, missionWarId)) return;
-            if (requested > 0)
+            bool canGenerate = ArmyRtsControllerService.
+                CanGenerateWartimeReplacements(army, preferredCity,
+                    missionWarId);
+            // Transport or a lost source city can block generation, but must
+            // not keep an expired operation in the authority workset forever.
+            if (requested > 0 && canGenerate)
             {
                 int enlisted = RecruitFormalWarShortage(army, kingdom,
                     preferredCity, requested, out confirmedExhausted,
@@ -368,7 +371,8 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
             bool reservesConfirmedExhausted = confirmedExhausted ||
-                deadlineReached && SyntheticMobilizationLedgerService.
+                canGenerate && deadlineReached &&
+                SyntheticMobilizationLedgerService.
                     AvailableReplacement(
                         ResolveMissionWarId(army, kingdom),
                         preferredCity?.id ?? -1L) <= 0 &&

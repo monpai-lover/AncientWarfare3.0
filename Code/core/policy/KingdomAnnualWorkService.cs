@@ -32,6 +32,10 @@ namespace AncientWarfare3.core.policy
                         pending.RequestedYear, year)) return;
                 pending.RequestedYear = KingdomAnnualWorkRules.MergeYear(
                     pending.RequestedYear, year);
+                // A stage can outlive the deferred queue's bounded retries.
+                // A later annual event must restore its ticket, preserving the
+                // active stage so already completed work is not replayed.
+                Enqueue(kingdomId);
                 return;
             }
 

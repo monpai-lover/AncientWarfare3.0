@@ -59,7 +59,9 @@ namespace AncientWarfare3.core.db
             get
             {
                 _ = Instance;
-                return _db;
+                // A failed world change may retain the old connection until a
+                // checkpoint finishes. Only lifecycle cleanup may use it then.
+                return IsOperational ? _db : null;
             }
         }
 
@@ -190,7 +192,7 @@ namespace AncientWarfare3.core.db
 
             try
             {
-                if (_db == null)
+                if (!IsOperational)
                 {
                     pError = "Live lineage archive is unavailable.";
                     return false;
@@ -456,6 +458,12 @@ namespace AncientWarfare3.core.db
 
         private void CloseRuntimeDatabase()
         {
+            // Quarantine public reads/writes and invalidate cached/in-flight
+            // reads before waiting. Shutdown may time out and leave _db alive
+            // solely so a later cleanup can close it safely.
+            InitializeSuccessful = false;
+            ActorArchivePresenceIndex.ClearUnknown();
+            Interlocked.Increment(ref _runtimeDatabaseEpoch);
             // 后台检查点持有同一个库文件的第二条连接。Windows 上不放掉它,
             // CloseAndDeleteRuntimeDb 的 File.Delete 会直接失败。放在这里而不是
             // 调用方,是因为这是关库的唯一收口。
@@ -464,8 +472,6 @@ namespace AncientWarfare3.core.db
             _db.Close();
             _db.Dispose();
             _db = null;
-            ActorArchivePresenceIndex.ClearUnknown();
-            Interlocked.Increment(ref _runtimeDatabaseEpoch);
         }
 
         private static bool HashMatches(string pPath, byte[] pExpected)

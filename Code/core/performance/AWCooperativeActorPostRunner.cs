@@ -3534,6 +3534,8 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         {
             EnemyPrepareKind kind = actionKinds[i];
             Actor actor = actionActors[i];
+            if (!IsLiveEnemySearchActor(actor) ||
+                !ReferenceEquals(actor.batch, work.Batch)) continue;
 
             switch (kind)
             {
@@ -3612,11 +3614,17 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             activeBehaviorPartitionsValid.Length);
     }
 
+    private static bool IsLiveEnemySearchActor(Actor actor)
+    {
+        return actor?.data != null && actor.asset != null &&
+               actor.current_tile != null && actor.kingdom?.data != null &&
+               actor.kingdom.asset != null && !actor.isRekt() && actor.isAlive();
+    }
+
     private void PrepareEnemySearch(
         Actor actor)
     {
-        if (actor == null || actor.data == null ||
-            actor.current_tile == null || actor.kingdom == null)
+        if (!IsLiveEnemySearchActor(actor))
         {
             return;
         }
@@ -4300,9 +4308,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
             {
                 Actor actor = actors[i];
                 EnemyPrepareKind kind;
-                if (!(actor?.data != null && !actor.isRekt() &&
-                      actor.isAlive() && actor.asset != null &&
-                      actor.kingdom?.data != null))
+                if (!IsLiveEnemySearchActor(actor))
                 {
                     continue;
                 }
@@ -5002,6 +5008,10 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
 
         internal void Search()
         {
+            // Preparation and worker dispatch can land in different frames.
+            // A removed actor must not turn stale search work into a global
+            // scheduler fault through native asset/kingdom dereferences.
+            if (!IsLiveEnemySearchActor(actor)) return;
             if (primaryCandidates.Count > 0)
             {
                 IEnumerable<BaseSimObject> candidates = primaryCandidates;
@@ -5062,7 +5072,7 @@ internal sealed class AWCooperativeActorPostRunner : IAWCooperativeBatchPostRunn
         internal void Commit()
         {
             // 搜索可能跨过渲染帧，提交前不能用旧结果覆盖期间产生的新战斗状态。
-            if (actor.isRekt() || actor.has_attack_target)
+            if (!IsLiveEnemySearchActor(actor) || actor.has_attack_target)
             {
                 return;
             }

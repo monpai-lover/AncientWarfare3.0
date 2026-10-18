@@ -30,7 +30,18 @@ var tests = new (string Name, Action Test)[]
     ("synthetic cleanup preserves permanent and unrelated actors", () => SyntheticDemobilizationRuntimeTests.Run("PermanentAndUnrelatedActorsSurvive")),
     ("old transport release preserves transferred actors' new paths", () => TransportReleaseRuntimeTests.Run("TransferredMemberKeepsNewPath")),
     ("transport release ignores detached and invalid roster entries", () => TransportReleaseRuntimeTests.Run("DetachedAndInvalidActorsAreNotCancelled")),
-    ("transport release remains idempotent for current members", () => TransportReleaseRuntimeTests.Run("RepeatedReleaseIsIdempotent"))
+    ("transport release remains idempotent for current members", () => TransportReleaseRuntimeTests.Run("RepeatedReleaseIsIdempotent")),
+    ("replenishment deadline advances while captain remains in transport", () => ReplenishmentDeadlineRuntimeTests.Run("CaptainInBoatExpires")),
+    ("replenishment deadline advances after source city changes owner", () => ReplenishmentDeadlineRuntimeTests.Run("CapturedSourceExpires")),
+    ("replenishment deadline advances after source city disposal", () => ReplenishmentDeadlineRuntimeTests.Run("DisposedSourceExpires")),
+    ("replenishment deadline advances after source city disappears", () => ReplenishmentDeadlineRuntimeTests.Run("MissingSourceExpires")),
+    ("replenishment recovers when the transport gate clears before deadline", () => ReplenishmentDeadlineRuntimeTests.Run("TemporaryGateRecoveryStillRecruits")),
+    ("eligible replenishment retains its final deadline recruitment batch", () => ReplenishmentDeadlineRuntimeTests.Run("EligiblePartialBatchStillFinishesAtDeadline")),
+    ("large military rosters retain scheduled ration cooldowns", () => ArmySupplyCadenceRuntimeTests.Run("LargeRosterKeepsCooldown")),
+    ("scheduled rations consume food once per interval", () => ArmySupplyCadenceRuntimeTests.Run("HungryActorConsumesOncePerInterval")),
+    ("supply runtime reset clears scheduled cooldowns", () => ArmySupplyCadenceRuntimeTests.Run("RuntimeResetClearsCooldown")),
+    ("supply cooldown does not retain removed actor objects", () => ArmySupplyCadenceRuntimeTests.Run("CacheDoesNotRetainRemovedActors")),
+    ("scheduled supply ignores null and disposed actors", () => ArmySupplyCadenceRuntimeTests.Run("InvalidActorsAreIgnored"))
 };
 int failed = 0;
 foreach (var test in tests)

@@ -1,6 +1,7 @@
 using System.Reflection;
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.patch;
 
@@ -13,11 +14,12 @@ internal static class SavePatchTests
         SuccessfulSaveReleasesBarrierOnce();
         EngineFailureReleasesBarrier();
         PreparationFailureReleasesBarrier();
+        CheckpointTimeoutReleasesBarrierAndAllowsRetry();
         ExportFailureReleasesBarrier();
         BranchSaveRepairsPreserveRecoverableBuildings();
         BranchRepairFailureCannotReleaseOuterBarrier();
         NewWorldClearsBranchIdentityCaches();
-        Console.WriteLine("Save patch ownership and branch integration tests passed (9 scenarios).");
+        Console.WriteLine("Save patch ownership and branch integration tests passed (10 scenarios).");
     }
 
     private static void NestedSaveCannotReleaseSnapshotBarrier()
@@ -122,6 +124,29 @@ internal static class SavePatchTests
         True(ReferenceEquals(expected, failure), "sidecar failures remain visible to the save caller");
         Equal(1, AWAsyncWorldLifecycle.SaveBarrierExitCalls,
             "failed sidecar export releases its barrier once");
+    }
+
+    private static void CheckpointTimeoutReleasesBarrierAndAllowsRetry()
+    {
+        Reset();
+        LineageArchivePragmaService.CheckpointReady = false;
+        bool state = false;
+        Exception failure = null;
+        try { AW_SavePatch.SaveWorldToDirectory_Prefix(out state); }
+        catch (InvalidOperationException error) { failure = error; }
+        finally { LineageArchivePragmaService.CheckpointReady = true; }
+        True(failure != null && state, "checkpoint timeout rejects a save after it acquired the barrier");
+        True(failure.Message.Contains("checkpoint failed"), "save preserves the checkpoint failure reason");
+        FinalizeSave(failure, state);
+        True(!AWAsyncWorldLifecycle.SaveBarrierActive,
+            "checkpoint timeout leaves no async barrier blocking resumed simulation");
+        Equal(1, AWAsyncWorldLifecycle.SaveBarrierExitCalls,
+            "checkpoint timeout and finalizer release the owned barrier once");
+        AW_SavePatch.SaveWorldToDirectory_Prefix(out bool retry);
+        AW_SavePatch.SaveWorldToDirectory_Postfix(string.Empty, retry);
+        FinalizeSave(null, retry);
+        True(!AWAsyncWorldLifecycle.SaveBarrierActive,
+            "a later save succeeds after the checkpoint becomes available");
     }
 
     private static Exception FinalizeSave(Exception error, bool state) =>

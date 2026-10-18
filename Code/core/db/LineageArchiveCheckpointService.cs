@@ -25,7 +25,7 @@ namespace AncientWarfare3.core.db
     ///
     ///     与存档的关系:<see cref="LineageArchivePragmaService.CheckpointForSave"/>
     ///     仍在主线程做(存档本来就是停顿点,且要求确定性)。两者共用
-    ///     <see cref="Gate"/> 串行化,存档最多等一个在途检查点。
+    ///     <see cref="Gate"/> 串行化,等待在途检查点的锁最多两秒。
     ///
     ///     兜底:即使本服务完全不工作,WAL 也只会涨到「两次存档之间的写入量」,
     ///     存档时的 CheckpointForSave 会清掉。
@@ -214,22 +214,47 @@ namespace AncientWarfare3.core.db
 
         /// <summary>
         ///     世界切换 / 退出时调用。等在途检查点结束再放连接,免得把正在
-        ///     搬运的 WAL 连接抽掉。
+        ///     搬运的 WAL 连接抽掉。等待超时则保留任务和连接,由调用方稍后重试。
         /// </summary>
         internal static void Shutdown()
         {
+            long deadline = Stopwatch.GetTimestamp() + 2L * Stopwatch.Frequency;
             Task running = Volatile.Read(ref _running);
             if (running != null)
             {
-                try { running.Wait(TimeSpan.FromSeconds(2)); }
-                catch { }
+                try
+                {
+                    if (!running.Wait(TimeSpan.FromSeconds(2)))
+                        throw new TimeoutException(
+                            "Lineage archive checkpoint shutdown timed out; background checkpoint is still running.");
+                }
+                catch (AggregateException)
+                {
+                    // A completed faulted task no longer owns the connection.
+                    // Its failure must not prevent safe cleanup and a later retry.
+                }
             }
 
-            Volatile.Write(ref _running, null);
-            lock (Gate) { CloseConnection(); }
-            Interlocked.Exchange(ref _lastCompletedAt, 0L);
-            _consecutiveFailures = 0;
-            _disabled = false;
+            TimeSpan remaining = TimeSpan.FromSeconds(Math.Max(0L,
+                deadline - Stopwatch.GetTimestamp()) / (double)Stopwatch.Frequency);
+            if (!Monitor.TryEnter(Gate, remaining))
+                throw new TimeoutException(
+                    "Lineage archive checkpoint shutdown timed out waiting for the checkpoint boundary.");
+            try
+            {
+                // Keep the task/connection intact until its owner has finished.
+                // Closing or forgetting it on timeout would let a world switch
+                // replace the database while old checkpoint I/O is still active.
+                if (!ReferenceEquals(Volatile.Read(ref _running), running))
+                    throw new InvalidOperationException(
+                        "Lineage archive checkpoint changed during shutdown.");
+                CloseConnection();
+                Volatile.Write(ref _running, null);
+                Interlocked.Exchange(ref _lastCompletedAt, 0L);
+                _consecutiveFailures = 0;
+                _disabled = false;
+            }
+            finally { Monitor.Exit(Gate); }
         }
     }
 }

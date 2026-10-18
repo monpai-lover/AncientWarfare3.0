@@ -306,8 +306,14 @@ namespace AncientWarfare3.core.multiplayer
             CityTechService.ClearRuntime();
             var stages = new List<AW3RestoreStage>
             {
-                new AW3RestoreStage("archive_create",
-                    LineageArchiveManager.Instance.CreateDataBase),
+                new AW3RestoreStage("archive_create", () =>
+                {
+                    LineageArchiveManager archive = LineageArchiveManager.Instance;
+                    archive.CreateDataBase();
+                    if (!archive.IsOperational)
+                        throw new InvalidOperationException(
+                            "Fresh lineage archive initialization failed.");
+                }, stopOnFailure: true),
                 new AW3RestoreStage("mandate_projection",
                     MandateService.RebuildRuntimeMarkerProjection),
                 new AW3RestoreStage("mandate_projection_resume", () =>

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using UnityEngine;
 
 namespace AncientWarfare3.core.lineage
@@ -6,13 +6,20 @@ namespace AncientWarfare3.core.lineage
     internal static class ArmyRtsAbstractSupplyService
     {
         private const double ScheduledCheckIntervalSeconds = 1d;
-        private const int MaximumTrackedActors = 8192;
-        private static readonly Dictionary<long, double> NextScheduledCheck =
-            new Dictionary<long, double>();
+        private sealed class ScheduledCheck
+        {
+            internal double NextAllowed;
+        }
+
+        // Clearing a fixed-size ID table makes every actor miss the cooldown
+        // when a stable roster exceeds its capacity. Weak keys preserve live
+        // actors' cadence without retaining actors removed from the world.
+        private static ConditionalWeakTable<Actor, ScheduledCheck>
+            NextScheduledCheck = new ConditionalWeakTable<Actor, ScheduledCheck>();
 
         internal static void ClearRuntime()
         {
-            NextScheduledCheck.Clear();
+            NextScheduledCheck = new ConditionalWeakTable<Actor, ScheduledCheck>();
         }
 
         internal static bool TryConsumeHomeRationScheduled(Actor pActor)
@@ -21,10 +28,11 @@ namespace AncientWarfare3.core.lineage
             double now;
             try { now = Time.realtimeSinceStartupAsDouble; }
             catch { now = 0d; }
+            ScheduledCheck check = null;
             double nextAllowed = actorId >= 0L &&
-                                 NextScheduledCheck.TryGetValue(actorId,
-                                     out double next)
-                ? next
+                                 NextScheduledCheck.TryGetValue(pActor,
+                                     out check)
+                ? check.NextAllowed
                 : 0d;
             // ShouldRunScheduledCheck 是纯 AND,先判哪一项都等价。这里被 P0
             // 每帧按 actor 调用(约 6000 次/采样区间),而绝大多数调用都处在
@@ -51,10 +59,9 @@ namespace AncientWarfare3.core.lineage
             // 而这本来就是 ScheduledCheckIntervalSeconds 定义的粒度。
             if (actorId >= 0L)
             {
-                if (NextScheduledCheck.Count >= MaximumTrackedActors)
-                    NextScheduledCheck.Clear();
-                NextScheduledCheck[actorId] = now +
-                                              ScheduledCheckIntervalSeconds;
+                check ??= NextScheduledCheck.GetValue(pActor,
+                    _ => new ScheduledCheck());
+                check.NextAllowed = now + ScheduledCheckIntervalSeconds;
             }
             if (!shouldRun) return false;
             return TryConsumeHomeRation(pActor);

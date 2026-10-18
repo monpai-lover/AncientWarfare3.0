@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net9.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>disable</Nullable></PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.CodeAnalysis"><HintPath>$(MSBuildBinPath)/Roslyn/bincore/Microsoft.CodeAnalysis.dll</HintPath></Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp"><HintPath>$(MSBuildBinPath)/Roslyn/bincore/Microsoft.CodeAnalysis.CSharp.dll</HintPath></Reference>
+    <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
+    <Compile Include="../../Code/core/db/LineageArchiveCheckpointService.cs" Link="Production/LineageArchiveCheckpointService.cs" />
+    <Compile Include="../../Code/core/db/LineageArchivePragmaService.cs" Link="Production/LineageArchivePragmaService.cs" />
+    <Compile Include="../../Code/core/db/LineageArchiveManager.cs" Link="Production/LineageArchiveManager.cs" />
+    <Compile Include="../../Code/core/db/LineageRuntimePathRules.cs" Link="Production/LineageRuntimePathRules.cs" />
+    <Compile Include="../../Code/core/db/LocalizedNameIdentitySchema.cs" Link="Production/LocalizedNameIdentitySchema.cs" />
+    <Compile Include="../../Code/core/historyapi/AW3HistoryReadConnection.cs" Link="Production/AW3HistoryReadConnection.cs" />
+    <Compile Include="../../Code/utils/SQLiteHelper.cs" Link="Production/SQLiteHelper.cs" />
+    <Compile Include="../../Code/attributes/TableDefAttribute.cs" Link="Production/TableDefAttribute.cs" />
+    <Compile Include="../../Code/attributes/TableItemDefAttribute.cs" Link="Production/TableItemDefAttribute.cs" />
+  </ItemGroup>
+</Project>

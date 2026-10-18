@@ -262,9 +262,6 @@ namespace AncientWarfare3.core.performance
             ArmyRtsAssignmentReconciliationService.Reset();
             DeJureRegionMaintenanceService.Reset();
             AWEnemyPresenceCache.Clear();
-            // 世界切换时放掉后台检查点的连接:它指向的是上一局的运行时库,
-            // 留着会挡住 CloseAndDeleteRuntimeDb 删文件。
-            core.db.LineageArchiveCheckpointService.Shutdown();
             CityReservePoolService.ClearRuntime();
             SyntheticMobilizationLedgerService.ClearRuntime();
             WarriorArmyMembershipService.ClearRuntime();
@@ -285,6 +282,16 @@ namespace AncientWarfare3.core.performance
             ActorDeathArchiveService.Reset();
             PeasantRebelBanditStrongholdPopulationService.Clear();
             BanditStrongholdCityDisposalService.Clear();
+            // Runtime cache reset can proceed while checkpoint I/O finishes.
+            // Database replacement still requires a successful strict Shutdown
+            // in CloseRuntimeDatabase before the old archive can be deleted.
+            try { core.db.LineageArchiveCheckpointService.Shutdown(); }
+            catch (System.TimeoutException error)
+            {
+                ModClass.LogWarning(
+                    "Lineage checkpoint cleanup deferred; background task and connection retained: " +
+                    error.Message);
+            }
         }
 
         private static void ProcessCycle(AWAuthorityCycleGate pGate,
