@@ -55,6 +55,7 @@ namespace AncientWarfare3.core.performance
         private static int _pendingPhaseSteps = 1;
         private static int _longestPhaseSteps = 1;
         private static bool _faulted;
+        private static bool _faultHasNullReference;
         private static string _faultMessage = string.Empty;
         private static bool _criticalHookInstalled;
         private static int _simulationPhaseDepth;
@@ -64,6 +65,7 @@ namespace AncientWarfare3.core.performance
         public static long CyclesStarted { get; private set; }
         public static long CyclesCompleted { get; private set; }
         public static bool Faulted => _faulted;
+        public static bool FaultHasNullReference => _faultHasNullReference;
         public static string FaultMessage => _faultMessage;
         public static bool CriticalHookInstalled => _criticalHookInstalled;
         public static bool IsExecutingSimulationPhase =>
@@ -239,17 +241,53 @@ namespace AncientWarfare3.core.performance
                 _currentAw3Phase = phase;
         }
 
-        public static void MarkFault(Exception pException)
+        public static void MarkFault(Exception pException,
+            bool pRequireNullReferenceRepair = false)
         {
             _faulted = true;
+            _faultHasNullReference = _faultHasNullReference ||
+                                     pRequireNullReferenceRepair ||
+                                     ContainsNullReferenceException(pException);
             _faultMessage = pException == null
                 ? "unknown"
                 : pException.GetType().Name + ": " + pException.Message;
         }
 
+        private static bool ContainsNullReferenceException(Exception pException)
+        {
+            if (pException == null) return false;
+            var pending = new Stack<Exception>();
+            var visited = new List<Exception>();
+            pending.Push(pException);
+            while (pending.Count > 0)
+            {
+                Exception current = pending.Pop();
+                bool alreadyVisited = false;
+                for (int index = 0; index < visited.Count; index++)
+                {
+                    if (!ReferenceEquals(visited[index], current)) continue;
+                    alreadyVisited = true;
+                    break;
+                }
+                if (alreadyVisited) continue;
+                visited.Add(current);
+                if (current is NullReferenceException) return true;
+
+                if (current.InnerException != null)
+                    pending.Push(current.InnerException);
+                if (current is AggregateException aggregate)
+                {
+                    foreach (Exception inner in aggregate.InnerExceptions)
+                        if (inner != null) pending.Push(inner);
+                }
+            }
+            return false;
+        }
+
         public static void ResetFault()
         {
             _faulted = false;
+            _faultHasNullReference = false;
             _faultMessage = string.Empty;
         }
 

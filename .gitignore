@@ -181,6 +181,10 @@
 /Tests/CheckpointBoundary.Isolated.Tests/*
 !/Tests/CheckpointBoundary.Isolated.Tests/*.cs
 !/Tests/CheckpointBoundary.Isolated.Tests/*.csproj
+!/Tests/EmergencyNullReferenceRepair.Isolated.Tests/
+/Tests/EmergencyNullReferenceRepair.Isolated.Tests/*
+!/Tests/EmergencyNullReferenceRepair.Isolated.Tests/*.cs
+!/Tests/EmergencyNullReferenceRepair.Isolated.Tests/*.csproj
 !/Tests/KingdomAnnualQueue.Isolated.Tests/
 /Tests/KingdomAnnualQueue.Isolated.Tests/*
 !/Tests/KingdomAnnualQueue.Isolated.Tests/*.cs

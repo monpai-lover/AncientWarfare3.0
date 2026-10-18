@@ -315,7 +315,8 @@ namespace AncientWarfare3.patch
             {
                 ResetSchedulerState(
                     pUnbindSimulationTime: false,
-                    pForce: true);
+                    pForce: true,
+                    pResetFault: false);
             }
             catch (Exception cleanupException)
             {
@@ -635,18 +636,33 @@ namespace AncientWarfare3.patch
             }
 
             string previousFault = AWFramePriorityGovernor.FaultMessage;
+            bool repairNullReferences = AWFramePriorityGovernor.FaultHasNullReference;
+            MapBox recoveryWorld = World.world;
+            // Pause controls have already toggled this off. Keep simulation
+            // stopped until every worker is joined and live-reference repair
+            // has finished; a failed attempt remains explicitly retryable.
+            Config.paused = true;
             try
             {
-                ResetSchedulerState(pUnbindSimulationTime: false, pForce: true);
+                ResetSchedulerState(pUnbindSimulationTime: false, pForce: true,
+                    pResetFault: false);
+                if (!ReferenceEquals(recoveryWorld, World.world))
+                    throw new InvalidOperationException(
+                        "World changed during scheduler recovery.");
+                string repairSummary = repairNullReferences
+                    ? AWEmergencyNullReferenceRepairService.Repair(recoveryWorld)
+                    : "null-reference repair not required";
+                AWFramePriorityGovernor.ResetFault();
+                Config.paused = false;
                 ModClass.LogInfo("AW scheduler recovered after explicit resume: " +
-                    previousFault);
+                    previousFault + "; " + repairSummary);
             }
             catch (Exception error)
             {
-                // ResetSchedulerState attempts every cleanup step, including
-                // ResetFault, before reporting failures. Restore the latch if
-                // any owner could not release its work safely.
-                AWFramePriorityGovernor.MarkFault(error);
+                // Keep the original repair requirement if teardown or repair
+                // fails with a different exception on this attempt.
+                AWFramePriorityGovernor.MarkFault(error,
+                    pRequireNullReferenceRepair: repairNullReferences);
                 Config.paused = true;
                 ModClass.LogError("AW scheduler resume cleanup failed; game remains paused: " +
                     error);
@@ -669,7 +685,8 @@ namespace AncientWarfare3.patch
 
         private static void ResetSchedulerState(
             bool pUnbindSimulationTime,
-            bool pForce = false)
+            bool pForce = false,
+            bool pResetFault = true)
         {
             AWCooperativeSimulationRunner runner =
                 AWCooperativeSimulationRunner.Instance;
@@ -717,8 +734,9 @@ namespace AncientWarfare3.patch
 
             RunCleanup(() => { AWAuthorityCycleService.Reset(); },
                 ref firstError);
-            RunCleanup(() => { AWFramePriorityGovernor.ResetFault(); },
-                ref firstError);
+            if (pResetFault)
+                RunCleanup(() => { AWFramePriorityGovernor.ResetFault(); },
+                    ref firstError);
             _pendingAutoSave = false;
             _bypassAutoSaveDeferral = false;
             _schedulerLifecycleOwned = false;
@@ -1544,13 +1562,15 @@ namespace AncientWarfare3.patch
             Exception pError)
         {
             bool quarantineThirdPartyFault =
+                !AWFramePriorityGovernor.Faulted &&
                 AWThirdPartySchedulerFaultRules.ShouldQuarantine(pError);
             bool cleanupSucceeded = true;
             try
             {
                 ResetSchedulerState(
                     pUnbindSimulationTime: false,
-                    pForce: true);
+                    pForce: true,
+                    pResetFault: false);
             }
             catch (Exception cleanupException)
             {
