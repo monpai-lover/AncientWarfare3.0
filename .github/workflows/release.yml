@@ -4,12 +4,16 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - 'b/20260822-baseline-non-path-port'
+    paths:
+      - '.github/workflows/release.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: publish-release-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
@@ -19,17 +23,76 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Check out release tag
+      - name: Check out triggering revision
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Select the existing release tag
+        id: version
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, re, subprocess
+          tag = (os.environ['GITHUB_REF_NAME'] if os.environ['GITHUB_REF_TYPE'] == 'tag'
+                 else 'v' + json.loads(pathlib.Path('mod.json').read_text())['version'])
+          if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+[a-z]?', tag):
+              raise SystemExit('Invalid release tag')
+          subprocess.run(['git', 'fetch', 'origin', f'refs/tags/{tag}:refs/tags/{tag}'], check=True)
+          subprocess.run(['git', 'checkout', '--detach', f'refs/tags/{tag}'], check=True)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'tag={tag}\n')
+          PY
       - name: Package and verify installation files
-        run: python3 scripts/package_release.py --tag "$GITHUB_REF_NAME" --output artifacts
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: python3 scripts/package_release.py --tag "$RELEASE_TAG" --output artifacts
       - name: Publish release and installation archive
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            "artifacts/AncientWarfare3-${GITHUB_REF_NAME}.zip" \
-            --verify-tag \
-            --title "Ancient Warfare 3 ${GITHUB_REF_NAME}" \
-            --notes-file artifacts/RELEASE-NOTES.md \
-            --latest
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, tempfile
+          tag = os.environ['RELEASE_TAG']
+          repo = os.environ['GITHUB_REPOSITORY']
+          archive = pathlib.Path('artifacts') / f'AncientWarfare3-{tag}.zip'
+          checksum = pathlib.Path(str(archive) + '.sha256')
+          notes = pathlib.Path('artifacts/RELEASE-NOTES.md')
+          expected = hashlib.sha256(archive.read_bytes()).hexdigest()
+
+          def gh(*args):
+              return subprocess.run(['gh', *args, '--repo', repo], check=True)
+
+          query = subprocess.run(
+              ['gh', 'release', 'view', tag, '--repo', repo,
+               '--json', 'tagName,isDraft,assets,url'],
+              text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+          if query.returncode:
+              if 'release not found' not in query.stderr.lower():
+                  raise SystemExit(query.stderr)
+              if os.environ['GITHUB_REF_TYPE'] != 'tag':
+                  raise SystemExit('Branch recovery requires an existing release draft')
+              gh('release', 'create', tag, '--verify-tag', '--draft',
+                 '--title', f'Ancient Warfare 3 {tag}', '--notes-file', str(notes))
+              release = {'tagName': tag, 'isDraft': True, 'assets': []}
+          else:
+              release = json.loads(query.stdout)
+          if release['tagName'] != tag:
+              raise SystemExit('Unexpected release tag')
+          if not release['isDraft']:
+              if os.environ['GITHUB_REF_TYPE'] != 'tag':
+                  print('Release is already published; no changes made')
+                  raise SystemExit(0)
+              raise SystemExit('Refusing to overwrite an existing published release')
+
+          assets = {asset['name'] for asset in release['assets']}
+          if archive.name not in assets:
+              gh('release', 'upload', tag, str(archive))
+          with tempfile.TemporaryDirectory() as directory:
+              gh('release', 'download', tag, '--pattern', archive.name, '--dir', directory)
+              downloaded = pathlib.Path(directory) / archive.name
+              if hashlib.sha256(downloaded.read_bytes()).hexdigest() != expected:
+                  raise SystemExit('Uploaded archive differs from the verified package')
+          # A different Python/zlib version can change the ZIP bytes. Keep the
+          # checksum and release notes aligned with the archive verified above.
+          gh('release', 'upload', tag, str(checksum), '--clobber')
+          gh('release', 'edit', tag, '--notes-file', str(notes), '--draft=false', '--latest')
+          gh('release', 'view', tag, '--json', 'url,isDraft,assets')
+          PY
