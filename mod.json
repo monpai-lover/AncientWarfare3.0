@@ -1,8 +1,8 @@
 {
     "name": "Ancient Warfare 3",
     "author": "GoatDie#4068",
-    "version": "1.2.7g",
-    "description": "Ancient Warfare 3.0 v1.2.7g - historical figure cards, minister deployment, supporter crates, lineage repairs, and card placement fixes.",
+    "version": "1.2.7h",
+    "description": "Ancient Warfare 3.0 v1.2.7h - simulation stability fixes, manual null-reference recovery, military examinations, local military rosters, and Xia texture updates.",
     "iconPath": "icon.png",
     "RepoUrl": "https://github.com/monpai-lover/AncientWarfare3.0",
     "GUID": "ANCIENTWARFARE3",
